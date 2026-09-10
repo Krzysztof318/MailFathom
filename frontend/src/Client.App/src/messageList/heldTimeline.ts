@@ -2,7 +2,12 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type { MailTimelineEntry, MailTimelinePage, MailTimelinePageDirection } from '@mailfathom/client-backend';
+import type {
+    MailTimelineEntry,
+    MailTimelinePage,
+    MailTimelinePageDirection,
+    SignalledFlags,
+} from '@mailfathom/client-backend';
 
 // What the list is holding, which is bounded as well as what it is drawing. Windowing alone bounds the document; this
 // bounds the memory behind it, because a reader who has scrolled past forty thousand messages has read four hundred
@@ -211,6 +216,53 @@ export function changeNoticed(held: HeldTimeline, storedEmailIds: readonly strin
     }
 
     return { slots: held.slots.map((slot) => (holdsNamed(slot) ? { ...slot, emails: null } : slot)) };
+}
+
+/**
+ * What the list knows once the deployment said where some rows' flags now stand.
+ *
+ * The rows are redrawn where they are held rather than dropped, which is the whole point of the statement: a star or a
+ * read mark lands on the screen without a page being read again, without the reader's place moving, and without the row
+ * under their pointer going anywhere. A row the list is not holding is ignored — the page it is on is read again from
+ * its own cursor when the reader reaches it, and it will carry the flag by then.
+ *
+ * @param held What the list knows now.
+ * @param flags Where the deployment says each named row's flags stand.
+ * @returns What the list knows.
+ */
+export function flagsNoticed(held: HeldTimeline, flags: readonly SignalledFlags[]): HeldTimeline {
+    const stated = new Map(flags.map((flag) => [flag.email, flag]));
+
+    const redrawn = (email: MailTimelineEntry): MailTimelineEntry => {
+        const flag = stated.get(email.id);
+
+        if (flag === undefined) {
+            return email;
+        }
+
+        // A flag the statement is silent about is one the deployment did not observe rather than one it cleared, so the
+        // row keeps what it was drawn with. That is also what makes applying the same statement twice the same rows.
+        return {
+            ...email,
+            unread: flag.isSeen === null ? email.unread : !flag.isSeen,
+            flagged: flag.isFlagged ?? email.flagged,
+        };
+    };
+
+    const holdsNamed = (slot: TimelineSlot): boolean => slot.emails?.some((email) => stated.has(email.id)) === true;
+
+    // Answered before anything is rebuilt, so a statement about mail this list is not holding leaves the list the
+    // object it already was — the same reason `changeNoticed` asks first. A page holding none of the rows named keeps
+    // its own object for that reason one level down.
+    if (!held.slots.some(holdsNamed)) {
+        return held;
+    }
+
+    return {
+        slots: held.slots.map((slot) =>
+            holdsNamed(slot) ? { ...slot, emails: slot.emails?.map(redrawn) ?? null } : slot,
+        ),
+    };
 }
 
 /**

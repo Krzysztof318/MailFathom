@@ -14,14 +14,17 @@ namespace MailFathom.Application.Signals;
 /// <remarks>
 /// <para>
 /// A signal is an instruction to look again rather than a payload to keep. It names what changed and for whom, and the
-/// client re-reads over the authenticated routes it already has — which is what keeps
+/// client re-reads over the authenticated routes it already has — the one exception being
+/// <see cref="ClientSignalKind.MailFlagsChanged" />, which states where two flags stand because they are the only
+/// change a client can apply without deciding whether a row still belongs where it is drawn. That keeps
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0028-no-mail-on-the-device-and-an-honest-client-with-no-route-to-its-deployment.md">ADR 0028</see>
 /// intact: nothing new is stored on a device, and a client whose channel is down behaves exactly as one that never had
 /// it.
 /// </para>
 /// <para>
-/// <b>No mail crosses.</b> A count, an account alias, a folder alias, a stored identity, and a state are the whole
-/// vocabulary; no subject, address, body fragment, filename, attachment name, or snippet reaches a signal at any size.
+/// <b>No mail crosses.</b> A count, an account alias, a folder alias, a stored identity, a server flag, and a state are
+/// the whole vocabulary; no subject, address, body fragment, filename, attachment name, or snippet reaches a signal at
+/// any size.
 /// The one exception is <see cref="Headline" /> and <see cref="SecondLine" /> on
 /// <see cref="ClientSignalKind.NotificationRaised" />, which are the notification record's own already-derived text and
 /// reach a client that is entitled to read that record over its own route.
@@ -49,6 +52,7 @@ public sealed class ClientSignal
         MailFolderAlias? folder,
         int count,
         IReadOnlyList<StoredEmailId> emails,
+        IReadOnlyList<SignalledEmailFlags> flags,
         NotificationKind? notificationKind,
         string? headline,
         string? secondLine)
@@ -59,12 +63,13 @@ public sealed class ClientSignal
         this.Folder = folder;
         this.Count = count;
         this.Emails = emails;
+        this.Flags = flags;
         this.NotificationKind = notificationKind;
         this.Headline = headline;
         this.SecondLine = secondLine;
     }
 
-    /// <summary>Gets which of the five kinds this is.</summary>
+    /// <summary>Gets which of the six kinds this is.</summary>
     public ClientSignalKind Kind { get; }
 
     /// <summary>Gets the user whose connections this reaches, and no other's.</summary>
@@ -81,6 +86,9 @@ public sealed class ClientSignal
 
     /// <summary>Gets the stored identities the change names, bounded by <see cref="MostNamedEmails" /> and empty for every other kind.</summary>
     public IReadOnlyList<StoredEmailId> Emails { get; }
+
+    /// <summary>Gets where the two server flags now stand for each email a flag change names, bounded by <see cref="MostNamedEmails" /> and empty for every other kind.</summary>
+    public IReadOnlyList<SignalledEmailFlags> Flags { get; }
 
     /// <summary>Gets which kind of notification was written, where the kind reports one.</summary>
     public NotificationKind? NotificationKind { get; }
@@ -111,6 +119,7 @@ public sealed class ClientSignal
             folder,
             newEmailCount,
             emails: [],
+            flags: [],
             notificationKind: null,
             headline: null,
             secondLine: null);
@@ -136,6 +145,54 @@ public sealed class ClientSignal
             folder,
             count: 0,
             [.. emails.Distinct().Take(MostNamedEmails)],
+            flags: [],
+            notificationKind: null,
+            headline: null,
+            secondLine: null);
+    }
+
+    /// <summary>States where the <c>\Seen</c> and <c>\Flagged</c> flags of one folder's mail now stand, nothing else about it having moved.</summary>
+    /// <param name="account">The account the change is in.</param>
+    /// <param name="folder">The folder the change is in.</param>
+    /// <param name="flags">Where each affected email's flags now stand, taken up to <see cref="MostNamedEmails" />.</param>
+    /// <returns>The signal.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="flags" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when nothing is stated: an empty list, or one whose every entry is silent about both flags.</exception>
+    /// <remarks>
+    /// It is composed only where nothing but those two flags moved. A message that also changed folder, was deleted, or
+    /// whose keywords moved is a <see cref="MailChanged" />, because a client applying a flag in place has decided that
+    /// the row still belongs where it is drawn — and only a flag makes that true.
+    /// </remarks>
+    public static ClientSignal MailFlagsChanged(
+        MailAccountIdentity account,
+        MailFolderAlias folder,
+        IEnumerable<SignalledEmailFlags> flags)
+    {
+        ArgumentNullException.ThrowIfNull(flags);
+
+        IReadOnlyList<SignalledEmailFlags> stated =
+        [
+            .. flags
+                .Where(static flag => flag.SaysAnything)
+                .DistinctBy(static flag => flag.Email)
+                .Take(MostNamedEmails),
+        ];
+
+        if (stated.Count == 0)
+        {
+            throw new ArgumentException(
+                "A flag change states where a flag now stands, so one stating neither flag of any email says nothing a client could apply.",
+                nameof(flags));
+        }
+
+        return new ClientSignal(
+            ClientSignalKind.MailFlagsChanged,
+            account.User,
+            account.Id,
+            folder,
+            count: 0,
+            emails: [],
+            stated,
             notificationKind: null,
             headline: null,
             secondLine: null);
@@ -152,6 +209,7 @@ public sealed class ClientSignal
             folder: null,
             count: 0,
             emails: [],
+            flags: [],
             notificationKind: null,
             headline: null,
             secondLine: null);
@@ -175,6 +233,7 @@ public sealed class ClientSignal
             folder: null,
             unreadCount,
             emails: [],
+            flags: [],
             notification.Kind,
             notification.Title,
             notification.Body);
@@ -197,6 +256,7 @@ public sealed class ClientSignal
             folder: null,
             count: 0,
             emails: [],
+            flags: [],
             notificationKind: null,
             headline: null,
             secondLine: null);
@@ -208,7 +268,9 @@ public sealed class ClientSignal
     /// <exception cref="ArgumentException">Thrown when the two are not in one scope, which is a caller folding two statements that are not about the same thing.</exception>
     /// <remarks>
     /// Counts add, because two runs that committed mail into one folder committed the sum of them. Named identities
-    /// join, up to the same bound one signal carries. Everything else takes the later value, because a state, a
+    /// join, up to the same bound one signal carries. Stated flags join by email, each value taking the later
+    /// statement about it and keeping what that statement was silent about, so a window that reported both flags is not
+    /// erased by an authored change that reported one. Everything else takes the later value, because a state, a
     /// headline, and an unread count each describe a moment rather than an accumulation — and the later moment is the
     /// true one.
     /// </remarks>
@@ -230,15 +292,37 @@ public sealed class ClientSignal
             this.Folder,
             this.Kind == ClientSignalKind.MailArrived ? this.Count + later.Count : later.Count,
             [.. this.Emails.Concat(later.Emails).Distinct().Take(MostNamedEmails)],
+            FoldedFlags(this.Flags, later.Flags),
             later.NotificationKind,
             later.Headline,
             later.SecondLine);
+    }
+
+    /// <summary>Joins two windows' flag statements, one entry per email, bounded like every other list a signal carries.</summary>
+    /// <remarks>The order the earlier statement established is kept, so an email folded into is not moved to the end of the list and pushed past the bound by one a client had already been told about.</remarks>
+    private static IReadOnlyList<SignalledEmailFlags> FoldedFlags(
+        IReadOnlyList<SignalledEmailFlags> earlier,
+        IReadOnlyList<SignalledEmailFlags> later)
+    {
+        if (later.Count == 0)
+        {
+            return earlier;
+        }
+
+        return
+        [
+            .. earlier
+                .Concat(later)
+                .GroupBy(static flag => flag.Email)
+                .Select(static statements => statements.Aggregate(static (held, flag) => held.FoldedWith(flag)))
+                .Take(MostNamedEmails),
+        ];
     }
 }
 
 /// <summary>What two signals must share before one folds into the other: whose it is, what kind it is, and where it happened.</summary>
 /// <param name="User">Whose mail the statement is about.</param>
-/// <param name="Kind">Which of the five kinds it is.</param>
+/// <param name="Kind">Which of the six kinds it is.</param>
 /// <param name="Account">The account it names, where the kind names one.</param>
 /// <param name="Folder">The folder it names, where the kind names one.</param>
 /// <remarks>Declared once and read from both sides of the fold — the buffer keys on it and <see cref="ClientSignal.FoldedWith" /> refuses a pair that does not share it — so the two can never come to disagree about what one scope is. The place is part of it deliberately: folding two folders' arrivals into one would leave a client told that mail arrived without being told where to look.</remarks>

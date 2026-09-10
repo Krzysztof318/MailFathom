@@ -1569,6 +1569,91 @@ public sealed class MailboxReconcilerTests
             [.. signal.Emails.OrderBy(email => email.Value)]);
     }
 
+    /// <summary>A window in which nothing but the two server flags moved states where they now stand, so a row is redrawn without a read.</summary>
+    [Fact]
+    public async Task ReconcileAsync_WithNothingButFlagsMoved_StatesWhereTheFlagsStandInsteadOfNamingRowsToReRead()
+    {
+        // Arrange
+        // 10's \Seen moved and 13's \Flagged did; the session reports both flags clear for every occurrence it holds,
+        // which is where each of them now stands.
+        IReadOnlyList<StoredOccurrence> occurrences =
+        [
+            .. ObservedOccurrence(10, isSeen: true),
+            .. ObservedOccurrence(13, isSeen: false, isFlagged: true),
+        ];
+        var store = new FakeReconciliationStore(occurrences);
+        await using var mailboxSession = CreateSessionHolding(10, 13);
+        var channel = new RecordingClientSignalChannel();
+        var clock = new FakeTimeProvider(RunInstant);
+        await using var signals = new ClientSignals([channel], clock);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            timeProvider: clock,
+            signals: signals);
+
+        // Act
+        await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var signal = Assert.Single(channel.Published);
+        Assert.Equal(ClientSignalKind.MailFlagsChanged, signal.Kind);
+        Assert.Equal(Account.Id, signal.Account);
+        Assert.Equal(InboxFolder.Alias, signal.Folder);
+        Assert.Empty(signal.Emails);
+        Assert.Equal(
+            [
+                new SignalledEmailFlags(occurrences[0].StoredEmailId, IsSeen: false, IsFlagged: false),
+                new SignalledEmailFlags(occurrences[1].StoredEmailId, IsSeen: false, IsFlagged: false),
+            ],
+            [.. signal.Flags.OrderBy(flag => flag.Email.Value)]);
+    }
+
+    /// <summary>A keyword the statement has no room for is not a flag, so the window names rows to re-read as it did before.</summary>
+    [Fact]
+    public async Task ReconcileAsync_WithAKeywordMoved_NamesRowsToReReadRatherThanStatingFlags()
+    {
+        // Arrange
+        var occurrences = ObservedOccurrence(14, isSeen: false, isFlagged: false, "todo");
+        var store = new FakeReconciliationStore(occurrences);
+        await using var mailboxSession = CreateSessionHolding(14);
+        var channel = new RecordingClientSignalChannel();
+        var clock = new FakeTimeProvider(RunInstant);
+        await using var signals = new ClientSignals([channel], clock);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            timeProvider: clock,
+            signals: signals);
+
+        // Act
+        await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var signal = Assert.Single(channel.Published);
+        Assert.Equal(ClientSignalKind.MailChanged, signal.Kind);
+        Assert.Equal([occurrences[0].StoredEmailId], signal.Emails);
+        Assert.Empty(signal.Flags);
+    }
+
     /// <summary>A pass that moved nothing says nothing, so an idle deployment is silent rather than chatty.</summary>
     [Fact]
     public async Task ReconcileAsync_WithNothingMoved_SignalsNothing()

@@ -14,12 +14,12 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Signals;
 
-/// <summary>Covers what each of the five kinds puts on the wire, and proves that no mail travels with any of them.</summary>
+/// <summary>Covers what each of the six kinds puts on the wire, and proves that no mail travels with any of them.</summary>
 /// <remarks>
 /// <para>
 /// One test per kind, and each asserts the payload as a whole rather than field by field, because the claim is about
 /// what does <em>not</em> cross as much as about what does: a member added later that carried a subject, an address, a
-/// body fragment, or an attachment name would leave all five failing rather than passing beside it.
+/// body fragment, or an attachment name would leave all six failing rather than passing beside it.
 /// </para>
 /// <para>
 /// Each arrangement then hands the composition the mail-shaped text a raise site has in hand where the kind has
@@ -56,7 +56,7 @@ public sealed class ClientSignalPayloadTests
         var payload = ClientSignalPayload.For(signal);
 
         // Assert
-        AssertPayloadIs(new ClientSignalPayload("mail.arrived", "work", Inbox.Value, 4, [], null, null, null), payload);
+        AssertPayloadIs(new ClientSignalPayload("mail.arrived", "work", Inbox.Value, 4, [], [], null, null, null), payload);
         AssertNothingAboutMailOrTheUserCrossed(payload);
     }
 
@@ -79,6 +79,37 @@ public sealed class ClientSignalPayloadTests
                 Inbox.Value,
                 0,
                 [email.Value.ToString()],
+                [],
+                null,
+                null,
+                null),
+            payload);
+        AssertNothingAboutMailOrTheUserCrossed(payload);
+    }
+
+    /// <summary>A flag change states where the two flags stand, and states nothing about the message they are on.</summary>
+    [Fact]
+    public void For_MailFlagsChanged_RendersWhereTheTwoFlagsStandAndNothingElse()
+    {
+        // Arrange
+        var email = StoredEmailId.Create(Guid.CreateVersion7(Instant));
+        var signal = ClientSignal.MailFlagsChanged(
+            Account,
+            Inbox,
+            [new SignalledEmailFlags(email, IsSeen: true, IsFlagged: null)]);
+
+        // Act
+        var payload = ClientSignalPayload.For(signal);
+
+        // Assert
+        AssertPayloadIs(
+            new ClientSignalPayload(
+                "mail.flags.changed",
+                "work",
+                Inbox.Value,
+                0,
+                [],
+                [new ClientSignalFlagsPayload(email.Value.ToString(), IsSeen: true, IsFlagged: null)],
                 null,
                 null,
                 null),
@@ -97,7 +128,7 @@ public sealed class ClientSignalPayloadTests
         var payload = ClientSignalPayload.For(signal);
 
         // Assert
-        AssertPayloadIs(new ClientSignalPayload("folders.changed", "work", null, 0, [], null, null, null), payload);
+        AssertPayloadIs(new ClientSignalPayload("folders.changed", "work", null, 0, [], [], null, null, null), payload);
         AssertNothingAboutMailOrTheUserCrossed(payload);
     }
 
@@ -131,6 +162,7 @@ public sealed class ClientSignalPayloadTests
                 null,
                 2,
                 [],
+                [],
                 nameof(NotificationKind.Mail),
                 "Mail arrived",
                 "Four messages arrived in work."),
@@ -149,18 +181,19 @@ public sealed class ClientSignalPayloadTests
         var payload = ClientSignalPayload.For(signal);
 
         // Assert
-        AssertPayloadIs(new ClientSignalPayload("account.state", "work", null, 0, [], null, null, null), payload);
+        AssertPayloadIs(new ClientSignalPayload("account.state", "work", null, 0, [], [], null, null, null), payload);
         AssertNothingAboutMailOrTheUserCrossed(payload);
     }
 
     /// <summary>Asserts one payload against another as a whole, so a member added later is covered rather than skipped.</summary>
     /// <param name="expected">What the kind is supposed to render as.</param>
     /// <param name="actual">What it rendered as.</param>
-    /// <remarks>The named identities are compared as a sequence and then set aside, because a record compares a list member by reference and would otherwise report two equal sequences as different payloads.</remarks>
+    /// <remarks>The two lists are compared as sequences and then set aside, because a record compares a list member by reference and would otherwise report two equal sequences as different payloads.</remarks>
     private static void AssertPayloadIs(ClientSignalPayload expected, ClientSignalPayload actual)
     {
         Assert.Equal(expected.Emails, actual.Emails);
-        Assert.Equal(expected with { Emails = [] }, actual with { Emails = [] });
+        Assert.Equal(expected.Flags, actual.Flags);
+        Assert.Equal(expected with { Emails = [], Flags = [] }, actual with { Emails = [], Flags = [] });
     }
 
     private static void AssertNothingAboutMailOrTheUserCrossed(ClientSignalPayload payload)

@@ -49,9 +49,23 @@ export const mostNamedSignalEmails = 100;
 export type SignalNotificationKind = 'Mail' | 'Calendar' | 'Case' | 'Task' | 'System';
 
 /**
+ * Where one message's two server flags now stand, as a flag change carries it.
+ *
+ * Each value is optional because the deployment states what it observed: a reconciliation window has the server's whole
+ * answer and states both, and a change this client asked for carries only the flag that was written. A reader applies
+ * what is stated and leaves the rest of the row alone, which is what makes applying the same statement twice the same
+ * state.
+ */
+export interface SignalledFlags {
+    readonly email: string;
+    readonly isSeen: boolean | null;
+    readonly isFlagged: boolean | null;
+}
+
+/**
  * One statement that something changed.
  *
- * Five closed shapes rather than one record of optional fields, because what a reader does with a signal is decided
+ * Six closed shapes rather than one record of optional fields, because what a reader does with a signal is decided
  * entirely by which of them arrived: a folder set that moved and a message that changed are read again from different
  * routes, and a shape carrying both would leave every reader checking which fields happened to be present.
  */
@@ -62,6 +76,12 @@ export type ClientSignal =
           readonly account: string;
           readonly folder: string;
           readonly emails: readonly string[];
+      }
+    | {
+          readonly kind: 'mail.flags.changed';
+          readonly account: string;
+          readonly folder: string;
+          readonly flags: readonly SignalledFlags[];
       }
     | { readonly kind: 'folders.changed'; readonly account: string }
     | {
@@ -155,7 +175,7 @@ export function readSignalTicket(
 }
 
 /**
- * Reads one payload the deployment sent, refusing anything that is not one of the five statements.
+ * Reads one payload the deployment sent, refusing anything that is not one of the six statements.
  *
  * @returns The signal, or `null` where the payload is not one this client acts on.
  */
@@ -171,6 +191,8 @@ export function parseClientSignal(payload: unknown): ClientSignal | null {
             return parseArrival(record);
         case 'mail.changed':
             return parseChange(record);
+        case 'mail.flags.changed':
+            return parseFlagChange(record);
         case 'folders.changed':
             return isIdentity(record['account']) ? { kind: 'folders.changed', account: record['account'] } : null;
         case 'notification.raised':
@@ -361,6 +383,67 @@ function parseChange(record: Readonly<Record<string, unknown>>): ClientSignal | 
     }
 
     return { kind: 'mail.changed', account, folder, emails: [...named] };
+}
+
+function parseFlagChange(record: Readonly<Record<string, unknown>>): ClientSignal | null {
+    const account = record['account'];
+    const folder = record['folder'];
+    const stated = record['flags'];
+
+    if (!isIdentity(account) || !isIdentity(folder) || !Array.isArray(stated)) {
+        return null;
+    }
+
+    if (stated.length === 0 || stated.length > mostNamedSignalEmails) {
+        return null;
+    }
+
+    const flags: SignalledFlags[] = [];
+
+    for (const entry of stated) {
+        const flag = parseFlags(entry);
+
+        // One unreadable entry refuses the whole statement rather than being dropped from it: a client applying the
+        // rest would put part of a change on the screen and never learn it had missed the other part, which a signal
+        // it refused outright leaves to the read it would have made anyway.
+        if (flag === null) {
+            return null;
+        }
+
+        flags.push(flag);
+    }
+
+    return { kind: 'mail.flags.changed', account, folder, flags };
+}
+
+function parseFlags(entry: unknown): SignalledFlags | null {
+    const record = asRecord(entry);
+
+    if (record === null) {
+        return null;
+    }
+
+    const email = record['email'];
+    const isSeen = optionalFlag(record['isSeen']);
+    const isFlagged = optionalFlag(record['isFlagged']);
+
+    if (!isIdentity(email) || isSeen === undefined || isFlagged === undefined) {
+        return null;
+    }
+
+    // A statement about neither flag says nothing a row could be redrawn from, so it is refused where an empty list is.
+    return isSeen === null && isFlagged === null ? null : { email, isSeen, isFlagged };
+}
+
+// `undefined` reports a value that is neither a flag nor absent, which is what separates a refusal from a silence: a
+// missing member is the deployment not having observed that flag, and a string or a number in its place is a payload
+// this client does not act on.
+function optionalFlag(value: unknown): boolean | null | undefined {
+    if (value === undefined || value === null) {
+        return null;
+    }
+
+    return typeof value === 'boolean' ? value : undefined;
 }
 
 function parseRaisedNotification(record: Readonly<Record<string, unknown>>): ClientSignal | null {
