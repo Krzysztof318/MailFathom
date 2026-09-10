@@ -7,6 +7,7 @@ using MailFathom.Infrastructure.Persistence.Accounts.Configurations;
 using MailFathom.Infrastructure.Persistence.Answering.Configurations;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Contacts.Configurations;
+using MailFathom.Infrastructure.Persistence.Coordination.Configurations;
 using MailFathom.Infrastructure.Persistence.Delivery.Configurations;
 using MailFathom.Infrastructure.Persistence.Emails.Configurations;
 using MailFathom.Infrastructure.Persistence.Emails.Threads.Configurations;
@@ -183,6 +184,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<JobScheduleEntity> JobSchedules => this.Set<JobScheduleEntity>();
 
+    internal DbSet<WorkLeaseEntity> WorkLeases => this.Set<WorkLeaseEntity>();
+
     internal DbSet<NotificationEntity> Notifications => this.Set<NotificationEntity>();
 
     /// <inheritdoc />
@@ -258,6 +261,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new ContactAddressConfiguration());
         modelBuilder.ApplyConfiguration(new JobConfiguration());
         modelBuilder.ApplyConfiguration(new JobScheduleConfiguration());
+        modelBuilder.ApplyConfiguration(new WorkLeaseConfiguration());
         modelBuilder.ApplyConfiguration(new NotificationConfiguration());
     }
 }

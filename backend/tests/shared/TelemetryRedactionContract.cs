@@ -49,12 +49,18 @@ internal static class TelemetryRedactionContract
     /// An alias is MailFathom's own word for an account, a folder, or a provider endpoint: the operator wrote it, it is
     /// bounded by the size of their configuration, and a dashboard is unreadable without it. Every other dimension is
     /// one of this process's own closed words, so a caller string arriving on one is the defect this catches.
+    /// <para>
+    /// A work scope is on the list for the same reason one step removed: it is composed out of those names rather than
+    /// being one of them — an account's synchronization is held under a scope naming that account — so it is bounded
+    /// by the configuration exactly as an alias is, and a dashboard of who holds what is unreadable without it.
+    /// </para>
     /// </remarks>
     internal static readonly string[] DimensionsCarryingAConfiguredAlias =
     [
         "mailfathom.mail.account",
         "mailfathom.mail.folder",
         "mailfathom.answering.endpoint",
+        "mailfathom.work.scope",
     ];
 
     /// <summary>The words a span, an instrument, or a dimension may never be named after.</summary>

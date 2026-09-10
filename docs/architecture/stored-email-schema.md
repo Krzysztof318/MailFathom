@@ -1076,6 +1076,51 @@ The row carries no foreign key onto anything. A schedule is declared in configur
 
 Nothing in it is personal data. An account alias, a rule name, two instants and a job identifier are MailFathom's own names for things.
 
+## Who is holding work that must not run twice
+
+`work_leases` is how a deployment running more than one replica decides which of them does a piece of work nothing
+enqueued: a mailbox supervisor, a deployment-wide sweep, an operator's re-derivation, the stored-content move.
+[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
+is the decision it implements, and it is `jobs`' lease in a second shape: the same stamped row with a holder and an
+expiry, the same compare-and-set on every write, and none of the queue's machinery, because a job is an occasion
+something asked for and a lease is a role a replica holds for as long as it keeps renewing.
+
+| Column | What it records |
+|---|---|
+| `Scope` | The primary key, and the unit of work being held. It is composed by the caller out of the key its own progress row already carries — a mail account, the name of a walk, the deployment — so nothing decides what one unit of the work is twice. MailFathom's own names, never a subject, an address, or anything else out of a message |
+| `Holder` | Which *hold* has the scope, as a generated identity rather than a process name. Every write is conditional on it, so a replica whose lease was taken over and which then renews or releases late finds the row naming somebody else and writes nothing — the same reasoning `jobs` keeps its lease owner per attempt for |
+| `HeldSince` | When the current holder took the scope. A renewal leaves it where it is, so it says how long this hold has been running rather than when it last wrote |
+| `ExpiresAt` | When the scope becomes takeable again whatever its holder is doing. It is the only column a renewal moves, and the comparison a claim is decided by |
+
+There is one row per *held* scope and none for a scope nothing holds, because a release deletes the row rather than
+clearing it. So the table is the set of holds the deployment currently has, which is what an operator asking who holds
+what reads, and it is bounded by how much singleton work the deployment configures rather than by how long it has been
+running. Nothing cascades into it and nothing points at it: the scope is a composed name rather than a reference, so a
+lease whose subject is gone is a row the expiry frees rather than one a constraint has to reach.
+
+A claim is one statement. It inserts the scope, and where a row is already there it takes it only when the recorded
+lease has run out — the conflict resolved against the existing row's expiry inside the same statement. Two things
+follow. Two replicas claiming one scope at the same moment leave one holder, because the primary key decides it rather
+than a check either of them could have made first. And a replica that stopped answering releases everything it held
+without anything having to notice: an expired lease is indistinguishable from one whose holder is gone, which is the
+same crash recovery `jobs` gets from its own expiry.
+
+Every instant in the row is PostgreSQL's own rather than a reading from the replica that wrote it, and the caller is
+told the expiry the row ended up with rather than one it computed. A deployment therefore holds one clock: a replica
+running minutes fast finds a live lease live, where a comparison against its own clock would have found it expired and
+handed it a scope somebody else is working under.
+
+What a holder is promised is **one writer, and never one runner**. The compare-and-set takes back a write; it does not
+take back an IMAP connection, an SMTP send, or a provider call already in flight. So MailFathom's own state has exactly
+one writer, while a mail server may briefly see two connections for one account — "briefly" being the margin between a
+holder failing to renew and the expiry it last read, which is why a holder stops its work on the first failed renewal
+rather than when the clock says the lease is over.
+
+Nothing in it is personal data. A composed scope name, a generated hold identity, and two instants are MailFathom's own
+names for its own work, and the same three are what the telemetry beside it publishes: which scopes a replica holds,
+how often a scope changed hands, and when a holder lost one. The hold identity stays off every measurement, because it
+is fresh per lease and would make a new time series of every takeover; an operator who needs it reads this table.
+
 ## Where an operator's re-derivation has got to
 
 `mail_rederivation_positions` holds one row per unfinished re-read of stored MIME — the walk [`mfctl mailbox
@@ -1657,6 +1702,7 @@ Every claim on this page that is a claim about PostgreSQL rather than about the 
 - A stored vector cannot disagree with its profile: a vector whose length differs from the `Dimension` beside it, and a `Dimension` the named profile never declared, are both refused at the write, while the matching width is stored. Two profiles of different widths coexist in the one dimensionless column, re-registering a geometry already present is refused by the fingerprint index, and deleting a message erases the vectors derived from it while the profile they named survives.
 - The [search read model](../features/email-search.md) composes that vector, `websearch_to_tsquery`, `ts_rank`, and `ts_headline` into commands PostgreSQL accepts — a malformed headline option list is a runtime failure rather than a compiler error — ranks the window it returns, cuts snippets inside the configured bounds, and leaves the change tracker empty across every query it issues.
 - Both guarantees the job store gets from PostgreSQL rather than from its own code: two callers racing to enqueue one execution produce one job, because the unique index refuses the second insert; and two workers claiming at the same moment take different jobs, because the claim selects and stamps under `FOR UPDATE SKIP LOCKED` in one statement. A lease that has run out is reclaimed with a second attempt counted, the attempt it was taken from writes nothing afterwards, a completed job keeps the key that refuses the same execution again, and a row whose type this build does not declare is left where it is. A dead letter is claimed by nothing and keeps the key and the recorded failure that ended it, a scheduled retry holds the job back until the instant it named, and a release hands the attempt back with the job. And the claim is fair across users: against one user's backlog beside another user's single due job, a claim bounded to two hands back one of each rather than two of the backlog.
+- The one guarantee the work lease gets from PostgreSQL rather than from its own code: eight replicas claiming one scope at the same moment leave exactly one holder, because the claim inserts on the primary key and resolves the conflict against the recorded expiry in one statement. A lease whose holder stopped renewing is taken by the next replica that asks, a live one is refused whoever asks, and a renewal and a release from a hold another replica already took over both write nothing — which is what stops a late shutdown handing away a scope somebody is working under.
 - A schedule's durable state is written by one statement whether the row is there or not: a schedule seeded and then advanced leaves one row carrying the latest occasion, and a schedule nothing has written is absent from the read rather than answered with an empty state — which is the difference between seeding once and seeding on every pass.
 - The contact book's eleven claims about PostgreSQL rather than about the model: erasing a person removes every address row through the cascade and frees those addresses for somebody else, two overlapping writers claiming one address leave the loser with a conflict rather than a provider failure, a keyset walk of the book serves every contact exactly once in the order the index is built in — which is also the only place the comparison translates to SQL at all — an amendment that stops naming an address deletes its row and releases it, a search selects the people whose stored name key or whose address key contains the text, which is the one contact predicate that reaches both tables at once and the one no index above answers, erasing the collected origin removes one user's rows of it and every address row hanging off one in two set-based statements no change tracker ever sees, the threshold collection is held to counts what one address wrote out of the stored mail in a query whose two halves read a message stored in several folders as one message, two users each recording the same correspondent both succeed because the unique index is over the user and the address rather than over the address, a page of one user's book is planned through the user-leading index rather than scanned, at a volume where a sequential scan was the alternative, and a person only another user wrote down is answered for by none of the four reads answered in batches — not by name, not by address, and not by identity — while the same four under the user who holds them answer with them, and giving up on collection takes only the book it was asked of — the other user's collected person and the address row beneath them survive it.
 - A draft's whole life runs against the real database and the real mail server at once: it is written, appended to the folder playing the drafts role, revised, promoted, and given up when the send it became is delivered. What only PostgreSQL settles there is that the record and its message cross one transaction, that a revision rewrites the one payload row rather than adding a second, that the copy rows keyed by revision are what an edit's append and removal are read from, and that removing the draft takes its recipients, its copies, and its message with it.
