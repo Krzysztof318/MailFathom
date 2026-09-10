@@ -5,6 +5,7 @@
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Contacts.Collection;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.EmailContent.Move;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
@@ -134,6 +135,7 @@ public sealed class TelemetrySurfaceContractTests
     private static readonly RetainedContentReleaseTelemetry ContentRelease = new();
     private static readonly StoredEmailContentTelemetry StoredContent = new(Clock);
     private static readonly StoredMailRederivationTelemetry Rederivation = new(Clock);
+    private static readonly WorkLeaseTelemetry WorkLeases = new();
 
     private static readonly BoundedEmailEmbeddingBacklog EmbeddingBacklog =
         new(new EmailEmbeddingBacklogOptions { Capacity = 4 });
@@ -169,6 +171,7 @@ public sealed class TelemetrySurfaceContractTests
         typeof(StoredContentMoveTelemetry),
         typeof(StoredEmailContentTelemetry),
         typeof(StoredMailRederivationTelemetry),
+        typeof(WorkLeaseTelemetry),
     ];
 
     /// <summary>The drive really emits the surface, and the poison really travels through it.</summary>
@@ -293,6 +296,7 @@ public sealed class TelemetrySurfaceContractTests
         DriveObjectStorage();
         DriveSensitiveContent();
         DriveStoredMailRederivation();
+        DriveWorkLeases();
 
         PersistenceCommits.RecordCommitted();
         PersistenceCommits.RecordConcurrencyConflict();
@@ -301,6 +305,24 @@ public sealed class TelemetrySurfaceContractTests
         surface.ObserveGauges();
 
         return surface;
+    }
+
+    /// <summary>Drives a scope taken, renewed, lost, and given back, so both outcomes of both counters are emitted.</summary>
+    /// <remarks>
+    /// The scope is composed out of the configured alias rather than being one, which is what a supervisor's own scope
+    /// is: the dimension is on the permitted list for that reason, and driving it with a plain word would leave the
+    /// one class of input it may carry unasserted.
+    /// </remarks>
+    private static void DriveWorkLeases()
+    {
+        var scope = WorkScope.Create($"mail-account:{TelemetryRedactionContract.ConfiguredAliasSentinel}");
+
+        WorkLeases.RecordClaim(scope, granted: true);
+        WorkLeases.RecordClaim(scope, granted: false);
+        WorkLeases.RecordRenewal(scope, granted: true);
+        WorkLeases.RecordRenewal(scope, granted: false);
+        WorkLeases.RecordClaim(scope, granted: true);
+        WorkLeases.RecordRelease(scope);
     }
 
     /// <summary>Drives a pass that carried a payload, refused one for every stated reason, and reached the end.</summary>

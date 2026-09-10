@@ -750,6 +750,33 @@ An instance with `Jobs:Enabled` switched off, or one with no registered handler,
 does not start, so it neither runs work, dispatches a schedule, nor measures the queue. The depth of a queue that
 instance is not draining is somebody else's replica to report.
 
+### Holding work that must not run twice
+
+Work nothing enqueued — a mailbox supervisor, a deployment-wide sweep, an operator's re-derivation, the stored-content
+move — is held by one replica at a time through a lease row, and three instruments say what that is doing. All three
+are broken down by `mailfathom.work.scope`, which is the unit of work being held: a composed name out of MailFathom's
+own words, bounded by how much singleton work the deployment configures rather than by anything a message carries. The
+hold that has the scope is deliberately not a dimension on any of them — it is a fresh identity per lease, so a
+takeover would open a new time series — and an operator who needs to know which replica holds what reads the lease
+table itself.
+
+`mailfathom.work_leases.claims` counts every attempt to take a scope, tagged with `mailfathom.work.lease.outcome` as
+`granted` or `refused`. A granted claim **is** a change of holder, because a live lease is refused whoever asks, so the
+granted rate is how often work moved between replicas; a refused claim is the ordinary answer for a replica whose work
+somebody else is doing, and a steady stream of them is a replica waiting rather than one that is idle or broken.
+
+`mailfathom.work_leases.renewals` counts every attempt to extend a held lease, under the same outcome tag. **The
+refused half is worth alerting on**: it is a replica discovering that a scope it thought it held has moved on, which is
+what stops the run rather than slows it, and it means the holder failed to reach the database for longer than its lease
+allowed. A steady non-zero rate says the lease duration is short for what the deployment's database latency actually
+is.
+
+`mailfathom.work_leases.held` reports which scopes *this* replica is holding right now, as one series per scope with
+the value `1`. Read across the replicas of a deployment — each of which names itself through the resource attributes on
+every measurement it publishes — that is the whole answer to who holds what. A scope leaves the gauge when the replica
+releases it and when a renewal reports the hold gone, so the two replicas involved in a takeover never both publish it;
+a replica holding nothing publishes no series at all rather than a row of zeroes.
+
 ### What a synchronization cycle emits
 
 No instrumentation package exists for the mail library, so without what follows the part of MailFathom that spends the

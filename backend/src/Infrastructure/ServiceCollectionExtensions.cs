@@ -8,6 +8,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.Discovery.Citations;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Runs;
@@ -122,6 +123,7 @@ using MailFathom.Infrastructure.Persistence.Accounts;
 using MailFathom.Infrastructure.Persistence.Answering;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Contacts;
+using MailFathom.Infrastructure.Persistence.Coordination;
 using MailFathom.Infrastructure.Persistence.Delivery;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Emails.Threads;
@@ -308,6 +310,7 @@ public static class ServiceCollectionExtensions
         AddStoredMailAdapters(services);
         AddMailRuleAdapters(services);
         AddJobQueueAdapters(services);
+        AddWorkLeaseAdapters(services);
         AddSpamClassificationStores(services);
         AddReadSideStores(services);
         AddMailContentAdapters(services);
@@ -688,6 +691,19 @@ public static class ServiceCollectionExtensions
         // A singleton with the instruments on it, for the reason every other telemetry type here is one: an instrument
         // created per scope would publish a second time series for the same measurement.
         services.AddSingleton<JobQueueTelemetry>();
+    }
+
+    /// <summary>Registers the one way a replica takes exclusive hold of work that must not run twice.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddWorkLeaseAdapters(IServiceCollection services)
+    {
+        // Scoped like every other store, and beside the queue rather than inside it: a job is an occasion the queue
+        // hands out, and a lease is a role a replica holds for as long as it keeps renewing. It takes no persistence
+        // session, because a hold outlives the transaction that took it.
+        services.AddScoped<IWorkLeaseStore, WorkLeaseStore>();
+        // A singleton for the reason every other telemetry type here is one, and for a second: the gauge it publishes
+        // is the set of scopes this process holds, which one instance per scope would report a fragment of.
+        services.AddSingleton<WorkLeaseTelemetry>();
     }
 
     /// <summary>Registers what a classification verdict is written to and read back from, whatever this deployment decides to classify.</summary>
