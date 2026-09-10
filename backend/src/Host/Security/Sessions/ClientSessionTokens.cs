@@ -44,13 +44,22 @@ internal sealed class ClientSessionTokens
 {
     /// <summary>How long a minted token authenticates for.</summary>
     /// <remarks>
-    /// A working day rather than a handshake, because this is what a head keeps between starts: a client reopened
-    /// inside it is already signed in, which is the requirement the stored password used to meet. It is not longer,
-    /// because a token that outlives the day it was minted on is a credential on somebody's machine that nobody
-    /// remembers issuing — and a client left open renews rather than expiring, so the length bounds the abandoned case
-    /// rather than the working one.
+    /// <para>
+    /// A month rather than a working day, because this is what a head keeps between starts and the client's own screen
+    /// states the number: somebody who asked to be kept signed in is told this device stays signed in for thirty days,
+    /// and a deployment minting a shorter session would make that screen say something it does not keep. A client left
+    /// open renews rather than expiring, so what this length actually bounds is the abandoned case — a token nobody
+    /// presented again, on a machine nobody came back to.
+    /// </para>
+    /// <para>
+    /// It was twelve hours until <c>#1844</c>, which is the same reasoning against a smaller promise: the screen said
+    /// nothing about a duration then, so a working day was the whole requirement. What did not change is that it is
+    /// not configurable, that ending the credential behind a session ends it whatever is left of this, and that a
+    /// restart of this process ends every session it is holding — so thirty days is the most a session lasts rather
+    /// than a length an operator can count on.
+    /// </para>
     /// </remarks>
-    internal static readonly TimeSpan Lifetime = TimeSpan.FromHours(12);
+    internal static readonly TimeSpan Lifetime = TimeSpan.FromDays(30);
 
     /// <summary>What every token this deployment mints begins with.</summary>
     /// <remarks>

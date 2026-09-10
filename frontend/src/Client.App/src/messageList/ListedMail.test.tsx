@@ -51,7 +51,12 @@ describe('ListedMailProvider', () => {
         const listed = held();
         const everything = vi.fn();
 
-        listed.listing({ selectAll: everything, takeFocus: () => undefined, stand: () => undefined });
+        listed.listing({
+            selectAll: everything,
+            takeFocus: () => undefined,
+            stand: () => undefined,
+            readAgain: () => undefined,
+        });
         listed.selectAll();
 
         listed.listing(null);
@@ -64,7 +69,12 @@ describe('ListedMailProvider', () => {
         const listed = held();
         const stood = vi.fn();
 
-        listed.listing({ selectAll: () => undefined, takeFocus: () => undefined, stand: stood });
+        listed.listing({
+            selectAll: () => undefined,
+            takeFocus: () => undefined,
+            stand: stood,
+            readAgain: () => undefined,
+        });
         listed.stand('commitments');
 
         listed.listing(null);
@@ -77,7 +87,12 @@ describe('ListedMailProvider', () => {
         const listed = held();
         const focused = vi.fn();
 
-        listed.listing({ selectAll: () => undefined, takeFocus: focused, stand: () => undefined });
+        listed.listing({
+            selectAll: () => undefined,
+            takeFocus: focused,
+            stand: () => undefined,
+            readAgain: () => undefined,
+        });
         listed.takeFocus();
 
         listed.listing(null);

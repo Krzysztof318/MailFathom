@@ -59,6 +59,7 @@ const acts = {
     remove: vi.fn(),
     follow: vi.fn(),
     show: vi.fn(),
+    readAgain: vi.fn(),
 };
 
 function centre(held: Partial<Centre> = {}): Centre {
@@ -66,6 +67,7 @@ function centre(held: Partial<Centre> = {}): Centre {
         unreadCount: 1,
         shown: true,
         notifications: [mail, meeting],
+        arrived: new Set<string>(),
         reading: false,
         failure: null,
         ...acts,
@@ -152,6 +154,15 @@ describe('NotificationCentre', () => {
         panel({ unreadCount: 4 });
 
         expect(screen.getByText('4 new')).toBeDefined();
+    });
+
+    // The standing rule for every list in this client: a centre already drawn is not redrawn as a centre appearing,
+    // so what a poll brings back moves the row it brought and leaves the rows beside it where they were.
+    it('opens the row that arrived, and only that one', () => {
+        panel({ arrived: new Set(['n-mail']) });
+
+        expect([...rowFor('Ada Lovelace wrote').classList]).toContain('animate-row-opening');
+        expect([...rowFor('Standing meeting moved').classList]).not.toContain('animate-row-opening');
     });
 
     it('draws every notification on the tab that shows all of them', () => {

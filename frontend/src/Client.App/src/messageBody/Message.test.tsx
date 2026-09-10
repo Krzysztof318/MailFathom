@@ -208,6 +208,19 @@ describe('Message', () => {
         asked = [];
     });
 
+    // The words standing in that space are held against the design as images rather than asserted here: they are
+    // `aria-hidden` by construction and jsdom computes no layout, so what this suite can say about the wait is what a
+    // person meets — the sentence while the read is in flight, and no message until one has arrived.
+    it('says the message is opening while the read is in flight', () => {
+        // An answer that never comes, which is the whole of the state under test.
+        answer = () => new Promise<Answer>(() => undefined);
+
+        readingOneMessage();
+
+        expect(screen.getByRole('status').textContent).toBe('Opening the message…');
+        expect(screen.queryByText('A drawn message.')).toBeNull();
+    });
+
     it('draws the message the read answered with', async () => {
         readingOneMessage();
 

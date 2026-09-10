@@ -61,6 +61,13 @@ export interface NotificationCentre {
     /** The window of the centre the panel draws, newest first. */
     readonly notifications: readonly ClientNotification[];
 
+    /**
+     * The rows that were not there the last time this client read the centre, which is what a row opening itself is
+     * drawn from. It is empty after the first read of a credential's centre, because everything is new then and
+     * nothing arrived.
+     */
+    readonly arrived: ReadonlySet<string>;
+
     /** Whether the page behind the panel is being read for the first time, which is what the panel says while it waits. */
     readonly reading: boolean;
 
@@ -69,6 +76,13 @@ export interface NotificationCentre {
 
     readonly show: () => void;
     readonly hide: () => void;
+
+    /**
+     * Reads what has happened again, whether or not the panel is open. It is what the rail's refresh asks of the
+     * centre: the count is polled on its own and a page is read when somebody looks, so a reader who wants to know
+     * now has nothing to press without it.
+     */
+    readonly readAgain: () => void;
 
     /** Puts one notification into the read state stated, which is what the row's own control does. */
     readonly markRead: (ids: readonly string[], read: boolean) => void;
@@ -116,6 +130,7 @@ export function useNotificationCentre(
     const [unreadCount, setUnreadCount] = useState(0);
     const [shown, setShown] = useState(false);
     const [notifications, setNotifications] = useState<readonly ClientNotification[]>([]);
+    const [arrived, setArrived] = useState<ReadonlySet<string>>(new Set());
     const [reading, setReading] = useState(false);
     const [failure, setFailure] = useState<ClientFailureReason | null>(null);
 
@@ -154,9 +169,16 @@ export function useNotificationCentre(
         setCredential(session);
         setUnreadCount(0);
         setNotifications([]);
+        setArrived(new Set());
         setShown(false);
         setFailure(null);
     }
+
+    // Reading the count as this effect is currently able to, held so that asking for one by hand does not have to
+    // restart the interval and the subscription that live beside it. It is written by the effect rather than declared
+    // outside it, because what a read needs — the session, the transport, the controller that abandons it — is the
+    // effect's own and none of it is this hook's for as long as this hook exists.
+    const countNow = useRef<(() => void) | null>(null);
 
     useEffect(() => {
         if (session === null || !online) {
@@ -165,7 +187,11 @@ export function useNotificationCentre(
 
         const attempted = new AbortController();
 
-        async function count(): Promise<void> {
+        // `asksForThePage` is false for a count somebody asked for beside a page they are already asking for: the rise
+        // below is what turns an unattended count into a page read, and a hand-made refresh has bumped the token
+        // itself, so leaving it armed would ask the route twice — the second answer arriving against a `known` the
+        // first had already filled, which is a row that arrived and is marked as though it had always been there.
+        async function count(asksForThePage: boolean): Promise<void> {
             if (session === null) {
                 return;
             }
@@ -184,22 +210,26 @@ export function useNotificationCentre(
 
             // Only a rise asks for the page. A count that fell is this client's own marking landing, and a count that
             // did not move is the ordinary poll — neither is anything a reader has to be told about.
-            if (rose) {
+            if (rose && asksForThePage) {
                 setAsked((token) => token + 1);
             }
         }
 
-        void count();
+        countNow.current = () => {
+            void count(false);
+        };
+
+        void count(true);
 
         const polling = window.setInterval(() => {
-            void count();
+            void count(true);
         }, unreadCountInterval);
 
         // Coming back to the window is when somebody looks at the bell, and it is the moment a poll is least likely to
         // have just landed — a machine that was asleep ran no interval at all.
         function returned(): void {
             if (document.visibilityState === 'visible') {
-                void count();
+                void count(true);
             }
         }
 
@@ -211,11 +241,12 @@ export function useNotificationCentre(
         // number this client keeps in step on its own.
         const listening = signalledChanges.listen((signal) => {
             if (signal.kind === 'notification.raised') {
-                void count();
+                void count(true);
             }
         });
 
         return () => {
+            countNow.current = null;
             attempted.abort();
             window.clearInterval(polling);
             document.removeEventListener('visibilitychange', returned);
@@ -231,6 +262,17 @@ export function useNotificationCentre(
 
     const hide = useCallback((): void => {
         setShown(false);
+    }, []);
+
+    // The same token a rise in the count bumps, so asking for a page by hand and something having arrived stay one
+    // mechanism rather than two reads racing on the same route. The count is read beside it rather than left to the
+    // interval, because the badge is what a reader who does not open the panel is looking at — and it is the read the
+    // effect above is holding rather than a second one composed here, so a press cannot outlive the session it was
+    // made under. It is asked for as a count alone, so a press that finds notifications waiting costs the one page
+    // read bumped here rather than a second one the rise would otherwise ask for.
+    const readAgain = useCallback((): void => {
+        setAsked((token) => token + 1);
+        countNow.current?.();
     }, []);
 
     // Coming back through the notification the operating system showed is the same act as reaching for the bell, so it
@@ -362,6 +404,7 @@ export function useNotificationCentre(
 
             setFailure(null);
             setNotifications(page);
+            setArrived(seen === null ? new Set() : new Set(page.map((row) => row.id).filter((id) => !seen.has(id))));
             known.current = { session, ids: new Set(page.map((notification) => notification.id)) };
 
             // The first read is what this client has, rather than what has just happened, so nothing is announced from
@@ -489,10 +532,12 @@ export function useNotificationCentre(
         unreadCount,
         shown,
         notifications,
+        arrived,
         reading,
         failure,
         show,
         hide,
+        readAgain,
         markRead,
         markAllRead,
         remove,

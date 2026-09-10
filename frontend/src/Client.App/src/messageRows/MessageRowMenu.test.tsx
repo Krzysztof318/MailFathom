@@ -157,13 +157,13 @@ describe('MessageRowMenu', () => {
     it('draws no way to check a reading for a message that carries none', () => {
         menuUnder();
 
-        expect(screen.queryByRole('menuitem', { name: 'Check what MailFathom made of it' })).toBeNull();
+        expect(screen.queryByRole('menuitem', { name: 'AI summary' })).toBeNull();
     });
 
     it('offers checking a reading at the foot, below the acts that change the mailbox', () => {
         menuUnder({ onCheckReadings: vi.fn() });
 
-        expect(drawn().at(-1)).toBe('Check what MailFathom made of it');
+        expect(drawn().at(-1)).toBe('AI summary');
     });
 
     it('opens the readings rather than acting on the message', () => {
@@ -171,7 +171,7 @@ describe('MessageRowMenu', () => {
         const performed = vi.fn();
 
         menuUnder({ acts: actsWhere(() => null, performed), onCheckReadings: checked });
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Check what MailFathom made of it' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'AI summary' }));
 
         expect(checked).toHaveBeenCalledOnce();
         expect(performed).not.toHaveBeenCalled();

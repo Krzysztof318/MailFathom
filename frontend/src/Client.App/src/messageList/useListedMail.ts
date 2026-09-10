@@ -55,6 +55,9 @@ export interface ListedMail {
 
     /** Puts one of the tree's standing views in force on the list, and does nothing where no list is on the screen. */
     readonly stand: (view: StandingView) => void;
+
+    /** Reads the leading end of the list again, and does nothing where no list is on the screen. */
+    readonly readAgain: () => void;
 }
 
 /** What a list on the screen answers for, filled by the list itself and by nothing above it. */
@@ -67,6 +70,13 @@ export interface ListedMailbox {
      * is: what a view sets is filters on the folder in front of the reader, and the folder's filters are the list's.
      */
     readonly stand: (view: StandingView) => void;
+
+    /**
+     * Reads the leading end of the list again, which is the list's own act for the reason the two above are: what the
+     * leading end *is* — which page, read with which cursor, under which filters — is the list's alone, and a refresh
+     * asked from the rail knows none of it.
+     */
+    readonly readAgain: () => void;
 }
 
 /** What a tree with no provider above it reads, which is a client where nothing outside a list can reach into one. */
@@ -77,6 +87,7 @@ export const nothingListed: ListedMail = {
     takeFocus: () => undefined,
     listing: () => undefined,
     stand: () => undefined,
+    readAgain: () => undefined,
 };
 
 export const ListedMailContext = createContext<ListedMail>(nothingListed);

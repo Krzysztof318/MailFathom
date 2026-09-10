@@ -45,6 +45,9 @@ export function ListedMailProvider({ children }: { readonly children: ReactNode 
         stand: (view) => {
             mailbox.current?.stand(view);
         },
+        readAgain: () => {
+            mailbox.current?.readAgain();
+        },
         listing: (list) => {
             mailbox.current = list;
         },

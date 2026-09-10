@@ -67,6 +67,7 @@ import { AccountMenu } from './shell/AccountMenu';
 import { IntentField } from './shell/IntentField';
 import { LanguageChoice, ThemeChoice } from './shell/Preferences';
 import { Space } from './shell/Space';
+import { Refresh } from './shell/Refresh';
 import { SpaceNavigation } from './shell/SpaceNavigation';
 import { useConnection } from './shell/useConnection';
 import { useBackNavigation } from './shellOperations/backNavigation';
@@ -134,8 +135,8 @@ export function App({
     const [notices, setNotices] = useState<readonly CredentialNotice[]>([]);
     const baseAddress = adopted === null ? null : adopted.deployment.baseAddress;
 
-    // What names this sign-in, and it is deliberately not the credential: a renewal replaces the token every eleven
-    // hours, and a frame keyed on the value would empty the screen, take focus off whatever was being read, and record
+    // What names this sign-in, and it is deliberately not the credential: a renewal replaces the token an hour before
+    // it expires, and a frame keyed on the value would empty the screen, take focus off whatever was being read, and record
     // a second session beginning — at an instant nothing happened at. The person and the address are what actually
     // change when somebody signs out and somebody else signs in.
     const signedInAs = person === null || baseAddress === null ? null : `${baseAddress}\n${person}`;
@@ -511,7 +512,7 @@ export function App({
         revise({ selection: null, conversation: null });
     }, [space, layers, closeAttachment, closeFullHtml, revise]);
 
-    function signedIn(reached: DeploymentAddress, session: KeptSession): void {
+    function signedIn(reached: DeploymentAddress, session: KeptSession, keptBeyondTheTab: boolean): void {
         if (adopted === null) {
             storeDeployment(reached);
             setAdopted({ deployment: reached, origin: 'chosen' });
@@ -529,7 +530,7 @@ export function App({
         // The screen has already said how long the sign-in will be kept, so a store that refused the write says so
         // rather than leaving somebody to discover it by being asked for the password again at the next start. This
         // one is read inside the frame: signing in worked, and what failed is only the keeping.
-        void credentials.keep(reached, writeKeptSession(session)).then((stored) => {
+        void credentials.keep(reached, writeKeptSession(session), keptBeyondTheTab).then((stored) => {
             if (!stored) {
                 setNotices(['sessionNotKept']);
             }
@@ -618,7 +619,7 @@ export function App({
                 adopted={adopted}
                 refusal={deployment.outcome === 'refused' ? deployment.refusal : null}
                 clearTextPermitted={deployment.outcome === 'resolved' ? deployment.clearTextPermitted : null}
-                lifetime={credentials.lifetime}
+                beyondTheTab={credentials.beyondTheTab}
                 notices={notices}
                 send={send}
                 onSignedIn={signedIn}
@@ -844,6 +845,16 @@ export function App({
                                                             current={space}
                                                             onPointerDown={swipe.onNavigationPointerDown}
                                                             onClickCapture={swipe.onNavigationClickCapture}
+                                                            refresh={
+                                                                // On the same grant the bell is, and for the same reason: today
+                                                                // the two things it reads again are the mail and the centre, and
+                                                                // a credential that may read neither would press it for nothing.
+                                                                readsMail ? (
+                                                                    <Refresh
+                                                                        readNotificationsAgain={notifications.readAgain}
+                                                                    />
+                                                                ) : null
+                                                            }
                                                             notifications={
                                                                 // Offered on the grant the routes are admitted under, and absent
                                                                 // rather than inert without it: a bell that could never answer is
@@ -1080,7 +1091,7 @@ function SignInScreen({
     adopted,
     refusal,
     clearTextPermitted,
-    lifetime,
+    beyondTheTab,
     notices,
     send,
     onSignedIn,
@@ -1089,10 +1100,10 @@ function SignInScreen({
     readonly adopted: AdoptedDeployment | null;
     readonly refusal: ConfigurationRefusal | null;
     readonly clearTextPermitted: boolean | null;
-    readonly lifetime: CredentialStore['lifetime'];
+    readonly beyondTheTab: CredentialStore['beyondTheTab'];
     readonly notices: readonly CredentialNotice[];
     readonly send: DeploymentTransport;
-    readonly onSignedIn: (reached: DeploymentAddress, session: KeptSession) => void;
+    readonly onSignedIn: (reached: DeploymentAddress, session: KeptSession, keptBeyondTheTab: boolean) => void;
     readonly onPointSomewhereElse: () => void;
 }) {
     const { translate } = useLocalization();
@@ -1138,7 +1149,7 @@ function SignInScreen({
                         <SignIn
                             adopted={adopted}
                             clearTextPermitted={clearTextPermitted}
-                            lifetime={lifetime}
+                            beyondTheTab={beyondTheTab}
                             notices={notices}
                             send={send}
                             onSignedIn={onSignedIn}

@@ -73,13 +73,17 @@ export function MessageRow({
     open,
     selected,
     focusable,
+    arrived,
+    changed,
     note,
+    onReadings,
     onOpen,
     onPoint,
     onPress,
     onAnswer,
     onArchive,
     onPointerEnter,
+    onSettled,
     onElement,
 }: {
     readonly email: MailTimelineEntry;
@@ -88,8 +92,26 @@ export function MessageRow({
     readonly selected: boolean;
     readonly focusable: boolean;
 
+    /**
+     * Whether this row arrived in a list the reader was already looking at, which is what it lands for. It is false
+     * for every row of a list's first read: that list appeared, and nothing arrived in it.
+     */
+    readonly arrived?: boolean;
+
+    /**
+     * Whether the deployment named this message as one that changed, which is what the row is washed and marked for.
+     * A list whose rows nothing signals about — the search results — hands neither.
+     */
+    readonly changed?: boolean;
+
     /** What the row has to say about the message beyond what it draws, in the line the height already reserves. */
     readonly note?: ReactNode;
+
+    /**
+     * Opens what MailFathom read from this message, or absent where it read nothing from it and where the list offers
+     * no such surface at all.
+     */
+    readonly onReadings?: (() => void) | undefined;
     readonly onOpen: () => void;
 
     /**
@@ -123,6 +145,17 @@ export function MessageRow({
     readonly onArchive?: (() => void) | undefined;
 
     readonly onPointerEnter: () => void;
+
+    /**
+     * That the row has finished saying it moved, so the list stops holding it as a row that did.
+     *
+     * A windowed list unmounts a row scrolled out of the window and mounts it again on the way back, and a row still
+     * held as arrived would land a second time each time that happened — which is the animation running for something
+     * that did not just happen. So the row reports the end of its own animation rather than the list timing it, and
+     * the duration stays in the stylesheet where every other one is.
+     */
+    readonly onSettled?: (() => void) | undefined;
+
     readonly onElement: (element: HTMLLIElement | null) => void;
 }) {
     const { translate } = useLocalization();
@@ -166,6 +199,13 @@ export function MessageRow({
             aria-setsize={-1}
             aria-current={open ? 'true' : undefined}
             tabIndex={focusable ? 0 : -1}
+            onAnimationEnd={(event) => {
+                // The row's own animation and not one inside it: `animationend` bubbles, so a symbol animating within
+                // the row would otherwise report the row as having finished moving before it had.
+                if (event.target === event.currentTarget) {
+                    onSettled?.();
+                }
+            }}
             onContextMenu={press.onContextMenu}
             onPointerDown={(event) => {
                 press.onPointerDown(event);
@@ -209,7 +249,14 @@ export function MessageRow({
             //
             // Vertical panning stays the scroller's and everything sideways is the row's, which is what stops a browser
             // from taking the gesture over as a scroll before it has been read.
-            className="relative h-message-row-narrow touch-pan-y overflow-hidden border-b border-b-sunken workspace:h-message-row"
+            //
+            // One of the two animations at most, and the arrival wins: a row that has only just been drawn has nothing
+            // to have changed from, so washing it as well would be marking it against a version of itself the reader
+            // never saw. Both are the design project's, and `styles.css` holds why the arrival here is the travel
+            // without the height a flowing list gets.
+            className={`relative h-message-row-narrow touch-pan-y overflow-hidden border-b border-b-sunken workspace:h-message-row ${
+                arrived === true ? 'animate-row-landing' : changed === true ? 'animate-row-changed' : ''
+            }`}
         >
             {carrying === undefined ? null : (
                 // What the row is being carried off is showing: the act, named and drawn, against the edge the finger
@@ -295,6 +342,33 @@ export function MessageRow({
                             </span>
                         </span>
                     ) : null}
+
+                    {/* What MailFathom read from this message, opened from the row the design project draws it on and
+                        offered only where there is a reading to open. It is a mark rather than a control, and that is
+                        an accessibility obligation rather than a shortcut: a row is an `option` of a listbox and holds
+                        no focusable descendant, so a button here would take the keyboard path off the list. The
+                        announced path to the same surface is the row's own menu, which a pointer, a finger and a
+                        keyboard each reach — this is the pointer's shortcut to it and is hidden from everything that
+                        would otherwise announce a second, unreachable copy of it. */}
+                    {onReadings === undefined ? null : (
+                        <span
+                            aria-hidden="true"
+                            title={translate('list.readings')}
+                            className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted hover:bg-accent-soft hover:text-accent-deep pointer-coarse:size-8"
+                            onPointerDown={(event) => {
+                                event.stopPropagation();
+                            }}
+                            onPointerUp={(event) => {
+                                event.stopPropagation();
+                            }}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onReadings();
+                            }}
+                        >
+                            <Icon name="auto_awesome" className="size-4 pointer-coarse:size-4.75" />
+                        </span>
+                    )}
 
                     <ReceivedAt at={email.receivedAt} />
                 </div>

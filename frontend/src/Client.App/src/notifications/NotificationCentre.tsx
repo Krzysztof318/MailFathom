@@ -337,6 +337,7 @@ export function NotificationCentre({
                         notification={notification}
                         selected={picked.includes(notification.id)}
                         selecting={picked.length > 0}
+                        arrived={centre.arrived.has(notification.id)}
                         now={now}
                         onOpen={() => {
                             clear();

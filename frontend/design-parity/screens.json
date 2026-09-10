@@ -200,20 +200,20 @@
         {
           "click": {
             "role": "button",
-            "name": "Show the full HTML version"
+            "name": "Show the original message"
           }
         },
         {
           "click": {
             "role": "button",
-            "name": "Show the HTML",
+            "name": "Show the original",
             "exact": true
           }
         },
         {
           "expect": {
             "role": "region",
-            "name": "The sender's own version of this message"
+            "name": "The original message, as its sender wrote it"
           }
         }
       ],
@@ -239,13 +239,13 @@
         {
           "click": {
             "role": "button",
-            "name": "Show the full HTML version"
+            "name": "Show the original message"
           }
         },
         {
           "expect": {
             "role": "button",
-            "name": "Show the HTML",
+            "name": "Show the original",
             "exact": true
           }
         }

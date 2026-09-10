@@ -128,8 +128,8 @@ describe('OpenedMessage', () => {
         const onShowFullHtml = vi.fn();
 
         drawing(described, read, nothingMarkedRead, false, onShowFullHtml);
-        fireEvent.click(screen.getByRole('button', { name: 'Show the full HTML version' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Show the HTML' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show the original message' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show the original' }));
 
         expect(onShowFullHtml).toHaveBeenCalled();
     });
@@ -139,7 +139,7 @@ describe('OpenedMessage', () => {
     it('offers no way to the markup where the reader is already reading it', () => {
         drawing(described, read, nothingMarkedRead, true);
 
-        expect(screen.queryByRole('button', { name: 'Show the full HTML version' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Show the original message' })).toBeNull();
     });
 
     // The screen's own head is the caller's: a conversation says its subject once above every message in it, and a

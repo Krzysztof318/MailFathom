@@ -245,7 +245,7 @@ describe('ReadingPane', () => {
     it('says it is reading while the deployment has answered nothing', () => {
         drawing(answersNothing);
 
-        expect(screen.getByRole('status')).toHaveProperty('textContent', 'Reading this message…');
+        expect(screen.getByRole('status')).toHaveProperty('textContent', 'Opening this message…');
     });
 
     // What the skeleton standing in that space looks like is held against the design as images rather than asserted
@@ -254,11 +254,11 @@ describe('ReadingPane', () => {
     it('says it is reading until the message is there, and stops saying it once the message is', async () => {
         drawing(deploymentDescribing());
 
-        expect(screen.getByRole('status')).toHaveProperty('textContent', 'Reading this message…');
+        expect(screen.getByRole('status')).toHaveProperty('textContent', 'Opening this message…');
 
         await screen.findByRole('heading', { name: 'Quarterly invoice', level: 2 });
 
-        expect(screen.queryByText('Reading this message…')).toBeNull();
+        expect(screen.queryByText('Opening this message…')).toBeNull();
     });
 
     it('says the machine is offline rather than reporting the deployment as unreachable', () => {
@@ -555,7 +555,7 @@ describe('ReadingPane and the sender own markup', () => {
     it('offers the sender own markup on the message card rather than in the head', async () => {
         drawingOfferingMarkup(vi.fn(), false);
 
-        const offered = await screen.findByRole('button', { name: 'Show the full HTML version' });
+        const offered = await screen.findByRole('button', { name: 'Show the original message' });
 
         expect(offered.closest('header')).toBeNull();
     });
@@ -564,10 +564,10 @@ describe('ReadingPane and the sender own markup', () => {
         const shown = vi.fn();
 
         drawingOfferingMarkup(shown, false);
-        fireEvent.click(await screen.findByRole('button', { name: 'Show the full HTML version' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Show the original message' }));
 
         expect(shown).not.toHaveBeenCalled();
-        expect(screen.getByRole('heading', { name: 'Show the full HTML?' })).toBeDefined();
+        expect(screen.getByRole('heading', { name: 'Show the original message?' })).toBeDefined();
     });
 
     it('offers no such control where the reader chose to embed every message as its sender wrote it', async () => {
@@ -575,7 +575,7 @@ describe('ReadingPane and the sender own markup', () => {
 
         await screen.findByRole('heading', { name: 'Quarterly invoice', level: 2 });
 
-        expect(screen.queryByRole('button', { name: 'Show the full HTML version' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Show the original message' })).toBeNull();
     });
 });
 
@@ -651,7 +651,7 @@ describe('ReadingPane against a deployment that says what changed', () => {
 
         // Assert
         expect(screen.getByText('Quarterly invoice')).toBeDefined();
-        expect(screen.queryByText('Reading this message…')).toBeNull();
+        expect(screen.queryByText('Opening this message…')).toBeNull();
     });
 });
 

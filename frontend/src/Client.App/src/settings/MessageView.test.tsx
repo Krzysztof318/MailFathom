@@ -47,27 +47,27 @@ describe('MessageView', () => {
         drawing(false);
 
         expect(screen.getByRole('radio', { name: 'Reduced' })).toBeDefined();
-        expect(screen.getByRole('radio', { name: 'HTML' })).toBeDefined();
+        expect(screen.getByRole('radio', { name: 'Original' })).toBeDefined();
     });
 
     it('reports the reduced text as chosen for somebody who has set nothing', () => {
         drawing(false);
 
         expect(screen.getByRole('radio', { name: 'Reduced', checked: true })).toBeDefined();
-        expect(screen.getByRole('radio', { name: 'HTML', checked: false })).toBeDefined();
+        expect(screen.getByRole('radio', { name: 'Original', checked: false })).toBeDefined();
     });
 
     it('reports the sender’s own markup as chosen once it has been picked', () => {
         drawing(true);
 
-        expect(screen.getByRole('radio', { name: 'HTML', checked: true })).toBeDefined();
+        expect(screen.getByRole('radio', { name: 'Original', checked: true })).toBeDefined();
     });
 
     it('states the view a reader picked', () => {
         const picked = vi.fn();
 
         drawing(false, picked);
-        fireEvent.click(screen.getByRole('radio', { name: 'HTML' }));
+        fireEvent.click(screen.getByRole('radio', { name: 'Original' }));
 
         expect(picked).toHaveBeenCalledWith(true);
     });
@@ -86,7 +86,7 @@ describe('MessageView', () => {
 
         expect(
             screen.getByText(
-                'Messages are shown as cleaned-up text; the full HTML is one control away on the message head.',
+                'Messages are shown as cleaned-up text; the original is one control away on the message head.',
             ),
         ).toBeDefined();
     });

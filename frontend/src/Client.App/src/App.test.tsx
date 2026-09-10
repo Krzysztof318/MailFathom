@@ -242,11 +242,11 @@ describe('App', () => {
         const list = await screen.findByRole('listbox', { name: 'Messages' });
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Show the full HTML version' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Show the HTML' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Show the original message' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show the original' }));
 
-        const standing = await screen.findByRole('dialog', { name: "The sender's own version of this message" });
-        const surface = within(standing).getByRole('region', { name: "The sender's own version of this message" });
+        const standing = await screen.findByRole('dialog', { name: 'The original message, as its sender wrote it' });
+        const surface = within(standing).getByRole('region', { name: 'The original message, as its sender wrote it' });
 
         // The message is where it was rather than replaced by the surface, which is the whole of what a window over it
         // means: the reading column goes on drawing what the reader was reading.
@@ -258,7 +258,7 @@ describe('App', () => {
             expect(document.activeElement).toBe(surface);
         });
 
-        fireEvent.click(within(surface).getByRole('button', { name: 'Close this view' }));
+        fireEvent.click(within(surface).getByRole('button', { name: 'Close the original message' }));
 
         expect(screen.queryByRole('dialog')).toBeNull();
         expect(screen.getByText('A drawn message.')).toBeDefined();
@@ -273,12 +273,14 @@ describe('App', () => {
         const list = await screen.findByRole('listbox', { name: 'Messages' });
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Show the full HTML version' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Show the HTML' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Show the original message' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show the original' }));
 
         // A tab of its own, so it takes the column the message had rather than standing in a window over it — which is
         // the mode deciding the shape, and the one difference between this test and the one above.
-        expect(await screen.findByRole('region', { name: "The sender's own version of this message" })).toBeDefined();
+        expect(
+            await screen.findByRole('region', { name: 'The original message, as its sender wrote it' }),
+        ).toBeDefined();
         expect(screen.queryByRole('dialog')).toBeNull();
         expect(screen.queryByText('A drawn message.')).toBeNull();
     });
