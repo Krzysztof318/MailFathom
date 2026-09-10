@@ -1077,9 +1077,10 @@ public static class ServiceCollectionExtensions
         // a response rather than a provider, so an instance that answers no questions simply resolves them and never
         // publishes one.
         services.AddSingleton(answeringBudget.Answer);
-        // A singleton because a ceiling over a period is one answer about the deployment: a ledger per scope would let
-        // every concurrent question believe it was the first one of the period. Registered for every deployment for the
-        // reason the bounds above are — an instance that answers nothing admits nothing and spends nothing.
+        // A singleton because it owns this process's answering instruments, created once on the shared meter: a second
+        // instance would publish the same instrument names twice. What the ceilings are decided against is the period
+        // row below, not anything held here. Registered for every deployment for the reason the bounds above are — an
+        // instance that answers nothing admits nothing and spends nothing.
         services.AddSingleton<MailAnsweringSpendTracker>();
         // The row the tracker admits against, scoped because it reaches the database through the session that owns a
         // connection. Registered for every deployment for the reason the tracker is: an instance that answers nothing

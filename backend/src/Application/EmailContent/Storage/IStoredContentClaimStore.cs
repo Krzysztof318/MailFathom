@@ -38,6 +38,12 @@ public interface IStoredContentClaimStore
     /// <returns>The claim that was taken, or the bound that refused it.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="bytes" /> is not positive, or the lifetime is not.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the caller already holds a transaction the claim would join.</exception>
+    /// <remarks>
+    /// A claim opens a transaction of its own and cannot be taken inside a caller's: a claim nobody has committed binds
+    /// no other replica, and the serialization every claim shares would be held for the whole of the caller's work.
+    /// Claim before opening a session, as synchronization does.
+    /// </remarks>
     Task<StoredContentClaimRecord> ClaimAsync(
         MailUserId user,
         long bytes,

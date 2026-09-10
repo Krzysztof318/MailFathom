@@ -348,6 +348,12 @@ the occupancy and the outstanding claims are read inside the statement that take
 rather than on any replica's. A deployment that configures neither ceiling takes no claim and never reaches the
 claim table, which is what keeps the cost of a bound on the deployments that asked for one.
 
+Within one run, the first refusal is the one thing that is remembered. Every message the run discovers after it is
+recorded as awaiting headroom under the same bound without a claim of its own: a smaller payload behind the refused one
+might still fit, but finding it would cost a claim — a transaction on the deployment's one claim serialization point —
+for every message of the run, and nothing is lost by not asking, because the next run's refill fetches what this one
+left against whatever room exists by then. The refill pass stops at its own first refusal for the same reason.
+
 What the occupancy is measured as is PostgreSQL's own accounting of what the content table occupies — its heap, its
 indexes, and the out-of-line storage the payloads live in — read from the catalogue in constant time rather than summed
 over the rows. That is the quantity a disk fills with. Two consequences follow from it and are intended: the number is

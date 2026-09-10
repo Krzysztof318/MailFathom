@@ -27,7 +27,7 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// </remarks>
 public interface IMailAnsweringSpendPeriodStore
 {
-    /// <summary>Takes an allowance for one run against the deployment's period, if either ceiling has one left.</summary>
+    /// <summary>Takes an allowance for one run against the deployment's period, only where both ceilings still have room.</summary>
     /// <param name="periodStart">The period's start, as the bounds place it.</param>
     /// <param name="maximumRuns">The greatest number of runs this period may admit.</param>
     /// <param name="maximumTokens">The greatest number of tokens the runs of this period may consume.</param>
@@ -45,8 +45,8 @@ public interface IMailAnsweringSpendPeriodStore
         long maximumTokens,
         CancellationToken cancellationToken);
 
-    /// <summary>Adds what one run consumed to the period it was admitted into.</summary>
-    /// <param name="periodStart">The period's start, as the bounds place it.</param>
+    /// <summary>Adds what one run consumed to the period it ended in.</summary>
+    /// <param name="periodStart">The start of the period the run ended in, as the bounds place it — which, for a run that spanned a roll-over, is a later period than the one it was admitted into.</param>
     /// <param name="tokenCount">The tokens the run sent and received together, across every call it made.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The tokens this period has consumed including these.</returns>

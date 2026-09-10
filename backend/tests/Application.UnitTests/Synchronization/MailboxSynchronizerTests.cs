@@ -3073,6 +3073,41 @@ public sealed class MailboxSynchronizerTests
     }
 
     /// <summary>
+    /// Once a claim is refused, the run defers every later occurrence under the same bound without claiming again — a
+    /// smaller payload that would have fitted included, since finding it would cost a claim per message of the run.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_ARunWhoseFirstClaimWasRefused_DefersEveryLaterOccurrenceWithoutAskingAgain()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var refused = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(10));
+        var wouldHaveFitted = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(11));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [MetadataOf(refused, 600), MetadataOf(wouldHaveFitted, 50)],
+            wouldHaveFitted.Uid,
+            inventory: new InMemoryStoredEmailContentInventory { StoredContentBytes = 900 },
+            storedContentCeiling: new StoredContentCeiling(
+                new InMemoryStoredContentClaimStore().HoldingInTotal(900),
+                1000));
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(MailAccountIdentity.Create(SyntheticMailUser.Deployment, accountId), InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.StoredEmailCount);
+        Assert.Equal(2, result.ContentVolume.DeferredForStorageEmailCount);
+        await arrangement.Session.DidNotReceive().FetchEmailContentWithoutSettingSeenAsync(
+            Arg.Any<EmailOccurrenceId>(),
+            Arg.Any<long>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
     /// A user at their share defers their own mail's content and leaves the instance's room untouched, so another
     /// user's run stores content normally through the same ceiling.
     /// </summary>

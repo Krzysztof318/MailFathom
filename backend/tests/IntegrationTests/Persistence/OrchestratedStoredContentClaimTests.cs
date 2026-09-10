@@ -62,31 +62,38 @@ public sealed class OrchestratedStoredContentClaimTests(MailFathomOrchestrationF
         var user = OrchestratedDeploymentUser.Shared.User;
         var ceilings = await CeilingsWithRoomForAsync(onOneHost, payloadCount: 1, cancellationToken);
 
-        // Act
-        var taken = await ClaimAsync(onOneHost, user, ceilings, cancellationToken);
-        var refusedElsewhere = await ClaimAsync(onAnotherHost, user, ceilings, cancellationToken);
+        StoredContentClaimRecord? taken = null;
+        StoredContentClaimRecord? refusedElsewhere = null;
+        StoredContentClaimRecord? admittedElsewhere = null;
 
-        await ReleaseAsync(onOneHost, taken.ClaimId!.Value, cancellationToken);
-
-        var admittedElsewhere = await ClaimAsync(onAnotherHost, user, ceilings, cancellationToken);
-
-        // Assert
         try
         {
+            // Act
+            taken = await ClaimAsync(onOneHost, user, ceilings, cancellationToken);
+            refusedElsewhere = await ClaimAsync(onAnotherHost, user, ceilings, cancellationToken);
+
+            // Assert
             Assert.True(taken.IsGranted);
             Assert.Equal(StoredContentBound.Deployment, refusedElsewhere.ReachedBound);
+
+            // Act
+            await ReleaseAsync(onOneHost, taken.ClaimId!.Value, cancellationToken);
+            taken = null;
+            admittedElsewhere = await ClaimAsync(onAnotherHost, user, ceilings, cancellationToken);
+
+            // Assert
             Assert.True(admittedElsewhere.IsGranted);
         }
         finally
         {
-            // Released whatever the assertions decided: a claim that outlives a failing test reserves its bytes for
-            // the whole of ClaimLifetime in a database this collection shares, and every claim test here states its
-            // room from the catalogue alone, so the next one would report an arrangement with no room rather than
-            // the defect that actually failed.
-            if (admittedElsewhere.ClaimId is { } stillHeld)
-            {
-                await ReleaseAsync(onAnotherHost, stillHeld, cancellationToken);
-            }
+            // Every claim this test can be granted is released here whatever the assertions decided — including the
+            // one that should have been refused, since that is exactly what the regression this class exists for would
+            // grant. A claim that outlives a failing test reserves its bytes for the whole of ClaimLifetime in a
+            // database this collection shares, and every claim test states its room from the catalogue alone, so the
+            // next one would report an arrangement with no room rather than the defect that actually failed.
+            await ReleaseIfGrantedAsync(onOneHost, taken, cancellationToken);
+            await ReleaseIfGrantedAsync(onAnotherHost, refusedElsewhere, cancellationToken);
+            await ReleaseIfGrantedAsync(onAnotherHost, admittedElsewhere, cancellationToken);
         }
     }
 
@@ -142,6 +149,17 @@ public sealed class OrchestratedStoredContentClaimTests(MailFathomOrchestrationF
             (scope, token) => scope.GetRequiredService<IStoredContentClaimStore>()
                 .ClaimAsync(user, PayloadByteCount, ceilings, ClaimLifetime, token),
             cancellationToken);
+
+    private static async Task ReleaseIfGrantedAsync(
+        OrchestratedMailFathomServices services,
+        StoredContentClaimRecord? record,
+        CancellationToken cancellationToken)
+    {
+        if (record?.ClaimId is { } claimId)
+        {
+            await ReleaseAsync(services, claimId, cancellationToken);
+        }
+    }
 
     /// <summary>Gives one claim's room back, through a scope of its own the way the ceiling's own disposal does.</summary>
     private static Task<Guid> ReleaseAsync(

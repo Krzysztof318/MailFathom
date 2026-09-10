@@ -249,6 +249,13 @@ public sealed class MailboxSynchronizer
         var relocatedCount = 0;
         var hasMore = true;
         var stoppedForContentBudget = false;
+
+        // The bound that refused this run's first storage claim, once one has. Every occurrence discovered after it is
+        // recorded as awaiting headroom under the same bound without asking again, on the trade the deferred-content
+        // refill states: a smaller payload behind the refused one might still fit, but finding it would cost a claim —
+        // a transaction on the deployment's one claim serialization point — per message of the run, and nothing is lost
+        // by not asking, because the next run refills what this one deferred against whatever headroom exists by then.
+        StoredContentBound? storageRefusal = null;
         var inspectedBatchCount = 0;
         var suppressedChanges = new List<SuppressedMailboxChange>();
 
@@ -332,6 +339,7 @@ public sealed class MailboxSynchronizer
                         user,
                         budget,
                         collection,
+                        storageRefusal,
                         cancellationToken);
                     processedThroughUid = metadata.OccurrenceId.Uid;
 
@@ -340,6 +348,11 @@ public sealed class MailboxSynchronizer
                         // The folder stopped holding the occurrence between the batch that described it and the fetch. There
                         // is no message to record and nothing local to correct, so the checkpoint simply moves past it.
                         continue;
+                    }
+
+                    if (occurrence.Availability == StoredEmailContentAvailability.AwaitingStorageHeadroom)
+                    {
+                        storageRefusal ??= occurrence.ReachedStorageBound;
                     }
 
                     switch (occurrence.Availability)
@@ -660,6 +673,7 @@ public sealed class MailboxSynchronizer
                 user,
                 budget,
                 collection,
+                storageAlreadyRefused: null,
                 cancellationToken);
 
             // A ceiling filled up again while this pass ran. The pass stops asking rather than working down the queue
@@ -886,6 +900,7 @@ public sealed class MailboxSynchronizer
         MailUserId user,
         SynchronizationContentBudget budget,
         ContactCollectionRun collection,
+        StoredContentBound? storageAlreadyRefused,
         CancellationToken cancellationToken)
     {
         if (!this.WouldFetchContentOf(metadata))
@@ -897,6 +912,20 @@ public sealed class MailboxSynchronizer
                 filing,
                 StoredEmailContentAvailability.ExceededSizeLimit,
                 StoredContentBound.None,
+                cancellationToken);
+        }
+
+        // A ceiling already refused this run, so the occurrence is deferred under the bound that refused it without a
+        // claim of its own — see where the refusal is carried for why asking again is not worth its cost.
+        if (storageAlreadyRefused is { } refusedBound)
+        {
+            return await this.RecordOccurrenceWithoutContentAsync(
+                user,
+                metadata,
+                placement,
+                filing,
+                StoredEmailContentAvailability.AwaitingStorageHeadroom,
+                refusedBound,
                 cancellationToken);
         }
 
