@@ -13,9 +13,21 @@ import { everything, roleRank, scopeKey, type MailScope } from '../workspace/mai
 // every account at once and the roles that span them — the inbox of all three accounts is a thing somebody wants as
 // often as the inbox of one. That group is what several mailboxes are for, so a user holding exactly one account is
 // not offered it: it would draw that account's folders a second time under a heading meaning the same thing. Below it
-// each account carries its own folders, nested the way its mail server nests them, which is what the levels of a
-// folder's path are for. And a folder that plays a role is placed by that role rather than by its name, because a name
-// is whatever a provider chose in whatever language.
+// each account carries its own folders, nested by the alias that names them. And a folder that plays a role is placed
+// by that role rather than by its name, because a name is whatever a provider chose in whatever language.
+//
+// **The nesting is the alias's and not the remote path's.** An alias is MailFathom's own name for a folder and is what
+// every other route on this surface names it by, so a tree built from it is a tree whose rows can be acted on — a
+// folder created inside another is one whose alias extends its parent's, and nothing has to work out which server path
+// that turned into. The remote path is where the folder sits on somebody's mail server, which is a second hierarchy
+// that a provider, a delimiter, and a language each get a say in; it is what the folder dialog edits and what the last
+// level of a row's name is read from, and it decides nothing about the shape of the tree.
+
+/** How many segments an alias may carry, which is how deep a mailbox nests: `Inbox/Projects/2026` and no further. */
+export const deepestAlias = 3;
+
+/** The one character an alias nests on, which every reading of one here splits and joins by. */
+export const aliasSeparator = '/';
 
 /** One row of the tree, whatever it stands for: the whole workspace, a role across it, an account, or a folder. */
 export interface FolderTreeRow {
@@ -23,7 +35,7 @@ export interface FolderTreeRow {
     readonly key: string;
 
     /**
-     * What selecting the row scopes the client to, or `null` for a level of a path the service named no folder for.
+     * What selecting the row scopes the client to, or `null` for a level of an alias the service named no folder for.
      *
      * Not the same thing as the key, and an account's row is where the two part: pressing a mailbox's name means its
      * inbox rather than every folder it has at once, so the row is keyed by the account and scopes to the inbox. What
@@ -32,14 +44,38 @@ export interface FolderTreeRow {
      */
     readonly scope: MailScope | null;
 
-    /** The name whatever this row stands for has: a mailbox's display name, a level of a path, or a folder's alias. */
+    /** The name whatever this row stands for has: a mailbox's display name, a level of an alias, or a folder's own. */
     readonly name: string;
 
     /** The role this row stands for, where it has one — in which case the role names it rather than `name` does. */
     readonly role: MailFolderRole | null;
 
+    /**
+     * The account this row belongs to, or `null` for the two rows that span every account.
+     *
+     * It is what the menus on a row are drawn from rather than anything the tree itself reads: a folder is created,
+     * edited and removed inside one mailbox, so a row standing for every mailbox at once carries no such act — which
+     * is the design's *All accounts carries none* stated as a value rather than as a case in a component.
+     */
+    readonly accountId: string | null;
+
+    /** The alias this row stands for, whole, or `null` for a row standing for no one folder of one account. */
+    readonly alias: string | null;
+
+    /** The folder's place on its mail server, or `null` where this row stands for no folder the service named. */
+    readonly remotePath: readonly string[] | null;
+
     /** How deep the row sits, counted from one, which is what a tree reports as its level. */
     readonly level: number;
+
+    /**
+     * Whether the row is drawn folded away until somebody opens it.
+     *
+     * The folders a mailbox nests open collapsed, which is the design's own reading and the only one that scales: a
+     * mailbox filed three levels deep would otherwise open as a list of everything it has ever held. An account opens
+     * expanded, because a column showing no folder at all is a column saying nothing.
+     */
+    readonly opensCollapsed: boolean;
 
     /** How many unread messages the deployment holds here, or `null` where nothing counted any. */
     readonly unreadEmailCount: number | null;
@@ -64,13 +100,13 @@ export interface VisibleRow {
     readonly expanded: boolean | null;
 }
 
-// A level of a folder's path while the tree is being built: the folder bound to exactly that path where there is one,
-// and whatever is nested under it. A level with no folder of its own is a path the service named a deeper folder for
+// A level of an alias while the tree is being built: the folder bound to exactly that alias where there is one, and
+// whatever is nested under it. A level with no folder of its own is an alias the service named a deeper folder for
 // without naming this one — a mapping bound to `Archive/2024` where nothing is bound to `Archive`.
-interface PathLevel {
+interface AliasLevel {
     readonly name: string;
     folder: MailFolder | null;
-    readonly children: Map<string, PathLevel>;
+    readonly children: Map<string, AliasLevel>;
 }
 
 /** The whole tree, as the rows drawing it top to bottom. */
@@ -82,6 +118,16 @@ export function folderTreeOf(directory: MailFolderDirectory): readonly FolderTre
     const accounts = directory.accounts.map(accountRow);
 
     return directory.accounts.length === 1 ? accounts : [everythingRow(directory), ...accounts];
+}
+
+/** The segments an alias nests by, which is what decides both a row's parent and whether another may sit under it. */
+export function aliasSegments(alias: string): readonly string[] {
+    return alias.split(aliasSeparator).filter((segment) => segment.length > 0);
+}
+
+/** Whether a folder may hold another, which is the design's three-segment ceiling asked of one alias. */
+export function admitsNesting(alias: string): boolean {
+    return aliasSegments(alias).length < deepestAlias;
 }
 
 /**
@@ -123,24 +169,45 @@ export function openingScope(directory: MailFolderDirectory): MailScope {
  * Flattened rather than nested, because both things reading this want it flat: the keyboard moves from one visible row
  * to the next one whatever their depth, and a row states its own level rather than being nested inside its parent's
  * list. A tree that draws its rows as a flat list with the level on each is what lets the two agree by construction.
+ *
+ * `toggled` holds the rows whose fold a reader moved away from what it opens at, rather than the rows that are folded.
+ * One set answers both directions because each row states its own default: an account somebody folded away and a
+ * subfolder somebody opened are the same act recorded the same way, and a set holding only one of the two would need a
+ * second beside it that could disagree with it.
  */
-export function visibleRows(rows: readonly FolderTreeRow[], collapsed: ReadonlySet<string>): readonly VisibleRow[] {
+export function visibleRows(rows: readonly FolderTreeRow[], toggled: ReadonlySet<string>): readonly VisibleRow[] {
     const visible: VisibleRow[] = [];
 
-    gather(rows, collapsed, visible);
+    gather(rows, toggled, visible);
 
     return visible;
 }
 
-function gather(siblings: readonly FolderTreeRow[], collapsed: ReadonlySet<string>, into: VisibleRow[]): void {
+/**
+ * Whether any row of the tree stands for a key, whichever fold it sits behind.
+ *
+ * Asked of the whole tree rather than of the rows a reader can see, because a folder somebody chose is still a folder
+ * this client is scoped to once its parent is folded away — and a subfolder opens collapsed, so the rows a reader can
+ * see leave out exactly the nested ones a scope is most likely to name.
+ */
+export function namesRow(rows: readonly FolderTreeRow[], key: string): boolean {
+    return rows.some((row) => row.key === key || namesRow(row.children, key));
+}
+
+/** Whether a row is drawn open, given the folds a reader has moved. */
+export function expandedRow(row: FolderTreeRow, toggled: ReadonlySet<string>): boolean {
+    return toggled.has(row.key) ? row.opensCollapsed : !row.opensCollapsed;
+}
+
+function gather(siblings: readonly FolderTreeRow[], toggled: ReadonlySet<string>, into: VisibleRow[]): void {
     siblings.forEach((row, index) => {
         const opens = row.children.length > 0;
-        const expanded = opens && !collapsed.has(row.key);
+        const expanded = opens && expandedRow(row, toggled);
 
         into.push({ row, position: index + 1, setSize: siblings.length, expanded: opens ? expanded : null });
 
         if (expanded) {
-            gather(row.children, collapsed, into);
+            gather(row.children, toggled, into);
         }
     });
 }
@@ -155,7 +222,11 @@ function everythingRow(directory: MailFolderDirectory): FolderTreeRow {
         scope: everything,
         name: '',
         role: null,
+        accountId: null,
+        alias: null,
+        remotePath: null,
         level: 1,
+        opensCollapsed: false,
         unreadEmailCount: totalOf(directory, (folder) => folder.unreadEmailCount),
         storedEmailCount: totalOf(directory, (folder) => folder.storedEmailCount),
         children: [...roles.entries()]
@@ -172,7 +243,11 @@ function roleRow(role: MailFolderRole, folders: readonly MailFolder[]): FolderTr
         scope,
         name: '',
         role,
+        accountId: null,
+        alias: null,
+        remotePath: null,
         level: 2,
+        opensCollapsed: false,
         unreadEmailCount: sumOf(folders, (folder) => folder.unreadEmailCount),
         storedEmailCount: sumOf(folders, (folder) => folder.storedEmailCount),
         children: [],
@@ -188,7 +263,11 @@ function accountRow(entry: MailAccountFolders): FolderTreeRow {
         scope: inbox === undefined ? whole : { kind: 'folder', accountId: entry.account.id, alias: inbox.alias },
         name: entry.account.displayName,
         role: null,
+        accountId: entry.account.id,
+        alias: null,
+        remotePath: null,
         level: 1,
+        opensCollapsed: false,
         unreadEmailCount: sumOf(entry.folders, (folder) => folder.unreadEmailCount),
         storedEmailCount: sumOf(entry.folders, (folder) => folder.storedEmailCount),
         children: folderRows(entry),
@@ -196,31 +275,24 @@ function accountRow(entry: MailAccountFolders): FolderTreeRow {
 }
 
 function folderRows(entry: MailAccountFolders): readonly FolderTreeRow[] {
-    const levels = new Map<string, PathLevel>();
-    const unbound: MailFolder[] = [];
+    const levels = new Map<string, AliasLevel>();
 
     for (const folder of entry.folders) {
-        const [outermost, ...rest] = folder.path;
+        const [outermost, ...rest] = aliasSegments(folder.alias);
 
-        if (outermost === undefined) {
-            unbound.push(folder);
-        } else {
+        // An alias of nothing but separators is an answer no mapping produced, and it has nowhere in the tree to go.
+        if (outermost !== undefined) {
             place(levels, outermost, rest, folder);
         }
     }
 
-    const rows = [
-        ...[...levels.values()].map((level) => rowOfLevel(level, entry.account.id, [], 2)),
-        ...unbound.map((folder) => folderRow(folder, folder.alias, entry.account.id, 2, [])),
-    ];
-
-    return rows.sort(bySiblingOrder);
+    return [...levels.values()].map((level) => rowOfLevel(level, entry.account.id, [], 2)).sort(bySiblingOrder);
 }
 
-// Walks a folder's path down the levels built so far, adding what is missing, and binds the folder to the last of
+// Walks a folder's alias down the levels built so far, adding what is missing, and binds the folder to the last of
 // them. Recursive rather than iterative so nothing has to assert that the level it ended on exists.
-function place(levels: Map<string, PathLevel>, name: string, rest: readonly string[], folder: MailFolder): void {
-    const level = levels.get(name) ?? { name, folder: null, children: new Map<string, PathLevel>() };
+function place(levels: Map<string, AliasLevel>, name: string, rest: readonly string[], folder: MailFolder): void {
+    const level = levels.get(name) ?? { name, folder: null, children: new Map<string, AliasLevel>() };
 
     levels.set(name, level);
 
@@ -233,33 +305,37 @@ function place(levels: Map<string, PathLevel>, name: string, rest: readonly stri
     }
 }
 
-function rowOfLevel(level: PathLevel, accountId: string, above: readonly string[], depth: number): FolderTreeRow {
-    const path = [...above, level.name];
+function rowOfLevel(level: AliasLevel, accountId: string, above: readonly string[], depth: number): FolderTreeRow {
+    const segments = [...above, level.name];
+    const alias = segments.join(aliasSeparator);
     const children = [...level.children.values()]
-        .map((nested) => rowOfLevel(nested, accountId, path, depth + 1))
+        .map((nested) => rowOfLevel(nested, accountId, segments, depth + 1))
         .sort(bySiblingOrder);
 
     if (level.folder === null) {
         return {
             // Keyed by where it sits rather than by what it is called, because two mailboxes nest folders of the same
             // name and a key that collided would fold both of them away together.
-            key: `level:${accountId}:${path.join('/')}`,
+            key: `level:${accountId}:${alias}`,
             scope: null,
-            name: level.name,
+            name: levelName(segments, children),
             role: null,
+            accountId,
+            alias,
+            remotePath: null,
             level: depth,
+            opensCollapsed: true,
             unreadEmailCount: null,
             storedEmailCount: null,
             children,
         };
     }
 
-    return folderRow(level.folder, level.name, accountId, depth, children);
+    return folderRow(level.folder, accountId, depth, children);
 }
 
 function folderRow(
     folder: MailFolder,
-    name: string,
     accountId: string,
     depth: number,
     children: readonly FolderTreeRow[],
@@ -269,13 +345,62 @@ function folderRow(
     return {
         key: scopeKey(scope),
         scope,
-        name,
+        name: folderName(folder),
         role: folder.role,
+        accountId,
+        alias: folder.alias,
+        remotePath: folder.path,
         level: depth,
+        opensCollapsed: true,
         unreadEmailCount: folder.unreadEmailCount,
         storedEmailCount: folder.storedEmailCount,
         children,
     };
+}
+
+// What a person recognizes a level nothing is bound to by. Its own alias segment is canonically upper-cased, exactly
+// as a bound folder's alias is, so drawing it would put a mailbox in capitals nobody typed — the defect `folderName`
+// below avoids, cured the same way: the remote path of a folder nested under this level records what somebody wrote.
+//
+// The two are lined up from their ends rather than by position, because an alias and a remote path nest the same
+// folder to whatever depths MailFathom and the mail server each chose: an alias two levels deep may sit three
+// directories down. A path too short to reach this level, and a level nothing is bound anywhere beneath, both leave
+// the alias segment as the only name there is.
+function levelName(segments: readonly string[], children: readonly FolderTreeRow[]): string {
+    const own = segments.at(-1) ?? '';
+    const bound = nearestBound(children);
+
+    return bound === null ? own : (bound.path.at(-1 - (aliasSegments(bound.alias).length - segments.length)) ?? own);
+}
+
+// The first folder the service named anywhere below these rows, read depth first so the nearest one answers, and as
+// the two values a level's name is read from rather than as the row itself — which is what says both are there.
+function nearestBound(
+    rows: readonly FolderTreeRow[],
+): { readonly alias: string; readonly path: readonly string[] } | null {
+    for (const row of rows) {
+        if (row.alias !== null && row.remotePath !== null) {
+            return { alias: row.alias, path: row.remotePath };
+        }
+
+        const deeper = nearestBound(row.children);
+
+        if (deeper !== null) {
+            return deeper;
+        }
+    }
+
+    return null;
+}
+
+// What a person recognizes the folder by, which is the last level of where it sits on their mail server: the alias is
+// canonically upper-cased so that one folder is one value in a database whose collation MailFathom does not control,
+// and reading a name off it would draw a mailbox in capitals nobody typed. An alias nothing has bound yet has no such
+// level to read, and its own last segment is what is left.
+function folderName(folder: MailFolder): string {
+    const deepest = folder.path.at(-1) ?? aliasSegments(folder.alias).at(-1);
+
+    return deepest ?? folder.alias;
 }
 
 // A folder playing a role comes before one that plays none, in the order roles are offered in; the rest read as a

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useId, type RefObject } from 'react';
+import { useFolderMaintenance } from '../folders/useFolderMaintenance';
 import { Icon } from '../controls/Icon';
 import { MailboxMark } from '../controls/MailboxMark';
 import { SurfaceControl } from '../controls/SurfaceControl';
@@ -18,6 +19,13 @@ import { destinationName, type MoveDestination, type MoveDestinationGroup } from
 // one mailbox, so saying which one is saying what will happen. Exactly one group is offered today, because a message
 // moves between folders of its own account and nowhere else and a selection spanning two accounts is refused before
 // this dialog is reached; `mailboxDestinations.ts` is where that is decided.
+//
+// **Each group ends with a way to make a folder**, which is the design project's *New folder here*: the folder
+// somebody meant to file into does not always exist yet, and a sheet that could only offer what is already there
+// would send them to the folder column and back. It opens the same dialog the column's own menus open —
+// `folders/FolderMaintenance.tsx` owns it — and it closes this sheet first, because two dialogs at once is a reader
+// answering a question they cannot see the subject of. Filing the mail is then a second act rather than a
+// continuation of this one, which is honest: the folder is a mapping the account has yet to resolve.
 //
 // It is a choice rather than a confirmation, which is why it is not `Confirmation`: nothing here states a consequence
 // or offers a way back, because picking a folder *is* the act and the toast that follows is where taking it back is
@@ -41,6 +49,7 @@ export function MoveChoice({
     readonly onChosen: (destination: MoveDestination) => void;
 }) {
     const { translate } = useLocalization();
+    const maintenance = useFolderMaintenance();
     const asks = useId();
 
     // What a press answers with is a position in this one list, so the groups are flattened once here rather than the
@@ -114,6 +123,27 @@ export function MoveChoice({
                                 </li>
                             ))}
                         </ul>
+
+                        {maintenance.offered ? (
+                            <button
+                                type="button"
+                                className="flex w-full items-center gap-2.5 px-4 py-2.25 text-start text-base text-accent-strong transition hover:bg-hover"
+                                onClick={() => {
+                                    asked.current?.close();
+                                    maintenance.declare(
+                                        {
+                                            accountId: group.accountId,
+                                            accountName: group.accountName,
+                                            declaredAliases: group.destinations.map((destination) => destination.alias),
+                                        },
+                                        null,
+                                    );
+                                }}
+                            >
+                                <Icon name="create_new_folder" className="size-4.5 shrink-0" />
+                                <span className="truncate">{translate('folders.newFolderHere')}</span>
+                            </button>
+                        ) : null}
                     </section>
                 ))}
             </div>

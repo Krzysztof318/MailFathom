@@ -252,6 +252,145 @@ internal sealed class UserRecordAdministration(
             cancellationToken);
     }
 
+    /// <summary>Declares one more folder in one of the signed-in user's mail accounts.</summary>
+    /// <param name="accountId">The identifier the account the folder belongs to is named by.</param>
+    /// <param name="folderJson">The folder, as the JSON object a file would have written.</param>
+    /// <param name="expectedVersion">The version the record was read at.</param>
+    /// <param name="cancellationToken">Cancels the read and the commit.</param>
+    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no record for the acting user.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="folderJson" /> is <see langword="null" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailAccountsWrite" />.</exception>
+    /// <remarks>
+    /// The three folder acts carry the grant a mail account's own settings carry rather than one of their own. A
+    /// folder is a setting of the account it sits in — it names a path on that account's server and decides what is
+    /// mirrored from it — so a deployment that lets somebody state their own mailboxes has already let them state what
+    /// is read out of one, and a second grant would divide a permission nobody has asked to divide.
+    /// </remarks>
+    internal Task<UserRecordWriteOutcome?> AddOwnFolderAsync(
+        string accountId,
+        string folderJson,
+        long expectedVersion,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+        ArgumentNullException.ThrowIfNull(folderJson);
+        authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
+
+        return this.ChangeFolderAsync(
+            authorization.RequireUser(),
+            expectedVersion,
+            record => UserRecordComposition.WithFolderAdded(record, accountId, folderJson),
+            $"This user declares no mail account '{accountId}', so there is nothing for a folder to be added to.",
+            cancellationToken);
+    }
+
+    /// <summary>States one folder of the signed-in user's afresh, in place of the one carrying an alias.</summary>
+    /// <param name="accountId">The identifier the account the folder belongs to is named by.</param>
+    /// <param name="alias">The alias the folder being changed is declared under.</param>
+    /// <param name="folderJson">The folder as it is to stand, as the JSON object a file would have written.</param>
+    /// <param name="expectedVersion">The version the record was read at.</param>
+    /// <param name="cancellationToken">Cancels the read and the commit.</param>
+    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no record for the acting user.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> or <paramref name="alias" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="folderJson" /> is <see langword="null" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailAccountsWrite" />.</exception>
+    internal Task<UserRecordWriteOutcome?> ReplaceOwnFolderAsync(
+        string accountId,
+        string alias,
+        string folderJson,
+        long expectedVersion,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(alias);
+        ArgumentNullException.ThrowIfNull(folderJson);
+        authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
+
+        return this.ChangeFolderAsync(
+            authorization.RequireUser(),
+            expectedVersion,
+            record => UserRecordComposition.WithFolderReplaced(record, accountId, alias, folderJson),
+            $"This user's mail account '{accountId}' declares no folder '{alias}'. Read their record to see the aliases it holds.",
+            cancellationToken);
+    }
+
+    /// <summary>Withdraws one folder from one of the signed-in user's mail accounts.</summary>
+    /// <param name="accountId">The identifier the account the folder belongs to is named by.</param>
+    /// <param name="alias">The alias the folder being withdrawn is declared under.</param>
+    /// <param name="expectedVersion">The version the record was read at.</param>
+    /// <param name="cancellationToken">Cancels the read and the commit.</param>
+    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no record for the acting user.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> or <paramref name="alias" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailAccountsWrite" />.</exception>
+    /// <remarks>The mail this deployment already stored out of that folder is deliberately untouched, exactly as it is when a mail account stops being declared: no configuration edit takes somebody's mail away, and what becomes of it is an act of its own.</remarks>
+    internal Task<UserRecordWriteOutcome?> RemoveOwnFolderAsync(
+        string accountId,
+        string alias,
+        long expectedVersion,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(alias);
+        authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
+
+        return this.ChangeFolderAsync(
+            authorization.RequireUser(),
+            expectedVersion,
+            record => UserRecordComposition.WithFolderRemoved(record, accountId, alias),
+            $"This user's mail account '{accountId}' declares no folder '{alias}'. Read their record to see the aliases it holds.",
+            cancellationToken);
+    }
+
+    /// <summary>Composes one folder change over the record as the row holds it, and refuses one that matched nothing.</summary>
+    /// <remarks>
+    /// One private for the three acts, because they differ in exactly the composition they hand over and in the
+    /// sentence an unmatched change is reported with. What is the same is everything that decides whether the change
+    /// may be made at all — the version, the configuration refusal, the binder, and the commit — and a copy of that
+    /// per act is three places for one of them to drift.
+    /// </remarks>
+    private async Task<UserRecordWriteOutcome?> ChangeFolderAsync(
+        MailUserId user,
+        long expectedVersion,
+        Func<string, string?> compose,
+        string unmatched,
+        CancellationToken cancellationToken)
+    {
+        if (await this.OpenAsync(user, expectedVersion, cancellationToken) is not { } opened)
+        {
+            return null;
+        }
+
+        if (opened.Refusal is { } refusal)
+        {
+            return refusal;
+        }
+
+        string? candidate;
+
+        try
+        {
+            candidate = compose(opened.Record.Json);
+        }
+        catch (Exception refused) when (refused is FormatException or System.Text.Json.JsonException)
+        {
+            return UserRecordWriteOutcome.Refused(
+                MailFathomErrorCode.ConfigurationCandidateInvalid,
+                opened.Record.Version,
+                [$"The folder change is not one this deployment can compose over the user's record, so nothing was written: {refused.Message}"]);
+        }
+
+        // Reported as a refusal rather than as nothing to change, for the reason a withdrawn mail account is: a change
+        // that matched nothing is a name the caller got wrong, and answering that the record is fine would leave them
+        // believing a folder had moved.
+        return candidate is null
+            ? UserRecordWriteOutcome.Refused(
+                MailFathomErrorCode.ConfigurationCandidateInvalid,
+                opened.Record.Version,
+                [unmatched])
+            : await this.JudgeAndCommitAsync(user, opened.Record, candidate, UserRecordAuthority.User, cancellationToken);
+    }
+
     /// <summary>Reads one user's record, redacted, with the source their mail accounts come from beside it.</summary>
     private async Task<UserRecordReading?> ReadAsync(MailUserId user, CancellationToken cancellationToken) =>
         await documents.ReadAsync(user, cancellationToken) is { } record

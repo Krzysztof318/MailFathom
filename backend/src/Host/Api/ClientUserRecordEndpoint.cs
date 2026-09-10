@@ -51,6 +51,23 @@ internal static class ClientUserRecordEndpoint
     /// <remarks>The identifier travels in the body for the reason <see cref="UserRecordEndpoints.UserMailAccountRemovalRoute" /> gives: it is a name its user chose rather than a generated handle, and a removal that silently addressed nothing is the one outcome this act must not have.</remarks>
     internal const string MailAccountRemovalRoute = $"{MailAccountsRoute}/removal";
 
+    /// <summary>The route one folder of one mail account is declared at.</summary>
+    /// <remarks>
+    /// Under the record rather than beside <see cref="ClientMailFoldersEndpoint.MailFoldersRoute" />, because making
+    /// a folder is a change to what this deployment is configured to read rather than a change to a mailbox. Nothing
+    /// here reaches a mail server: the folder becomes a mapping, the account's next run resolves it, and the mapping
+    /// is what says the server may be asked to create it. That is the whole reason the two surfaces are apart — one
+    /// answers what the folders are, and this one states what they should be.
+    /// </remarks>
+    internal const string FoldersRoute = $"{MailAccountsRoute}/folders";
+
+    /// <summary>The route one folder is stated afresh at, in place of the one carrying an alias.</summary>
+    internal const string FolderReplacementRoute = $"{FoldersRoute}/replacement";
+
+    /// <summary>The route one folder is withdrawn at.</summary>
+    /// <remarks>The alias travels in the body for the reason a withdrawn mail account's identifier does, and for one more: an alias nests on a slash, so a name a route segment could carry is not a name every alias has.</remarks>
+    internal const string FolderRemovalRoute = $"{FoldersRoute}/removal";
+
     /// <summary>Maps the record routes into the client group, so they inherit its requirement, its policy, and its limits.</summary>
     /// <param name="api">The client route group.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="api" /> is <see langword="null" />.</exception>
@@ -73,6 +90,18 @@ internal static class ClientUserRecordEndpoint
             .RequirePermission(MailFathomPermission.MailAccountsWrite);
 
         api.MapPost(MailAccountRemovalRoute, RemoveMailAccountAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(UserRecordEndpoints.MaxWriteRequestBytes))
+            .RequirePermission(MailFathomPermission.MailAccountsWrite);
+
+        api.MapPost(FoldersRoute, AddFolderAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(UserRecordEndpoints.MaxWriteRequestBytes))
+            .RequirePermission(MailFathomPermission.MailAccountsWrite);
+
+        api.MapPost(FolderReplacementRoute, ReplaceFolderAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(UserRecordEndpoints.MaxWriteRequestBytes))
+            .RequirePermission(MailFathomPermission.MailAccountsWrite);
+
+        api.MapPost(FolderRemovalRoute, RemoveFolderAsync)
             .WithMetadata(new RequestSizeLimitAttribute(UserRecordEndpoints.MaxWriteRequestBytes))
             .RequirePermission(MailFathomPermission.MailAccountsWrite);
     }
@@ -185,6 +214,109 @@ internal static class ClientUserRecordEndpoint
 
         return Answered(await records.RemoveOwnMailAccountAsync(accountId, request.Version, cancellationToken));
     }
+
+    /// <summary>Declares one more folder in one of the acting user's mail accounts.</summary>
+    /// <param name="records">The record administration.</param>
+    /// <param name="request">The account, the declaration, and the version the record was read at.</param>
+    /// <param name="cancellationToken">Cancels the read and the commit.</param>
+    /// <returns><c>200</c> with what the write did, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the request names no account or carries no declaration.</returns>
+    internal static async Task<Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> AddFolderAsync(
+        [FromServices] UserRecordAdministration records,
+        [FromBody] UserFolderRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (StatedVersion(request.Version) is { } refused)
+        {
+            return refused;
+        }
+
+        if (Named(request.AccountId) is not { } accountId)
+        {
+            return Refusal("A declared folder names the mail account it belongs to.");
+        }
+
+        if (request.Folder is not { Length: > 0 } folder)
+        {
+            return Refusal("A declared folder carries the settings the folder is read with.");
+        }
+
+        return Answered(await records.AddOwnFolderAsync(accountId, folder, request.Version, cancellationToken));
+    }
+
+    /// <summary>States one folder of the acting user's afresh, in place of the one carrying an alias.</summary>
+    /// <param name="records">The record administration.</param>
+    /// <param name="request">The account, the alias being replaced, the declaration, and the version the record was read at.</param>
+    /// <param name="cancellationToken">Cancels the read and the commit.</param>
+    /// <returns><c>200</c> with what the write did, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the request names no account or folder, or carries no declaration.</returns>
+    internal static async Task<Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> ReplaceFolderAsync(
+        [FromServices] UserRecordAdministration records,
+        [FromBody] UserFolderReplacementRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (StatedVersion(request.Version) is { } refused)
+        {
+            return refused;
+        }
+
+        if (Named(request.AccountId) is not { } accountId)
+        {
+            return Refusal("A replaced folder names the mail account it belongs to.");
+        }
+
+        if (Named(request.Alias) is not { } alias)
+        {
+            return Refusal("A replaced folder names the alias it is declared under now.");
+        }
+
+        if (request.Folder is not { Length: > 0 } folder)
+        {
+            return Refusal("A replaced folder carries the settings it is to stand with.");
+        }
+
+        return Answered(await records.ReplaceOwnFolderAsync(accountId, alias, folder, request.Version, cancellationToken));
+    }
+
+    /// <summary>Withdraws one folder from one of the acting user's mail accounts.</summary>
+    /// <param name="records">The record administration.</param>
+    /// <param name="request">The account, the alias, and the version the record was read at.</param>
+    /// <param name="cancellationToken">Cancels the read and the commit.</param>
+    /// <returns><c>200</c> with what the write did, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the request names no account or no folder.</returns>
+    /// <remarks>The mail already stored out of that folder stays, exactly as it does when a mail account stops being declared. What this does is stop the deployment reading the folder.</remarks>
+    internal static async Task<Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> RemoveFolderAsync(
+        [FromServices] UserRecordAdministration records,
+        [FromBody] UserFolderRemovalRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (StatedVersion(request.Version) is { } refused)
+        {
+            return refused;
+        }
+
+        if (Named(request.AccountId) is not { } accountId)
+        {
+            return Refusal("A withdrawn folder names the mail account it belongs to.");
+        }
+
+        if (Named(request.Alias) is not { } alias)
+        {
+            return Refusal("A withdrawn folder names the alias it was declared under.");
+        }
+
+        return Answered(await records.RemoveOwnFolderAsync(accountId, alias, request.Version, cancellationToken));
+    }
+
+    /// <summary>Reads a name a request has to carry, or nothing where it carried none.</summary>
+    /// <remarks>White space is the case a length check alone lets through, and an alias or an identifier of nothing but spaces reaches the composition as a name that matches no entry — which would be reported as a folder somebody does not have rather than as a request that named none.</remarks>
+    private static string? Named(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
     /// <summary>Answers what a write did, or that this deployment holds no record for the caller.</summary>
     private static Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult> Answered(

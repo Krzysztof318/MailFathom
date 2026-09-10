@@ -5,6 +5,7 @@
 import { useRef } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { FolderMaintenanceContext, noFolderMaintenance, type FolderMaintenance } from '../folders/useFolderMaintenance';
 import { LocalizationProvider } from '../localization/Localization';
 import type { MoveDestination, MoveDestinationGroup } from './mailboxDestinations';
 import { MoveChoice } from './MoveChoice';
@@ -43,14 +44,33 @@ function Asking({ onChosen }: { readonly onChosen: (destination: MoveDestination
     );
 }
 
-function open(onChosen: (destination: MoveDestination) => void = () => undefined): void {
+function open(
+    onChosen: (destination: MoveDestination) => void = () => undefined,
+    maintenance: FolderMaintenance = noFolderMaintenance,
+): void {
     render(
         <LocalizationProvider>
-            <Asking onChosen={onChosen} />
+            <FolderMaintenanceContext value={maintenance}>
+                <Asking onChosen={onChosen} />
+            </FolderMaintenanceContext>
         </LocalizationProvider>,
     );
 
     fireEvent.click(screen.getByRole('button', { name: opener }));
+}
+
+/** A client whose credential may make a folder, recording the mailbox each act was asked about. */
+function offering(): { maintenance: FolderMaintenance; asked: unknown[] } {
+    const asked: unknown[] = [];
+
+    return {
+        asked,
+        maintenance: {
+            ...noFolderMaintenance,
+            offered: true,
+            declare: (mailbox, parent) => asked.push({ mailbox, parent }),
+        },
+    };
 }
 
 describe('MoveChoice', () => {
@@ -101,5 +121,50 @@ describe('MoveChoice', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
         expect(chosen).toHaveBeenCalledExactlyOnceWith(archive);
+    });
+});
+
+describe('MoveChoice, making a folder', () => {
+    it('offers a folder that does not exist yet in the mailbox the group stands for', () => {
+        const { maintenance, asked } = offering();
+
+        open(() => undefined, maintenance);
+        fireEvent.click(screen.getByRole('button', { name: 'New folder here' }));
+
+        expect(asked).toEqual([
+            {
+                mailbox: {
+                    accountId: 'work',
+                    accountName: work.accountName,
+                    declaredAliases: ['work-archive', 'work-clients'],
+                },
+                parent: null,
+            },
+        ]);
+    });
+
+    it('leaves the sheet before the dialog opens, two questions at once being one nobody can read', () => {
+        const { maintenance } = offering();
+
+        open(() => undefined, maintenance);
+        fireEvent.click(screen.getByRole('button', { name: 'New folder here' }));
+
+        expect(screen.queryByRole('dialog', { name: 'File in another folder' })).toBeNull();
+    });
+
+    it('files nothing when the sheet is left that way, the folder not being a destination yet', () => {
+        const chosen = vi.fn();
+        const { maintenance } = offering();
+
+        open(chosen, maintenance);
+        fireEvent.click(screen.getByRole('button', { name: 'New folder here' }));
+
+        expect(chosen).not.toHaveBeenCalled();
+    });
+
+    it('offers nothing of the kind to a credential that may not change what the deployment reads', () => {
+        open();
+
+        expect(screen.queryByRole('button', { name: 'New folder here' })).toBeNull();
     });
 });

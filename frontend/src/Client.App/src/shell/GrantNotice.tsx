@@ -22,6 +22,7 @@ const capabilityNotices: Readonly<Record<ClientCapability, MessageKey>> = {
     deleteMail: 'grant.deleteMail',
     composeMail: 'grant.composeMail',
     sendMail: 'grant.sendMail',
+    manageFolders: 'grant.manageFolders',
 };
 
 export function GrantNotice({ withheld }: { readonly withheld: readonly ClientCapability[] }) {
