@@ -444,6 +444,7 @@ public sealed class MailboxMutationConvergerTests
                 commitPolicy,
                 this.AuditTrail,
                 ClientSignalPublishers.ReachingNobody,
+                new InMemoryMailFolderResolutionStore(),
                 new MailboxMutationOptions { MaximumAttempts = maximumAttempts });
 
             var transportSecurityPolicyReader = Substitute.For<IMailTransportSecurityPolicyReader>();

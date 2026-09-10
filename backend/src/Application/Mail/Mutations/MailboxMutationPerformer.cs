@@ -2,10 +2,10 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Signals;
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
@@ -34,6 +34,7 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly IMailboxMutationAuditTrail auditTrail;
     private readonly ClientSignals signals;
+    private readonly IMailFolderResolutionStore folderResolutions;
     private readonly int maximumAttempts;
 
     /// <summary>Initializes the performer from the record store, the write session it acts through, and its attempt bound.</summary>
@@ -42,6 +43,7 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
     /// <param name="commitPolicy">Commits the record's first write, retrying an optimistic conflict.</param>
     /// <param name="auditTrail">Keeps the history a finished mutation leaves behind, where the account asked for one.</param>
     /// <param name="signals">Tells an open client that a change it may be drawing as pending has settled.</param>
+    /// <param name="folderResolutions">Names the alias the folder a change files into is currently bound to.</param>
     /// <param name="options">Supplies how many attempts one mutation may spend.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the configured attempt bound is below one.</exception>
@@ -51,6 +53,7 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
         OptimisticConcurrencyRetryPolicy commitPolicy,
         IMailboxMutationAuditTrail auditTrail,
         ClientSignals signals,
+        IMailFolderResolutionStore folderResolutions,
         MailboxMutationOptions options)
     {
         ArgumentNullException.ThrowIfNull(store);
@@ -58,6 +61,7 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(auditTrail);
         ArgumentNullException.ThrowIfNull(signals);
+        ArgumentNullException.ThrowIfNull(folderResolutions);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentOutOfRangeException.ThrowIfLessThan(options.MaximumAttempts, 1, nameof(options));
 
@@ -66,6 +70,7 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
         this.commitPolicy = commitPolicy;
         this.auditTrail = auditTrail;
         this.signals = signals;
+        this.folderResolutions = folderResolutions;
         this.maximumAttempts = options.MaximumAttempts;
     }
 
@@ -87,29 +92,58 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
             transportSecurityPolicy,
             cancellationToken);
 
-        this.AnnounceSettledChange(request, folder);
+        await this.AnnounceSettledChangeAsync(request, folder, cancellationToken);
 
         return outcome;
     }
 
     /// <summary>Tells an open client that a change it may be showing as pending has stopped being pending.</summary>
     /// <remarks>
+    /// <para>
     /// Every status this answers with is the mailbox having settled the change — performed, already performed,
     /// abandoned, or an outcome nobody can establish — and each of those alters what a client draws for that message.
     /// A change the server merely deferred leaves here as an exception rather than as a status, so a run that reached
     /// no conclusion announces nothing and the pending row on the screen stays the true one.
+    /// </para>
+    /// <para>
+    /// A change that names a destination moves two folders rather than one, so both are announced: the folder the
+    /// occurrence was in when the record was written, and the folder it was filed into. Announcing only the first would
+    /// leave somebody watching the folder mail is being filed into waiting for the next thing that happens to re-read
+    /// it. Which of the two the mailbox actually reached is not distinguished, because an unacknowledged placement may
+    /// have landed and a client re-reads either folder the same way.
+    /// </para>
     /// </remarks>
-    private void AnnounceSettledChange(MailboxMutationRequest request, MailFolderResolution folder)
+    private async Task AnnounceSettledChangeAsync(
+        MailboxMutationRequest request,
+        MailFolderResolution folder,
+        CancellationToken cancellationToken)
     {
         if (!this.signals.Reaches)
         {
             return;
         }
 
-        this.signals.Publish(ClientSignal.MailChanged(
-            MailAccountIdentity.Create(request.User, request.Occurrence.AccountId),
-            folder.Alias,
-            [request.StoredEmailId]));
+        this.signals.Publish(ClientSignal.MailChanged(request.Account, folder.Alias, [request.StoredEmailId]));
+
+        if (request.DestinationPath is not { } destination)
+        {
+            return;
+        }
+
+        // The request names the destination the way an IMAP command is issued against it, and a client knows a folder by
+        // its alias alone, so the binding is what turns one into the other. A destination no alias is bound to — a
+        // folder this deployment maps and does not mirror — announces nothing, there being no folder a client holds
+        // mail for.
+        var landedIn = await this.folderResolutions.GetAliasBoundToAsync(
+            request.Account,
+            destination,
+            cancellationToken);
+
+        if (landedIn is { } destinationAlias)
+        {
+            this.signals.Publish(
+                ClientSignal.MailChanged(request.Account, destinationAlias, [request.StoredEmailId]));
+        }
     }
 
     private async Task<MailboxMutationOutcome> PerformThroughRecordAsync(

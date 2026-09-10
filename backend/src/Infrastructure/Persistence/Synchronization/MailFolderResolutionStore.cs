@@ -45,6 +45,39 @@ internal sealed class MailFolderResolutionStore(MailFathomDbContext readContext)
     }
 
     /// <inheritdoc />
+    public async Task<MailFolderAlias?> GetAliasBoundToAsync(
+        MailAccountIdentity account,
+        RemoteFolderPath remotePath,
+        CancellationToken cancellationToken)
+    {
+        var pathValue = remotePath.Value;
+        var userValue = account.User.Value;
+        var accountValue = account.Id.Value;
+
+        // The generation is compared against the alias's own highest rather than taken as the highest of the rows the
+        // path matched: an alias the server has since made MailFathom rebind still holds its earlier generation naming
+        // the old folder, and answering with that alias would name a folder it no longer is. Ordered so that two aliases
+        // bound to one folder — which configuration permits and nothing else disambiguates — answer the same way twice.
+        // The delimiter column is deliberately not compared, which is the reading RemoteFolderPath.NamesSameFolderAs
+        // states: a binding written before the server reported a delimiter names the folder one written after names.
+        var alias = await readContext.MailFolders
+            .AsNoTracking()
+            .Where(folder => folder.UserId == userValue
+                && folder.MailboxAccountId == accountValue
+                && folder.RemotePath == pathValue
+                && folder.ResolutionGeneration == readContext.MailFolders
+                    .Where(binding => binding.UserId == folder.UserId
+                        && binding.MailboxAccountId == folder.MailboxAccountId
+                        && binding.Alias == folder.Alias)
+                    .Max(binding => binding.ResolutionGeneration))
+            .OrderBy(folder => folder.Alias)
+            .Select(folder => folder.Alias)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return alias is null ? null : MailFolderAlias.Create(alias);
+    }
+
+    /// <inheritdoc />
     public async Task SaveResolutionAsync(
         IPersistenceSession session,
         MailAccountIdentity account,
