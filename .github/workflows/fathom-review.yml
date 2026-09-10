@@ -22,15 +22,22 @@ name: Fathom review
 # and submits one review. That split is what keeps a prompt injection in the diff, in a comment, or
 # in the linked issue from reaching an authenticated API call.
 #
-# A review is four jobs, and which job does what is the load-bearing part of the design rather than
+# A review is three jobs, and which job does what is the load-bearing part of the design rather than
 # an arrangement of steps. `collect` freezes the change as data and splits it into groups, holding no
 # credential that writes anything. `read` runs one session per group, concurrently, and each returns
 # candidates under a schema of its own — that is the first pass, and it is the run rather than a
 # model that decides who reads what, so an 88-file change is six readers of fifteen files instead of
 # one session of 88. `judge` performs the second pass: it confirms every candidate against the file
 # it concerns, reads what no reader could — the obligations index, the change's own account of
-# itself, the previous passes — and is the one job that holds the App token and publishes. `board`
-# records the verdict.
+# itself, the previous passes — and is the one job that holds the App token and publishes.
+#
+# What it publishes is the review and nothing else. Neither verdict reaches the board from here:
+# `Ready to merge` never did, because this workflow reads the diff and cannot see the pipeline, and
+# `Changes requested` no longer does, because it makes the same claim about a state this run cannot
+# see either. Both are decided in `Apply pull request rules`, from the review and the checks
+# together, once every pipeline outside `CodeQL` has finished;
+# `.github/pull-request/select-board-status.sh` holds the rules. What this workflow still writes is
+# `In review`, from the moment a review starts.
 #
 # What that buys is a run whose length follows the largest group rather than the whole change, and a
 # coverage list composed from what the readers reported opening rather than claimed by the reviewer
@@ -736,13 +743,14 @@ jobs:
   # there for that whole time — most often `In progress`, which is the state the work was in before
   # the pull request existed at all.
   #
-  # It preserves the same two statuses the verdict does, and for the same reason: `Done` is the
-  # merge and the close, `Blocked` is the one status a hand writes about something outside the
-  # project, and a review that starts on either says nothing that entitles it to erase them. What
-  # writes over this value afterwards depends on the verdict: a withheld approval is written by the
-  # job below a few minutes later, and an approval leaves it standing until `Apply pull request
-  # rules` finds the pipelines agreeing. A run that publishes no verdict leaves the item here too,
-  # where a reader can see a review was asked for and produced nothing.
+  # It preserves two statuses, and for the reason a verdict preserves them: `Done` is the merge and
+  # the close, `Blocked` is the one status a hand writes about something outside the project, and a
+  # review that starts on either says nothing that entitles it to erase them. This is the only status
+  # this workflow writes, and what writes over it is `Apply pull request rules`, once the review and
+  # every pipeline outside `CodeQL` have both concluded — whichever way they concluded. So the item
+  # sits here for as long as the change is still being decided about, which is what the column says,
+  # and a run that publishes no verdict leaves it here too, where a reader can see a review was asked
+  # for and produced nothing.
   #
   # It runs beside the reviewer rather than before it, because nothing in the review depends on the
   # board: making it a dependency would let a project API failure delay or skip a review.
@@ -967,6 +975,10 @@ jobs:
           # contexts a job-level `env` block may read and a workflow that names it there fails
           # validation before a job exists.
           REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          # The changed files as collected, before the generated migrations are dropped from the
+          # list the readers are given. It sits beside the review directory rather than inside it so
+          # that the artifact carries one list of changed files and no reader can pick up the other.
+          OBLIGATIONS_FILES: ${{ runner.temp }}/files.obligations.json
           GITHUB_API_SCRIPT: ${{ github.workspace }}/.github/pull-request/call-github-api.sh
           # How long each of the two loops below that call once per record may spend in total. They
           # are declared here rather than written into the body for the reason the settle windows
@@ -1064,6 +1076,35 @@ jobs:
 
             printf '%s mirrored design sources under design/files/ are not reviewed: they are the design project copied byte for byte, and nothing in this repository writes them.\n' \
               "$mirrored_design" >> "$REVIEW_DIRECTORY/truncation.txt"
+          fi
+
+          # The second class, dropped for a reason of its own rather than by widening the one above.
+          # EF Core writes every file under `backend/src/Infrastructure/Persistence/Migrations/` —
+          # the migration, its `.Designer.cs` twin, and the model snapshot the whole solution shares
+          # — and `AGENTS.md` makes them append-only, so what a reader could say about one is either
+          # a judgement on a tool's output or a judgement on a schema decision that `$add-migration`
+          # already reviewed as SQL before it was committed. `index-obligations.sh` has kept them out
+          # of the test obligation on exactly that reasoning since it was written; this applies the
+          # same reasoning to the reading. The snapshot alone is thousands of lines, so left in they
+          # take groups of the reader matrix and head-content budget from the files somebody wrote.
+          #
+          # What the obligations index reads is the list from before this drop, because the one
+          # obligation a migration carries exists precisely because nobody reads it:
+          # `docs/operations/database-schema.md` declares
+          # `describes: backend/src/Infrastructure/Persistence/Migrations/**`, so a schema change
+          # still owes that page, and filtering the index's input too would silence it.
+          cp "$REVIEW_DIRECTORY/files.json" "$OBLIGATIONS_FILES"
+
+          migrations="$(jq 'map(select(.filename | startswith("backend/src/Infrastructure/Persistence/Migrations/"))) | length' \
+            "$REVIEW_DIRECTORY/files.json")"
+
+          if (( migrations > 0 )); then
+            jq 'map(select(.filename | startswith("backend/src/Infrastructure/Persistence/Migrations/") | not))' \
+              "$REVIEW_DIRECTORY/files.json" > "$REVIEW_DIRECTORY/files.reviewable.json"
+            mv "$REVIEW_DIRECTORY/files.reviewable.json" "$REVIEW_DIRECTORY/files.json"
+
+            printf '%s generated EF Core migration files under backend/src/Infrastructure/Persistence/Migrations/ are not reviewed: EF Core writes them, they are append-only, and the schema change they carry is reviewed as SQL before it is committed.\n' \
+              "$migrations" >> "$REVIEW_DIRECTORY/truncation.txt"
           fi
 
           # The lines a review comment may anchor to, taken from the same patches the review is
@@ -1330,12 +1371,13 @@ jobs:
 
           changed_files="$(jq -r '.changed_files' "$REVIEW_DIRECTORY/pull-request.json")"
           collected_files="$(jq -r 'length' "$REVIEW_DIRECTORY/files.json")"
-          # The mirrored design sources dropped above are not files the ceiling cut, and their own
-          # note already says where they went. Counting them here would report a truncation that did
-          # not happen on every pull request that refreshes the mirror.
-          if (( changed_files - mirrored_design > collected_files )); then
+          # The mirrored design sources and the generated migrations dropped above are not files the
+          # ceiling cut, and each already has a note of its own saying where it went. Counting them
+          # here would report a truncation that did not happen on every pull request that refreshes
+          # the mirror or adds a migration.
+          if (( changed_files - mirrored_design - migrations > collected_files )); then
             printf 'The pull request changes %s files and this review covers the first %s.\n' \
-              "$(( changed_files - mirrored_design ))" "$collected_files" >> "$REVIEW_DIRECTORY/truncation.txt"
+              "$(( changed_files - mirrored_design - migrations ))" "$collected_files" >> "$REVIEW_DIRECTORY/truncation.txt"
           fi
 
           echo "Collected ${collected_files} changed files and ${fetched} head-content files."
@@ -1360,13 +1402,18 @@ jobs:
         shell: bash
         env:
           REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          # The collected change including the generated migrations, which the readers are not given
+          # and this index still is: the page that documents the schema declares them as its subject,
+          # so the obligation a migration carries would go unreported if the index read what the
+          # readers read. The collection step above writes it.
+          OBLIGATIONS_FILES: ${{ runner.temp }}/files.obligations.json
           INDEX_SCRIPT: ${{ github.workspace }}/.github/fathom-review/index-obligations.sh
         run: |
           set -euo pipefail
 
           "$INDEX_SCRIPT" \
             "$GITHUB_WORKSPACE" \
-            "$REVIEW_DIRECTORY/files.json" \
+            "$OBLIGATIONS_FILES" \
             "$REVIEW_DIRECTORY/obligations.json"
 
       # Who reads what, decided here and not by a model. `group-changed-files.sh` holds the reasoning
@@ -2352,8 +2399,7 @@ jobs:
 
             # The verdict is stated here rather than derived again downstream, because this is the
             # only place that knows a review was actually published: every branch above returns
-            # without one, and the job that records it on the board must not move an item on the
-            # strength of a review that was never posted.
+            # without one, and the run's own metrics must not record a verdict that was never posted.
             echo 'verdict=approved' >> "$GITHUB_OUTPUT"
 
             echo 'Approved: the review found nothing above the bar.'
@@ -2614,91 +2660,3 @@ jobs:
           # Longer than the inputs and the candidates, which are consumed inside the run, because
           # this is read across runs: comparing a week of them is what the file is for.
           retention-days: 30
-
-  # The half of the verdict that is this workflow's to write. `Status` is the lifecycle field the
-  # owner's views group by, and until this job existed `Changes requested` had no writer at all: the
-  # built-in `Code changes requested` workflow fires on a review submitted as `REQUEST_CHANGES`,
-  # which nothing here produces — this reviewer submits `COMMENT` on purpose so that it cannot block
-  # a merge, and GitHub does not let the author of a pull request request changes on their own. So
-  # the column that says a change is waiting on the agent answering it was decided by a run whose
-  # conclusion reached the board through nobody.
-  #
-  # An approval writes nothing here, and that is the deliberate half. `Ready to merge` says the
-  # change is waiting on nothing but the owner pressing the button, and this workflow reads the diff
-  # rather than the pipeline: an approval is published while `Required CI` is still running as often
-  # as not. Both halves of that claim are asked in `Apply pull request rules`, where the approval and
-  # the checks are visible at once, so a run that approves leaves the item in `In review` and that
-  # workflow moves it when the pipelines agree. A run that withheld approval needs no such second
-  # opinion — a reader's objection is owed an answer whatever the pipeline concluded.
-  #
-  # It is a job of its own rather than a step after the submission, for the credential. Writing a
-  # field on a user-owned project needs a classic token with the `project` scope — no GitHub App
-  # permission covers one and no fine-grained token carries the scope — and that scope is
-  # account-wide. Keeping it in a job that checks out nothing from the branch, runs no model, and
-  # receives the verdict as a string is what bounds where it can be read: the reviewer session never
-  # shares a runner with it.
-  #
-  # Without the secret the job says so and ends green. The board write is then enabled by adding the
-  # token rather than by another change to this file, and a fork's pull request — which reaches this
-  # workflow only when a maintainer labels it — moves the board exactly as the owner's own does.
-  board:
-    name: Record a withheld approval on the board
-    needs:
-      - decide
-      - judge
-    # The one verdict this workflow writes. A run that published none ended for one of the other
-    # reasons the submission step returns on and says nothing about the board, and a run that
-    # approved is answered by `Apply pull request rules` for the reason above. `!cancelled()` is what
-    # lets this still run after a reviewer that failed *after* posting findings — that verdict is
-    # real and the board should carry it.
-    if: ${{ !cancelled() && needs.judge.outputs.verdict == 'changes_requested' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      # For `collect-closing-issues.sh` alone, from the base commit for the reason every other read
-      # of this repository in this file is: the branch under review must not supply the code that
-      # decides which issues its own merge closes.
-      - name: Check out the base commit
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
-          persist-credentials: false
-
-      - name: Move the issues this pull request closes
-        id: board
-        shell: bash
-        env:
-          # The workflow token reads the pull request body; the board token is used for the project
-          # calls and nothing else, so the account-wide credential is named on each command that
-          # cannot be made without it rather than on the whole step.
-          GH_TOKEN: ${{ github.token }}
-          BOARD_TOKEN: ${{ secrets.BOARD_PROJECT_TOKEN }}
-          REPOSITORY: ${{ github.repository }}
-          PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
-          # The board is the owner's rather than an organization's, which is the whole reason the
-          # credential above is what it is. The number belongs to that login's namespace.
-          BOARD_OWNER: Krzysztof318
-          BOARD_NUMBER: '4'
-          STATUS_FIELD: Status
-          # The same script the collection step runs, so which issues this change closes is one
-          # answer rather than two that can drift apart.
-          CLOSING_ISSUES_SCRIPT: ${{ github.workspace }}/.github/pull-request/collect-closing-issues.sh
-          CLOSING_ISSUE_LIMIT: '5'
-          # The walk itself — collect what the pull request closes, resolve the field, move each
-          # item — is shared with the job that announces the review and with `Apply pull request
-          # rules`, because those writes differ only in the value and in the statuses they may act
-          # on.
-          BOARD_STATUS_SCRIPT: ${{ github.workspace }}/.github/pull-request/write-board-status.sh
-          # The value this job writes, and the two it refuses to write over. `Done` is the merge and
-          # the close, so a verdict arriving after one must not drag a finished item back into
-          # review. `Blocked` is the one status a hand writes: it says the issue is waiting on
-          # something outside the project, which a review verdict does not answer, and overwriting
-          # it would erase the only statement on the board that nothing here can derive.
-          CHANGES_REQUESTED_STATUS: Changes requested
-          PRESERVED_STATUSES: Done,Blocked
-        run: |
-          set -euo pipefail
-
-          "$BOARD_STATUS_SCRIPT" "$CHANGES_REQUESTED_STATUS" "$PRESERVED_STATUSES"

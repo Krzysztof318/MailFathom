@@ -1020,7 +1020,7 @@ below leave it out for. `scripts/test-agent-workflow.sh` holds the list to exact
 workflows a pull request runs, in both directions, so a new pipeline cannot be forgotten
 into a pull request that then never reaches `Ready to merge`.
 
-Three rules live in `.github/pull-request/select-board-status.sh`, read top to bottom:
+Four rules live in `.github/pull-request/select-board-status.sh`, read top to bottom:
 
 - A pull request that **no longer merges** moves the issues it closes from `Ready to merge`
   to `Conflicts`. `Ready to merge` says the change is waiting on nothing but the owner
@@ -1035,16 +1035,32 @@ Three rules live in `.github/pull-request/select-board-status.sh`, read top to b
   `SKIPPED` and `NEUTRAL` are the ordinary shape of a job a path filter turned off, and
   `CANCELLED` is what a superseded run leaves behind on a head that has since been read
   again.
-- An **approved head whose checks have all finished without failing** earns
-  `Ready to merge`, and this is the rule the pipeline exists for. `Fathom review` reads the
-  diff and cannot see the pipeline, so an approval published while `Required CI` is still
-  running says nothing about whether the change builds; both halves are asked here, where
-  both are visible. The approval has to be of the head in front of us — GitHub keeps a
-  review against the commit it was written on — and the pull request has to read
-  `MERGEABLE` rather than merely not `CONFLICTING`, because a column claiming there is
-  nothing left to wait for is claimed from an answer rather than from the absence of one.
+- A **head the reviewer withheld approval on** earns `Changes requested` as well. That
+  verdict is published as a `COMMENT` review on purpose, so that a reviewer reporting no
+  status check cannot block a merge, which is exactly why GitHub's built-in
+  `Code changes requested` workflow never fires for it — this rule is the column's only
+  writer.
+- An **approved head** earns `Ready to merge`, and this is the rule the pipeline exists for.
+  `Fathom review` reads the diff and cannot see the pipeline, so an approval published while
+  `Required CI` is still running says nothing about whether the change builds; both halves
+  are asked here, where both are visible. Either verdict has to be of the head in front of
+  us — GitHub keeps a review against the commit it was written on — and this one also needs
+  the pull request to read `MERGEABLE` rather than merely not `CONFLICTING`, because a
+  column claiming there is nothing left to wait for is claimed from an answer rather than
+  from the absence of one.
 
-Two sets of checks are not read, and a draft earns neither of the last two rules. `CodeQL`
+**The last three are decided only once every pipeline outside the ignored set has finished.**
+That is one condition stated where the checks are counted rather than three copies of it, and
+it holds for both verdicts because both claim something about the whole state of the change:
+`Ready to merge` says nothing is left to wait for, and `Changes requested` says what is owed
+is the agent's answer — while a run still in flight can add to what that answer has to cover.
+So a review published minutes before `Required CI` finishes moves nothing until it does, a
+check that failed beside one still running waits with it, and the pipeline that concludes
+last raises the event that asks again. The conflict rule is the one asked before that wait,
+because a conflict is news about a verdict already published rather than a verdict being
+published.
+
+Two sets of checks are not read, and a draft earns none of the last three rules. `CodeQL`
 is not a required check on `main`: a finding there is worth acting on and does not make the
 change unmergeable, so reading it would hold every pull request out of `Ready to merge` for
 a question the ruleset does not ask. `Apply pull request rules`'s own checks are not read
@@ -1052,6 +1068,10 @@ because nothing they publish says whether the change builds — they are a label
 write — and a rule that read them would be deciding partly from its own run. And a draft is
 work being written rather than a change asking for anything, its checks red as often as not
 while it is.
+
+That is also why `CodeQL` may still be running when a verdict is published: it is outside
+the wait for the same reason it is outside the rules, which is that merging does not wait on
+it either.
 
 The conflict rule is asked before that, and deliberately: it is true of an item already in
 `Ready to merge`, which is a pull request that had been ready and has since stopped merging.
@@ -1353,18 +1373,32 @@ files or comments; the line list derived from the files would inherit that shape
 and the submission step would then validate every anchor against the first page
 alone and push every other finding into the review body.
 
-One class of changed file never reaches any of that. `design/files/` is the design
+Two classes of changed file never reach the readers. `design/files/` is the design
 project's screen sources and its generated runtime copied byte for byte, and
 `scripts/design-mirror.sh record` checks each of them against the size the project
 states — so nobody here writes a line of them, an edit to one is caught by that
 check rather than by a reader's judgement, and a single artboard is more added
-lines than a large change. They are dropped where the collection is frozen, once,
-ahead of the anchors, the head content, the obligations index and the groups, and
-the count joins the truncation notes so a reader of the review can tell a file
-nobody looked at from a file nobody was meant to. It is that one directory rather
-than the tree above it: `design/manifest.json`, `design/state-inventory.md`,
-`design/parity.json` and `design/README.md` are written in this repository and are
-read like anything else.
+lines than a large change. It is that one directory rather than the tree above it:
+`design/manifest.json`, `design/state-inventory.md`, `design/parity.json` and
+`design/README.md` are written in this repository and are read like anything else.
+
+`backend/src/Infrastructure/Persistence/Migrations/` is the second. EF Core writes
+the migration, its `.Designer.cs` twin and the model snapshot; `AGENTS.md` makes
+them append-only; and the schema change they carry is reviewed as SQL by
+`$add-migration` before it is committed — so a reader given one can only judge a
+tool's output or re-judge a decision already reviewed, while the snapshot alone is
+thousands of lines that would take a group of the reader matrix and head-content
+budget from the files somebody wrote. It is the same reasoning
+`index-obligations.sh` has always applied to the test obligation, extended to the
+reading.
+
+Both are dropped where the collection is frozen, once, ahead of the anchors, the
+head content and the groups that all read it, and each count joins the truncation
+notes so a reader of the review can tell a file nobody looked at from a file nobody
+was meant to. The obligations index is the one step given the change with the
+migrations still in it: `docs/operations/database-schema.md` declares that
+directory as its subject, so a schema change still owes that page, and the single
+obligation a migration carries exists precisely because nobody reads it.
 
 The collection then splits the change into groups and the run starts one reader per
 group, concurrently — the fan-out described under **How a review is spread over
@@ -2247,94 +2281,80 @@ owner's approval is still required and this one sits beside it as a signal.
 status check and gates nothing must not be able to block a merge either, which is
 why `NEEDS CHANGES` is a heading in a body and never a review state.
 
-### What the verdict moves on the board
+### What a review moves on the board
 
-The workflow writes the roadmap board's `Status` field twice, on every issue the
+The workflow writes the roadmap board's `Status` field once, on every issue the
 pull request's body closes and on nothing else — because closing an issue is what
 makes a review of the pull request a statement about that issue's lifecycle.
 
-The first write happens as the review starts, beside the collecting job rather
-than before it, and it writes `In review`. A review takes minutes, and without it
-the column says whatever the last event left there for that whole time — usually
+That write happens as the review starts, beside the collecting job rather than
+before it, and it writes `In review`. A review takes minutes, and without it the
+column says whatever the last event left there for that whole time — usually
 `In progress`, the state the work was in before the pull request existed. Nothing
 in the review depends on that write, which is why it runs in parallel: a project
 API failure must not delay or skip a review.
 
-The last write is the one verdict this workflow is entitled to: `Changes
-requested`, where the review withheld approval. That is the verdict rather than
-the presence of findings, and the two stopped being the same question once a
-review carrying only P3 findings began publishing them under an approval. A run
-that publishes no verdict writes nothing and leaves `In review` standing, where a
-reader sees that a review was asked for and produced nothing.
-
-**An approval writes nothing here**, and that is deliberate. `Ready to merge` says
-the change is waiting on nothing but the owner pressing the button, and this
-workflow reads the diff rather than the pipeline — an approval is published while
-`Required CI` is still running as often as not, and a pipeline can go red minutes
-after one. Both halves of that claim are asked in
+**Neither verdict is written here**, and that is deliberate on both sides. Each of
+them claims something about the whole state of the change rather than about the
+diff: `Ready to merge` says the change is waiting on nothing but the owner
+pressing the button, and `Changes requested` says what is owed is the agent's
+answer — and a pipeline still running can add to what that answer has to cover.
+This workflow reads the diff and cannot see the pipeline, so both are asked in
 [The board status the state earns](#the-board-status-the-state-earns), where the
-approval and the checks are visible at once, so an approving run leaves the item in
-`In review` and `Apply pull request rules` moves it when the pipelines agree. A
-withheld approval needs no such second opinion: a reader's objection is owed an
-answer whatever the pipeline concluded.
+review and the checks are visible at once and where both wait for every pipeline
+outside `CodeQL` to finish. An item therefore sits in `In review` for as long as
+the change is still being decided about — which is what that column says — and a
+run that publishes no verdict leaves it there too, where a reader sees that a
+review was asked for and produced nothing.
 
-Both writes are one script, `write-board-status.sh`, and so are the rules in
+That the review's verdict has to be read from the pull request rather than
+announced by this workflow costs nothing: the reviewer publishes a withheld
+approval as a `COMMENT` review on the head, which is a fact the pipeline rules
+read directly and a reader can go and look at.
+
+The write is one script, `write-board-status.sh`, and so are the rules in
 `Apply pull request rules`. The walk is identical — collect what the pull
 request closes, resolve the field and the option by name, find the item on this
 board, mutate it — and the callers differ only in the value they write and in the
 statuses they may write it over. That authority is two arguments rather than one,
 because it is one question asked in two directions: the statuses a write refuses
-to overwrite, and the statuses it may act on and no others. The review's two
-writes name the same preserved pair and no required list, because a verdict
-describes whatever item it finds; the conflict rule names one required status and
-no preserved list, because it is only true of an item that is currently approved.
+to overwrite, and the statuses it may act on and no others. The announcement and
+the two verdict rules name the same preserved pair and no required list, because
+each describes whatever item it finds; the conflict rule names one required status
+and no preserved list, because it is only true of an item that is currently
+approved. The closing issues come from `collect-closing-issues.sh`, the same
+script the collection step and `Apply pull request rules` run, so which issues a
+merge closes is one answer GitHub gives rather than three derivations of it that
+drift.
 
-It exists because that half of the field had no writer at all. The board's
-built-in `Code changes requested` workflow fires on a review's *state*, and the
-state it reads is produced by nobody here: `REQUEST_CHANGES` is refused for the
-reason the section above gives, and GitHub does not let the author of a pull
-request request changes on their own — which is every pull request in this
-repository. So the column that says a change is waiting on the agent answering its
-findings was decided by a run whose conclusion reached the board through no
-mechanism.
+Two statuses are never written over, by the announcement or by either verdict.
+`Done` is the merge and the close, so a verdict arriving after one must not drag a
+finished item back into review, and a review starting on one must not either.
+`Blocked` is the one status a hand writes, and it says the issue waits on
+something outside the project — a question neither a verdict nor a review in
+flight answers, so neither gets to erase the answer.
 
-The verdict is a job condition rather than a second reading of the pull request.
-The submission step states it in the one branch that posted a review, so a run
-that ended for any of the other reasons it returns on moves nothing, an approving
-run is left to the pipeline rules, and a write that happens always names a review
-a reader can go and look at. The closing
-issues come from `collect-closing-issues.sh`, the same script the collection step
-and `Apply pull request rules` run, so which issues a merge closes is one answer
-GitHub gives rather than three derivations of it that drift.
-
-Two statuses are never written over, by either end of the review. `Done` is the
-merge and the close, so a verdict arriving after one must not drag a finished
-item back into review, and a review starting on one must not either. `Blocked` is
-the one status a hand writes, and it says the issue waits on something outside the
-project — a question neither a verdict nor a review in flight answers, so neither
-gets to erase the answer.
-
-Each write is a job of its own for the credential. Writing a field on a
+The write is a job of its own for the credential. Writing a field on a
 user-owned project needs a classic token with the `project` scope: no GitHub App
 permission covers one and no fine-grained token carries the scope, which
 [Issue tracking and the roadmap board](issue-tracking.md#status-transitions)
-records along with what that costs. Both jobs check out only the base commit, run
-no model, and receive their input as a string, so the account-wide credential
+records along with what that costs. The job checks out only the base commit, runs
+no model, and receives its input as a string, so the account-wide credential
 never shares a runner with the reviewer session — the same separation that keeps
 the App's token in the one step that makes no model call. Where the secret is
-absent a job says so and ends green: this workflow gates nothing, and a missing
+absent the job says so and ends green: this workflow gates nothing, and a missing
 credential must not turn a review red. A pull request that closes no issue ends
 the same way, with a notice, because a change opened without a contract is an
 ordinary shape. An issue that is not on the board ends green too, but as a
 warning: every issue this project opens is placed there by a built-in workflow,
 so one that is missing has something wrong with it rather than nothing.
 
-`scripts/test-agent-workflow.sh` runs both steps against a fake `gh` the way it
-runs the gate, the settle loop, and the submission: it asserts that the withheld
-verdict writes `Changes requested`, that the announcement writes `In review`, that
-both leave `Done` and `Blocked` alone, and that a run without the token writes
-nothing. That an approval writes nothing is asserted against the workflow itself,
-since it is the job's condition rather than a branch inside a step.
+`scripts/test-agent-workflow.sh` runs the step against a fake `gh` the way it
+runs the gate, the settle loop, and the submission: it asserts that the
+announcement writes `In review`, that it leaves `Done` and `Blocked` alone, and
+that a run without the token writes nothing. That this workflow writes no verdict
+at all is asserted against the workflow itself, since it is the absence of a job
+rather than a branch inside a step.
 
 ### Who publishes it
 

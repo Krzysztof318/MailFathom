@@ -2708,6 +2708,7 @@ case "$endpoint" in
     response="$(
       jq -nc --argjson count "${FAKE_CHANGED_FILE_COUNT:-1}" \
         --argjson mirrored "${FAKE_MIRRORED_DESIGN_FILE_COUNT:-0}" \
+        --argjson migrations "${FAKE_MIGRATION_FILE_COUNT:-0}" \
         '[range($count) | {filename: "backend/src/Sample\(.).cs", previous_filename: null,
                            status: "modified", additions: 1, deletions: 0,
                            patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
@@ -2715,6 +2716,11 @@ case "$endpoint" in
          | . + [range($mirrored)
                 | {filename: "design/files/Artboard\(.).dc.html", previous_filename: null,
                    status: "modified", additions: 6000, deletions: 5000,
+                   patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
+         | . + [range($migrations)
+                | {filename: "backend/src/Infrastructure/Persistence/Migrations/2026080100000\(.)_Add.cs",
+                   previous_filename: null,
+                   status: "added", additions: 4000, deletions: 0,
                    patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
          | . + (if $mirrored > 0 then
                   [{filename: "design/state-inventory.md", previous_filename: null,
@@ -2832,6 +2838,9 @@ run_fathom_review_collect() {
   # How many mirrored design sources the pull request carries beside the changed files above. The
   # ordinary case is none, so every other contract here measures a collection the drop never touched.
   local mirrored_design_file_count="${6:-0}"
+  # How many generated EF Core migration files it carries beside them, for the same reason: the
+  # ordinary change adds none, so every other contract measures a collection the drop never touched.
+  local migration_file_count="${7:-0}"
   local step_script="$test_directory/fathom-review-collect.sh"
   local step_output_file="$test_directory/fathom-review-collect-step-output"
 
@@ -2857,6 +2866,11 @@ run_fathom_review_collect() {
     export CLOSING_ISSUE_LIMIT_SECONDS="$closing_issue_limit_seconds"
     export FAKE_CHANGED_FILE_COUNT="$changed_file_count"
     export FAKE_MIRRORED_DESIGN_FILE_COUNT="$mirrored_design_file_count"
+    export FAKE_MIGRATION_FILE_COUNT="$migration_file_count"
+    # The list the obligations index is given, which the step writes beside the review directory
+    # rather than into it. The workflow declares the path from `runner.temp`; here it is the same
+    # directory the review one sits in.
+    export OBLIGATIONS_FILES="$test_directory/fathom-review-collect-files.obligations.json"
     export_api_retry_environment
     export REVIEWER_LOGIN='fathom-reviewer[bot]'
     export EXPLICIT="$explicit"
@@ -2933,6 +2947,34 @@ fathom_review_never_reads_the_mirrored_design() {
   # The drop is not the file ceiling, and saying so twice would report a truncation that never
   # happened on every pull request that refreshes the mirror.
   assert_excludes 'this review covers the first' "$collect_review_directory/truncation.txt"
+}
+
+# EF Core writes every file under the migrations directory, `AGENTS.md` makes them append-only, and
+# `$add-migration` reviews the schema change as SQL before it is committed — so a reader given one
+# can only judge a tool's output or re-judge a decision already reviewed, while the snapshot alone
+# is thousands of lines taking a group of the matrix and the head-content budget from the files
+# somebody wrote. The obligations index still reads them, because the single obligation a migration
+# carries exists precisely because nobody reads it: `docs/operations/database-schema.md` declares the
+# directory as its subject, and an index filtered like the readers are would report the change as
+# owing that page nothing.
+fathom_review_never_reads_a_generated_migration() {
+  local output_file="$test_directory/fathom-review-collect-migration-output"
+
+  run_fathom_review_collect "$output_file" 120 120 1 false 0 2
+
+  assert_json '["backend/src/Sample.cs"]' \
+    '[.[].filename] | sort' "$collect_review_directory/files.json"
+  assert_json '["backend/src/Sample.cs"]' \
+    '[.[].filename] | sort' "$collect_review_directory/lines.json"
+  assert_contains '2 generated EF Core migration files' \
+    "$collect_review_directory/truncation.txt"
+  # Neither drop is the file ceiling, and reporting one that did not happen would put a sentence
+  # about incomplete coverage into the body of every review of a schema change.
+  assert_excludes 'this review covers the first' "$collect_review_directory/truncation.txt"
+  # What the obligations index is handed, which is the collection before the drop.
+  assert_json '2' \
+    '[.[] | select(.filename | startswith("backend/src/Infrastructure/Persistence/Migrations/"))] | length' \
+    "$test_directory/fathom-review-collect-files.obligations.json"
 }
 
 # The window is a ceiling like every other one in the step, so an ordinary collection never reaches
@@ -3917,33 +3959,12 @@ export_fathom_review_board_environment() {
   export_api_retry_environment
 }
 
-run_fathom_review_board() {
+run_fathom_review_announcement() {
   local closing_issues="$1"
   local current_status="$2"
   local output_file="$3"
   # The ordinary case is a configured board; the contract about an unconfigured one names the empty
   # token itself.
-  local board_token="${4-classic-token-that-is-not-real}"
-  local step_script="$test_directory/fathom-review-board.sh"
-
-  extract_fathom_review_step 'board' "$step_script"
-  prepare_fathom_review_board_state "$closing_issues" "$current_status"
-
-  set +e
-  (
-    export_fathom_review_board_environment "$board_token"
-    export CHANGES_REQUESTED_STATUS='Changes requested'
-    export PRESERVED_STATUSES='Done,Blocked'
-    bash "$step_script"
-  ) > "$output_file" 2>&1
-  board_status=$?
-  set -e
-}
-
-run_fathom_review_announcement() {
-  local closing_issues="$1"
-  local current_status="$2"
-  local output_file="$3"
   local board_token="${4-classic-token-that-is-not-real}"
   local step_script="$test_directory/fathom-review-announce.sh"
 
@@ -3961,56 +3982,19 @@ run_fathom_review_announcement() {
   set -e
 }
 
-# An approval is half of what `Ready to merge` claims and this workflow holds the other half of
-# nothing: it reads the diff, and the pipeline it cannot see is still running as often as not. So the
-# job runs for the withheld verdict alone, and `Apply pull request rules` decides the approved one
-# once the checks agree. The gate is the job's condition rather than a branch inside the step, which
-# is why this is read from the workflow rather than from a run.
-fathom_review_records_no_approval_on_the_board() {
-  local condition
+# Neither verdict reaches the board from this workflow. `Ready to merge` never did — it reads the
+# diff and cannot see the pipeline — and a withheld approval no longer does either, because it makes
+# the same claim about a state this run cannot see: what is owed is the agent's answer, while a
+# pipeline still in flight can add to what that answer has to cover. Both are decided in
+# `Apply pull request rules`, from the review and the checks together, and the only status left here
+# is the `In review` the announcement writes.
+fathom_review_records_no_verdict_on_the_board() {
+  local workflow="$source_repository_root/.github/workflows/fathom-review.yml"
 
-  condition="$(
-    sed -n "/^  board:/,/^    runs-on:/p" \
-      "$source_repository_root/.github/workflows/fathom-review.yml" \
-      | sed -n 's/^    if: //p'
-  )"
-
-  assert_contains "verdict == 'changes_requested'" <(printf '%s\n' "$condition")
-  [[ "$condition" != *'Ready to merge'* ]]
-  ! grep -q 'APPROVED_STATUS' "$source_repository_root/.github/workflows/fathom-review.yml"
-}
-
-fathom_review_records_findings_as_changes_requested() {
-  local output_file="$test_directory/fathom-review-board-changes-output"
-
-  run_fathom_review_board '12' 'In progress' "$output_file"
-
-  ((board_status == 0))
-  assert_contains 'option=option-changes' "$board_mutations_file"
-  assert_contains 'to Changes requested' "$output_file"
-}
-
-# A verdict that arrives after the merge must not reopen a finished item, and `Blocked` is the one
-# status a hand writes — a review says nothing about whether the issue is waiting on something
-# outside the project, so it does not get to erase that statement.
-fathom_review_leaves_a_finished_item_alone() {
-  local output_file="$test_directory/fathom-review-board-done-output"
-
-  run_fathom_review_board '12' 'Done' "$output_file"
-
-  ((board_status == 0))
-  [[ ! -s "$board_mutations_file" ]]
-  assert_contains 'which this write does not overwrite' "$output_file"
-}
-
-fathom_review_leaves_a_blocked_item_alone() {
-  local output_file="$test_directory/fathom-review-board-blocked-output"
-
-  run_fathom_review_board '12' 'Blocked' "$output_file"
-
-  ((board_status == 0))
-  [[ ! -s "$board_mutations_file" ]]
-  assert_contains 'Issue 12 is Blocked' "$output_file"
+  ! grep -qE '^  board:' "$workflow"
+  ! grep -q 'CHANGES_REQUESTED_STATUS' "$workflow"
+  ! grep -q 'APPROVED_STATUS' "$workflow"
+  assert_contains 'IN_REVIEW_STATUS' "$workflow"
 }
 
 # A pull request GitHub resolved no closing reference on moves nothing. The reviewer's own
@@ -4019,16 +4003,13 @@ fathom_review_leaves_a_blocked_item_alone() {
 fathom_review_moves_nothing_for_a_pull_request_that_closes_no_issue() {
   local output_file="$test_directory/fathom-review-board-unlinked-output"
 
-  run_fathom_review_board '' 'Todo' "$output_file"
+  run_fathom_review_announcement '' 'Todo' "$output_file"
 
   ((board_status == 0))
   [[ ! -s "$board_mutations_file" ]]
   assert_contains 'closes no issue' "$output_file"
 }
 
-# Writing a user-owned project needs a classic token with the `project` scope, which is account-wide.
-# Until one is stored the job says so and ends green: the workflow gates nothing, so a missing
-# credential must not turn a review red.
 # The review that has started is the newest thing true of the item, so the announcement says so from
 # an item that was still being written.
 fathom_review_announces_a_started_review() {
@@ -4075,10 +4056,13 @@ fathom_review_announces_over_every_other_status() {
   done
 }
 
+# Writing a user-owned project needs a classic token with the `project` scope, which is account-wide.
+# Until one is stored the step says so and ends green: the workflow gates nothing, so a missing
+# credential must not turn a review red.
 fathom_review_writes_no_status_without_the_board_token() {
   local output_file="$test_directory/fathom-review-board-untokened-output"
 
-  run_fathom_review_board '12' 'In progress' "$output_file" ''
+  run_fathom_review_announcement '12' 'In progress' "$output_file" ''
 
   ((board_status == 0))
   [[ ! -s "$board_mutations_file" ]]
@@ -4167,8 +4151,9 @@ board_state_green_checks='[
 
 # The state a rule reads, written as a fixture rather than fetched. Every condition in that script is
 # a question about these fields alone, which is what lets a board rule be tested without a token and
-# without a pull request to reproduce it on. `approval` is `none`, `current`, or `stale`, the last
-# being an approval GitHub kept against a head that has since been pushed over.
+# without a pull request to reproduce it on. `approval` is `none`, `current`, `stale`, or
+# `commented`: the third is an approval GitHub kept against a head that has since been pushed over,
+# and the fourth is the withheld approval the reviewer publishes as a `COMMENT` review on the head.
 write_pull_request_state() {
   local state_file="$1"
   local mergeable="$2"
@@ -4181,8 +4166,9 @@ write_pull_request_state() {
     '{number: 1, mergeable: $mergeable, isDraft: $draft, state: "OPEN", labels: [],
       headRefOid: "head-commit",
       reviews: (if $approval == "none" then []
-                else [{author: "fathom-reviewer[bot]", state: "APPROVED",
-                       commit: (if $approval == "current" then "head-commit" else "older-commit" end)}]
+                else [{author: "fathom-reviewer[bot]",
+                       state: (if $approval == "commented" then "COMMENTED" else "APPROVED" end),
+                       commit: (if $approval == "stale" then "older-commit" else "head-commit" end)}]
                 end),
       checks: $checks}' \
     > "$state_file"
@@ -4254,13 +4240,35 @@ select_board_status_earns_nothing_from_an_approval_of_an_older_head() {
   assert_file_content '' "$output_file"
 }
 
-# A check still running is an answer that has not arrived, and the column claims there is nothing
-# left to wait for. The pipeline that finishes next raises the event that asks again.
+# A pipeline still running is an answer that has not arrived, and neither verdict may be published
+# from a state that is still moving: `Ready to merge` claims there is nothing left to wait for, and
+# `Changes requested` claims what is owed is the agent's answer while a run in flight can still add
+# to what that answer has to cover. Every input that would otherwise earn a status is asked the same
+# question here, because the wait is one condition rather than one per rule, and the pipeline that
+# finishes next raises the event that asks again.
 select_board_status_earns_nothing_while_a_check_is_still_running() {
-  local output_file="$test_directory/select-board-status-pending-check"
+  local output_file
   local checks
+  local approval
 
   checks="$(jq -c '.[0].status = "IN_PROGRESS" | .[0].conclusion = ""' <<< "$board_state_green_checks")"
+
+  for approval in current commented; do
+    output_file="$test_directory/select-board-status-pending-check-${approval}"
+
+    run_select_board_status 'MERGEABLE' "$output_file" "$approval" "$checks"
+
+    assert_file_content '' "$output_file"
+  done
+
+  # A check that already failed beside one still running is the same wait. The failure is not going
+  # anywhere, and publishing it now would put the item into the column that says the agent owes an
+  # answer before the run that decides what the answer covers has finished.
+  output_file="$test_directory/select-board-status-pending-beside-a-failure"
+  checks="$(
+    jq -c '.[0].status = "IN_PROGRESS" | .[0].conclusion = "" | .[1].conclusion = "FAILURE"' \
+      <<< "$board_state_green_checks"
+  )"
 
   run_select_board_status 'MERGEABLE' "$output_file" 'current' "$checks"
 
@@ -4268,7 +4276,7 @@ select_board_status_earns_nothing_while_a_check_is_still_running() {
 }
 
 # A red pipeline is owed an answer whatever the review said, so this rule describes any item it finds
-# rather than naming a required status — and it is asked before the approval, so an approved change
+# rather than naming a required status — and it is asked before the verdict, so an approved change
 # that broke afterwards leaves the merge column.
 select_board_status_earns_changes_requested_from_a_failed_check() {
   local output_file
@@ -4283,6 +4291,35 @@ select_board_status_earns_changes_requested_from_a_failed_check() {
 
     assert_file_content $'Changes requested\t\tDone,Blocked' "$output_file"
   done
+}
+
+# The reviewer publishes a withheld approval as a `COMMENT` review so that it cannot block a merge,
+# which is exactly why GitHub's built-in `Code changes requested` workflow never fires for it. This
+# rule is the only writer of that column, and it is asked here rather than in `Fathom review` because
+# it makes the same claim about the pipelines that `Ready to merge` does.
+select_board_status_earns_changes_requested_from_a_withheld_approval() {
+  local output_file="$test_directory/select-board-status-withheld"
+
+  run_select_board_status 'MERGEABLE' "$output_file" 'commented' "$board_state_green_checks"
+
+  assert_file_content $'Changes requested\t\tDone,Blocked' "$output_file"
+}
+
+# A verdict belongs to the commit it was written on, and that holds for a withheld approval exactly
+# as it holds for one that was given: a push carrying either forward without a re-review is a verdict
+# about code nobody read.
+select_board_status_earns_nothing_from_a_withheld_approval_of_an_older_head() {
+  local output_file="$test_directory/select-board-status-stale-withheld"
+  local state_file="$test_directory/select-board-status-pull-request.json"
+
+  write_pull_request_state "$state_file" 'MERGEABLE' 'stale' "$board_state_green_checks"
+  jq '.reviews[0].state = "COMMENTED"' "$state_file" > "$state_file.tmp"
+  mv "$state_file.tmp" "$state_file"
+
+  bash "$source_repository_root/.github/pull-request/select-board-status.sh" \
+    "$state_file" > "$output_file" 2>&1
+
+  assert_file_content '' "$output_file"
 }
 
 # Neither of those is a pipeline the merge waits on. `CodeQL` is not a required check on `main`, and
@@ -10116,6 +10153,7 @@ run_test fathom_review_reads_the_newest_comment_whatever_the_order
 run_test fathom_review_collects_the_labels_of_an_issue_the_change_closes
 run_test fathom_review_reports_unknown_labels_for_an_issue_it_could_not_fetch
 run_test fathom_review_never_reads_the_mirrored_design
+run_test fathom_review_never_reads_a_generated_migration
 run_test fathom_review_reads_head_content_within_its_window
 run_test fathom_review_stops_reading_head_content_when_its_window_is_gone
 run_test fathom_review_stops_reading_closing_issues_when_its_window_is_gone
@@ -10158,10 +10196,7 @@ run_test fathom_review_publishes_the_coverage_gap_under_an_approval
 run_test fathom_review_publishes_nothing_when_the_reviewer_returned_no_answer
 run_test fathom_review_fails_when_a_finished_reviewer_returned_no_answer
 run_test fathom_review_refuses_findings_that_carry_a_credential
-run_test fathom_review_records_no_approval_on_the_board
-run_test fathom_review_records_findings_as_changes_requested
-run_test fathom_review_leaves_a_finished_item_alone
-run_test fathom_review_leaves_a_blocked_item_alone
+run_test fathom_review_records_no_verdict_on_the_board
 run_test fathom_review_moves_nothing_for_a_pull_request_that_closes_no_issue
 run_test fathom_review_announces_a_started_review
 run_test fathom_review_announces_nothing_over_a_finished_or_blocked_item
@@ -10176,6 +10211,8 @@ run_test select_board_status_earns_ready_to_merge_when_the_review_and_the_checks
 run_test select_board_status_earns_nothing_from_an_approval_of_an_older_head
 run_test select_board_status_earns_nothing_while_a_check_is_still_running
 run_test select_board_status_earns_changes_requested_from_a_failed_check
+run_test select_board_status_earns_changes_requested_from_a_withheld_approval
+run_test select_board_status_earns_nothing_from_a_withheld_approval_of_an_older_head
 run_test select_board_status_reads_neither_codeql_nor_its_own_checks
 run_test select_board_status_earns_nothing_on_a_draft
 run_test pull_request_rules_listen_to_every_workflow_a_pull_request_runs
