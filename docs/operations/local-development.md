@@ -1663,16 +1663,20 @@ two jobs, split by the event that can answer them. On a `pull_request` — opene
 ready, or edited — it checks out the merge commit and applies the labels
 `.github/pull-request/select-labels.sh` says the change earns, today `security` when any issue the
 body refers to carries it, whether the change closes that issue or merely names it. On a push to
-`main` it instead sweeps every open pull request, asks GitHub whether each still merges, and writes
-the roadmap board where `.github/pull-request/select-board-status.sh` says a state earns a status —
-today, moving what a conflicting pull request closes from `Ready to merge` to `Conflicts`. Each job
-runs on one of those events and skips the other, which is what keeps the labelling as short as it
-was: `Fathom review` waits for this workflow's run before it reads the labels. It reports no status
-check and blocks nothing; a draft runs it, because a label is worth having while the change is still
-being written. It only ever adds a label, so one a hand applied stays. [Rules on the pull
+`main`, and on any of the six workflows a pull request runs concluding, it instead reads what those
+pull requests are in — whether each still merges, whether the reviewer approved the head, and what
+its checks concluded — and writes the roadmap board where
+`.github/pull-request/select-board-status.sh` says a state earns a status: `Conflicts` for what a
+conflicting pull request closes, `Changes requested` for a failed check, and `Ready to merge` where
+the approval and the checks agree. The push sweeps every open pull request and a concluded pipeline
+decides the one it ran on. Each job runs on its own events and skips the others, which is what keeps
+the labelling as short as it was: `Fathom review` waits for this workflow's run before it reads the
+labels. It reports no status check and blocks nothing; a draft runs it, because a label is worth
+having while the change is still being written, though no board rule reads a draft. It only ever adds
+a label, so one a hand applied stays. [Rules on the pull
 request](agent-workflow.md#rules-on-the-pull-request) carries the reasoning, including why the
-labelling takes `pull_request` rather than the trigger `Fathom review` holds and what that costs on a
-fork.
+labelling takes `pull_request` rather than the trigger `Fathom review` holds, why the board half
+takes `workflow_run` rather than `check_suite`, and what either costs on a fork.
 
 ### `CI` after a merge to `main`
 

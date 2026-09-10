@@ -21,10 +21,21 @@ name: Apply pull request rules
 # - **Labels** follow from the body, so they are decided on a `pull_request` event and on that one
 #   pull request. `Fathom review` waits for this workflow's run to conclude before it reads the
 #   labels off a pull request, so anything slower added to that path delays every review.
-# - **A board status** follows from whether a pull request still merges, and *that* changes when
-#   something else merges into `main` rather than through any event on the pull request itself. So it
-#   is decided on a push to `main`, across every open pull request at once, and never on a
-#   `pull_request` event — where it would answer nothing and lengthen the wait above.
+# - **A board status** follows from three things the pull request cannot announce for itself: whether
+#   it still merges, which changes when something *else* merges into `main`; whether the reviewer
+#   approved the head in front of us; and what its pipelines concluded. So it is decided on a push to
+#   `main`, across every open pull request at once, and on a pipeline concluding, for the one pull
+#   request that run belongs to. It is never decided on a `pull_request` event, where it would answer
+#   nothing and lengthen the wait above.
+#
+#   `workflow_run` rather than `check_suite`, and that is not a preference: GitHub does not raise
+#   `check_suite` for a suite GitHub Actions created, which is every pipeline in this repository, so
+#   the event that looks like the right one answers nothing here. The workflows are named one by one
+#   because there is no `workflows-ignore`, and naming them is also what keeps this workflow off its
+#   own list — a run that triggered itself would conclude, raise the event again, and chain until
+#   GitHub's three-level limit stopped it. `CodeQL` is left off for a different reason: it is not
+#   required to merge, so nothing here reads its conclusion and a run of it decides nothing.
+#   `scripts/test-agent-workflow.sh` holds the list to exactly the workflows a pull request runs.
 #
 # It only ever adds a label. A label a hand applied answers a question this workflow cannot see —
 # `Fathom review`'s own `fathom-review` label is the worked example of a label that means *somebody
@@ -61,18 +72,39 @@ on:
     branches:
       - main
 
+  # A pipeline concluding is the other half of what `Ready to merge` claims, and the reviewer cannot
+  # see it: an approval is published on a diff, minutes before `Required CI` finishes or fails. Every
+  # workflow a pull request runs is named here except `CodeQL`, which merging does not wait on, and
+  # this one, which is running while the rule is being decided.
+  workflow_run:
+    types:
+      - completed
+    workflows:
+      - CI
+      - Contributor licence
+      - Fathom review
+      - Protected paths
+      - Publish the documentation
+      - Typo check
+
   # For a sweep by hand, after a rule changes or after a run was cancelled. It takes a ref and that
   # is harmless here: no credential in this workflow is one a branch could spend, and the board
   # scripts it would run from that ref are covered by `Protected paths`.
   workflow_dispatch:
 
 concurrency:
-  # One run per pull request for the labelling, and one per branch for the sweep. A newer run
-  # supersedes whatever is still deciding in either case: the labels are a function of a body that
-  # has since changed, and a sweep started by a later merge reads a state that already contains
-  # everything the earlier one was going to find. `Fathom review` waits for this group to go quiet
-  # before it reads the labels.
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # One run per pull request for the labelling, one per head for a pipeline concluding, and one per
+  # branch for the sweep. A newer run supersedes whatever is still deciding in each case: the labels
+  # are a function of a body that has since changed, a sweep started by a later merge reads a state
+  # that already contains everything the earlier one was going to find, and two pipelines finishing
+  # on one head are two runs asking the same question of the same commit. The head is what keeps
+  # those last two apart — every `workflow_run` here carries `refs/heads/main` as its ref, so a group
+  # keyed on the ref alone would let a pipeline concluding on one pull request cancel the run
+  # deciding another. `Fathom review` waits for this group to go quiet before it reads the labels.
+  group: >-
+    ${{ github.workflow }}-${{ github.event.pull_request.number
+        || github.event.workflow_run.head_sha
+        || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -216,10 +248,18 @@ jobs:
           BOARD_NUMBER: '4'
           STATUS_FIELD: Status
           BASE_BRANCH: main
+          READ_STATE_SCRIPT: ${{ github.workspace }}/.github/pull-request/read-pull-request-state.sh
+          # Every read in this job goes through it, the way every read in `Fathom review` does, so a
+          # dropped connection costs a wait rather than the board write that would have followed.
+          GITHUB_API_SCRIPT: ${{ github.workspace }}/.github/pull-request/call-github-api.sh
           SELECT_BOARD_STATUS_SCRIPT: ${{ github.workspace }}/.github/pull-request/select-board-status.sh
           CLOSING_ISSUES_SCRIPT: ${{ github.workspace }}/.github/pull-request/collect-closing-issues.sh
           BOARD_STATUS_SCRIPT: ${{ github.workspace }}/.github/pull-request/write-board-status.sh
           CLOSING_ISSUE_LIMIT: '5'
+          # The head a concluded pipeline ran on, and the whole of how this run knows it is about one
+          # pull request rather than about all of them. It is empty on the sweep, which is what
+          # selects between the two ways the state is read below.
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           # More open pull requests than this repository has ever had at once, and still a ceiling:
           # one project call is made per issue below it, so an unbounded sweep is an unbounded number
           # of them.
@@ -236,42 +276,42 @@ jobs:
           open_file="$(mktemp)"
           pull_request_file="$(mktemp)"
 
-          # Every open pull request in one call, with the state every rule reads. Asking per pull
-          # request would multiply the polling below by the number of them for an answer GitHub
-          # computes for the whole repository at once.
-          read_open_pull_requests() {
-            gh api graphql \
-              -f owner="${REPOSITORY%/*}" \
-              -f name="${REPOSITORY#*/}" \
-              -f base="$BASE_BRANCH" \
-              -F first="$PULL_REQUEST_LIMIT" \
-              -f query='
-                query($owner: String!, $name: String!, $base: String!, $first: Int!) {
-                  repository(owner: $owner, name: $name) {
-                    pullRequests(states: OPEN, baseRefName: $base, first: $first,
-                                 orderBy: {field: UPDATED_AT, direction: DESC}) {
-                      totalCount
-                      nodes {
-                        number
-                        mergeable
-                        isDraft
-                        state
-                        labels(first: 20) { nodes { name } }
-                      }
-                    }
-                  }
-                }' \
-              --jq '.data.repository.pullRequests
-                    | {total: .totalCount,
-                       pull_requests: [.nodes[]
-                                       | {number, mergeable, isDraft, state,
-                                          labels: [.labels.nodes[].name]}]}'
+          pull_request_number=''
+
+          # Which pull request a concluded pipeline was about. `workflow_run.pull_requests` answers
+          # this only for a head in this repository, and a run started by `pull_request_target` — the
+          # trigger `Fathom review` and `Contributor licence` hold — carries it empty, so the head is
+          # asked about instead. That call answers for a fork's pull request exactly as it does for
+          # this repository's own.
+          if [[ -n "$WORKFLOW_RUN_HEAD_SHA" ]]; then
+            pull_request_number="$(
+              "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/commits/${WORKFLOW_RUN_HEAD_SHA}/pulls" \
+                --jq '[.[] | select(.state == "open")][0].number // empty'
+            )"
+
+            # A pipeline that ran on `main` itself, or on a head whose pull request has since closed.
+            # The push to `main` is what decides the board after a merge, and it has its own run.
+            if [[ -z "$pull_request_number" ]]; then
+              printf '::notice::No open pull request has %s as its head, so nothing was decided.\n' \
+                "$WORKFLOW_RUN_HEAD_SHA"
+              exit 0
+            fi
+
+            printf 'Deciding pull request %s, whose pipeline concluded.\n' "$pull_request_number"
+          fi
+
+          # The state every rule reads, in one call: the sweep asks for every open pull request at
+          # once rather than one at a time, because GitHub computes mergeability for the whole
+          # repository and the polling below would otherwise be multiplied by the number of them.
+          read_pull_requests() {
+            "$READ_STATE_SCRIPT" \
+              "$REPOSITORY" "$BASE_BRANCH" "$PULL_REQUEST_LIMIT" "$pull_request_number"
           }
 
           waited=0
 
           while true; do
-            read_open_pull_requests > "$open_file"
+            read_pull_requests > "$open_file"
 
             pending="$(jq '[.pull_requests[] | select(.mergeable == "UNKNOWN")] | length' "$open_file")"
 
@@ -320,7 +360,13 @@ jobs:
 
             [[ -n "$rule" ]] || continue
 
-            IFS=$'\t' read -r status required preserved <<< "$rule"
+            # `cut` rather than `read`, because either of the two authority fields may be empty and
+            # a tab is whitespace: `IFS=$'\t' read` collapses the two tabs of an empty middle field
+            # into one separator, which reads a rule's preserved statuses as its required ones and
+            # inverts what it is entitled to move.
+            status="$(cut -f1 <<< "$rule")"
+            required="$(cut -f2 <<< "$rule")"
+            preserved="$(cut -f3 <<< "$rule")"
 
             printf 'Pull request %s earns %s.\n' "$number" "$status"
 

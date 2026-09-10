@@ -5,9 +5,10 @@
 
 # Write one `Status` value on the roadmap board, on every issue merging a pull request will close.
 #
-# Three writes share this walk today: `Fathom review` announcing that a review is running and
-# recording its verdict, and `Apply pull request rules` moving an item whose pull request stopped
-# merging. They differ in which value they write and in which statuses they may write it over;
+# Three callers share this walk today: `Fathom review` announcing that a review is running and
+# recording a withheld approval, and `Apply pull request rules` writing whichever status a pull
+# request's state earns — a conflict, a failed pipeline, or an approval the checks agree with.
+# They differ in which value they write and in which statuses they may write it over;
 # everything else is the same — collect what the pull request closes, resolve the field and its
 # option by name, find the item on *this* board, and mutate it. That is why the walk lives here
 # rather than once per caller, where the second copy is the one that stops matching the first.

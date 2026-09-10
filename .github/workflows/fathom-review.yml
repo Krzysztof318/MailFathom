@@ -734,14 +734,15 @@ jobs:
   # The board says a review is running, from the moment it starts rather than when it concludes. A
   # review takes minutes, and until this job existed the column said whatever the last event left
   # there for that whole time — most often `In progress`, which is the state the work was in before
-  # the pull request existed at all. The verdict job below then answers the same question the other
-  # way round, so between them the field never describes a moment that has passed.
+  # the pull request existed at all.
   #
   # It preserves the same two statuses the verdict does, and for the same reason: `Done` is the
   # merge and the close, `Blocked` is the one status a hand writes about something outside the
-  # project, and a review that starts on either says nothing that entitles it to erase them. The
-  # verdict then writes over this value a few minutes later, and a run that publishes none leaves
-  # the item where a reader can see a review was asked for and produced nothing.
+  # project, and a review that starts on either says nothing that entitles it to erase them. What
+  # writes over this value afterwards depends on the verdict: a withheld approval is written by the
+  # job below a few minutes later, and an approval leaves it standing until `Apply pull request
+  # rules` finds the pipelines agreeing. A run that publishes no verdict leaves the item here too,
+  # where a reader can see a review was asked for and produced nothing.
   #
   # It runs beside the reviewer rather than before it, because nothing in the review depends on the
   # board: making it a dependency would let a project API failure delay or skip a review.
@@ -2614,13 +2615,21 @@ jobs:
           # this is read across runs: comparing a week of them is what the file is for.
           retention-days: 30
 
-  # The verdict as the board reads it. `Status` is the lifecycle field the owner's views group by,
-  # and until this job existed the two values a review decides had no writer at all: the built-in
-  # `Code changes requested` workflow fires on a review submitted as `REQUEST_CHANGES`, which
-  # nothing here produces — this reviewer submits `COMMENT` on purpose so that it cannot block a
-  # merge, and GitHub does not let the author of a pull request request changes on their own. So the
-  # column that says whether a change is waiting on the owner or on the agent answering it was
-  # decided by a run whose conclusion reached the board through nobody.
+  # The half of the verdict that is this workflow's to write. `Status` is the lifecycle field the
+  # owner's views group by, and until this job existed `Changes requested` had no writer at all: the
+  # built-in `Code changes requested` workflow fires on a review submitted as `REQUEST_CHANGES`,
+  # which nothing here produces — this reviewer submits `COMMENT` on purpose so that it cannot block
+  # a merge, and GitHub does not let the author of a pull request request changes on their own. So
+  # the column that says a change is waiting on the agent answering it was decided by a run whose
+  # conclusion reached the board through nobody.
+  #
+  # An approval writes nothing here, and that is the deliberate half. `Ready to merge` says the
+  # change is waiting on nothing but the owner pressing the button, and this workflow reads the diff
+  # rather than the pipeline: an approval is published while `Required CI` is still running as often
+  # as not. Both halves of that claim are asked in `Apply pull request rules`, where the approval and
+  # the checks are visible at once, so a run that approves leaves the item in `In review` and that
+  # workflow moves it when the pipelines agree. A run that withheld approval needs no such second
+  # opinion — a reader's objection is owed an answer whatever the pipeline concluded.
   #
   # It is a job of its own rather than a step after the submission, for the credential. Writing a
   # field on a user-owned project needs a classic token with the `project` scope — no GitHub App
@@ -2633,15 +2642,16 @@ jobs:
   # token rather than by another change to this file, and a fork's pull request — which reaches this
   # workflow only when a maintainer labels it — moves the board exactly as the owner's own does.
   board:
-    name: Record the verdict on the board
+    name: Record a withheld approval on the board
     needs:
       - decide
       - judge
-    # A verdict exists only where a review was published, so this asks the one question that
-    # separates a run that concluded something from a run that ended for any of the other reasons
-    # the submission step returns on. `!cancelled()` is what lets it still run after a reviewer that
-    # failed *after* posting findings — that verdict is real and the board should carry it.
-    if: ${{ !cancelled() && needs.judge.outputs.verdict != '' }}
+    # The one verdict this workflow writes. A run that published none ended for one of the other
+    # reasons the submission step returns on and says nothing about the board, and a run that
+    # approved is answered by `Apply pull request rules` for the reason above. `!cancelled()` is what
+    # lets this still run after a reviewer that failed *after* posting findings — that verdict is
+    # real and the board should carry it.
+    if: ${{ !cancelled() && needs.judge.outputs.verdict == 'changes_requested' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -2667,7 +2677,6 @@ jobs:
           BOARD_TOKEN: ${{ secrets.BOARD_PROJECT_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
-          VERDICT: ${{ needs.judge.outputs.verdict }}
           # The board is the owner's rather than an organization's, which is the whole reason the
           # credential above is what it is. The number belongs to that login's namespace.
           BOARD_OWNER: Krzysztof318
@@ -2682,24 +2691,14 @@ jobs:
           # rules`, because those writes differ only in the value and in the statuses they may act
           # on.
           BOARD_STATUS_SCRIPT: ${{ github.workspace }}/.github/pull-request/write-board-status.sh
-          # The two values a review decides, and the two this job refuses to write over. `Done` is
-          # the merge and the close, so a verdict arriving after one must not drag a finished item
-          # back into review. `Blocked` is the one status a hand writes: it says the issue is
-          # waiting on something outside the project, which a review verdict does not answer, and
-          # overwriting it would erase the only statement on the board that nothing here can derive.
-          APPROVED_STATUS: Ready to merge
+          # The value this job writes, and the two it refuses to write over. `Done` is the merge and
+          # the close, so a verdict arriving after one must not drag a finished item back into
+          # review. `Blocked` is the one status a hand writes: it says the issue is waiting on
+          # something outside the project, which a review verdict does not answer, and overwriting
+          # it would erase the only statement on the board that nothing here can derive.
           CHANGES_REQUESTED_STATUS: Changes requested
           PRESERVED_STATUSES: Done,Blocked
         run: |
           set -euo pipefail
 
-          case "$VERDICT" in
-            approved) status="$APPROVED_STATUS" ;;
-            changes_requested) status="$CHANGES_REQUESTED_STATUS" ;;
-            *)
-              echo "::notice::The review published no verdict this run, so the board is unchanged."
-              exit 0
-              ;;
-          esac
-
-          "$BOARD_STATUS_SCRIPT" "$status" "$PRESERVED_STATUSES"
+          "$BOARD_STATUS_SCRIPT" "$CHANGES_REQUESTED_STATUS" "$PRESERVED_STATUSES"
