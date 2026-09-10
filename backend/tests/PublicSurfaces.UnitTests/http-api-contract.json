@@ -2847,6 +2847,15 @@
               "boolean"
             ]
           },
+          "notificationSeconds": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
           "openMailInTabs": {
             "type": [
               "null",
@@ -2882,6 +2891,14 @@
           "markReadOnOpen": {
             "type": "boolean"
           },
+          "notificationSeconds": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
           "openMailInTabs": {
             "type": "boolean"
           },
@@ -2899,7 +2916,8 @@
           "markReadOnOpen",
           "expandWholeThread",
           "embeddedHtmlMessages",
-          "aiFiltersShown"
+          "aiFiltersShown",
+          "notificationSeconds"
         ],
         "type": "object"
       },
@@ -12007,6 +12025,86 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClientMailDeletesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/mutations/deletes/releases": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientMailChangeWithdrawalRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailChangesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/mutations/deletes/withdrawals": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientMailChangeWithdrawalRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailChangesResponse"
                 }
               }
             },

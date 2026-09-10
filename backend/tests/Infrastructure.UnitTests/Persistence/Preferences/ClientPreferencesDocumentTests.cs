@@ -39,7 +39,7 @@ public sealed class ClientPreferencesDocumentTests
 
         // Assert
         Assert.Equal(
-            """{"telemetryEnabled":true,"theme":"system","openMailInTabs":false,"markReadOnOpen":true,"expandWholeThread":false,"embeddedHtmlMessages":false,"aiFiltersShown":true}""",
+            """{"telemetryEnabled":true,"theme":"system","openMailInTabs":false,"markReadOnOpen":true,"expandWholeThread":false,"embeddedHtmlMessages":false,"aiFiltersShown":true,"notificationSeconds":5}""",
             document);
     }
 
