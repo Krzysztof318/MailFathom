@@ -62,7 +62,7 @@
 # before them. A conflict is not an answer to what a reader or a pipeline objected to: an item whose
 # reviewer withheld approval on a conflicting head owes the answer and the rebase both, and the column
 # that says the agent owes something is `Changes requested`. Asked first, the conflict rule would print
-# a status whose write is refused everywhere but `Ready to merge`, and the verdict it pre-empted would
+# a status whose write is refused everywhere but `Ready to merge`, and the verdict it shadowed would
 # never be published.
 #
 # Usage: select-board-status.sh <pull-request-json-file>

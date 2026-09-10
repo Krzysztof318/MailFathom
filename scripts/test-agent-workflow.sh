@@ -4212,7 +4212,7 @@ select_board_status_earns_conflicts_from_any_column_for_an_approved_head() {
 
 # A verdict is asked before whether the change still merges. Asked the other way round, a conflicting
 # head would print `Conflicts` for a write refused everywhere but `Ready to merge`, and the withheld
-# approval or the failed check it pre-empted would never be published — the item would stay in review.
+# approval or the failed check it shadowed would never be published — the item would stay in review.
 select_board_status_earns_changes_requested_on_a_pull_request_that_stopped_merging() {
   local output_file
   local checks
