@@ -45,16 +45,17 @@ public interface IMailAnsweringSpendPeriodStore
         long maximumTokens,
         CancellationToken cancellationToken);
 
-    /// <summary>Adds what one provider call consumed to the period it belongs to.</summary>
+    /// <summary>Adds what one run consumed to the period it was admitted into.</summary>
     /// <param name="periodStart">The period's start, as the bounds place it.</param>
-    /// <param name="tokenCount">The tokens the call sent and received together.</param>
+    /// <param name="tokenCount">The tokens the run sent and received together, across every call it made.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The tokens this period has consumed including these.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the count is negative.</exception>
     /// <remarks>
-    /// Recorded per call rather than per run, so a run that is stopped part way through has still spent what it spent,
-    /// and expressed as an increment rather than as a read followed by a write, so two replicas answering at once add
-    /// to each other instead of overwriting one another's total.
+    /// Charged once as the run ends rather than once per provider call, which is the trade ADR 0031 took: a run
+    /// already spends a provider's tokens, so one row touched beside that is not measurable, while a row touched per
+    /// turn of a tool loop is. Expressed as an increment rather than as a read followed by a write, so two replicas
+    /// answering at once add to each other instead of overwriting one another's total.
     /// </remarks>
     Task<long> RecordSpendAsync(DateTimeOffset periodStart, long tokenCount, CancellationToken cancellationToken);
 }

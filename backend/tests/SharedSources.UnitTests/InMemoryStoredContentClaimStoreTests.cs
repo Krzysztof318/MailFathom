@@ -135,6 +135,7 @@ public sealed class InMemoryStoredContentClaimStoreTests
         // Assert
         Assert.True(record.IsGranted);
         Assert.Equal(900L, claims.ReservedBytes);
+        Assert.Equal(1, claims.OutstandingClaimCount);
     }
 
     [Fact]

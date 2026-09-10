@@ -126,6 +126,34 @@ internal sealed class BudgetedChatClient : Microsoft.Extensions.AI.DelegatingCha
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Refused on the one path that cannot charge, for the reason <see cref="GetStreamingResponseAsync" /> is refused:
+    /// the period's write is asynchronous, so a synchronous owner releasing a run that spent tokens would drop that
+    /// spend silently, and a ceiling that under-counts without a signal fails open. The inner client is released
+    /// first, so the mistake costs a thrown exception rather than a leaked client.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Thrown when a synchronous owner releases a run whose tokens nothing has charged.</exception>
+    protected override void Dispose(bool disposing)
+    {
+        long uncharged;
+
+        lock (this.gate)
+        {
+            uncharged = this.unchargedInputTokens + this.unchargedOutputTokens;
+        }
+
+        var wouldDropSpend = disposing && uncharged > 0 && Volatile.Read(ref this.settled) == 0;
+
+        base.Dispose(disposing);
+
+        if (wouldDropSpend)
+        {
+            throw new NotSupportedException(
+                "Releasing this client synchronously is not supported while a run's tokens are uncharged: the deployment's period is charged from DisposeAsync, which an owner awaits.");
+        }
+    }
+
+    /// <inheritdoc />
     /// <remarks>Refused here as well as underneath, so no path exists on which a run could stream past the ceilings this decorator applies.</remarks>
     /// <exception cref="NotSupportedException">Always thrown.</exception>
     public override IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate> GetStreamingResponseAsync(

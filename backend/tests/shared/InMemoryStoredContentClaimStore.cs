@@ -31,7 +31,11 @@ internal sealed class InMemoryStoredContentClaimStore : IStoredContentClaimStore
     public long OccupiedBytes { get; set; }
 
     /// <summary>Gets how many claims are still binding, which is what says a released claim was given back.</summary>
-    public int OutstandingClaimCount => this.claims.Count;
+    /// <remarks>
+    /// An expired claim is not one of them, for the same reason it reserves nothing: the persisted store sweeps
+    /// expired rows inside its claim statement, so a deployment holds no such row and neither does this.
+    /// </remarks>
+    public int OutstandingClaimCount => this.claims.Values.Count(room => !room.HasExpired);
 
     /// <summary>Gets how much every unexpired claim reserves between them.</summary>
     public long ReservedBytes => this.claims.Values.Where(room => !room.HasExpired).Sum(room => room.Bytes);

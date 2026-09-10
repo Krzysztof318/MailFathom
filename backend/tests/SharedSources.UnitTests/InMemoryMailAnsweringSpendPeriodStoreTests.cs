@@ -109,6 +109,15 @@ public sealed class InMemoryMailAnsweringSpendPeriodStoreTests
             () => periods.TryAdmitRunAsync(Period, 0, 1000, TestContext.Current.CancellationToken));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
             () => periods.TryAdmitRunAsync(Period, 1, 0, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task RecordSpendAsync_ANegativeTokenCount_IsRefused()
+    {
+        // Arrange
+        var periods = new InMemoryMailAnsweringSpendPeriodStore();
+
+        // Act, Assert
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
             () => periods.RecordSpendAsync(Period, -1, TestContext.Current.CancellationToken));
     }

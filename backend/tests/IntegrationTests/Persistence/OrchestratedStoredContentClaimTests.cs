@@ -37,6 +37,11 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// catalogue figure the claim statement reads. A literal would be a claim about how much mail the rest of the suite
 /// happened to leave behind, which is not this class's subject and changes whenever another class stores a message.
 /// </para>
+/// <para>
+/// What a deployment bounding neither population does is not here and does not belong here: the store answers it from
+/// a guard that returns before any database call, and <c>InMemoryStoredContentClaimStoreTests</c> states it where the
+/// absence of a claim is observable rather than merely unasserted.
+/// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 public sealed class OrchestratedStoredContentClaimTests(MailFathomOrchestrationFixture orchestration)
@@ -66,11 +71,23 @@ public sealed class OrchestratedStoredContentClaimTests(MailFathomOrchestrationF
         var admittedElsewhere = await ClaimAsync(onAnotherHost, user, ceilings, cancellationToken);
 
         // Assert
-        Assert.True(taken.IsGranted);
-        Assert.Equal(StoredContentBound.Deployment, refusedElsewhere.ReachedBound);
-        Assert.True(admittedElsewhere.IsGranted);
-
-        await ReleaseAsync(onAnotherHost, admittedElsewhere.ClaimId!.Value, cancellationToken);
+        try
+        {
+            Assert.True(taken.IsGranted);
+            Assert.Equal(StoredContentBound.Deployment, refusedElsewhere.ReachedBound);
+            Assert.True(admittedElsewhere.IsGranted);
+        }
+        finally
+        {
+            // Released whatever the assertions decided: a claim that outlives a failing test reserves its bytes for
+            // the whole of ClaimLifetime in a database this collection shares, and every claim test here states its
+            // room from the catalogue alone, so the next one would report an arrangement with no room rather than
+            // the defect that actually failed.
+            if (admittedElsewhere.ClaimId is { } stillHeld)
+            {
+                await ReleaseAsync(onAnotherHost, stillHeld, cancellationToken);
+            }
+        }
     }
 
     /// <summary>
@@ -93,26 +110,6 @@ public sealed class OrchestratedStoredContentClaimTests(MailFathomOrchestrationF
         // Assert
         Assert.False(record.IsGranted);
         Assert.Equal(StoredContentBound.User, record.ReachedBound);
-    }
-
-    /// <summary>A deployment that bounds neither population reaches no table at all, so nothing is reserved.</summary>
-    [Fact]
-    public async Task ClaimAsync_NeitherPopulationIsBounded_AnswersUnboundedWithoutWritingAClaim()
-    {
-        // Arrange
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var user = OrchestratedDeploymentUser.Shared.User;
-
-        // Act
-        var record = await ClaimAsync(
-            services,
-            user,
-            new StoredContentCeilings(DeploymentBytes: null, UserBytes: null),
-            cancellationToken);
-
-        // Assert
-        Assert.Equal(StoredContentClaimRecord.Unbounded, record);
     }
 
     /// <summary>States ceilings that admit exactly the payloads asked for, over whatever storage already occupies.</summary>

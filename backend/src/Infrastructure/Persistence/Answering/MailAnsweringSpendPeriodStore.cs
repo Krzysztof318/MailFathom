@@ -80,10 +80,10 @@ internal sealed class MailAnsweringSpendPeriodStore(MailFathomDbContext dbContex
             """;
     }
 
-    /// <summary>The statement that adds one provider call's tokens to the period they were spent in.</summary>
+    /// <summary>The statement that adds one run's tokens to the period they were spent in.</summary>
     /// <remarks>
     /// Unconditional, because what has already been spent cannot be refused: the ceiling is applied when a run is
-    /// admitted, and a call the deployment has already paid for is recorded whether or not it took the period past its
+    /// admitted, and a run the deployment has already paid for is recorded whether or not it took the period past its
     /// ceiling. A period whose first write is a spend rather than an admission is the shape a run admitted just before
     /// a roll-over leaves, and it inserts its row like any other.
     /// </remarks>

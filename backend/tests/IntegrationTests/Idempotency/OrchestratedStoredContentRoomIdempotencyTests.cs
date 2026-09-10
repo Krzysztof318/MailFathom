@@ -67,14 +67,23 @@ public sealed class OrchestratedStoredContentRoomIdempotencyTests(MailFathomOrch
         // Assert
         var granted = attempts.Results.Where(record => record.IsGranted).ToArray();
 
-        attempts.AssertSingleEffect(granted.Length);
-        Assert.All(
-            attempts.Results.Where(record => !record.IsGranted),
-            record => Assert.Equal(StoredContentBound.Deployment, record.ReachedBound));
-
-        foreach (var record in granted)
+        try
         {
-            await ReleaseAsync(onOneHost, record.ClaimId!.Value, cancellationToken);
+            attempts.AssertSingleEffect(granted.Length);
+            Assert.All(
+                attempts.Results.Where(record => !record.IsGranted),
+                record => Assert.Equal(StoredContentBound.Deployment, record.ReachedBound));
+        }
+        finally
+        {
+            // Released whatever the assertions decided, because a claim that outlives a failing test keeps reserving
+            // its bytes for the whole of ClaimLifetime in a database this collection shares — and the next claim test
+            // states its room from the catalogue alone, so it would report an arrangement that never had room rather
+            // than the defect that actually failed here.
+            foreach (var record in granted)
+            {
+                await ReleaseAsync(onOneHost, record.ClaimId!.Value, cancellationToken);
+            }
         }
     }
 

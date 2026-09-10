@@ -168,6 +168,41 @@ public sealed class BudgetedChatClientTests
             () => client.GetResponseAsync(Conversation, options: null, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// A synchronous owner cannot charge the period, so releasing a run that spent tokens that way is refused rather
+    /// than dropping that spend silently — every construction site awaits disposal, and this is what reports the one
+    /// that stops.
+    /// </summary>
+    [Fact]
+    public async Task Dispose_ARunWhoseTokensNothingHasCharged_IsRefused()
+    {
+        // Arrange
+        using var inner = ScriptedChatClient.AnsweringWithUsage("The invoice was attached.", inputTokens: 90, outputTokens: 30);
+        var spendLedger = Substitute.For<IMailAnsweringSpendLedger>();
+        var client = new BudgetedChatClient(inner, LedgerAllowing(), spendLedger);
+
+        await client.GetResponseAsync(Conversation, options: null, TestContext.Current.CancellationToken);
+
+        // Act, Assert
+        Assert.Throws<NotSupportedException>(client.Dispose);
+        await spendLedger.DidNotReceive().RecordSpendAsync(Arg.Any<ChatTokenUsage>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A run that charged the period is released synchronously without complaint, which is the path disposal itself takes.</summary>
+    [Fact]
+    public async Task Dispose_ARunThatAlreadyChargedThePeriod_IsAccepted()
+    {
+        // Arrange
+        using var inner = ScriptedChatClient.AnsweringWithUsage("The invoice was attached.", inputTokens: 90, outputTokens: 30);
+        var client = new BudgetedChatClient(inner, LedgerAllowing(), Substitute.For<IMailAnsweringSpendLedger>());
+
+        await client.GetResponseAsync(Conversation, options: null, TestContext.Current.CancellationToken);
+        await client.DisposeAsync();
+
+        // Act, Assert
+        client.Dispose();
+    }
+
     /// <summary>No path may exist on which a run could stream past the ceilings this decorator applies.</summary>
     [Fact]
     public void GetStreamingResponseAsync_AnyCall_IsRefused()
