@@ -974,6 +974,33 @@ describe('MessageList', () => {
         expect([...row(0).classList]).not.toContain('animate-row-changed');
     });
 
+    it('redraws a row from a stated flag without reading the page it is on again', async () => {
+        const deployment = deploymentSaying();
+        const asked = recording(pageOf([message(0), message(1)]));
+
+        renderList(asked.transport, { changes: deployment.changes });
+        await rows();
+
+        const before = asked.requests.length;
+
+        act(() => {
+            deployment.say({
+                kind: 'mail.flags.changed',
+                account: 'work',
+                folder: 'INBOX',
+                flags: [{ email: 'message-0', isSeen: false, isFlagged: true }],
+            });
+        });
+
+        const drawn = await rows();
+
+        expect(drawn[0]?.textContent).toContain('Unread');
+        expect(drawn[0]?.textContent).toContain('Flagged');
+        expect(drawn[1]?.textContent).not.toContain('Unread');
+        expect(asked.requests.length).toBe(before);
+        expect([...row(0).classList]).toContain('animate-row-changed');
+    });
+
     it('draws the most actionable reading on a row that carries one, without displacing the mail', async () => {
         renderList(answering(pageOf([message(0, { enrichment: derived }), message(1)])));
         await rows();

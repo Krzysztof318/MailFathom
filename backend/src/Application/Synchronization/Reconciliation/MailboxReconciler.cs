@@ -214,8 +214,15 @@ public sealed class MailboxReconciler
     /// without <c>CONDSTORE</c>, and an account still ramping up, describe every occurrence in every window, so reading
     /// the outcome's whole still-present list would announce a mailbox nobody touched once per cycle.
     /// <para>
-    /// What crosses is the account, the folder, and the stored identities — no flag, no count of which kind of change,
-    /// and nothing derived from a message. Which of them changed is what the client re-reads to find out.
+    /// What crosses is the account, the folder, and the stored identities — no count of which kind of change, and
+    /// nothing derived from a message. Which of them changed is what the client re-reads to find out.
+    /// </para>
+    /// <para>
+    /// A window in which nothing moved but the two server flags is the one exception, and it states where they now
+    /// stand instead. That saves the client a read per star and per read mark, and it is safe only because a flag never
+    /// moves a message between folders or in or out of a filtered view — so a window that also lost an occurrence, or
+    /// moved a keyword the statement has no room for, says <c>mail.changed</c> for the whole of what it found rather
+    /// than splitting one window into two statements a client would apply in an order nothing fixes.
     /// </para>
     /// </remarks>
     private void AnnounceWhatMoved(
@@ -229,18 +236,33 @@ public sealed class MailboxReconciler
             return;
         }
 
-        var moved = classification.Moved
-            .Select(static observed => observed.Candidate.StoredEmailId)
-            .Concat(outcome.Disappeared)
+        var moved = classification.Moved;
+        var left = outcome.Disappeared
             .Concat(outcome.RemovedByOwnMutation.Select(static attributed => attributed.StoredEmailId))
             .ToArray();
 
-        if (moved.Length == 0)
+        if (moved.Count == 0 && left.Length == 0)
         {
             return;
         }
 
-        this.signals.Publish(ClientSignal.MailChanged(account, folder, moved));
+        if (left.Length == 0 && moved.All(static observed => !observed.KeywordsMoved))
+        {
+            this.signals.Publish(ClientSignal.MailFlagsChanged(
+                account,
+                folder,
+                moved.Select(static observed => new SignalledEmailFlags(
+                    observed.Candidate.StoredEmailId,
+                    observed.Snapshot.IsSeen,
+                    observed.Snapshot.IsFlagged))));
+
+            return;
+        }
+
+        this.signals.Publish(ClientSignal.MailChanged(
+            account,
+            folder,
+            moved.Select(static observed => observed.Candidate.StoredEmailId).Concat(left)));
     }
 
     /// <summary>Separates the disappearances MailFathom caused from the ones the disposition answers for.</summary>

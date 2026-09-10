@@ -270,6 +270,7 @@ export {
     type MailFathomSignalChannel,
     type SignalChannelHandle,
     type SignalChannelOpening,
+    type SignalledFlags,
     type SignalNotificationKind,
     type SignalStream,
     type SignalStreamSchedule,

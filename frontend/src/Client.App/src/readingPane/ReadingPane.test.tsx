@@ -599,6 +599,30 @@ describe('ReadingPane against a deployment that says what changed', () => {
         });
     });
 
+    it('applies a stated flag to the message it is drawing rather than reading it again', async () => {
+        // Arrange
+        asked.length = 0;
+        const signalling = deploymentSaying();
+        drawing(deploymentDescribing(), messageId, true, deliversNothing, nothingMarkedRead, signalling.changes);
+        await screen.findByText('Quarterly invoice');
+        await screen.findByRole('button', { name: /^Flag —/ });
+        const before = asked.length;
+
+        // Act
+        act(() => {
+            signalling.say({
+                kind: 'mail.flags.changed',
+                account: 'work',
+                folder: 'INBOX',
+                flags: [{ email: messageId, isSeen: true, isFlagged: true }],
+            });
+        });
+
+        // Assert
+        await screen.findByRole('button', { name: /^Unflag —/ });
+        expect(asked.length).toBe(before);
+    });
+
     it('leaves a message about other mail alone rather than reading this one again', async () => {
         // Arrange
         asked.length = 0;

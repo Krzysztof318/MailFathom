@@ -102,14 +102,21 @@ export const signalTicket = {
 };
 
 /**
- * The five payloads a deployment sends over the channel, one of each kind.
+ * The six payloads a deployment sends over the channel, one of each kind.
  *
  * A signal is an instruction to look again rather than something to keep, so nothing here carries mail: what each says
- * is which folder, which mailbox, or which messages to re-read over the routes the client already reads.
+ * is which folder, which mailbox, or which messages to re-read over the routes the client already reads. The flag
+ * change is the one that states a value instead, and two booleans beside an identifier are still not mail.
  */
 export const signals = {
     mailArrived: { kind: 'mail.arrived', account: 'work', folder: 'INBOX', count: 3 },
     mailChanged: { kind: 'mail.changed', account: 'work', folder: 'INBOX', emails: [newsletterId, markupOnlyId] },
+    mailFlagsChanged: {
+        kind: 'mail.flags.changed',
+        account: 'work',
+        folder: 'INBOX',
+        flags: [{ email: newsletterId, isSeen: true, isFlagged: null }],
+    },
     foldersChanged: { kind: 'folders.changed', account: 'work' },
     notificationRaised: {
         kind: 'notification.raised',

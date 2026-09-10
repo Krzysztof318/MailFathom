@@ -2282,24 +2282,39 @@ own identifier the moment it is admitted, and every statement is published to on
 a caller supplied, because nothing here takes one.
 
 **What crosses is what changed, never what it changed to.** A signal is an instruction to look again: it names a count,
-an account alias, a folder alias, and a stored identity, and no subject, address, body fragment, filename, or attachment
-name reaches it at any size. The one exception is a raised notification's own headline and second line, which are the
-record's already-derived text and reach a client entitled to read that record over
-[the notification routes](#the-notification-routes). Five things are said:
+an account alias, a folder alias, a stored identity, and the two server flags of one, and no subject, address, body
+fragment, filename, or attachment name reaches it at any size. The one exception is a raised notification's own headline
+and second line, which are the record's already-derived text and reach a client entitled to read that record over
+[the notification routes](#the-notification-routes). Six things are said:
 
 | Signal | What it says |
 | --- | --- |
 | `mail.arrived` | A run committed mail into one folder, and how much |
 | `mail.changed` | Stored mail in one folder is no longer what a client last read, naming up to 100 of the rows |
+| `mail.flags.changed` | Nothing moved but the `\Seen` or `\Flagged` flag of up to 100 rows, and where each of those flags now stands |
 | `folders.changed` | The set of folders an account mirrors has moved |
 | `notification.raised` | A notification was written, with its kind, its two lines, and how many now stand unread |
 | `account.state` | An account's synchronization run finished, so what a client says about it is out of date |
+
+**A flag is the one change stated rather than pointed at.** `mail.flags.changed` carries, per row, the stored identity
+and where each of the two flags now stands, so a client redraws the row it already holds without reading the page it is
+on — which is what makes a star or a read mark land on the screen without a round trip behind it. It is safe for those
+two values alone: applying the same statement twice is the same state, and a flag never moves a message between folders
+or in or out of a filtered view, so no reader has to decide whether the row still belongs where it is drawn. Anything
+else that moved — a message that changed folder, was deleted, or whose keywords moved — says `mail.changed` for the
+whole of what a run found, and a client re-reads. A flag a publisher did not observe is left out rather than reported as
+cleared: a reconciliation window states both, and a change this deployment authored states the one it wrote.
+
+**A client that does not know the sixth kind ignores it and re-reads on its own interval**, exactly as it ignores any
+other kind it does not know; the client and the service ship under one version, so this is an addition rather than a
+break.
 
 **A settled move says `mail.changed` twice, once per folder.** A change that files a message somewhere — a move, a copy —
 changes the folder it left and the folder it landed in, so both are named, and a client watching either re-reads when the
 message crosses rather than when something else makes it look again. The destination is named by its alias, so a move
 into a folder this deployment maps and does not mirror announces the source alone: there is no folder a client holds mail
-for. Everything else — a flag change, a delete — names the one folder the message is in, exactly as before.
+for. Everything else — a delete, a keyword change — names the one folder the message is in, exactly as before, and a
+settled flag change says `mail.flags.changed` about that one folder instead.
 
 **Statements are folded per user, per kind, and per place over half a second.** A run committing a folder's worth of
 mail is one arrival to the person who was away from the screen rather than one statement per message, and two folders'

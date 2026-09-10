@@ -714,7 +714,7 @@ public sealed class MailboxMutationPerformerTests
         await using var signals = new ClientSignals([channel], clock);
         var context = new PerformerContext(signals: signals);
         context.FolderResolutions.Bind(Account.Id, MailFolderAlias.Create("archive"), ArchivePath.Value);
-        var request = RequestFor("set-seen");
+        var request = RequestFor("delete");
 
         // Act
         await context.Performer.PerformAsync(request, InboxFolder, TransportPolicy, CancellationToken.None);
@@ -728,6 +728,62 @@ public sealed class MailboxMutationPerformerTests
         Assert.Equal(SyntheticMailUser.Deployment, signal.User);
         Assert.Equal(InboxFolder.Alias, signal.Folder);
         Assert.Equal([request.StoredEmailId], signal.Emails);
+    }
+
+    /// <summary>A flag this deployment wrote is stated rather than pointed at, so the read mark lands without a read behind it.</summary>
+    [Fact]
+    public async Task PerformAsync_WhenASettledChangeWroteAFlag_StatesWhereThatFlagStands()
+    {
+        // Arrange
+        var channel = new RecordingClientSignalChannel();
+        var clock = new FakeTimeProvider();
+        await using var signals = new ClientSignals([channel], clock);
+        var context = new PerformerContext(signals: signals);
+        var request = RequestFor("set-seen");
+
+        // Act
+        await context.Performer.PerformAsync(request, InboxFolder, TransportPolicy, CancellationToken.None);
+
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var signal = Assert.Single(channel.Published);
+        Assert.Equal(ClientSignalKind.MailFlagsChanged, signal.Kind);
+        Assert.Equal(InboxFolder.Alias, signal.Folder);
+        Assert.Empty(signal.Emails);
+
+        // The other flag is left unstated: the request carries the one that was asked for, and reporting where the
+        // other stands would be a guess about a value nobody wrote.
+        Assert.Equal(
+            [new SignalledEmailFlags(request.StoredEmailId, IsSeen: true, IsFlagged: null)],
+            signal.Flags);
+    }
+
+    /// <summary>A flag change nothing will attempt again established no state, so the row is named to be read again.</summary>
+    [Fact]
+    public async Task PerformAsync_WhenAFlagChangeWasAbandoned_NamesTheRowToReReadInstead()
+    {
+        // Arrange
+        var channel = new RecordingClientSignalChannel();
+        var clock = new FakeTimeProvider();
+        await using var signals = new ClientSignals([channel], clock);
+        var context = new PerformerContext(signals: signals);
+        var request = RequestFor("set-seen");
+        await context.OpenRecordFor(request);
+        context.Store.Arrange(request, record => record with { Stage = MailboxMutationStage.Abandoned });
+
+        // Act
+        await context.Performer.PerformAsync(request, InboxFolder, TransportPolicy, CancellationToken.None);
+
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var signal = Assert.Single(channel.Published);
+        Assert.Equal(ClientSignalKind.MailChanged, signal.Kind);
+        Assert.Equal([request.StoredEmailId], signal.Emails);
+        Assert.Empty(signal.Flags);
     }
 
     /// <summary>A folder this deployment does not mirror has no alias to re-read, so a move into one names the source alone.</summary>

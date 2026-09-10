@@ -143,16 +143,21 @@ export function FolderTree({
         revise({ scope: openingScope(offered) });
     }, [answered, workspace.scope, revise]);
 
-    // Three of the five kinds move this tree, because all three move a count it draws: mail arriving in a folder, a
-    // message changing folder or read state, and the mapping itself moving. It re-reads under whatever is drawn rather
+    // Four of the six kinds move this tree, because all four move a count it draws: mail arriving in a folder, a
+    // message changing folder, the mapping itself moving, and a read mark. It re-reads under whatever is drawn rather
     // than replacing it, so a reader whose pointer is on a row keeps the row.
+    //
+    // A stated flag is the one that is read rather than acted on wholesale. A count is derived from every message in a
+    // folder rather than from the ones a statement names, so there is nothing to apply in place — but a statement about
+    // stars alone moves no count, and re-reading the tree for one would be a request per star.
     useEffect(
         () =>
             signalledChanges.listen((signal) => {
                 if (
                     signal.kind === 'folders.changed' ||
                     signal.kind === 'mail.arrived' ||
-                    signal.kind === 'mail.changed'
+                    signal.kind === 'mail.changed' ||
+                    (signal.kind === 'mail.flags.changed' && signal.flags.some((stated) => stated.isSeen !== null))
                 ) {
                     setRefreshed((token) => token + 1);
                 }
