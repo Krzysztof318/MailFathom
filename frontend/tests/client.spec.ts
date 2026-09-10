@@ -1095,7 +1095,9 @@ const markupFrame = "The sender's own markup, drawn in isolation";
 
 async function showTheSenderMarkup(page: Page): Promise<void> {
     await page.getByRole('button', { name: 'Show the original message' }).click();
-    await page.getByRole('button', { name: 'Show the original' }).click();
+    // Exactly, because the control that opened this confirmation is named *Show the original message* and the
+    // agreement on it is named *Show the original* — one is a prefix of the other, and an inexact name matches both.
+    await page.getByRole('button', { name: 'Show the original', exact: true }).click();
 }
 
 test('draws the sender own markup in a frame that permits no origin and no way out of itself', async ({ page }) => {
