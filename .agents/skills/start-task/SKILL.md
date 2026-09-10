@@ -117,8 +117,9 @@ them if that access were ever removed.
    to the owner's checkout; the board fields need write access to the board, which step 2
    established. It carries exactly one `type:*` label, a `backend` or `frontend` label where the work
    lands in one of the two stacks and neither where it lands in neither, an `Area` and a `Queue`
-   value on the board, a milestone when the milestone rule assigns one, and a `Size` value estimated
-   from the scope the body describes. Decide each from the rules on that page rather than asking. `Queue: Next` is never
+   value on the board, a milestone when the milestone rule assigns one, and the `Size` placeholder
+   that page's one rule produces — a placeholder rather than an estimate, because the value the board
+   keeps is the one `$finish-change` measures off the diff. Decide each from the rules on that page rather than asking. `Queue: Next` is never
    one of them: the owner chooses it, and `$finish-change` writes it once the pull request exists, so
    a new issue takes `Later`, `Needs decision`, or `Parked`, and a parent takes one of those three by
    the same rules as any other issue. What marks a parent instead is the `parent` label and the `[P] `
@@ -157,7 +158,20 @@ them if that access were ever removed.
     and it is never removed — `docs/operations/issue-tracking.md` § *Labels* holds what it claims and
     why the claim is the weaker of the two available. In the fork role this step does not exist, for
     the reason every label step does not: it is write access to this repository.
-11. For dependency, CLI, protocol, service, or external API changes, consult current official
+11. Say whether the change looks large enough to split, in the `Scale` line of the brief. This is the
+    board's `XL` warning, and it is raised here because this is the last point before the first edit
+    at which anything has read the issue against the repository: the surfaces it reaches, the tests
+    each one obliges, the pages whose `describes:` marker covers them, and whether a migration or a
+    second stack is in it. `docs/operations/issue-tracking.md` § *Board fields* holds why it is not
+    the `Size` field's warning — read off an issue body it finds a third of the changes that land
+    there and is wrong about half of the ones it names, which is why it needs a reading rather than a
+    rule.
+
+    It is a report and never a refusal. Name what makes the change large and where the seam between
+    two issues would fall, then carry on: whether to split is the owner's call, and a warning nobody
+    acts on costs a sentence, while an unsplit `XL` is discovered when the pull request is already
+    open.
+12. For dependency, CLI, protocol, service, or external API changes, consult current official
     documentation and flag licensing review.
 
 Return:
@@ -169,7 +183,8 @@ Scope: <what governs the task, or that nothing does>
 Protected paths: <none reached, or which and what that means for this role>
 Issue: <number and title, or created with reason>
 Blocked by: <the open blockers refusing the work, or none — and any relation written>
-Placement: <type label, stack label or neither, Area, Queue, Size, milestone or none — or what the board probe left to triage>
+Placement: <type label, stack label or neither, Area, Queue, Size placeholder, milestone or none — or what the board probe left to triage>
+Scale: <no split warning, or what makes this look XL, which surfaces it reaches, and where a seam between two issues would fall>
 Claim: <agent:claude or agent:codex applied, already present, or not applicable in the fork role>
 Required context: <files read>
 Assumptions or blockers: <none or explicit list>

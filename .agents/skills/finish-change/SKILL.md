@@ -77,6 +77,25 @@ Do not proceed while a gate fails.
    grouping it, and a `Closes` reference pointing at a parent is the defect to correct rather than an
    issue to move to `Next`.
 
+   **The same board write sets `Size`, and it takes it from the diff rather than from the placeholder
+   the issue was opened with.** The pull request exists by this step, so its own line count is
+   available:
+
+   ```bash
+   band=$(gh api repos/Krzysztof318/MailFathom/pulls/<number> \
+     --jq '.additions + .deletions
+           | if . < 1000 then "S" elif . < 2500 then "M" elif . < 5000 then "L" else "XL" end')
+   ```
+
+   That endpoint names the base repository in both roles, exactly as the body patch above does. Write
+   the band it printed with one more `item-edit` against the `Size` field, and confirm it landed as
+   `Queue` is confirmed. `docs/operations/issue-tracking.md` § *Board fields* holds the boundaries and
+   why the value is taken here rather than argued over: this is the first moment the field can state a
+   measurement instead of a guess, and a review round that later carries the change across a boundary
+   leaves it one band out rather than wrong in kind. It is skipped on an issue carrying the `parent`
+   label for the reason `Queue` is — a parent's size is the sum of its children, and no pull request
+   closes one.
+
    Without that access there is no board write and no gate here. The board is the owner's and a grant
    on it is theirs to make, so this is not a step that failed or was skipped for convenience — it is a
    step that does not exist in this session. Report it as `not applicable (no board write)` rather
@@ -85,10 +104,9 @@ Do not proceed while a gate fails.
 Confirm the issue is still placed, against `docs/operations/issue-tracking.md`, as far as this
 session's access reaches: exactly one `type:*` label, a `backend` or `frontend` label where the work
 landed in one of the two stacks, and a milestone if the release rule assigns one, all of which need
-write access to the repository, and an `Area` and a `Size` on the board, the
-`Size` estimated when the issue was opened and now corrected against the diff this pull request
-actually produced. A change that grew past what the issue described may have outgrown its placement
-too.
+write access to the repository, and an `Area` and a `Size` on the board, the `Size` being what step 7
+measured rather than the placeholder the issue was opened with. A change that grew past what the
+issue described may have outgrown its placement too.
 
 Leave the board's `Status` field to the project automation. Set a status by hand only for an issue
 created already closed, which the automation does not add.
@@ -107,7 +125,8 @@ Push: <remote and branch>
 Pull request: <URL, and the base repository it targets>
 Issue link: <Closes #N confirmed in the published body>
 Queue: <Next confirmed on the board after the pull request existed, or not applicable (no board write)>
-Placement: <type label, stack label or neither, Area, Size, milestone or none — or what this session's access left to triage>
+Size: <the band written from this pull request's own diff and confirmed, or not applicable (no board write, or a parent issue)>
+Placement: <type label, stack label or neither, Area, milestone or none — or what this session's access left to triage>
 ```
 
 Never claim completion without fresh evidence for every line.
