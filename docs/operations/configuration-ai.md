@@ -811,8 +811,9 @@ length.
 
 Like the embedding ceiling, this ledger is **the deployment's and it is durable**: the period is one row every replica
 admits against, so a restart resumes the window where the deployment left it and three replicas share the configured
-allowance rather than each getting the whole of it. The write is made once per admitted run rather than once per
-provider call, which is what [ADR
+allowance rather than each getting the whole of it. A run that would otherwise open no write of its own makes two —
+one when it is admitted and one when it ends, carrying what it consumed — rather than one per provider call, which is
+what [ADR
 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) settled: a rate and a spend
 become the deployment's, and what it costs to make them so is a write beside a run that is already about to spend a
 provider's tokens.

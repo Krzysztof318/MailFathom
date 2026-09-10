@@ -195,7 +195,7 @@ internal sealed class MailSearchPhraseAgent : IMailSearchPhraseReader
             // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
             // this request's and the period's, and a search is charged to the same allowance a question is: what an
             // operator pays a provider does not change because the call was started from a search field.
-            using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
+            await using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
 
             var agent = MailSearchPhraseAgentComposition.Compose(
                 chatClient,

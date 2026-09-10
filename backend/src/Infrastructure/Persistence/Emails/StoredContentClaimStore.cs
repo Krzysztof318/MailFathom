@@ -73,16 +73,28 @@ internal sealed class StoredContentClaimStore(MailFathomDbContext dbContext) : I
         var names = StoredContentClaimNames.Of(dbContext.Model);
         var claimId = Guid.CreateVersion7();
 
-        await using var ownTransaction = dbContext.Database.CurrentTransaction is null
-            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
-            : null;
+        // Refused rather than joined, because both of this store's guarantees are lost silently inside somebody else's
+        // transaction: the claim row would stay invisible to every other replica until that caller committed, which is
+        // the one thing the port promises does not happen, and the advisory lock — the deployment's single claim
+        // serialization point — would be held for the whole of the caller's work rather than for the short
+        // database-only critical section this is. A caller claims before it opens a session, as synchronization does.
+        if (dbContext.Database.CurrentTransaction is not null)
+        {
+            throw new InvalidOperationException(
+                "A stored-content claim opens a transaction of its own and cannot be taken inside a caller's, because a claim nobody has committed binds no other replica.");
+        }
+
+        await using var ownTransaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         await dbContext.Database.ExecuteSqlRawAsync(
             "SELECT pg_advisory_xact_lock({0})",
             [ClaimSerializationKey],
             cancellationToken);
 
-        var reachedBound = await dbContext.Database
+        // Materialized rather than composed: a terminal that narrows the source — a single, a first, a count — makes
+        // EF Core wrap the statement in a subquery, and PostgreSQL refuses a data-modifying `WITH` anywhere but at the
+        // top level. The statement answers exactly one row by construction, so reading the array is the whole of it.
+        var verdicts = await dbContext.Database
             .SqlQueryRaw<int>(
                 ClaimStatement(names),
                 user.Value,
@@ -92,12 +104,11 @@ internal sealed class StoredContentClaimStore(MailFathomDbContext dbContext) : I
                 ceilings.DeploymentBytes ?? long.MaxValue,
                 ceilings.UserBytes ?? long.MaxValue,
                 names.ContentsTable)
-            .SingleAsync(cancellationToken);
+            .ToArrayAsync(cancellationToken);
 
-        if (ownTransaction is not null)
-        {
-            await ownTransaction.CommitAsync(cancellationToken);
-        }
+        var reachedBound = verdicts.Single();
+
+        await ownTransaction.CommitAsync(cancellationToken);
 
         var reached = (StoredContentBound)reachedBound;
 

@@ -23,11 +23,14 @@ internal sealed class ProviderPaceMarker(MailFathomDbContext dbContext) : IProvi
         ArgumentException.ThrowIfNullOrEmpty(workload);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero);
 
-        var wait = await dbContext.Database
+        // Materialized rather than composed: a terminal that narrows the source makes EF Core wrap the statement in a
+        // subquery, and PostgreSQL accepts a data-modifying statement only at the top level. The upsert answers exactly
+        // one row, granted or conflicting, so reading the array is the whole of it.
+        var waits = await dbContext.Database
             .SqlQueryRaw<TimeSpan>(ReserveStatement(dbContext.Model), workload, interval)
-            .SingleAsync(cancellationToken);
+            .ToArrayAsync(cancellationToken);
 
-        return wait;
+        return waits.Single();
     }
 
     /// <summary>The statement that moves one workload's marker forward and reports the slot it handed out.</summary>

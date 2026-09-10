@@ -4,7 +4,7 @@
 
 namespace MailFathom.Application.EmailContent.Storage;
 
-/// <summary>Holds room under both <see cref="StoredContentCeiling" /> levels while one payload is fetched and stored.</summary>
+/// <summary>Holds room under both of <see cref="StoredContentCeiling" />'s ceilings while one payload is fetched and stored.</summary>
 /// <remarks>
 /// <para>
 /// A claim is taken against what a message is expected to occupy, before it is fetched, and given back once the payload

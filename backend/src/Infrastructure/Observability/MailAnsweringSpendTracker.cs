@@ -25,8 +25,10 @@ namespace MailFathom.Infrastructure.Observability;
 /// what it used to be, and the reason is the one
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
 /// records: a ceiling worded as the deployment's and counted in each process is multiplied by the replica count, and
-/// the two ceilings here are the two that cost money. A write per admitted run is what that costs, beside a run that
-/// is already about to spend a provider's tokens.
+/// the two ceilings here are the two that cost money. What that costs is two writes for a run that would not otherwise
+/// have opened one — the admission, and the charge as the run ends — beside a run that is already about to spend a
+/// provider's tokens. Not a write per provider call, which is the shape that ADR refused and which a tool loop turning
+/// once per message of a backfill is what makes expensive.
 /// </para>
 /// <para>
 /// A refusal is counted as well as measured, because the two questions an operator asks are opposite: the counter says
@@ -147,9 +149,10 @@ public sealed partial class MailAnsweringSpendTracker : IMailAnsweringSpendLedge
     {
         ArgumentNullException.ThrowIfNull(usage);
 
-        // Charged to the window the call finished in, which is the same rule the admission uses. A run that spans a
-        // roll-over therefore pays part of itself into each, and that is the honest reading of a fixed window: the
-        // alternative is holding a second row for a period that has ended so a slow call can still reach it.
+        // Charged to the window the run ended in, which is the same rule the admission uses on the window it began in.
+        // A run that spans a roll-over is therefore admitted into one period and charged into the next, and that is the
+        // honest reading of a fixed window: the alternative is holding a period open so a slow run can still reach it,
+        // which is what makes a ceiling stop naming an interval.
         var periodStart = this.bounds.PeriodStartAt(this.timeProvider.GetUtcNow());
         var spent = usage.InputTokens + usage.OutputTokens;
 

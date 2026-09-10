@@ -36,6 +36,14 @@ internal sealed class InMemoryStoredContentClaimStore : IStoredContentClaimStore
     /// <summary>Gets how much every unexpired claim reserves between them.</summary>
     public long ReservedBytes => this.claims.Values.Where(room => !room.HasExpired).Sum(room => room.Bytes);
 
+    /// <summary>Gets how many times a release was asked for, whether or not it met a claim.</summary>
+    /// <remarks>
+    /// Counted rather than inferred from what is left, because removing a claim is idempotent: a claim released twice
+    /// and a claim released once leave the same store, so nothing about the outstanding count can tell a caller that
+    /// releases once from one that does not.
+    /// </remarks>
+    public int ReleaseCount { get; private set; }
+
     /// <summary>States what one user's stored content occupies before the test begins.</summary>
     /// <param name="user">The user.</param>
     /// <param name="occupiedBytes">What their payloads hold.</param>
@@ -108,6 +116,7 @@ internal sealed class InMemoryStoredContentClaimStore : IStoredContentClaimStore
     /// <inheritdoc />
     public Task ReleaseAsync(Guid claimId, CancellationToken cancellationToken)
     {
+        this.ReleaseCount++;
         this.claims.Remove(claimId);
 
         return Task.CompletedTask;

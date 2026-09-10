@@ -303,8 +303,10 @@ period again from zero. It was process-local until
 on the reasoning that a question opens no write of its own and a durable count would add one to the path of every
 provider call. What that reasoning missed is the replica count: a ceiling worded as the deployment's and counted in
 each process admits as many times what an operator agreed to as there are processes, at a provider that bills for it.
-So the write is per admitted run rather than per provider call — a run that is already about to spend a provider's
-tokens — and a restart resumes the window where the deployment left it.
+So the writes are the admission and the run's own total as it ends, rather than one per provider call: a run is
+already about to spend a provider's tokens, while a tool loop turns once per message of a backfill and a round trip per
+turn is the cost that reasoning does not pay for. A restart resumes the window where the deployment left it, and a run
+that failed, was refused, or was cancelled part way through still charges what it spent.
 
 ### What it is observable as
 

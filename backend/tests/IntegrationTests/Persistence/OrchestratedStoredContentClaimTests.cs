@@ -27,6 +27,12 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// process: what is asserted here is that the reservation lives in the database and not in whichever graph took it.
 /// </para>
 /// <para>
+/// What happens when several callers reach the last room at the same moment is a claim of its own and is stated where
+/// this suite states those — <c>OrchestratedStoredContentRoomIdempotencyTests</c>, under
+/// <c>backend/tests/IntegrationTests/Idempotency/</c>, raced through <c>ConcurrentIdempotency</c> rather than through
+/// anything that could stagger the attempts.
+/// </para>
+/// <para>
 /// The deployment ceiling is stated relative to what the content table already occupies, read through the same
 /// catalogue figure the claim statement reads. A literal would be a claim about how much mail the rest of the suite
 /// happened to leave behind, which is not this class's subject and changes whenever another class stores a message.
@@ -40,9 +46,6 @@ public sealed class OrchestratedStoredContentClaimTests(MailFathomOrchestrationF
 
     /// <summary>How long a claim of this class binds, generously enough that nothing here expires mid-test.</summary>
     private static readonly TimeSpan ClaimLifetime = TimeSpan.FromMinutes(5);
-
-    /// <summary>Enough callers that one reliably loses the advisory lock, and few enough that the claim costs seconds.</summary>
-    private const int CompetingClaimants = 8;
 
     [Fact]
     public async Task ClaimAsync_AClaimHeldByAnotherHost_RefusesThePayloadHereAndAdmitsItOnceItIsReleased()
@@ -68,48 +71,6 @@ public sealed class OrchestratedStoredContentClaimTests(MailFathomOrchestrationF
         Assert.True(admittedElsewhere.IsGranted);
 
         await ReleaseAsync(onAnotherHost, admittedElsewhere.ClaimId!.Value, cancellationToken);
-    }
-
-    /// <summary>
-    /// The room is handed out once however many callers ask for it at the same moment, which is the property a
-    /// measurement followed by an insert does not have and the reason the statement takes an advisory lock.
-    /// </summary>
-    /// <remarks>
-    /// Nothing orders the attempts and nothing may: an interleaving the harness chose would establish that the ceiling
-    /// holds under that one interleaving, which is the opposite of the claim. The attempts are split across two hosts
-    /// so the losers are refused by the database rather than by anything either graph remembers.
-    /// </remarks>
-    [Fact]
-    public async Task ClaimAsync_MoreCallersAtOnceThanTheCeilingAdmits_GrantsExactlyTheRoomThereWas()
-    {
-        // Arrange
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var onOneHost = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        await using var onAnotherHost = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var user = OrchestratedDeploymentUser.Shared.User;
-        var ceilings = await CeilingsWithRoomForAsync(onOneHost, payloadCount: 2, cancellationToken);
-
-        // Act
-        var records = await Task.WhenAll(Enumerable
-            .Range(0, CompetingClaimants)
-            .Select(claimant => ClaimAsync(
-                claimant % 2 == 0 ? onOneHost : onAnotherHost,
-                user,
-                ceilings,
-                cancellationToken)));
-
-        // Assert
-        var granted = records.Where(record => record.IsGranted).ToArray();
-
-        Assert.Equal(2, granted.Length);
-        Assert.All(
-            records.Where(record => !record.IsGranted),
-            record => Assert.Equal(StoredContentBound.Deployment, record.ReachedBound));
-
-        foreach (var record in granted)
-        {
-            await ReleaseAsync(onOneHost, record.ClaimId!.Value, cancellationToken);
-        }
     }
 
     /// <summary>

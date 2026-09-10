@@ -220,6 +220,9 @@ public sealed class StoredContentCeilingTests
         await claim.DisposeAsync();
 
         // Assert
+        // The release count rather than what is left: removing a claim is idempotent in the store, so the outstanding
+        // count reads zero whether the release ran once or twice and would pass with the guard deleted.
+        Assert.Equal(1, claims.ReleaseCount);
         Assert.Equal(0, claims.OutstandingClaimCount);
     }
 

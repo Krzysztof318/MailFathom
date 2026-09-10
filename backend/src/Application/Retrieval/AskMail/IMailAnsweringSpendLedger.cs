@@ -45,11 +45,16 @@ public interface IMailAnsweringSpendLedger
     /// </remarks>
     Task<bool> TryAdmitRunAsync(CancellationToken cancellationToken);
 
-    /// <summary>Adds what one provider call consumed to the current period.</summary>
-    /// <param name="usage">The tokens the call sent and received.</param>
+    /// <summary>Adds what one run consumed to the current period.</summary>
+    /// <param name="usage">The tokens that run sent and received, across every call it made.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when the period has been charged.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="usage" /> is <see langword="null" />.</exception>
-    /// <remarks>Recorded per call rather than per run, so a run that is stopped part way through has still spent what it spent.</remarks>
+    /// <remarks>
+    /// Charged once as the run ends rather than once per provider call, which is the cost the ADR above accepted and
+    /// the cost it refused: a tool loop turns once per message of a backfill, and a database round trip per turn is not
+    /// what "a run is already about to spend a provider's tokens" pays for. It is charged on every ending, so a run
+    /// that failed, was refused, or was cancelled part way through still spends what it spent.
+    /// </remarks>
     Task RecordSpendAsync(ChatTokenUsage usage, CancellationToken cancellationToken);
 }

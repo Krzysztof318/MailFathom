@@ -94,7 +94,8 @@ public sealed class InMemoryMailAnsweringSpendPeriodStoreTests
         // Assert
         Assert.Equal(1, admitted);
         Assert.Equal(2, periods.PeriodCount);
-        Assert.Equal((0, 0L), periods.Spent(next + TimeSpan.FromHours(1)));
+        Assert.Equal((1, 0L), periods.Spent(next));
+        Assert.Equal((1, 900L), periods.Spent(Period));
     }
 
     [Fact]

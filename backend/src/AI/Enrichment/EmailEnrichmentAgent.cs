@@ -229,7 +229,7 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
             // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
             // never reaches the endpoint's circuit, its concurrency budget, or its health record. The run ledger is
             // this derivation's own — one message is one run — and the period ledger is the deployment's.
-            using var chatClient = new BudgetedChatClient(
+            await using var chatClient = new BudgetedChatClient(
                 resilientClient,
                 new MailAnsweringRunLedger(this.runBounds),
                 this.spendLedger);

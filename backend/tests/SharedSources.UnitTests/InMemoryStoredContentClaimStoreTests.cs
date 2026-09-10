@@ -156,6 +156,29 @@ public sealed class InMemoryStoredContentClaimStoreTests
         // Assert
         Assert.Equal(0, claims.OutstandingClaimCount);
         Assert.Equal(0L, claims.ReservedBytes);
+        Assert.Equal(1, claims.ReleaseCount);
+    }
+
+    /// <summary>The count is what a caller asked for rather than what it met, which is what a release-once claim is proved by.</summary>
+    [Fact]
+    public async Task ReleaseAsync_AClaimThatWasAlreadyReleased_CountsBothAsks()
+    {
+        // Arrange
+        var claims = new InMemoryStoredContentClaimStore();
+        var record = await claims.ClaimAsync(
+            SyntheticMailUser.Deployment,
+            900,
+            new StoredContentCeilings(DeploymentBytes: 1000, UserBytes: null),
+            Lifetime,
+            TestContext.Current.CancellationToken);
+
+        // Act
+        await claims.ReleaseAsync(record.ClaimId!.Value, TestContext.Current.CancellationToken);
+        await claims.ReleaseAsync(record.ClaimId!.Value, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, claims.ReleaseCount);
+        Assert.Equal(0, claims.OutstandingClaimCount);
     }
 
     /// <summary>A deployment that bounds neither population reaches nothing, so nothing is reserved and nothing refused.</summary>

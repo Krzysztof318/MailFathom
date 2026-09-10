@@ -550,11 +550,7 @@ public sealed class StoredEmailEmbeddingGeneratorTests
                 new PersistenceConcurrencyOptions(),
                 new FakeTimeProvider()),
             spendGate ?? CreateSpendGate(new InMemoryEmbeddingSpendLedger(), EmbeddingSpendBudget.Unbounded),
-            ProviderRequestPacer.Create(
-                ProviderPacedWorkloads.EmailEmbedding,
-                maxRequestsPerMinute: 0,
-                new InMemoryProviderPaceMarker(TimeProvider.System),
-                TimeProvider.System),
+            UnpacedEmbedding(),
             ownership ?? new StubMailOwnership(),
             egressGuard ?? SensitiveContentEgressGuards.Inactive());
     }
@@ -563,4 +559,21 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         IEmbeddingSpendLedger ledger,
         EmbeddingSpendBudget budget) =>
         new(ledger, budget, new FakeTimeProvider(PeriodStart));
+
+    /// <summary>A pacer that never waits, over a clock of the test's own so no arrangement here can measure a real one.</summary>
+    /// <remarks>
+    /// The marker and the pacer share the clock, because the wait one hands out is measured on the other. A rate of
+    /// zero reaches neither today, and that is exactly why the arrangement has to be right: the first test here to
+    /// declare a rate would otherwise be measured against the machine's clock.
+    /// </remarks>
+    private static ProviderRequestPacer UnpacedEmbedding()
+    {
+        var pacingClock = new FakeTimeProvider();
+
+        return ProviderRequestPacer.Create(
+            ProviderPacedWorkloads.EmailEmbedding,
+            maxRequestsPerMinute: 0,
+            new InMemoryProviderPaceMarker(pacingClock),
+            pacingClock);
+    }
 }

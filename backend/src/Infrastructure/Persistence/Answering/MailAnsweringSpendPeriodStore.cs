@@ -31,11 +31,15 @@ internal sealed class MailAnsweringSpendPeriodStore(MailFathomDbContext dbContex
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumRuns, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumTokens, 1);
 
-        // A refused admission updates nothing and therefore returns no row, which reads as zero — a figure a granted
-        // admission can never produce, since the run it just counted is in it.
-        return await dbContext.Database
+        // A refused admission updates nothing and therefore returns no row, which is read as zero — a figure a granted
+        // admission can never produce, since the run it just counted is in it. Materialized rather than composed: a
+        // terminal that narrows the source makes EF Core wrap the statement in a subquery, and PostgreSQL accepts a
+        // data-modifying statement only at the top level.
+        var admittedRuns = await dbContext.Database
             .SqlQueryRaw<int>(AdmitStatement(dbContext.Model), periodStart, maximumRuns, maximumTokens)
-            .SingleOrDefaultAsync(cancellationToken);
+            .ToArrayAsync(cancellationToken);
+
+        return admittedRuns.SingleOrDefault();
     }
 
     /// <inheritdoc />
@@ -46,9 +50,13 @@ internal sealed class MailAnsweringSpendPeriodStore(MailFathomDbContext dbContex
     {
         ArgumentOutOfRangeException.ThrowIfNegative(tokenCount);
 
-        return await dbContext.Database
+        // Materialized rather than composed, for the reason the admission above is. The upsert answers exactly one row,
+        // inserting or conflicting, because a spend is never refused.
+        var consumedTokens = await dbContext.Database
             .SqlQueryRaw<long>(RecordSpendStatement(dbContext.Model), periodStart, tokenCount)
-            .SingleAsync(cancellationToken);
+            .ToArrayAsync(cancellationToken);
+
+        return consumedTokens.Single();
     }
 
     /// <summary>The statement that admits one run against both of the period's ceilings, or refuses it.</summary>

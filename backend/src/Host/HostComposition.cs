@@ -545,10 +545,12 @@ internal static class HostComposition
         // nothing about that answer is held here any more: what a claim is admitted against is read inside the
         // statement that takes it, so a run holds the configured numbers and no state a second run could disagree
         // with. That is also what makes the bound the deployment's rather than the process's — a level held in memory
-        // would be a level the other replicas could not see.
+        // would be a level the other replicas could not see. The numbers come from the scope's own snapshot, like the
+        // two bounds above, so a reload landing mid-run cannot give one folder run its per-run budget from the snapshot
+        // it pinned and its storage ceilings from a later one.
         builder.Services.AddScoped(provider =>
         {
-            var settings = provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>().Current;
+            var settings = provider.GetRequiredService<MailSynchronizationOptions>();
 
             return new StoredContentCeiling(
                 provider.GetRequiredService<IStoredContentClaimStore>(),
