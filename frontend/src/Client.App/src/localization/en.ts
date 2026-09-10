@@ -533,7 +533,7 @@ export const en = {
     'list.senderUnknown': 'No sender',
     'list.threadMessages': '{count} messages in this conversation',
 
-    'list.readings': 'What MailFathom made of it',
+    'list.readings': 'AI summary',
     'list.showReadings': 'Show a reading on each row',
     'list.readingsExplained':
         'One sentence per message, under the subject. It is kept for this folder, and turning it off changes nothing about the mail itself.',
@@ -549,7 +549,7 @@ export const en = {
     'reading.said': '{aspect}: {text}',
     'reading.title': 'What MailFathom read from this message',
     'reading.about': 'Every reading below comes from this message alone, and each one shows the fragment it rests on.',
-    'reading.check': 'Check what MailFathom made of it',
+    'reading.check': 'AI summary',
     'reading.close': 'Close',
     'reading.reason': 'Why: {reason}',
     'reading.dueAt': 'Due {when}',

@@ -1353,7 +1353,7 @@ test('opens what MailFathom made of a message from its own row, with the passage
     // The row's own menu, which is where checking a reading is reached from: a row is an `option` of a listbox and
     // holds no focusable descendant, so the sentence on it cannot be a control of its own.
     await enriched.click({ button: 'right' });
-    await page.getByRole('menuitem', { name: 'Check what MailFathom made of it' }).click();
+    await page.getByRole('menuitem', { name: 'AI summary' }).click();
 
     const checking = page.getByRole('dialog', { name: 'What MailFathom read from this message' });
 

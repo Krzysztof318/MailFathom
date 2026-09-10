@@ -589,7 +589,7 @@ describe('MessageRow, the mark that opens what was read', () => {
         const asked = vi.fn();
 
         markedRow({ onReadings: asked });
-        fireEvent.click(screen.getByTitle('What MailFathom made of it'));
+        fireEvent.click(screen.getByTitle('AI summary'));
 
         expect(asked).toHaveBeenCalledOnce();
     });
@@ -597,7 +597,7 @@ describe('MessageRow, the mark that opens what was read', () => {
     it('is drawn on no row whose message carries nothing that was read from it', () => {
         markedRow({});
 
-        expect(screen.queryByTitle('What MailFathom made of it')).toBeNull();
+        expect(screen.queryByTitle('AI summary')).toBeNull();
     });
 
     it('leaves the row unselected, a press on the mark being about the mark rather than about the message', () => {
@@ -605,7 +605,7 @@ describe('MessageRow, the mark that opens what was read', () => {
 
         markedRow({ onReadings: () => undefined, onPoint: pointed });
 
-        const mark = screen.getByTitle('What MailFathom made of it');
+        const mark = screen.getByTitle('AI summary');
 
         fireEvent.pointerDown(mark, { pointerType: 'mouse' });
         fireEvent.pointerUp(mark, { pointerType: 'mouse' });
@@ -616,6 +616,6 @@ describe('MessageRow, the mark that opens what was read', () => {
     it('announces nothing of its own, the row menu being the path that carries this surface a name', () => {
         markedRow({ onReadings: () => undefined });
 
-        expect(screen.getByTitle('What MailFathom made of it').getAttribute('aria-hidden')).toBe('true');
+        expect(screen.getByTitle('AI summary').getAttribute('aria-hidden')).toBe('true');
     });
 });
