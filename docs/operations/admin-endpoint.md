@@ -220,7 +220,7 @@ what it was never granted is what the record exists to make visible.
 | `PUT /api/admin/users/{userId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the label the user is told apart by. It answers with no body — the label the request carried is the whole of what changed — refuses a label another user carries, naming what to change, and answers `404` for a user this deployment holds no record for, as every other user-scoped route does. |
 | `DELETE /api/admin/users/{userId}` | `mailfathom.admin.erase` | Erases the user and every message, folder, attachment, and derived index this deployment holds for them. **This is the one route here that destroys mail, and it cannot be undone.** A user this deployment does not hold is reported as nothing erased rather than as a refusal. A user a configuration source declares is refused instead, naming the declaration to remove first: the next start would write them back and download their mailboxes again. |
 | `GET /api/admin/users/{userId}/record` | `mailfathom.admin.read` | Hands over one user's record as the redacted JSON an editing session opens, with the version it was read at and where this deployment currently reads that user's mail accounts from. |
-| `POST /api/admin/users/{userId}/record` | `mailfathom.admin.configuration.write` | Takes that record back edited and commits it as one change against the version it was opened over. |
+| `POST /api/admin/users/{userId}/record` | `mailfathom.admin.configuration.write` | Takes that record back edited and commits it as one change against the version it was opened over. It is what `mfctl user edit` sends when the editor exits, and a record another writer moved past is refused as superseded rather than merged. |
 | `POST /api/admin/users/{userId}/record/mail-accounts` | `mailfathom.admin.configuration.write` | Declares one more mailbox in the record, from the mail-account block the body carries. |
 | `POST /api/admin/users/{userId}/record/mail-accounts/removal` | `mailfathom.admin.configuration.write` | Stops the record declaring one mailbox, named by the identifier it was declared under. It withdraws no mail: everything already stored for that account stays where it is. |
 | `GET /api/admin/users/{userId}/record/adoption` | `mailfathom.admin.read` | Reports what adopting that user would copy out of this deployment's files — the configuration path behind their mail accounts, each account it would move, and each classification and scanning setting it would commit with them — and writes nothing. |
@@ -1183,6 +1183,7 @@ such user exists rather than editing somebody else's mailboxes.
 | `mfctl user list` | Reads who this deployment holds, where each one's mail accounts come from, and whether the running process serves them |
 | `mfctl user add --display-name <name>` | Records a user this deployment did not hold, and reports the identifier they were minted under |
 | `mfctl user show` | Reads one user's record as this deployment holds it, secrets redacted |
+| `mfctl user edit` | Opens that record in your `$VISUAL` or `$EDITOR` and commits what you saved as one change |
 | `mfctl user rename --display-name <name>` | Replaces the label that user is told apart by |
 | `mfctl user account add --from-file <path>` | Declares one more mailbox in that record |
 | `mfctl user account remove --id <account>` | Stops the record declaring one mailbox, leaving its stored mail alone |
@@ -1278,6 +1279,16 @@ says so.
 would switch somebody's spam protection off on the strength of an administrative act about where their settings live.
 Only the keys a user's record may hold travel — the engine settings stay the deployment's — and the preview names
 each one with the value it would take, since two of them file mail and mark it read on that user's own mail server.
+
+**`mfctl user edit` is the command for a change that is more than one mailbox.** `user account add` and
+`user account remove` each name one, and the deployment composes it into the record, so changing two of them — or
+anything else the record carries — is a run of commands each committing a version of its own, with every intermediate one
+an account set this deployment briefly read. The editing session is one change instead: the record is fetched with its
+version, opened in `$VISUAL` or `$EDITOR`, and committed against that version. An emptied buffer abandons the session
+and a buffer saved unchanged writes nothing, both reported as what they are rather than as a failure; a graphical editor
+needs the flag that makes it wait, such as `VISUAL="code --wait"`, because the command reads the file back when the
+editor exits. A record a configuration source still supplies is refused before the editor opens rather than after the
+commit, naming the adoption below.
 
 **A record is committed whole or not at all, over the version it was read at.** A candidate is bound strictly against
 the same rules a configuration file is, checked for two mail accounts declared under one identifier, checked that every

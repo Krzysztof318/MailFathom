@@ -6,7 +6,7 @@ using System.CommandLine;
 using System.Globalization;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Configuration;
-using MailFathom.Cli.Credentials;
+using MailFathom.Cli.Editing;
 
 namespace MailFathom.Cli.Commands.Configuration;
 
@@ -64,7 +64,7 @@ internal static class EditConfigurationCommand
         string? requestedDeployment,
         CancellationToken cancellationToken)
     {
-        var editor = EditorNamedByTheShell(context);
+        var editor = EditorDrivenDocument.EditorNamedByTheShell(context);
         var profile = await context.Deployment().ReachAsync(requestedDeployment, cancellationToken);
 
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
@@ -72,123 +72,18 @@ internal static class EditConfigurationCommand
 
         var opened = await client.ReadConfigurationDocumentAsync(profile.Token, cancellationToken);
         var document = opened.Document ?? string.Empty;
-        var session = Path.Combine(Path.GetTempPath(), $"mailfathom-configuration-{Guid.NewGuid():N}");
-        var buffer = Path.Combine(session, "configuration.json");
 
-        try
-        {
-            Open(session, buffer, document);
+        var saved = await EditorDrivenDocument.OpenAsync(
+            context,
+            editor,
+            "configuration",
+            "the deployment's configuration",
+            document,
+            cancellationToken);
 
-            if (context.Edit(editor, buffer) is { Saved: false } ended)
-            {
-                throw new CliFailure(WhyNothingWasWritten(editor, ended));
-            }
-
-            var saved = await ReadBackAsync(buffer, cancellationToken);
-
-            if (Abandoned(context, document, saved))
-            {
-                return CliExitCode.Success;
-            }
-
-            return await CommitAsync(context, client, profile.Token, opened, saved, evenIfShadowed, cancellationToken);
-        }
-        finally
-        {
-            Discard(session);
-        }
-    }
-
-    /// <summary>Opens the session's own directory and writes the document into it, readable by their user alone.</summary>
-    /// <exception cref="CliFailure">Thrown when the temporary directory cannot be written, which is a situation rather than a defect.</exception>
-    /// <remarks>
-    /// A temporary directory that is full, read-only, or on a filesystem that will not take a user-only mode is
-    /// something the operator can act on, so it is reported as a sentence naming the path rather than left to reach
-    /// <c>CliRunner</c> as a stack trace — the same answer the credential store and the token protector give for the
-    /// same situation.
-    /// </remarks>
-    private static void Open(string session, string buffer, string document)
-    {
-        try
-        {
-            UserOnlyStorage.CreateDirectory(session);
-
-            SettingsBuffer.Write(buffer, document);
-        }
-        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
-        {
-            throw new CliFailure($"The editing buffer at {buffer} could not be written.", failure);
-        }
-    }
-
-    /// <summary>Reads back what the editor saved.</summary>
-    /// <exception cref="CliFailure">Thrown when the buffer cannot be read, which the editor rather than this command left it as.</exception>
-    private static async Task<string> ReadBackAsync(string buffer, CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await File.ReadAllTextAsync(buffer, cancellationToken);
-        }
-        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
-        {
-            throw new CliFailure(
-                $"The editing buffer at {buffer} could not be read back after the editor exited, so nothing was written.",
-                failure);
-        }
-    }
-
-    /// <summary>Removes the session's directory and the buffer in it, letting the invocation's own outcome stand where it cannot be removed.</summary>
-    /// <remarks>
-    /// <para>
-    /// The case is the one this command's own guidance anticipates: a graphical editor started without its wait flag
-    /// returns while still holding the file open, so the delete throws on Windows over an invocation that had already
-    /// decided what it did. Turning that into a stack trace would report a failure to somebody whose command worked,
-    /// or replace the sentence naming why nothing was written — which is the rule <c>CliRunner.Record</c> states for a
-    /// full disk.
-    /// </para>
-    /// <para>
-    /// What is left behind on that path is the session's own directory, which is readable by its user alone whatever
-    /// the editor did to the file inside it. That is why the buffer sits in a directory of its own rather than in the
-    /// temporary directory itself: an editor that saves by writing a sibling and renaming it over the target creates
-    /// that sibling under the process umask, so the mode this command set at creation does not survive the first save
-    /// — and what the file then holds is the deployment's whole persisted configuration plus anything the operator
-    /// typed over a marker.
-    /// </para>
-    /// </remarks>
-    private static void Discard(string session)
-    {
-        try
-        {
-            Directory.Delete(session, recursive: true);
-        }
-        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
-        {
-        }
-    }
-
-    /// <summary>Reports whether the editing session asked for nothing, and says which of the two ways it did.</summary>
-    /// <remarks>
-    /// An emptied buffer is the conventional way to abandon an editor-driven command and is honoured as one, rather
-    /// than being read as a document that persists no settings at all — which is a change an operator can still make
-    /// deliberately by saving an empty JSON object.
-    /// </remarks>
-    private static bool Abandoned(CliContext context, string document, string saved)
-    {
-        if (string.IsNullOrWhiteSpace(saved))
-        {
-            context.Console.WriteLine("The buffer was emptied, so the deployment's configuration was left as it was.");
-
-            return true;
-        }
-
-        if (string.Equals(saved, document, StringComparison.Ordinal))
-        {
-            context.Console.WriteLine("The buffer was saved unchanged, so nothing was written.");
-
-            return true;
-        }
-
-        return false;
+        return saved is null
+            ? CliExitCode.Success
+            : await CommitAsync(context, client, profile.Token, opened, saved, evenIfShadowed, cancellationToken);
     }
 
     private static async Task<int> CommitAsync(
@@ -253,23 +148,4 @@ internal static class EditConfigurationCommand
             context.Console.WriteNotice($"  {path}");
         }
     }
-
-    /// <summary>Says why an editing session that did not finish wrote nothing, in terms the operator can act on.</summary>
-    /// <remarks>
-    /// The two endings need different advice. A wait flag is what repairs an editor that ran and returned before the
-    /// operator had finished; it repairs nothing for an editor the operating system never started, where the value in
-    /// the variable is the thing to correct and the system's own words are what name which way it is wrong.
-    /// </remarks>
-    private static string WhyNothingWasWritten(string editor, EditingSession ended) =>
-        ended.WhyItNeverStarted is { Length: > 0 } reason
-            ? $"The editor '{editor}' could not be started, so nothing was written: {reason}. Correct ${OperatorEditor.VisualVariable} or ${OperatorEditor.EditorVariable} to name a program on this machine."
-            : $"The editor '{editor}' did not finish successfully, so nothing was written. A graphical editor needs the flag that makes it wait — '{OperatorEditor.VisualVariable}=\"code --wait\"', for instance — because this command reads the file back when the editor exits.";
-
-    /// <summary>Finds the editor the operator's shell names, refusing rather than choosing one for them.</summary>
-    /// <exception cref="CliFailure">Thrown when neither variable names an editor.</exception>
-    private static string EditorNamedByTheShell(CliContext context) =>
-        context.Variable(OperatorEditor.VisualVariable) is { Length: > 0 } visual ? visual
-        : context.Variable(OperatorEditor.EditorVariable) is { Length: > 0 } editor ? editor
-        : throw new CliFailure(
-            $"No editor is named for this shell, so there is nothing to open the document in. Set ${OperatorEditor.VisualVariable} or ${OperatorEditor.EditorVariable} — a graphical editor needs the flag that makes it wait, such as 'code --wait'.");
 }

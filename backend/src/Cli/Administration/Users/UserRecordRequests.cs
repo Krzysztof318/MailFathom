@@ -45,6 +45,19 @@ internal sealed record UserRecord(
     [property: JsonPropertyName("readFromConfiguration")] bool ReadFromConfiguration,
     [property: JsonPropertyName("document")] string? Document);
 
+/// <summary>One user's record as an editing session saved it.</summary>
+/// <param name="Version">The version the buffer was opened over, which the commit is accepted against.</param>
+/// <param name="Document">The record as the operator left it, which the deployment judges whole.</param>
+/// <remarks>
+/// The whole record rather than the difference, for the reason the contact amendment sends a whole record: what the
+/// deployment accepts is a document, and a difference would have to be applied by something that then decided what the
+/// record means. The version is what makes that safe — a buffer composed over a record somebody else has moved past is
+/// refused rather than merged.
+/// </remarks>
+internal sealed record UserRecordSaveRequest(
+    [property: JsonPropertyName("version")] long Version,
+    [property: JsonPropertyName("document")] string Document);
+
 /// <summary>One mail account declared into a user's record.</summary>
 /// <param name="Version">The version the record was read at.</param>
 /// <param name="Account">The declaration, as the JSON object a configuration file would have written.</param>

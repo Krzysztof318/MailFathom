@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Editing;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -21,6 +22,16 @@ public sealed class UserCommandTests : IDisposable
 
     /// <summary>The code a deployment refuses a write to a configuration-served user with.</summary>
     private const int RecordReadFromConfiguration = 12015;
+
+    /// <summary>The code a deployment refuses a record composed over a version another writer moved past with.</summary>
+    private const int VersionSuperseded = 12008;
+
+    /// <summary>A record declaring one mailbox, which an editing session opens over.</summary>
+    private const string OneMailAccount = """{"MailAccounts":[{"AccountId":"work"}]}""";
+
+    /// <summary>A record whose secret-bearing value the deployment replaced with its redaction marker.</summary>
+    private const string RedactedMailAccount =
+        """{"MailAccounts":[{"AccountId":"work","Password":{"Secret":"(redacted)"}}]}""";
 
     private static readonly Guid User = new("11111111-1111-1111-1111-111111111111");
 
@@ -562,6 +573,202 @@ public sealed class UserCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Empty(deployment.UserRequestsTo(HttpMethod.Delete, AdminEndpointRoutes.UserPath(AnotherUser)));
+    }
+
+    /// <summary>What the operator saved is what is committed, over the version the buffer was opened at.</summary>
+    [Fact]
+    public async Task Edit_AnEditedRecord_CommitsWhatWasSavedOverTheVersionItWasOpenedAt()
+    {
+        // Arrange
+        const string edited = """{"MailAccounts":[{"AccountId":"work"},{"AccountId":"family"}]}""";
+
+        using var deployment = FakeUserRecordDeployment.HoldingRecords(User, OneMailAccount);
+
+        this.harness.EditsTheBufferInto(edited);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "edit", "--user", $"{User:D}", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var sent = Assert.Single(
+            deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserRecordPath(User)));
+
+        Assert.Equal(FakeUserRecordDeployment.RecordVersion, ReadVersion(sent.ContentAsUtf8String()));
+        Assert.Equal(edited, ReadField(sent.ContentAsUtf8String(), "document"));
+    }
+
+    /// <summary>
+    /// The buffer is the record the deployment answered with, byte for byte. What a record may carry is the deployment's
+    /// decision, so what is asserted here is that this command neither composes a document of its own nor rewrites the
+    /// one it was given.
+    /// </summary>
+    [Fact]
+    public async Task Edit_ARecordTheDeploymentRedacted_OpensTheBufferOnWhatTheDeploymentAnswered()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingRecords(User, RedactedMailAccount);
+
+        var opened = string.Empty;
+        this.harness.OpensTheBufferWith((_, path) =>
+        {
+            opened = File.ReadAllText(path);
+
+            return true;
+        });
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "edit", "--user", $"{User:D}", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Equal(RedactedMailAccount, opened);
+        Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserRecordPath(User)));
+    }
+
+    /// <summary>An emptied buffer is how every editor-driven command an operator has met is abandoned, and it is honoured as one.</summary>
+    [Fact]
+    public async Task Edit_AnEmptiedBuffer_LeavesTheRecordAsItWas()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingRecords(User, OneMailAccount);
+
+        this.harness.EditsTheBufferInto(string.Empty);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "edit", "--user", $"{User:D}", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserRecordPath(User)));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("emptied", StringComparison.Ordinal));
+    }
+
+    /// <summary>A record saved back as it was opened is nothing to commit, and spending a version on it would be a change the operator did not ask for.</summary>
+    [Fact]
+    public async Task Edit_ABufferSavedUnchanged_WritesNothing()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingRecords(User, OneMailAccount);
+
+        this.harness.EditsTheBufferInto(OneMailAccount);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "edit", "--user", $"{User:D}", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserRecordPath(User)));
+    }
+
+    /// <summary>Nothing is opened without an editor to open it in, and nothing about one person's mailboxes is fetched for a session that cannot start.</summary>
+    [Fact]
+    public async Task Edit_NoEditorNamedByTheShell_FailsWithoutReadingTheRecord()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingRecords(User, OneMailAccount);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "edit", "--user", $"{User:D}", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(
+            this.harness.Console.Errors,
+            line => line.Contains(OperatorEditor.VisualVariable, StringComparison.Ordinal));
+        Assert.Empty(deployment.RecordedRequests);
+    }
+
+    /// <summary>An editor that did not finish is a session that produced nothing, so nothing is read back and nothing is sent.</summary>
+    [Fact]
+    public async Task Edit_AnEditorThatDidNotFinish_FailsWithoutWritingAnything()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingRecords(User, OneMailAccount);
+
+        this.harness.OpensTheBufferWith((_, _) => false);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "edit", "--user", $"{User:D}", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserRecordPath(User)));
+    }
+
+    /// <summary>The deployment this serves usually holds one person, so the ordinary invocation names nobody.</summary>
+    [Fact]
+    public async Task Edit_ADeploymentHoldingOneUser_ActsOnThatUserWithoutBeingToldWhich()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingRecords(User, OneMailAccount);
+
+        this.harness.EditsTheBufferInto("""{"MailAccounts":[]}""");
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "edit", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Single(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserRecordPath(User)));
+    }
+
+    /// <summary>
+    /// A record somebody else committed over is refused rather than merged, and what an operator has to see is what that
+    /// writer changed. The other writer is routinely the person themselves from the client.
+    /// </summary>
+    [Fact]
+    public async Task Edit_AVersionAnotherWriterMovedPast_ReportsTheSettingsThatMoved()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.RefusingTheWrite(
+            User,
+            VersionSuperseded,
+            "The record was composed over version 3 and version 4 is in force.",
+            OneMailAccount,
+            """{"MailAccounts":[{"AccountId":"work"},{"AccountId":"family"}]}""");
+
+        this.harness.EditsTheBufferInto("""{"MailAccounts":[{"AccountId":"archive"}]}""");
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "edit", "--user", $"{User:D}", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(
+            this.harness.Console.Errors,
+            line => line.Contains("version 4 is in force", StringComparison.Ordinal));
+        Assert.Contains(
+            this.harness.Console.Errors,
+            line => line.Contains("MailAccounts:1:AccountId", StringComparison.Ordinal));
+    }
+
+    /// <summary>A record a file still supplies is refused before the editor opens, because the write was never going to be accepted and the operator's session would be spent on it.</summary>
+    [Fact]
+    public async Task Edit_ARecordAConfigurationSourceSupplies_RefusesWithoutOpeningTheEditor()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User, "work");
+
+        var openedTheEditor = false;
+        this.harness.OpensTheBufferWith((_, _) =>
+        {
+            openedTheEditor = true;
+
+            return true;
+        });
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "edit", "--user", $"{User:D}", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.False(openedTheEditor);
+        Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserRecordPath(User)));
+        Assert.Contains(
+            this.harness.Console.Errors,
+            line => line.Contains("mfctl user adopt", StringComparison.Ordinal));
     }
 
     public void Dispose()

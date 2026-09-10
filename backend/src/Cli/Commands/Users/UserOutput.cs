@@ -16,6 +16,17 @@ namespace MailFathom.Cli.Commands.Users;
 /// </remarks>
 internal static class UserOutput
 {
+    /// <summary>What a command says about a record a configuration source still supplies, before it does anything with it.</summary>
+    /// <remarks>
+    /// One sentence for the two commands that read a record and find that state: <c>user show</c> reports it beside the
+    /// empty document it just printed, and <c>user edit</c> refuses with it rather than opening a buffer over a write
+    /// that cannot be accepted. It is not what <see cref="ReportWrite" /> says about the same state, which is about a
+    /// write the deployment has already refused.
+    /// </remarks>
+    internal const string RecordSuppliedByAConfigurationSource =
+        "A configuration source supplies this user's mail accounts, so their record is empty and every change to it is "
+        + "refused. Run 'mfctl user adopt' to move them into their own record first.";
+
     /// <summary>Writes the users a deployment holds, one to a line.</summary>
     /// <param name="console">Where the listing is written.</param>
     /// <param name="users">The users, in the deployment's own order.</param>

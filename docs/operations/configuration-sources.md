@@ -1,6 +1,6 @@
 # Configuration sources
 
-<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Users/**, backend/src/Cli/Commands/Configuration/**, backend/src/Host/Hosting/Startup/ServedMailUsersStartupGate.cs, backend/src/Application/Access/DeploymentMailUserUnresolvedException.cs -->
+<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Users/**, backend/src/Cli/Commands/Configuration/**, backend/src/Cli/Editing/**, backend/src/Host/Hosting/Startup/ServedMailUsersStartupGate.cs, backend/src/Application/Access/DeploymentMailUserUnresolvedException.cs -->
 
 MailFathom reads its settings through the ordinary .NET configuration pipeline, plus two additions. A deployment may name a directory or a file of JSON configuration that it provisioned outside the application's own content root, which is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see. And the deployment's own persisted settings — one document in PostgreSQL, composed at startup like every other source — are layered in above those files, so a setting the deployment has persisted binds and validates exactly as one that came from a file. When an edit to that document takes effect is [its own section](#the-persisted-layer) below.
 
@@ -278,7 +278,7 @@ MailFathom persists Accounts:0:MailAccounts:0:Host in the user-accounts store ra
 document, so this is not where it is changed. A user still read from a configuration source is changed in the
 declaration that supplies them — the user's own section of the top-level Accounts collection — and served from it at
 the next restart; a user who has been adopted is changed with 'mfctl user account add' and 'mfctl user account
-remove'.
+remove', or with 'mfctl user edit' for their whole record at once.
 ```
 
 The user routes are the ones that do write that store, and until a user is adopted **they refuse too** — through the administrative record routes and through the client's own alike — because a write against an empty document would silently drop every mailbox the file was supplying. That refusal names `mfctl user adopt`, which is the one act that moves them.

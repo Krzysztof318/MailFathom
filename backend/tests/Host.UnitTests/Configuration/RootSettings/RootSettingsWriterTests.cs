@@ -365,9 +365,10 @@ public sealed class RootSettingsWriterTests
 
     /// <summary>A setting another store owns is refused rather than written into the root document.</summary>
     /// <remarks>
-    /// The refusal names both ways a user's mail accounts are changed, because this writer sees a path rather than a
-    /// user and cannot tell which of the two applies: an operator handed only one of them would be sent to edit a file
-    /// that no longer reaches that user, or to a command that refuses one who has not been adopted.
+    /// The refusal names every way a user's mail accounts are changed, because this writer sees a path rather than a
+    /// user and cannot tell which of them applies: an operator handed only one would be sent to edit a file that no
+    /// longer reaches that user, to a command that refuses one who has not been adopted, or to one mailbox at a time
+    /// where the change they are making is the whole record.
     /// </remarks>
     [Fact]
     public async Task WriteAsync_ASettingAnotherStoreOwns_IsRefused()
@@ -386,6 +387,7 @@ public sealed class RootSettingsWriterTests
         Assert.Contains("user-accounts", refusal, StringComparison.Ordinal);
         Assert.Contains("Accounts collection", refusal, StringComparison.Ordinal);
         Assert.Contains("mfctl user account add", refusal, StringComparison.Ordinal);
+        Assert.Contains("mfctl user edit", refusal, StringComparison.Ordinal);
         Assert.Equal(0, deployment.Row.AcceptedCommits);
     }
 

@@ -4,7 +4,7 @@
 
 using System.Text.Json;
 using MailFathom.Cli.Administration.Configuration;
-using MailFathom.Cli.Commands.Configuration;
+using MailFathom.Cli.Editing;
 using MailFathom.Cli.Transport;
 using MailFathom.Domain.Failures;
 using MailFathom.TestSupport;
@@ -358,7 +358,7 @@ public sealed class ConfigurationCommandTests : IDisposable
             documents: [FakeConfigurationDeployment.Document(version: 1, """{ "MailboxSearch": { "SnippetsPerEmail": "3" } }""")],
             write: FakeConfigurationDeployment.Committed(version: 2));
 
-        this.EditsTheBufferInto("""{ "MailboxSearch": { "SnippetsPerEmail": "5" } }""");
+        this.harness.EditsTheBufferInto("""{ "MailboxSearch": { "SnippetsPerEmail": "5" } }""");
 
         // Act
         var exitCode = await this.RunAsync(
@@ -482,7 +482,7 @@ public sealed class ConfigurationCommandTests : IDisposable
             documents: [FakeConfigurationDeployment.Document(version: 5, """{ "MailboxSearch": { "SnippetsPerEmail": "3" } }""")],
             write: FakeConfigurationDeployment.Committed(version: 6));
 
-        this.EditsTheBufferInto(edited);
+        this.harness.EditsTheBufferInto(edited);
 
         // Act
         var exitCode = await this.RunAsync(deployment, "config", "edit", "--endpoint", Endpoint);
@@ -511,7 +511,7 @@ public sealed class ConfigurationCommandTests : IDisposable
             ]);
 
         var opened = string.Empty;
-        this.OpensTheBufferWith((_, path) =>
+        this.harness.OpensTheBufferWith((_, path) =>
         {
             opened = File.ReadAllText(path);
 
@@ -545,7 +545,7 @@ public sealed class ConfigurationCommandTests : IDisposable
             documents: [FakeConfigurationDeployment.Document(version: 1, RedactedChatDocument)]);
 
         UnixFileMode mode = default;
-        this.OpensTheBufferWith((_, path) =>
+        this.harness.OpensTheBufferWith((_, path) =>
         {
             // Guarded again inside the callback, which is the only place the mode can be read: the buffer is deleted
             // when the session ends. The platform analyzer reads a guard within the body it is protecting rather than
@@ -586,7 +586,7 @@ public sealed class ConfigurationCommandTests : IDisposable
 
         UnixFileMode mode = default;
         var containing = string.Empty;
-        this.OpensTheBufferWith((_, path) =>
+        this.harness.OpensTheBufferWith((_, path) =>
         {
             // Read inside the callback for the reason the sibling test states, and guarded again for the same one.
             if (!OperatingSystem.IsWindows())
@@ -617,7 +617,7 @@ public sealed class ConfigurationCommandTests : IDisposable
         using var deployment = FakeConfigurationDeployment.Holding(
             documents: [FakeConfigurationDeployment.Document(version: 1, """{ "MailboxSearch": { "SnippetsPerEmail": "3" } }""")]);
 
-        this.EditsTheBufferInto(string.Empty);
+        this.harness.EditsTheBufferInto(string.Empty);
 
         // Act
         var exitCode = await this.RunAsync(deployment, "config", "edit", "--endpoint", Endpoint);
@@ -636,7 +636,7 @@ public sealed class ConfigurationCommandTests : IDisposable
         using var deployment = FakeConfigurationDeployment.Holding(
             documents: [FakeConfigurationDeployment.Document(version: 1, """{ "MailboxSearch": { "SnippetsPerEmail": "3" } }""")]);
 
-        this.OpensTheBufferWith((_, _) => true);
+        this.harness.OpensTheBufferWith((_, _) => true);
 
         // Act
         var exitCode = await this.RunAsync(deployment, "config", "edit", "--endpoint", Endpoint);
@@ -654,7 +654,7 @@ public sealed class ConfigurationCommandTests : IDisposable
         // Arrange
         using var deployment = FakeConfigurationDeployment.Holding();
 
-        this.OpensTheBufferWith((_, _) => false);
+        this.harness.OpensTheBufferWith((_, _) => false);
 
         // Act
         var exitCode = await this.RunAsync(deployment, "config", "edit", "--endpoint", Endpoint);
@@ -675,7 +675,7 @@ public sealed class ConfigurationCommandTests : IDisposable
         // Arrange
         using var deployment = FakeConfigurationDeployment.Holding();
 
-        this.OpensTheBufferWith((_, _) => EditingSession.NeverStarted("No such file or directory"));
+        this.harness.OpensTheBufferWith((_, _) => EditingSession.NeverStarted("No such file or directory"));
 
         // Act
         var exitCode = await this.RunAsync(deployment, "config", "edit", "--endpoint", Endpoint);
@@ -710,7 +710,7 @@ public sealed class ConfigurationCommandTests : IDisposable
                 version: 6,
                 "The document was composed over version 5 and version 6 is in force."));
 
-        this.EditsTheBufferInto("""{"MailboxSearch":{"SnippetsPerEmail":"7"}}""");
+        this.harness.EditsTheBufferInto("""{"MailboxSearch":{"SnippetsPerEmail":"7"}}""");
 
         // Act
         var exitCode = await this.RunAsync(deployment, "config", "edit", "--endpoint", Endpoint);
@@ -815,31 +815,6 @@ public sealed class ConfigurationCommandTests : IDisposable
     /// <summary>Reads back the body of the write the command sent.</summary>
     private static JsonElement SentWrite(FakeHttpMessageHandler deployment) =>
         JsonDocument.Parse(deployment.LastConfigurationWrite() ?? "{}").RootElement;
-
-    /// <summary>Stands in for the operator, saving the document they would have typed into the buffer.</summary>
-    private void EditsTheBufferInto(string saved) =>
-        this.OpensTheBufferWith((_, path) =>
-        {
-            File.WriteAllText(path, saved);
-
-            return true;
-        });
-
-    /// <summary>Names an editor for the shell and states what the session does to the buffer.</summary>
-    /// <remarks>
-    /// Both halves, because the command reads the variable before it opens anything: a session scripted without one
-    /// never reaches the editor at all, and the refusal it meets instead is the subject of a test of its own.
-    /// </remarks>
-    private void OpensTheBufferWith(Func<string, string, bool> session) =>
-        this.OpensTheBufferWith((editor, path) =>
-            session(editor, path) ? EditingSession.Finished : EditingSession.Failed);
-
-    /// <summary>Names an editor for the shell and states what became of the session it opens.</summary>
-    private void OpensTheBufferWith(Func<string, string, EditingSession> session)
-    {
-        this.harness.Variables[OperatorEditor.VisualVariable] = "vi";
-        this.harness.Editor = session;
-    }
 
     private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>
         this.harness.RunAsync(deployment, args);

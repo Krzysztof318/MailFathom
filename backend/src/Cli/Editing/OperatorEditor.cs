@@ -5,7 +5,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 
-namespace MailFathom.Cli.Commands.Configuration;
+namespace MailFathom.Cli.Editing;
 
 /// <summary>Runs the editor the operator's shell names, over a file this command wrote.</summary>
 /// <remarks>

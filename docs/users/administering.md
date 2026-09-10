@@ -665,6 +665,21 @@ the label you tell somebody apart by; nothing is keyed by it, so it moves no mai
 where the person is one your configuration declares, that file is where the label is changed, since a start puts the
 declared one back.
 
+**Changing more than one thing about somebody at once is `mfctl user edit`.** `mfctl user account add` and
+`mfctl user account remove` each name one mailbox, so two changes are two commands and the deployment briefly reads what
+is between them. `mfctl user edit` opens that person's whole record in your `$VISUAL` or `$EDITOR` and commits what you
+saved as one change — set it up as `VISUAL="code --wait"` if your editor is a graphical one, since the command reads the
+file back when the editor exits. Empty the buffer to abandon the session, or save it unchanged, and nothing is written
+either way. Passwords read back as `(redacted)`, and a marker saved back leaves the credential beneath it alone.
+
+```console
+$ mfctl user edit --user 7c02...
+Committed user record version 4.
+The replica this request reached is using this account set now. A synchronization run already in flight finishes
+against the previous version; the next run uses this one. Other replicas pick up the change after their next user write
+or restart.
+```
+
 **Recording a second person is refused while a surface they reach authenticates nobody.** A deployment serving one
 person may leave the MCP endpoint open, or hold it with a key, because there is only one answer to whose mail a caller
 is asking about. With two people there is no such answer, so give the MCP and client endpoints a username and password

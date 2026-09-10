@@ -190,6 +190,7 @@ internal static class CliRootCommand
             AddUserCommand.Create(context),
             ListUsersCommand.Create(context),
             ShowUserRecordCommand.Create(context),
+            EditUserRecordCommand.Create(context),
             RenameUserCommand.Create(context),
             AdoptUserCommand.Create(context),
             RemoveUserCommand.Create(context),

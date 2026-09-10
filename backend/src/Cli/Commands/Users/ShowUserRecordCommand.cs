@@ -71,9 +71,7 @@ internal static class ShowUserRecordCommand
 
         if (record.ReadFromConfiguration)
         {
-            context.Console.WriteNotice(
-                "A configuration source supplies this user's mail accounts, so their record is empty and every change "
-                + "to it is refused. Run 'mfctl user adopt' to move them into their own record first.");
+            context.Console.WriteNotice(UserOutput.RecordSuppliedByAConfigurationSource);
         }
 
         return CliExitCode.Success;

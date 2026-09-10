@@ -188,13 +188,14 @@ reads the roster and acts for the sole user it finds, which is one `mailfathom.a
 permission the act itself is published under. Passing `--user` skips that lookup and nothing else — the named user is
 sent as written, and the deployment refuses one it holds no record for.
 
-Skipping the lookup is not the same as making the command need one permission. Six of them read something else
+Skipping the lookup is not the same as making the command need one permission. Seven of them read something else
 unconditionally, whether or not `--user` was passed, so each needs `mailfathom.admin.read` beside its own name in every
 invocation:
 
 | Command | Reads, before the act |
 | --- | --- |
 | `mfctl user show` | the record it prints |
+| `mfctl user edit` | the record the editing session opens, and the version what you saved is committed against |
 | `mfctl user account add`, `mfctl user account remove` | the record the change is composed over, and the version it is composed at |
 | `mfctl user adopt` | what an adoption would move, which is what it asks you to confirm |
 | `mfctl user remove` | the roster, so the confirmation names the person being erased |

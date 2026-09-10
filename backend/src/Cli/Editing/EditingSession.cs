@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.Cli.Commands.Configuration;
+namespace MailFathom.Cli.Editing;
 
 /// <summary>What became of an editing session, in the terms the command reports it to an operator.</summary>
 /// <remarks>
