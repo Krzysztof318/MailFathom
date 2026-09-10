@@ -35,12 +35,14 @@ where it came from.
    error and names its own file and line.
 
    This is the gate, and `scripts/verify-full.sh` is not part of it. `CI` asserts every verdict that
-   script produces — the coverage target, the workflow contract suite, the client's bundle and the
-   browser suite behind it, and the whole solution's formatting — on the pull request this step is
-   about to open, on a runner per job. Run it here only where its answer is the one being waited on,
-   and say so in the report when you did. Say nothing when you did not: the pull request's checks are
-   where that evidence arrives, and presenting the fast loop as the full gate is the one way this step
-   can lie.
+   script produces — the coverage target, the workflow contract suite, the client's bundle, and the
+   whole solution's formatting — on the pull request this step is about to open, on a runner per job.
+   Run it here only where its answer is the one being waited on, and say so in the report when you
+   did. Say nothing when you did not: the pull request's checks are where that evidence arrives, and
+   presenting the fast loop as the full gate is the one way this step can lie.
+
+   The browser suite is not on that list and is not a reason to run the full gate: no local gate runs
+   it, `pnpm test:browser` reaches it, and `CI`'s `Frontend` job is the only thing that asserts it.
 5. Inspect status and the full diff for secrets, generated artifacts, unrelated edits, architecture
    violations, and missing tests or documentation. `scripts/review-obligations.sh` is what answers the
    last of those without reading the whole tree: it names the tests and pages the change obliges and

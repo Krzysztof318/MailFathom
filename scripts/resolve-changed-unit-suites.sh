@@ -13,7 +13,7 @@
 # each test project names for itself, read out of its own `Include` attributes: a `ProjectReference`
 # to the project under test, or a `Compile` linking one of its files in. Both are how a suite here
 # reaches production code and the second is not an edge case — `AppHost.UnitTests` holds no project
-# reference at all and reaches its subject by linking three files, which a rule written around
+# reference at all and reaches its subject by linking four files, which a rule written around
 # project references alone would have missed.
 #
 # The relation is direct rather than transitive, and that is the whole of what this narrowing costs:
