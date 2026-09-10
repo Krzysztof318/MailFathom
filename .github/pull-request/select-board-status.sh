@@ -20,7 +20,7 @@
 # be empty: an empty required list means any status may be moved, and an empty preserved list means
 # none is refused.
 #
-# Three rules are implemented, in this order:
+# Four rules are implemented, in this order:
 #
 # - A pull request that no longer merges into its base moves the issues it closes from
 #   `Ready to merge` to `Conflicts`. `Ready to merge` says the change is waiting on nothing but the
@@ -35,15 +35,28 @@
 #   that whether the objection was written by a reader or produced by a build — so this rule names no
 #   required status and describes whatever item it finds, the way a review's verdict does.
 #
-# - An approved head whose checks have all finished without failing earns `Ready to merge`. That is
-#   the rule this file exists for: the reviewer reads the diff and cannot see the pipeline, so an
-#   approval published while `Required CI` is still running says nothing about whether the change
-#   builds. Both halves are asked here, where both are visible, and `Fathom review` writes only the
-#   verdict that is its own.
+# - A head the reviewer withheld approval on earns `Changes requested` as well. That verdict is
+#   published as a `COMMENT` review on purpose, so that it cannot block a merge, and GitHub's
+#   built-in `Code changes requested` workflow therefore never fires for it — the column that says a
+#   change is waiting on the agent has no other writer.
+#
+# - An approved head that still merges earns `Ready to merge`.
+#
+# **The three rules below the conflict one are decided only once every pipeline outside the ignored
+# set has finished**, which is the single condition stated at the point the counts are read rather
+# than repeated in each of them. Both verdicts claim something about the whole state of the change:
+# `Ready to merge` says nothing is left to wait for, and `Changes requested` says what is owed is an
+# answer from the agent — and a run still in flight can add to what that answer has to cover. So a
+# review published minutes before `Required CI` finishes moves nothing until it does, and the
+# pipeline that concludes last raises the event that asks again. `CodeQL` is outside that wait for
+# the reason it is outside every other rule here: merging does not wait on it, so neither does the
+# column.
 #
 # Rules are read top to bottom and the first match wins, because the field holds one value. Order is
 # therefore a decision: a more specific rule goes above a more general one, which is why the conflict
-# rule — true only of an already approved item — is asked before the two that describe any item.
+# rule — true only of an already approved item — is asked before the three that describe any item,
+# and why it is the one rule asked before the pipelines have finished. A conflict is news about a
+# verdict already published rather than a verdict being published.
 #
 # Usage: select-board-status.sh <pull-request-json-file>
 #
@@ -104,7 +117,7 @@ if [[ "$(jq -r '.isDraft // false' "$pull_request_file")" == 'true' ]]; then
 fi
 
 # The two counts the rules are decided from, read in one pass so that the ignored set is applied
-# once. `failed` is what turns a change back, `pending` is what makes an approval premature.
+# once. `pending` is what makes either verdict premature, and `failed` is what turns a change back.
 IFS=$'\t' read -r failed pending <<< "$(
   jq -r --argjson ignored "$IGNORED_CHECKS" --argjson failures "$FAILED_CONCLUSIONS" '
     [.checks[]? | select(([.workflow // "", .name // ""] | any(. as $named | $ignored | index($named))) | not)]
@@ -114,27 +127,42 @@ IFS=$'\t' read -r failed pending <<< "$(
     "$pull_request_file"
 )"
 
+# Neither verdict is published while a pipeline is still deciding. This is the one place that wait
+# is expressed, so the three rules below it are each a question about a finished state rather than
+# three copies of the same condition.
+if (( pending > 0 )); then
+  exit 0
+fi
+
 if (( failed > 0 )); then
   printf 'Changes requested\t\tDone,Blocked\n'
   exit 0
 fi
 
-# The approval has to be of the head in front of us. GitHub keeps a review against the commit it was
-# written on, so a push that carries an approval forward without a re-review is a stale verdict, and
-# a stale verdict is the whole of what this comparison refuses.
-approved="$(
+# The reviewer's verdict on the head in front of us, as the one word it is published as: `COMMENTED`
+# where approval was withheld and `APPROVED` where it was given. GitHub keeps a review against the
+# commit it was written on, so a push that carries either forward without a re-review is a stale
+# verdict, and the comparison against the head is the whole of what refuses one.
+#
+# `latestReviews` is what the state was read from, which is one review per author, so this is the
+# reviewer's current word rather than the first one it ever said.
+verdict="$(
   jq -r --arg login "$REVIEWER_LOGIN" '
     . as $pull_request
-    | [.reviews[]?
-       | select(.author == $login and .state == "APPROVED" and .commit == $pull_request.headRefOid)]
-    | length > 0' \
+    | [.reviews[]? | select(.author == $login and .commit == $pull_request.headRefOid) | .state]
+    | last // ""' \
     "$pull_request_file"
 )"
+
+if [[ "$verdict" == 'COMMENTED' ]]; then
+  printf 'Changes requested\t\tDone,Blocked\n'
+  exit 0
+fi
 
 # `MERGEABLE` rather than *not conflicting*: `UNKNOWN` is an answer GitHub has not finished computing
 # and this column claims the change is waiting on nothing, which is a claim to make from an answer
 # rather than from the absence of one.
-if [[ "$approved" == 'true' && "$mergeable" == 'MERGEABLE' ]] && (( pending == 0 )); then
+if [[ "$verdict" == 'APPROVED' && "$mergeable" == 'MERGEABLE' ]]; then
   printf 'Ready to merge\t\tDone,Blocked\n'
   exit 0
 fi
