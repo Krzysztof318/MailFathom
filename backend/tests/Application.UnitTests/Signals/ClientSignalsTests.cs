@@ -130,6 +130,35 @@ public sealed class ClientSignalsTests
         Assert.Contains(third, delivered.Emails);
     }
 
+    /// <summary>Two statements about one email's flags are one statement, and neither half is erased by the other's silence.</summary>
+    [Fact]
+    public async Task Publish_TwoFlagChangesAboutOneEmail_DeliversEachValueFromTheStatementThatMadeIt()
+    {
+        // Arrange
+        var channel = new RecordingClientSignalChannel();
+        var clock = new FakeTimeProvider();
+        await using var signals = new ClientSignals([channel], clock);
+
+        var email = StoredEmailId.Create(Guid.CreateVersion7());
+
+        // Act
+        signals.Publish(ClientSignal.MailFlagsChanged(
+            Account,
+            Inbox,
+            [new SignalledEmailFlags(email, IsSeen: true, IsFlagged: false)]));
+        signals.Publish(ClientSignal.MailFlagsChanged(
+            Account,
+            Inbox,
+            [new SignalledEmailFlags(email, IsSeen: null, IsFlagged: true)]));
+
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var delivered = Assert.Single(channel.Published);
+        Assert.Equal([new SignalledEmailFlags(email, IsSeen: true, IsFlagged: true)], delivered.Flags);
+    }
+
     /// <summary>Every registered channel is handed the same fold, which is what lets a second delivery channel be added without touching a raise site.</summary>
     [Fact]
     public async Task Publish_SeveralRegisteredChannels_HandsTheFoldToEachOfThem()

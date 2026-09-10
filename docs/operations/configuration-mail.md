@@ -174,6 +174,14 @@ A folder entry names `Alias` (required — your stable name for the folder) and 
 server's own path) or `SpecialUse` (`Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`,
 `Important`, `Outbox`). Configuring no folder synchronizes the inbox by role.
 
+**An alias may carry `/`, and a client reads that as nesting.** `Inbox/Projects/2027` is one folder whose alias says
+it belongs under `Inbox/Projects`, and MailFathom's own client draws exactly that tree and offers no way to make a
+fourth level. It is a second hierarchy from `RemotePath` rather than a spelling of it: the alias is your name for the
+folder and the path is where it sits on the server, so the two nest independently and neither has to agree with the
+other. Nothing here requires a parent to be declared — an alias whose outer level names no entry simply draws as a
+level with no folder of its own — and the aliases already configured, which carry no separator, are one level each
+and are unaffected.
+
 `Outbox` is the one role that cannot be written alone: no mail server advertises one, so it names a folder only beside
 a `RemotePath` and startup refuses it without one, naming the alias. It is the folder a message waiting for an instant
 still ahead is [mirrored into](../features/mail-delivery.md#the-copy-in-the-accounts-own-folders); mapping none is the

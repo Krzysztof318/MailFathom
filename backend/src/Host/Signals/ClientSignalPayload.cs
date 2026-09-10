@@ -12,6 +12,7 @@ namespace MailFathom.Host.Signals;
 /// <param name="Folder">The folder alias the change is in, where the kind names one.</param>
 /// <param name="Count">How many things the change covers: the mail one run committed, or how many notifications stand unread.</param>
 /// <param name="Emails">The stored identities the change names, bounded where it names any and empty otherwise.</param>
+/// <param name="Flags">Where the two server flags now stand for each email a flag change names, and empty for every other kind.</param>
 /// <param name="NotificationKind">Which kind of notification was written, where the kind reports one.</param>
 /// <param name="Headline">The notification's own headline, and nothing for every other kind.</param>
 /// <param name="SecondLine">The notification's own second line, and nothing for every other kind.</param>
@@ -23,8 +24,9 @@ namespace MailFathom.Host.Signals;
 /// </para>
 /// <para>
 /// <b>No mail crosses.</b> The vocabulary is the one <see cref="ClientSignal" /> holds and nothing widens it here: a
-/// count, an account alias, a folder alias, and a stored identity, plus the notification record's own already-derived
-/// two lines, which are the stated exception and reach a client entitled to read that record over its own route.
+/// count, an account alias, a folder alias, a stored identity, and the two server flags of one, plus the notification
+/// record's own already-derived two lines, which are the stated exception and reach a client entitled to read that
+/// record over its own route.
 /// </para>
 /// </remarks>
 internal sealed record ClientSignalPayload(
@@ -33,6 +35,7 @@ internal sealed record ClientSignalPayload(
     string? Folder,
     int Count,
     IReadOnlyList<string> Emails,
+    IReadOnlyList<ClientSignalFlagsPayload> Flags,
     string? NotificationKind,
     string? Headline,
     string? SecondLine)
@@ -51,8 +54,21 @@ internal sealed record ClientSignalPayload(
             signal.Folder?.Value,
             signal.Count,
             [.. signal.Emails.Select(static email => email.Value.ToString())],
+            [
+                .. signal.Flags.Select(static flag => new ClientSignalFlagsPayload(
+                    flag.Email.Value.ToString(),
+                    flag.IsSeen,
+                    flag.IsFlagged)),
+            ],
             signal.NotificationKind?.ToString(),
             signal.Headline,
             signal.SecondLine);
     }
 }
+
+/// <summary>Where one email's two server flags now stand, as the flag change carries it.</summary>
+/// <param name="Email">The stored identity, which is the same identifier every row and every route already names it by.</param>
+/// <param name="IsSeen">Where the remote <c>\Seen</c> flag stands, and <see langword="null" /> where this statement is not about it.</param>
+/// <param name="IsFlagged">Where the remote <c>\Flagged</c> flag stands, and <see langword="null" /> where this statement is not about it.</param>
+/// <remarks>A value left out is a value the publisher did not observe rather than one that was cleared, so a client applies what is stated and leaves the rest of the row alone.</remarks>
+internal sealed record ClientSignalFlagsPayload(string Email, bool? IsSeen, bool? IsFlagged);

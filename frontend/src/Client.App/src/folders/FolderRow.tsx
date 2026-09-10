@@ -3,11 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { KeyboardEvent } from 'react';
+import type { MenuPoint } from '../contextMenu/menuPlacement';
+import { useRowPress } from '../contextMenu/rowPress';
 import { Icon } from '../controls/Icon';
 import { MailboxMark } from '../controls/MailboxMark';
-import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
-import { folderRoleIcons, folderRoleLabels } from '../workspace/mailScope';
+import { folderRoleIcons } from '../workspace/mailScope';
+import { folderRowName } from './folderRowNames';
 import type { FolderTreeRow } from './folderTreeRows';
 
 // One row of the tree, which is its own component because it is the row of a list and because it carries everything a
@@ -79,6 +81,7 @@ export function FolderRow({
     groupOrdinal,
     onSelect,
     onToggle,
+    onPress,
     onKeyDown,
     onElement,
 }: {
@@ -97,10 +100,15 @@ export function FolderRow({
 
     readonly onSelect: () => void;
     readonly onToggle: () => void;
+
+    /** Opens this row's menu at the point the gesture happened, or `undefined` for a row that offers no act. */
+    readonly onPress: ((at: MenuPoint) => void) | undefined;
+
     readonly onKeyDown: (event: KeyboardEvent<HTMLLIElement>) => void;
     readonly onElement: (element: HTMLLIElement | null) => void;
 }) {
     const { translate } = useLocalization();
+    const press = useRowPress(onPress);
     const group = groupOrdinal !== null;
     const indent = group ? '' : (levelIndents[Math.min(Math.max(row.level - 2, 0), levelIndents.length - 1)] ?? '');
 
@@ -114,7 +122,18 @@ export function FolderRow({
             aria-expanded={expanded ?? undefined}
             aria-selected={row.scope === null ? undefined : selected}
             tabIndex={focusable ? 0 : -1}
-            onClick={onSelect}
+            onClick={() => {
+                // The tap that ends a press which has already opened this row's menu is not a selection: without
+                // this, opening the menu with a finger would also scope the client to whatever was underneath it.
+                if (!press.tapSuppressed()) {
+                    onSelect();
+                }
+            }}
+            onContextMenu={press.onContextMenu}
+            onPointerDown={press.onPointerDown}
+            onPointerMove={press.onPointerMove}
+            onPointerUp={press.onPointerUp}
+            onPointerCancel={press.onPointerCancel}
             onKeyDown={onKeyDown}
             className={`flex items-center transition ${row.scope === null ? '' : 'cursor-pointer'} ${rowShape({ group, folded, selected, indent })}`}
         >
@@ -129,7 +148,7 @@ export function FolderRow({
 
             {/* Everything the rail has no room to draw, kept for the reader who hears the row rather than sees it. */}
             <span className={folded ? 'sr-only' : 'flex min-w-0 flex-1 items-center gap-2'}>
-                <span className="min-w-0 flex-1 truncate">{nameOf(row, translate)}</span>
+                <span className="min-w-0 flex-1 truncate">{folderRowName(row, translate)}</span>
 
                 <Unread count={row.role === 'Inbox' ? row.unreadEmailCount : null} />
             </span>
@@ -139,6 +158,7 @@ export function FolderRow({
             {folded ? null : (
                 <Twist
                     expanded={expanded}
+                    said={translate(expanded ? 'folders.collapseSubfolders' : 'folders.showSubfolders')}
                     onToggle={() => {
                         onToggle();
                     }}
@@ -148,18 +168,21 @@ export function FolderRow({
     );
 }
 
-function nameOf(row: FolderTreeRow, translate: (key: MessageKey) => string): string {
-    if (row.scope?.kind === 'everything') {
-        return translate('scope.allMailboxes');
-    }
-
-    return row.role === null ? row.name : translate(folderRoleLabels[row.role]);
-}
-
 // The control that opens a row, absent where there is nothing to open. It is hidden from the accessibility tree because
 // a tree already says whether a row is open and opens one from the keyboard: an extra control here would be a second
 // way to do what arrow keys already do, announced on every row.
-function Twist({ expanded, onToggle }: { readonly expanded: boolean | null; readonly onToggle: () => void }) {
+function Twist({
+    expanded,
+    said,
+    onToggle,
+}: {
+    readonly expanded: boolean | null;
+
+    /** What a pointer resting on it says, which is the design project's *Show* and *Collapse subfolders*. */
+    readonly said: string;
+
+    readonly onToggle: () => void;
+}) {
     if (expanded === null) {
         return null;
     }
@@ -167,6 +190,7 @@ function Twist({ expanded, onToggle }: { readonly expanded: boolean | null; read
     return (
         <span
             aria-hidden="true"
+            title={said}
             className="shrink-0 rounded p-0.5 hover:bg-hover"
             onClick={(event) => {
                 event.stopPropagation();

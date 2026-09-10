@@ -240,15 +240,15 @@
     --spacing-message-row-narrow: 6.875rem;
 
     /* How wide the rail is in the desktop composition and in the tablet one, where the project draws it narrower with
-       the label under the symbol at a smaller size; how wide the column beside it that holds the mailbox tree is when
-       it is open and when it is folded to a strip; and how wide the drawer the narrow shape holds the mailboxes in is.
-       All five are the project's, and they are here rather than on the components because the first four have to add
-       up to a composition. The message list's desktop width is not among them: it is the one width a person sets
-       rather than the design, so it is drawn from a value and its bounds live in `mailSpace/listWidth.ts`, where the
-       arithmetic that reads them is. */
+       the label under the symbol at a smaller size; how wide the column beside it that holds the mailbox tree is once
+       it has been folded to a strip; and how wide the drawer the narrow shape holds the mailboxes in is. All four are
+       the project's, and they are here rather than on the components because they have to add up to a composition.
+       Two widths are not among them, and for one reason: the message list's in the desktop composition, and the
+       mailbox column's while it is open, are widths a person sets rather than the design. Each is drawn from a value
+       whose bounds live beside the arithmetic that reads them — `mailSpace/listWidth.ts` and
+       `mailSpace/mailboxesWidth.ts`. */
     --spacing-rail: 6rem;
     --spacing-rail-narrow: 4.125rem;
-    --spacing-mailboxes: 13.125rem;
     --spacing-mailboxes-folded: 3.625rem;
     --spacing-drawer: 16.375rem;
 

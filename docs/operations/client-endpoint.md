@@ -84,6 +84,9 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/record` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts/removal` | `mailfathom.mail.accounts.write` |
+| `POST /api/client/record/mail-accounts/folders` | `mailfathom.mail.accounts.write` |
+| `POST /api/client/record/mail-accounts/folders/replacement` | `mailfathom.mail.accounts.write` |
+| `POST /api/client/record/mail-accounts/folders/removal` | `mailfathom.mail.accounts.write` |
 | `GET /api/client/display-name` | `mailfathom.mail.read` |
 | `POST /api/client/display-name` | `mailfathom.mail.accounts.write` |
 | `GET /api/client/drafts` | `mailfathom.mail.drafts.write` |
@@ -401,9 +404,17 @@ guessed from a folder's name to fill it in.
 **`path` is the folder's place on its mail server, outermost level first.** It is split into levels rather than
 published as a path and a delimiter, so a client builds a tree without knowing that mail servers have hierarchy
 delimiters or which character this one chose. The last level is what a person recognizes as the folder's name; `alias`
-above it is MailFathom's own name for the folder — one upper-cased configured word, unique within its account — and is
+above it is MailFathom's own name for the folder — a configured, upper-cased value unique within its account — and is
 what everything else on this surface names the folder by. A server that reports no delimiter has a flat mailbox and the
 whole path arrives as one level.
+
+**An alias nests on `/`, and that is a second hierarchy from `path` rather than a spelling of it.** `INBOX/PROJECTS`
+is a folder configuration filed under `INBOX`, wherever on the server either of them actually sits, and it is what a
+client draws a tree from: a folder made inside another is one whose alias extends its parent's, so nothing has to work
+out which server path that turned into. An alias carrying no separator is one level, which is every mapping a
+deployment configured before this existed. **Three segments is as deep as MailFathom's own client goes** — it offers
+no way to make a fourth — but the value is a configured name like any other and this surface neither imposes that
+ceiling nor promises one, so a client reading a deeper alias draws it where it falls.
 
 **The counts are of the local copy, not of the mailbox.** `storedEmailCount` is what this deployment holds and would
 serve, and `unreadEmailCount` is how many of those the mail server last reported without `\Seen`. A folder still being
@@ -1582,10 +1593,11 @@ subject, no correspondent, no body, and no keyword reaches a log line or a telem
 
 ### The record routes
 
-These four are how a person maintains what this deployment reads for them: which mailboxes it synchronizes, what each
-one is reached with, and the settings that are theirs rather than the deployment's. Reading is `mailfathom.mail.read`
-like the rest of this surface; the three writes are `mailfathom.mail.accounts.write`, separately granted for the reason
-every write here is separately granted — reading somebody's mail is not deciding which mailboxes are read for them.
+These seven are how a person maintains what this deployment reads for them: which mailboxes it synchronizes, which
+folders of each it reads, what each one is reached with, and the settings that are theirs rather than the
+deployment's. Reading is `mailfathom.mail.read` like the rest of this surface; the six writes are
+`mailfathom.mail.accounts.write`, separately granted for the reason every write here is separately granted — reading
+somebody's mail is not deciding which mailboxes are read for them.
 
 | Route | What it does |
 | --- | --- |
@@ -1593,6 +1605,24 @@ every write here is separately granted — reading somebody's mail is not decidi
 | `POST /api/client/record` | Commits that record back edited, as one change against the version it was opened over |
 | `POST /api/client/record/mail-accounts` | Declares one more mailbox in it |
 | `POST /api/client/record/mail-accounts/removal` | Stops it declaring one mailbox, named by the identifier it was declared under |
+| `POST /api/client/record/mail-accounts/folders` | Declares one more folder in one of those mailboxes |
+| `POST /api/client/record/mail-accounts/folders/replacement` | States one folder afresh, in place of the one carrying an alias |
+| `POST /api/client/record/mail-accounts/folders/removal` | Stops the mailbox declaring one folder, named by its alias |
+
+**The three folder routes are the whole of what a client may do to a folder, and none of them touches a mail
+server.** Each is a change to the mapping the record declares: a declaration adds one and lets the account's next run
+create the folder its own configuration names, a replacement states that mapping afresh in the position the old one
+held, and a removal takes the mapping out. Renaming, deleting, subscribing, and unsubscribing a folder *on the server*
+are refused outright by [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md), which is why a removal here
+stops the deployment reading a folder rather than removing one — the mail already stored stays where it is, exactly as
+withdrawing a whole mailbox leaves its mail, and so does the folder on the server. A removal withdraws only the alias
+it names: a folder nested under it by alias stays declared and is read as a folder of its own from then on.
+
+Each of the three takes the account by the identifier it was declared under, the folder as the JSON a configuration
+file would state it in, and the `version` the record was read at. The declaration is bound and validated exactly as a
+configuration file's is, so an alias that is not a valid one, a remote path that is not a path, and a record another
+writer moved on in the meantime are each refused with the sentence saying what to correct — as is a replacement or a
+removal naming an alias the account does not declare.
 
 **No route here names a user, and that is the whole of the isolation.** The record acted on is the one belonging to
 the credential that authenticated, resolved from the request rather than read out of the body or the path, so there is
@@ -2281,25 +2311,42 @@ closed without being told which.
 own identifier the moment it is admitted, and every statement is published to one group; nothing here reads a group name
 a caller supplied, because nothing here takes one.
 
-**What crosses is what changed, never what it changed to.** A signal is an instruction to look again: it names a count,
-an account alias, a folder alias, and a stored identity, and no subject, address, body fragment, filename, or attachment
-name reaches it at any size. The one exception is a raised notification's own headline and second line, which are the
+**What crosses is what changed, never what it changed to, with two named exceptions.** A signal is an instruction to
+look again: it names a count, an account alias, a folder alias, a stored identity, and the two server flags of one, and
+no subject, address, body fragment, filename, or attachment name reaches it at any size. The first exception is the
+flags `mail.flags.changed` carries, which say where each of those two stands rather than that one moved, for the reason
+the paragraph below the table gives. The second is a raised notification's own headline and second line, which are the
 record's already-derived text and reach a client entitled to read that record over
-[the notification routes](#the-notification-routes). Five things are said:
+[the notification routes](#the-notification-routes). Six things are said:
 
 | Signal | What it says |
 | --- | --- |
 | `mail.arrived` | A run committed mail into one folder, and how much |
 | `mail.changed` | Stored mail in one folder is no longer what a client last read, naming up to 100 of the rows |
+| `mail.flags.changed` | Nothing moved but the `\Seen` or `\Flagged` flag of up to 100 rows, and where each of those flags now stands |
 | `folders.changed` | The set of folders an account mirrors has moved |
 | `notification.raised` | A notification was written, with its kind, its two lines, and how many now stand unread |
 | `account.state` | An account's synchronization run finished, so what a client says about it is out of date |
+
+**A flag is the one change stated rather than pointed at.** `mail.flags.changed` carries, per row, the stored identity
+and where each of the two flags now stands, so a client redraws the row it already holds without reading the page it is
+on — which is what makes a star or a read mark land on the screen without a round trip behind it. It is safe for those
+two values alone: applying the same statement twice is the same state, and a flag never moves a message between folders
+or in or out of a filtered view, so no reader has to decide whether the row still belongs where it is drawn. Anything
+else that moved — a message that changed folder, was deleted, or whose keywords moved — says `mail.changed` for the
+whole of what a run found, and a client re-reads. A flag a publisher did not observe is left out rather than reported as
+cleared: a reconciliation window states both, and a change this deployment authored states the one it wrote.
+
+**A client that does not know the sixth kind ignores it and re-reads on its own interval**, exactly as it ignores any
+other kind it does not know; the client and the service ship under one version, so this is an addition rather than a
+break.
 
 **A settled move says `mail.changed` twice, once per folder.** A change that files a message somewhere — a move, a copy —
 changes the folder it left and the folder it landed in, so both are named, and a client watching either re-reads when the
 message crosses rather than when something else makes it look again. The destination is named by its alias, so a move
 into a folder this deployment maps and does not mirror announces the source alone: there is no folder a client holds mail
-for. Everything else — a flag change, a delete — names the one folder the message is in, exactly as before.
+for. Everything else — a delete, a keyword change — names the one folder the message is in, exactly as before, and a
+settled flag change says `mail.flags.changed` about that one folder instead.
 
 **Statements are folded per user, per kind, and per place over half a second.** A run committing a folder's worth of
 mail is one arrival to the person who was away from the screen rather than one statement per message, and two folders'

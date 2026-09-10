@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { ReactElement } from 'react';
-import { act, fireEvent, render, screen, waitFor, type RenderResult } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within, type RenderResult } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientSession, ClientSignal, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
@@ -15,6 +15,7 @@ import {
     type SignalledChanges,
 } from '../signals/signalledChanges';
 import { WorkspaceProvider } from '../workspace/Workspace';
+import { FolderMaintenanceContext, noFolderMaintenance, type FolderMaintenance } from './useFolderMaintenance';
 import { emptyWorkspace, useWorkspace, type Workspace } from '../workspace/useWorkspace';
 import { FolderTree } from './FolderTree';
 
@@ -56,7 +57,17 @@ const tree = {
                     behind: false,
                 },
                 {
-                    alias: 'ARCHIVE-2024',
+                    alias: 'ARCHIWUM',
+                    role: null,
+                    path: ['Archiwum'],
+                    storedEmailCount: 1200,
+                    unreadEmailCount: 0,
+                    synchronizationState: 'Synchronized',
+                    lastSynchronizedAt: '2026-08-31T09:00:00+00:00',
+                    behind: false,
+                },
+                {
+                    alias: 'ARCHIWUM/2024',
                     role: null,
                     path: ['Archiwum', '2024'],
                     storedEmailCount: 980,
@@ -150,13 +161,16 @@ function treeUnder(
     online: boolean,
     marking: ReadMarking = nothingMarkedRead,
     changes: SignalledChanges = nothingSignalled,
+    maintenance: FolderMaintenance = noFolderMaintenance,
 ): ReactElement {
     return (
         <LocalizationProvider>
             <WorkspaceProvider>
                 <SignalledChangesContext value={changes}>
                     <ReadMarkingContext value={marking}>
-                        <FolderTree session={session} transport={transport} online={online} />
+                        <FolderMaintenanceContext value={maintenance}>
+                            <FolderTree session={session} transport={transport} online={online} />
+                        </FolderMaintenanceContext>
                     </ReadMarkingContext>
                 </SignalledChangesContext>
                 <FoldTheColumn />
@@ -171,8 +185,34 @@ function renderTree(
     online = true,
     marking?: ReadMarking,
     changes?: SignalledChanges,
+    maintenance?: FolderMaintenance,
 ): RenderResult {
-    return render(treeUnder(transport, online, marking, changes));
+    return render(treeUnder(transport, online, marking, changes, maintenance));
+}
+
+/** A client whose credential may do everything to a folder, recording what each act was asked about. */
+function offering(): { maintenance: FolderMaintenance; asked: unknown[] } {
+    const asked: unknown[] = [];
+
+    return {
+        asked,
+        maintenance: {
+            offered: true,
+            marksRead: true,
+            changed: 0,
+            declare: (mailbox, parent) => asked.push({ act: 'declare', mailbox, parent }),
+            revise: (mailbox, folder, parent) => asked.push({ act: 'revise', mailbox, folder, parent }),
+            withdraw: (mailbox, folder) => asked.push({ act: 'withdraw', mailbox, folder }),
+            markAllRead: (accountId, folder, said) => asked.push({ act: 'markAllRead', accountId, folder, said }),
+        },
+    };
+}
+
+/** Opens a row's menu the way a pointer with a second button does, and answers what it offered. */
+function pressed(on: HTMLElement): readonly (string | null)[] {
+    fireEvent.contextMenu(on, { clientX: 40, clientY: 80 });
+
+    return screen.queryAllByRole('menuitem').map((item) => item.textContent);
 }
 
 /** A deployment a test speaks for, so what a signal does to the tree is asserted rather than waited for. */
@@ -207,6 +247,14 @@ function marked(...places: readonly MarkedIn[]): ReadMarking {
 
 function row(name: RegExp): HTMLElement {
     return screen.getByRole('treeitem', { name });
+}
+
+// The control that opens a row is hidden from the accessibility tree deliberately — a tree already says whether a row
+// is open and opens one from the keyboard — so it is the one thing here that cannot be found by its role. What it
+// still carries is the sentence a pointer resting on it reads, which is what this asks for rather than its place
+// among the row's children.
+function openTwisty(on: HTMLElement): void {
+    fireEvent.click(within(on).getByTitle(/subfolders$/));
 }
 
 async function drawn(): Promise<HTMLElement> {
@@ -256,6 +304,20 @@ describe('FolderTree', () => {
         expect(row(/^Work/)).toBeDefined();
         expect(row(/^Personal/)).toBeDefined();
         expect(row(/^Archiwum/).getAttribute('aria-level')).toBe('2');
+    });
+
+    // The design project opens a mailbox and shuts what nests inside a folder, which is the only reading that scales:
+    // a folder filed three levels deep would otherwise open as a list of everything the mailbox has ever held.
+    it('opens a mailbox and leaves what nests inside a folder shut until somebody opens it', async () => {
+        renderTree(answering(JSON.stringify(tree)));
+
+        await drawn();
+
+        expect(row(/^Archiwum/).getAttribute('aria-expanded')).toBe('false');
+        expect(screen.queryByRole('treeitem', { name: /^2024/ })).toBeNull();
+
+        openTwisty(row(/^Archiwum/));
+
         expect(row(/^2024/).getAttribute('aria-level')).toBe('3');
     });
 
@@ -507,6 +569,7 @@ describe('FolderTree', () => {
         renderTree(answering(JSON.stringify(tree)));
 
         await drawn();
+        openTwisty(row(/^Archiwum/));
         const nested = row(/^2024/);
 
         nested.focus();
@@ -538,6 +601,17 @@ describe('FolderTree', () => {
         expect(row(/^Work/).getAttribute('tabindex')).toBe('0');
     });
 
+    it('keeps a nested folder as the scope, a row folded away by default still being a row the tree holds', async () => {
+        renderTree(answering(JSON.stringify(tree)));
+
+        await drawn();
+
+        fireEvent.keyDown(row(/^Archiwum/), { key: 'ArrowRight' });
+        fireEvent.click(row(/^2024/));
+
+        expect(carried().scope).toEqual({ kind: 'folder', accountId: 'work', alias: 'ARCHIWUM/2024' });
+    });
+
     it('keeps what has been folded away in the workspace, so it survives moving between the spaces', async () => {
         renderTree(answering(JSON.stringify(tree)));
 
@@ -547,7 +621,136 @@ describe('FolderTree', () => {
         work.focus();
         fireEvent.keyDown(work, { key: 'ArrowLeft' });
 
-        expect(carried().collapsed).toEqual(['account:work']);
+        expect(carried().foldsToggled).toEqual(['account:work']);
+    });
+
+    // The design project answers a press on a mailbox heading and on a folder with a menu, and answers a press on the
+    // row spanning every mailbox with nothing — a folder is made, marked and removed inside one mailbox.
+    it('answers a press on a mailbox with making a folder in it and marking everything in it read', async () => {
+        const { maintenance } = offering();
+
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
+        await drawn();
+
+        expect(pressed(row(/^Work/))).toEqual(['New folder', 'Mark all as read']);
+    });
+
+    it('answers a press on a folder with the whole set, and on one playing a role without the two that change it', async () => {
+        const { maintenance } = offering();
+
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
+        await drawn();
+
+        expect(pressed(row(/^Archiwum/))).toEqual([
+            'New folder inside',
+            'Mark all as read',
+            'Edit folder',
+            'Delete folder',
+        ]);
+
+        fireEvent.keyDown(screen.getByRole('menuitem', { name: 'New folder inside' }), { key: 'Escape' });
+
+        expect(pressed(row(/^Inbox12 unread/))).toEqual(['New folder inside', 'Mark all as read']);
+    });
+
+    it('closes a menu whose row has been folded away, rather than reopening it when the row comes back', async () => {
+        const { maintenance } = offering();
+
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
+        await drawn();
+
+        fireEvent.keyDown(row(/^Archiwum/), { key: 'ArrowRight' });
+
+        expect(pressed(row(/^2024/))).toEqual([
+            'New folder inside',
+            'Mark all as read',
+            'Edit folder',
+            'Delete folder',
+        ]);
+
+        fireEvent.keyDown(row(/^Archiwum/), { key: 'ArrowLeft' });
+
+        expect(screen.queryAllByRole('menuitem')).toEqual([]);
+
+        fireEvent.keyDown(row(/^Archiwum/), { key: 'ArrowRight' });
+
+        expect(screen.getByRole('treeitem', { name: /^2024/ })).toBeDefined();
+        expect(screen.queryAllByRole('menuitem')).toEqual([]);
+    });
+
+    it('answers a press on the row spanning every mailbox with nothing at all', async () => {
+        const { maintenance } = offering();
+
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
+        await drawn();
+
+        expect(pressed(row(/^All mailboxes/))).toEqual([]);
+    });
+
+    it('offers only what this credential may do, so a folder it may not change is one it may still mark read', async () => {
+        const { maintenance } = offering();
+
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, {
+            ...maintenance,
+            offered: false,
+        });
+        await drawn();
+
+        expect(pressed(row(/^Archiwum/))).toEqual(['Mark all as read']);
+    });
+
+    it('makes a folder inside the row that was pressed, named by the mailbox it belongs to', async () => {
+        const { maintenance, asked } = offering();
+
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
+        await drawn();
+        pressed(row(/^Archiwum/));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'New folder inside' }));
+
+        expect(asked).toEqual([
+            {
+                act: 'declare',
+                mailbox: {
+                    accountId: 'work',
+                    accountName: 'Work',
+                    declaredAliases: ['INBOX', 'ARCHIVE', 'ARCHIWUM', 'ARCHIWUM/2024'],
+                },
+                parent: { alias: 'ARCHIWUM', remotePath: ['Archiwum'] },
+            },
+        ]);
+    });
+
+    it('asks to stop reading the folder that was pressed, saying whether anything nests inside it', async () => {
+        const { maintenance, asked } = offering();
+
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
+        await drawn();
+        pressed(row(/^Archiwum/));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Delete folder' }));
+
+        expect(asked).toEqual([
+            {
+                act: 'withdraw',
+                mailbox: expect.objectContaining({ accountId: 'work' }) as unknown,
+                folder: { alias: 'ARCHIWUM', remotePath: ['Archiwum'], name: 'Archiwum', holdsNested: true },
+            },
+        ]);
+    });
+
+    it('marks everything read in the folder that was pressed, and in the whole mailbox from its heading', async () => {
+        const { maintenance, asked } = offering();
+
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
+        await drawn();
+        pressed(row(/^Archiwum/));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Mark all as read' }));
+        pressed(row(/^Work/));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Mark all as read' }));
+
+        expect(asked).toEqual([
+            { act: 'markAllRead', accountId: 'work', folder: 'ARCHIWUM', said: 'Archiwum' },
+            { act: 'markAllRead', accountId: 'work', folder: null, said: 'Work' },
+        ]);
     });
 
     it('says a user with no mailbox has none, and what would give them one', async () => {
@@ -658,13 +861,13 @@ describe('FolderTree, in a folded column', () => {
 
         foldTheColumnAway();
 
-        expect(carried().collapsed).toEqual(['account:work']);
+        expect(carried().foldsToggled).toEqual(['account:work']);
         expect(screen.queryByRole('treeitem', { name: /^Archiwum/ })).toBeNull();
         expect(row(/^Work/).getAttribute('aria-expanded')).toBe('false');
 
         foldTheColumnAway();
 
-        expect(carried().collapsed).toEqual(['account:work']);
+        expect(carried().foldsToggled).toEqual(['account:work']);
         expect(screen.queryByRole('treeitem', { name: /^Archiwum/ })).toBeNull();
     });
     it('reads the tree again when the deployment says a count moved, without taking the tree off the screen', async () => {
@@ -701,6 +904,15 @@ describe('FolderTree, in a folded column', () => {
     it.each<{ signal: ClientSignal; named: string }>([
         { signal: { kind: 'folders.changed', account: 'work' }, named: 'the mapping moving' },
         { signal: { kind: 'mail.changed', account: 'work', folder: 'INBOX', emails: ['m-1'] }, named: 'mail changing' },
+        {
+            signal: {
+                kind: 'mail.flags.changed',
+                account: 'work',
+                folder: 'INBOX',
+                flags: [{ email: 'm-1', isSeen: true, isFlagged: null }],
+            },
+            named: 'a message being marked read',
+        },
     ])('reads the tree again on $named', async ({ signal }) => {
         const deployment = deploymentSaying();
         let reads = 0;
@@ -724,6 +936,36 @@ describe('FolderTree, in a folded column', () => {
 
         await drawn();
         expect(reads).toBe(2);
+    });
+
+    it('reads nothing again for a star, which moves no count this tree draws', async () => {
+        const deployment = deploymentSaying();
+        let reads = 0;
+
+        renderTree(
+            () => {
+                reads += 1;
+
+                return Promise.resolve({ status: 200, headers: {}, body: JSON.stringify(tree) });
+            },
+            true,
+            undefined,
+            deployment.changes,
+        );
+
+        await drawn();
+
+        act(() => {
+            deployment.say({
+                kind: 'mail.flags.changed',
+                account: 'work',
+                folder: 'INBOX',
+                flags: [{ email: 'm-1', isSeen: null, isFlagged: true }],
+            });
+        });
+
+        await drawn();
+        expect(reads).toBe(1);
     });
 
     it('reads nothing again for a signal about something the tree does not draw', async () => {

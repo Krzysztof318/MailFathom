@@ -22,6 +22,7 @@ export const clientCapabilities = [
     'deleteMail',
     'composeMail',
     'sendMail',
+    'manageFolders',
 ] as const;
 
 /** Something the client offers a person, where the grant permits it. */
@@ -39,6 +40,7 @@ const capabilityGrants: Readonly<Record<ClientCapability, MailFathomPermission>>
     deleteMail: 'mailfathom.mail.delete',
     composeMail: 'mailfathom.mail.drafts.write',
     sendMail: 'mailfathom.mail.send',
+    manageFolders: 'mailfathom.mail.accounts.write',
 };
 
 // Which capability each space is reached under. Every space that is still a placeholder carries none, because nothing

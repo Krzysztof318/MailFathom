@@ -34,7 +34,7 @@ const work: MailAccountFolders = {
     folders: [
         folder({ alias: 'INBOX', role: 'Inbox', path: ['INBOX'], unreadEmailCount: 12, storedEmailCount: 4213 }),
         folder({ alias: 'SENT', role: 'Sent', path: ['Wysłane'], storedEmailCount: 300 }),
-        folder({ alias: 'ARCHIVE-2024', path: ['Archiwum', '2024'], storedEmailCount: 980 }),
+        folder({ alias: 'ARCHIVE/2024', path: ['Archiwum', '2024'], storedEmailCount: 980 }),
     ],
 };
 
@@ -99,18 +99,37 @@ describe('folderTreeOf', () => {
     it('places the folders playing a role before the ones playing none, in the order they are offered in', () => {
         const work = find(folderTreeOf(directory), 'account:work');
 
-        expect(keysOf(work?.children ?? [])).toEqual(['folder:work:INBOX', 'folder:work:SENT', 'level:work:Archiwum']);
+        expect(keysOf(work?.children ?? [])).toEqual(['folder:work:INBOX', 'folder:work:SENT', 'level:work:ARCHIVE']);
     });
 
-    it('nests a folder where its mail server nests it', () => {
-        const archive = find(folderTreeOf(directory), 'level:work:Archiwum');
+    it('nests a folder where its alias nests it, and names it by the level its mail server calls it', () => {
+        const archive = find(folderTreeOf(directory), 'level:work:ARCHIVE');
         const nested = archive?.children[0];
 
         expect(archive?.scope).toBeNull();
         expect(archive?.level).toBe(2);
-        expect(nested?.key).toBe('folder:work:ARCHIVE-2024');
+        expect(nested?.key).toBe('folder:work:ARCHIVE/2024');
         expect(nested?.name).toBe('2024');
         expect(nested?.level).toBe(3);
+    });
+
+    // The alias is upper-cased by the service, so a level read off it would draw a mailbox in capitals nobody typed.
+    it('names a level nothing is bound to by what the mail server calls it rather than by its alias segment', () => {
+        expect(find(folderTreeOf(directory), 'level:work:ARCHIVE')?.name).toBe('Archiwum');
+    });
+
+    it('falls back to the alias segment for a level nothing beneath it states a remote path for', () => {
+        const unbound = {
+            synchronizationEnabled: true,
+            accounts: [
+                {
+                    account: account('work', 'Work'),
+                    folders: [folder({ alias: 'ARCHIVE/2024', path: [] })],
+                },
+            ],
+        };
+
+        expect(find(folderTreeOf(unbound), 'level:work:ARCHIVE')?.name).toBe('ARCHIVE');
     });
 
     it('shows a folder nothing has bound to a remote folder under the name MailFathom knows it by', () => {
@@ -217,7 +236,7 @@ describe('openingScope', () => {
 });
 
 describe('visibleRows', () => {
-    it('draws every row of an unfolded tree, each knowing where it sits among its siblings', () => {
+    it('opens the mailboxes and leaves what nests inside a folder shut, each row knowing where it sits', () => {
         const visible = visibleRows(folderTreeOf(directory), new Set());
 
         expect(visible.map((row) => row.row.key)).toEqual([
@@ -227,14 +246,19 @@ describe('visibleRows', () => {
             'account:work',
             'folder:work:INBOX',
             'folder:work:SENT',
-            'level:work:Archiwum',
-            'folder:work:ARCHIVE-2024',
+            'level:work:ARCHIVE',
             'account:personal',
             'folder:personal:INBOX',
             'folder:personal:NEWS',
         ]);
 
         expect(visible[0]).toEqual(expect.objectContaining({ position: 1, setSize: 3, expanded: true }));
+    });
+
+    it('draws what nests inside a folder somebody opened, which is the same set read the other way', () => {
+        const visible = visibleRows(folderTreeOf(directory), new Set(['level:work:ARCHIVE']));
+
+        expect(visible.map((row) => row.row.key)).toContain('folder:work:ARCHIVE/2024');
     });
 
     it('leaves out what is folded away, and everything under it', () => {

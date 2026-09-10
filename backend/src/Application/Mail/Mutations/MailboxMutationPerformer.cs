@@ -92,7 +92,7 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
             transportSecurityPolicy,
             cancellationToken);
 
-        await this.AnnounceSettledChangeAsync(request, folder, cancellationToken);
+        await this.AnnounceSettledChangeAsync(request, folder, outcome, cancellationToken);
 
         return outcome;
     }
@@ -112,14 +112,30 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
     /// it. Which of the two the mailbox actually reached is not distinguished, because an unacknowledged placement may
     /// have landed and a client re-reads either folder the same way.
     /// </para>
+    /// <para>
+    /// A flag this deployment did write is stated rather than pointed at, so the star or the read mark the person just
+    /// asked for lands on their screen without a read behind it. Only the flag that was asked for is stated: the
+    /// request carries one of the two, and reporting the other would be a guess about a value nobody wrote. Every
+    /// status that is not the change having been made says <c>mail.changed</c> instead — an abandoned or unknown
+    /// outcome is precisely the case where what the client drew as pending is not what the mailbox holds, so it re-reads
+    /// rather than being told a state nothing established.
+    /// </para>
     /// </remarks>
     private async Task AnnounceSettledChangeAsync(
         MailboxMutationRequest request,
         MailFolderResolution folder,
+        MailboxMutationOutcome outcome,
         CancellationToken cancellationToken)
     {
         if (!this.signals.Reaches)
         {
+            return;
+        }
+
+        if (WrittenFlagsOf(request, outcome) is { } writtenFlags)
+        {
+            this.signals.Publish(ClientSignal.MailFlagsChanged(request.Account, folder.Alias, [writtenFlags]));
+
             return;
         }
 
@@ -144,6 +160,34 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
             this.signals.Publish(
                 ClientSignal.MailChanged(request.Account, destinationAlias, [request.StoredEmailId]));
         }
+    }
+
+    /// <summary>Where a settled change left one of the two server flags, or nothing for a change that left neither.</summary>
+    /// <remarks>
+    /// The keyword mutations are deliberately not here. They are flag writes as far as provenance is concerned, but the
+    /// statement carries the two flags a client draws and nothing else, so a settled keyword change is a re-read like
+    /// every other mutation rather than a statement with nothing in it.
+    /// </remarks>
+    private static SignalledEmailFlags? WrittenFlagsOf(
+        MailboxMutationRequest request,
+        MailboxMutationOutcome outcome)
+    {
+        if (outcome.Status is not (MailboxMutationStatus.Performed or MailboxMutationStatus.AlreadyPerformed))
+        {
+            return null;
+        }
+
+        if (request.Mutation == MailboxMutation.SetSeen && request.DesiredSeenState is { } isSeen)
+        {
+            return new SignalledEmailFlags(request.StoredEmailId, isSeen, IsFlagged: null);
+        }
+
+        if (request.Mutation == MailboxMutation.SetFlagged && request.DesiredFlaggedState is { } isFlagged)
+        {
+            return new SignalledEmailFlags(request.StoredEmailId, IsSeen: null, isFlagged);
+        }
+
+        return null;
     }
 
     private async Task<MailboxMutationOutcome> PerformThroughRecordAsync(

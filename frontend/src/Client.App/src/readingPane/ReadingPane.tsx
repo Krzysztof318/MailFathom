@@ -10,6 +10,7 @@ import {
     type ClientSession,
     type MailFathomTransport,
     type MailMessage,
+    type SignalledFlags,
 } from '@mailfathom/client-backend';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
@@ -71,6 +72,33 @@ interface Read {
 interface Answered {
     readonly read: Read;
     readonly result: ClientResult<MailMessage>;
+}
+
+/**
+ * The answer with the flags the deployment stated applied to it, or the answer unchanged where it is about another
+ * message or is not a message at all.
+ *
+ * A flag the statement is silent about is one the deployment did not observe rather than one it cleared, so the message
+ * keeps what it was drawn with — which is what makes applying the same statement twice the same screen.
+ */
+function flagsApplied(answered: Answered | null, storedEmailId: string, flags: SignalledFlags): Answered | null {
+    if (answered?.result.outcome !== 'read' || answered.result.value.storedEmailId !== storedEmailId) {
+        return answered;
+    }
+
+    const message = answered.result.value;
+
+    return {
+        ...answered,
+        result: {
+            ...answered.result,
+            value: {
+                ...message,
+                unread: flags.isSeen === null ? message.unread : !flags.isSeen,
+                flagged: flags.isFlagged ?? message.flagged,
+            },
+        },
+    };
 }
 
 export function ReadingPane({
@@ -264,6 +292,18 @@ function OpenMessage({
             signalledChanges.listen((signal) => {
                 if (signal.kind === 'mail.changed' && signal.emails.includes(storedEmailId)) {
                     setRead((current) => ({ storedEmailId, attempt: current.attempt + 1, quietly: true }));
+                }
+
+                // A flag is applied to what is already drawn rather than read again: the two values it moves are the
+                // two this pane draws, so a star or a read mark from anywhere lands here without a round trip. A
+                // statement that arrives while a read is in flight is overwritten by that read's answer, which is the
+                // newer of the two readings and the one this pane asked for.
+                if (signal.kind === 'mail.flags.changed') {
+                    const flags = signal.flags.find((stated) => stated.email === storedEmailId);
+
+                    if (flags !== undefined) {
+                        setAnswer((current) => flagsApplied(current, storedEmailId, flags));
+                    }
                 }
             }),
         [signalledChanges, storedEmailId],

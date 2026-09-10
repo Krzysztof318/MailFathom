@@ -314,8 +314,226 @@ public sealed class ClientUserRecordEndpointTests
         Assert.Equal(8, written.Version);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task AddFolderAsync_ARequestNamingNoAccount_IsRefused(string? accountId)
+    {
+        // Arrange
+        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+
+        // Act
+        var result = await ClientUserRecordEndpoint.AddFolderAsync(
+            deployment.Records,
+            new UserFolderRequest(1, accountId, """{"Alias":"INBOX/PROJECTS"}"""),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        AssertRefusal(result.Result);
+    }
+
+    [Fact]
+    public async Task AddFolderAsync_AFolderTheirRecordAccepts_CommitsItIntoThatAccount()
+    {
+        // Arrange
+        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        deployment.Holding(SyntheticMailUser.Deployment, RecordDeclaring(Account("primary")), version: 1);
+
+        // Act
+        var result = await ClientUserRecordEndpoint.AddFolderAsync(
+            deployment.Records,
+            new UserFolderRequest(1, "primary", """{"Alias":"INBOX/PROJECTS","RemotePath":"INBOX/Projects","CreateIfMissing":true}"""),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(Assert.IsType<Ok<UserRecordWriteResponse>>(result.Result).Value!.Committed);
+        await deployment.Store.Received(1).CommitAsync(
+            SyntheticMailUser.Deployment,
+            Arg.Is<string>(candidate => candidate!.Contains("INBOX/PROJECTS", StringComparison.Ordinal)),
+            1,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>The three-level ceiling reaches the caller as a sentence they can act on rather than as a fault the process reports.</summary>
+    [Fact]
+    public async Task AddFolderAsync_AnAliasNestedPastThreeLevels_AnswersARefusalNamingItAndCommitsNothing()
+    {
+        // Arrange
+        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        deployment.Holding(SyntheticMailUser.Deployment, RecordDeclaring(Account("primary")), version: 1);
+
+        // Act
+        var result = await ClientUserRecordEndpoint.AddFolderAsync(
+            deployment.Records,
+            new UserFolderRequest(1, "primary", """{"Alias":"INBOX/PROJECTS/2027/Q1","RemotePath":"INBOX/Projects/2027/Q1"}"""),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var answered = Assert.IsType<Ok<UserRecordWriteResponse>>(result.Result).Value!;
+        Assert.False(answered.Committed);
+        Assert.Contains(answered.Messages, said => said.Contains("INBOX/PROJECTS/2027/Q1", StringComparison.Ordinal));
+        await deployment.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>A grant that reads mail has not thereby been granted the ability to change what this deployment reads.</summary>
+    [Fact]
+    public async Task AddFolderAsync_ACallerHoldingOnlyTheMailRead_IsRefused()
+    {
+        // Arrange
+        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailRead);
+
+        // Act and assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => ClientUserRecordEndpoint.AddFolderAsync(
+                deployment.Records,
+                new UserFolderRequest(1, "primary", """{"Alias":"INBOX"}"""),
+                TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>Renaming is where the alias travelling beside the declaration earns itself: the two deliberately differ.</summary>
+    [Fact]
+    public async Task ReplaceFolderAsync_AFolderRenamed_CommitsTheRecordCarryingTheNewAliasAndNotTheOld()
+    {
+        // Arrange
+        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        deployment.Holding(
+            SyntheticMailUser.Deployment,
+            $$"""{ "MailAccounts": [ {{AccountDeclaringFolder("primary", "INBOX/OLD")}} ] }""",
+            version: 1);
+
+        // Act
+        var result = await ClientUserRecordEndpoint.ReplaceFolderAsync(
+            deployment.Records,
+            new UserFolderReplacementRequest(1, "primary", "INBOX/OLD", """{"Alias":"INBOX/NEW","RemotePath":"INBOX/New"}"""),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(Assert.IsType<Ok<UserRecordWriteResponse>>(result.Result).Value!.Committed);
+        await deployment.Store.Received(1).CommitAsync(
+            SyntheticMailUser.Deployment,
+            Arg.Is<string>(candidate =>
+                candidate!.Contains("INBOX/NEW", StringComparison.Ordinal)
+                && !candidate.Contains("INBOX/OLD", StringComparison.Ordinal)),
+            1,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ReplaceFolderAsync_ARequestNamingNoFolder_IsRefused(string? alias)
+    {
+        // Arrange
+        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+
+        // Act
+        var result = await ClientUserRecordEndpoint.ReplaceFolderAsync(
+            deployment.Records,
+            new UserFolderReplacementRequest(1, "primary", alias, """{"Alias":"INBOX"}"""),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        AssertRefusal(result.Result);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ReplaceFolderAsync_ARequestNamingNoAccount_IsRefused(string? accountId)
+    {
+        // Arrange
+        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+
+        // Act
+        var result = await ClientUserRecordEndpoint.ReplaceFolderAsync(
+            deployment.Records,
+            new UserFolderReplacementRequest(1, accountId, "INBOX/OLD", """{"Alias":"INBOX/NEW"}"""),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        AssertRefusal(result.Result);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task RemoveFolderAsync_ARequestNamingNoAccount_IsRefused(string? accountId)
+    {
+        // Arrange
+        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+
+        // Act
+        var result = await ClientUserRecordEndpoint.RemoveFolderAsync(
+            deployment.Records,
+            new UserFolderRemovalRequest(1, accountId, "INBOX/PROJECTS"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        AssertRefusal(result.Result);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task RemoveFolderAsync_ARequestNamingNoFolder_IsRefused(string? alias)
+    {
+        // Arrange
+        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+
+        // Act
+        var result = await ClientUserRecordEndpoint.RemoveFolderAsync(
+            deployment.Records,
+            new UserFolderRemovalRequest(1, "primary", alias),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        AssertRefusal(result.Result);
+    }
+
+    /// <summary>An alias the account does not declare is a name the caller got wrong, and it is reported as one rather than committed as nothing.</summary>
+    [Fact]
+    public async Task RemoveFolderAsync_AnAliasTheAccountDoesNotDeclare_CommitsNothing()
+    {
+        // Arrange
+        var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailAccountsWrite);
+        deployment.Holding(
+            SyntheticMailUser.Deployment,
+            $$"""{ "MailAccounts": [ {{AccountDeclaringFolder("primary", "INBOX")}} ] }""",
+            version: 1);
+
+        // Act
+        var result = await ClientUserRecordEndpoint.RemoveFolderAsync(
+            deployment.Records,
+            new UserFolderRemovalRequest(1, "primary", "INBOX/PROJECTS"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(Assert.IsType<Ok<UserRecordWriteResponse>>(result.Result).Value!.Committed);
+        await deployment.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+    }
+
     private static UserRecordDeployment SignedInAs(MailUserId user, MailFathomPermission granted) =>
         new([granted], user);
+
+    /// <summary>A mailbox already declaring one folder, which the two acts that find one by alias are held against.</summary>
+    private static string AccountDeclaringFolder(string accountId, string alias) =>
+        $$"""
+          {
+            "AccountId": "{{accountId}}",
+            "DisplayName": "{{accountId}}",
+            "Host": "imap.example.test",
+            "UserName": "mailfathom@example.test",
+            "Secrets": { "Password": { "Name": "{{accountId}}-password", "SecretReference": "file:/run/secrets/{{accountId}}-password" } },
+            "Folders": [ { "Alias": "{{alias}}", "RemotePath": "{{alias}}" } ]
+          }
+          """;
 
     /// <summary>A mailbox whose credential this deployment provisioned for one user, which its name is what says.</summary>
     private static string AccountProvisionedFor(MailUserId user, string accountId) =>

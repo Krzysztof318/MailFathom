@@ -5,22 +5,33 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
-import { ListWidthGrip } from './ListWidthGrip';
+import { WidthGrip } from './WidthGrip';
 import { listWidthStep, narrowestList, startingListWidth, widestList } from './listWidth';
+
+// The list's own boundary, which is what this grip is drawn as everywhere but the mailbox column. The numbers are
+// props rather than the component's, so the harness states them once and every case below is about one boundary.
+const listBoundary = {
+    label: 'Message list width',
+    hint: 'Drag to resize, or double-click to reset.',
+    narrowest: narrowestList,
+    widest: widestList,
+    step: listWidthStep,
+    startingWidth: startingListWidth,
+};
 
 function renderGrip(width = 400): { chosen: ReturnType<typeof vi.fn>; grip: HTMLElement } {
     const chosen = vi.fn();
 
     render(
         <LocalizationProvider>
-            <ListWidthGrip width={width} onWidth={vi.fn()} onChosen={chosen} />
+            <WidthGrip {...listBoundary} width={width} onWidth={vi.fn()} onChosen={chosen} />
         </LocalizationProvider>,
     );
 
     return { chosen, grip: screen.getByRole('separator') };
 }
 
-describe('ListWidthGrip', () => {
+describe('WidthGrip', () => {
     it('stands as a separator naming what it moves, so a reader finds it by what it is', () => {
         const { grip } = renderGrip();
 
@@ -82,7 +93,7 @@ describe('ListWidthGrip', () => {
 
         render(
             <LocalizationProvider>
-                <ListWidthGrip width={400} onWidth={moved} onChosen={chosen} />
+                <WidthGrip {...listBoundary} width={400} onWidth={moved} onChosen={chosen} />
             </LocalizationProvider>,
         );
 
@@ -100,7 +111,7 @@ describe('ListWidthGrip', () => {
 
         render(
             <LocalizationProvider>
-                <ListWidthGrip width={400} onWidth={moved} onChosen={vi.fn()} />
+                <WidthGrip {...listBoundary} width={400} onWidth={moved} onChosen={vi.fn()} />
             </LocalizationProvider>,
         );
 
@@ -116,7 +127,7 @@ describe('ListWidthGrip', () => {
 
         render(
             <LocalizationProvider>
-                <ListWidthGrip width={400} onWidth={vi.fn()} onChosen={chosen} />
+                <WidthGrip {...listBoundary} width={400} onWidth={vi.fn()} onChosen={chosen} />
             </LocalizationProvider>,
         );
 
@@ -136,7 +147,7 @@ describe('ListWidthGrip', () => {
 
         render(
             <LocalizationProvider>
-                <ListWidthGrip width={400} onWidth={moved} onChosen={vi.fn()} />
+                <WidthGrip {...listBoundary} width={400} onWidth={moved} onChosen={vi.fn()} />
             </LocalizationProvider>,
         );
 

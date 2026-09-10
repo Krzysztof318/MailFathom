@@ -159,6 +159,28 @@ describe('parseClientSignal', () => {
         ).toStrictEqual({ kind: 'mail.changed', account: 'work', folder: 'INBOX', emails: ['m-1', 'm-2'] });
     });
 
+    it("reads a flag change as where each named row's flags now stand", () => {
+        expect(
+            parseClientSignal({
+                kind: 'mail.flags.changed',
+                account: 'work',
+                folder: 'INBOX',
+                flags: [
+                    { email: 'm-1', isSeen: true, isFlagged: false },
+                    { email: 'm-2', isFlagged: true },
+                ],
+            }),
+        ).toStrictEqual({
+            kind: 'mail.flags.changed',
+            account: 'work',
+            folder: 'INBOX',
+            flags: [
+                { email: 'm-1', isSeen: true, isFlagged: false },
+                { email: 'm-2', isSeen: null, isFlagged: true },
+            ],
+        });
+    });
+
     it('reads a moved folder set as the account whose tree to read again', () => {
         expect(parseClientSignal({ kind: 'folders.changed', account: 'work' })).toStrictEqual({
             kind: 'folders.changed',
@@ -200,6 +222,24 @@ describe('parseClientSignal', () => {
         ['a change whose rows are not a list', { kind: 'mail.changed', account: 'work', folder: 'I', emails: 'm-1' }],
         ['a raised notification of an unknown kind', { kind: 'notification.raised', notificationKind: 'Weather' }],
         ['a moved folder set naming no account', { kind: 'folders.changed' }],
+        ['a flag change stating nothing', { kind: 'mail.flags.changed', account: 'work', folder: 'INBOX', flags: [] }],
+        [
+            'a flag change whose statement is about neither flag',
+            { kind: 'mail.flags.changed', account: 'work', folder: 'INBOX', flags: [{ email: 'm-1' }] },
+        ],
+        [
+            'a flag change whose flag is not a flag',
+            {
+                kind: 'mail.flags.changed',
+                account: 'work',
+                folder: 'INBOX',
+                flags: [{ email: 'm-1', isSeen: 'yes' }],
+            },
+        ],
+        [
+            'a flag change naming no row',
+            { kind: 'mail.flags.changed', account: 'work', folder: 'INBOX', flags: [{ isSeen: true }] },
+        ],
     ];
 
     it.each(refused)('refuses %s', (_, payload) => {
@@ -210,6 +250,15 @@ describe('parseClientSignal', () => {
         const emails = Array.from({ length: mostNamedSignalEmails + 1 }, (_, index) => `m-${String(index)}`);
 
         expect(parseClientSignal({ kind: 'mail.changed', account: 'work', folder: 'INBOX', emails })).toBeNull();
+    });
+
+    it('refuses a flag change stating more rows than the deployment names', () => {
+        const flags = Array.from({ length: mostNamedSignalEmails + 1 }, (_, index) => ({
+            email: `m-${String(index)}`,
+            isSeen: true,
+        }));
+
+        expect(parseClientSignal({ kind: 'mail.flags.changed', account: 'work', folder: 'INBOX', flags })).toBeNull();
     });
 
     it('refuses a value longer than the deployment would ever send', () => {

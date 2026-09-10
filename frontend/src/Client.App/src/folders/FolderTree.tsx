@@ -11,6 +11,7 @@ import {
     type MailFathomTransport,
     type MailFolderDirectory,
 } from '@mailfathom/client-backend';
+import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
@@ -19,8 +20,20 @@ import { useSignalledChanges } from '../signals/signalledChanges';
 import { scopeKey } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { FolderRow } from './FolderRow';
-import { folderTreeOf, openingScope, visibleRows, type VisibleRow } from './folderTreeRows';
+import { FolderRowMenu } from './FolderRowMenu';
+import { actsOffered, type FolderAct } from './folderActs';
+import { aliasSegments } from './folderTreeRows';
+import { folderRowName } from './folderRowNames';
+import {
+    folderTreeOf,
+    namesRow,
+    openingScope,
+    visibleRows,
+    type FolderTreeRow,
+    type VisibleRow,
+} from './folderTreeRows';
 import { unreadAfterMarking } from './unreadAfterMarking';
+import { useFolderMaintenance, type FolderMailbox } from './useFolderMaintenance';
 
 // The client's scope selector: which mailbox and which folder everything else is about. It is a tree because the
 // mailboxes are a tree, and it is one tree rather than one per account because several mailboxes are one workspace —
@@ -34,10 +47,15 @@ import { unreadAfterMarking } from './unreadAfterMarking';
 // and the list, the search, and the next question read it from there.
 //
 // Two things fold here and they are different questions. A row folds away what is under it, which is this tree's own
-// and is what `workspace.collapsed` holds. The column folds to a rail, which is the composition's and is what
-// `workspace.mailboxesFolded` holds — read here rather than handed in because the composition that owns it renders
-// this tree as a region it was given rather than as a child it built. Neither touches the other: a rail draws the
-// same rows a column would, each as a symbol.
+// and is what `workspace.foldsToggled` holds — the rows whose fold somebody moved away from what the row opens at,
+// rather than the rows that are folded, because a mailbox opens expanded and a subfolder opens collapsed. The column
+// folds to a rail, which is the composition's and is what `workspace.mailboxesFolded` holds — read here rather than
+// handed in because the composition that owns it renders this tree as a region it was given rather than as a child it
+// built. Neither touches the other: a rail draws the same rows a column would, each as a symbol.
+//
+// **What a row answers a press with is not this tree's decision either.** `folderActs.ts` says which acts a row
+// offers, `folders/FolderMaintenance.tsx` performs them, and what this component does is name the mailbox each act
+// happens inside — because the tree is where the account, its name, and the aliases it already declares are held.
 
 const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthenticated: 'failure.unauthenticated',
@@ -46,9 +64,6 @@ const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unreadable: 'failure.unreadable',
     missing: 'failure.missing',
 };
-
-// Asking which rows the tree holds rather than which a reader can see, which is what the fallback below is about.
-const nothingFolded: ReadonlySet<string> = new Set();
 
 /** What one attempt answered, tagged with the attempt, so whether a read is in flight is worked out rather than kept. */
 interface Answered {
@@ -68,6 +83,7 @@ export function FolderTree({
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
     const { marked } = useReadMarking();
+    const maintenance = useFolderMaintenance();
     const signalledChanges = useSignalledChanges();
     const [attempt, setAttempt] = useState(0);
 
@@ -77,6 +93,10 @@ export function FolderTree({
     const [refreshed, setRefreshed] = useState(0);
     const [answered, setAnswered] = useState<Answered | null>(null);
     const [focused, setFocused] = useState<string | null>(null);
+
+    // Which row's menu is open and where the gesture that opened it happened. One at a time, because a second menu
+    // over the first is a reader choosing which of them their next press belongs to.
+    const [menu, setMenu] = useState<{ readonly key: string; readonly at: MenuPoint } | null>(null);
     const [connected, setConnected] = useState(online);
     const elements = useRef(new Map<string, HTMLLIElement>());
 
@@ -111,7 +131,7 @@ export function FolderTree({
         return () => {
             listening = false;
         };
-    }, [session, transport, attempt, refreshed, online]);
+    }, [session, transport, attempt, refreshed, online, maintenance.changed]);
 
     // A scope outlives the tree it was chosen from, so the answer that arrives is also what says whether it still
     // names anything: the session's store carries a folder across a reload, and a folder deleted on the mail server in
@@ -136,23 +156,28 @@ export function FolderTree({
         const offered = answered.result.value;
         const inScope = scopeKey(workspace.scope);
 
-        if (visibleRows(folderTreeOf(offered), nothingFolded).some((visible) => visible.row.key === inScope)) {
+        if (namesRow(folderTreeOf(offered), inScope)) {
             return;
         }
 
         revise({ scope: openingScope(offered) });
     }, [answered, workspace.scope, revise]);
 
-    // Three of the five kinds move this tree, because all three move a count it draws: mail arriving in a folder, a
-    // message changing folder or read state, and the mapping itself moving. It re-reads under whatever is drawn rather
+    // Four of the six kinds move this tree, because all four move a count it draws: mail arriving in a folder, a
+    // message changing folder, the mapping itself moving, and a read mark. It re-reads under whatever is drawn rather
     // than replacing it, so a reader whose pointer is on a row keeps the row.
+    //
+    // A stated flag is the one that is read rather than acted on wholesale. A count is derived from every message in a
+    // folder rather than from the ones a statement names, so there is nothing to apply in place — but a statement about
+    // stars alone moves no count, and re-reading the tree for one would be a request per star.
     useEffect(
         () =>
             signalledChanges.listen((signal) => {
                 if (
                     signal.kind === 'folders.changed' ||
                     signal.kind === 'mail.arrived' ||
-                    signal.kind === 'mail.changed'
+                    signal.kind === 'mail.changed' ||
+                    (signal.kind === 'mail.flags.changed' && signal.flags.some((stated) => stated.isSeen !== null))
                 ) {
                     setRefreshed((token) => token + 1);
                 }
@@ -209,8 +234,8 @@ export function FolderTree({
         );
     }
 
-    const collapsed = new Set(workspace.collapsed);
-    const visible = visibleRows(folderTreeOf(directory), collapsed);
+    const foldsToggled = new Set(workspace.foldsToggled);
+    const visible = visibleRows(folderTreeOf(directory), foldsToggled);
 
     // A row is what the client is scoped to when it stands for that scope, which is a comparison of one string because
     // a row is keyed by the scope selecting it writes.
@@ -227,6 +252,70 @@ export function FolderTree({
             .map((visibleRow, ordinal) => [visibleRow.row.key, ordinal] as const),
     );
 
+    // What each row offers, less what this credential may not do. The grant narrows the list rather than the row
+    // being absent from it: `folderActs.ts` answers what the *row* is, and what the *credential* is comes from the
+    // acts themselves, which is the one place either question is asked.
+    function actsFor(row: FolderTreeRow): readonly FolderAct[] {
+        return actsOffered(row).filter((act) => (act === 'markAllRead' ? maintenance.marksRead : maintenance.offered));
+    }
+
+    /** The mailbox a row belongs to, or `null` for a row spanning every mailbox and for an account nothing answered for. */
+    function mailboxOf(row: FolderTreeRow): FolderMailbox | null {
+        const entry = directory.accounts.find(({ account }) => account.id === row.accountId);
+
+        return entry === undefined
+            ? null
+            : {
+                  accountId: entry.account.id,
+                  accountName: entry.account.displayName,
+                  declaredAliases: entry.folders.map((folder) => folder.alias),
+              };
+    }
+
+    function takeAct(act: FolderAct, row: FolderTreeRow): void {
+        const mailbox = mailboxOf(row);
+
+        if (mailbox === null) {
+            return;
+        }
+
+        const said = folderRowName(row, translate);
+
+        switch (act) {
+            case 'newFolder':
+                maintenance.declare(mailbox, null);
+                break;
+            case 'newFolderInside':
+                // The row itself is the parent, and a level of an alias nothing is bound to has no place on a server
+                // to propose a child's path from — so the dialog proposes one from the root of the mailbox instead.
+                maintenance.declare(
+                    mailbox,
+                    row.alias === null ? null : { alias: row.alias, remotePath: row.remotePath ?? [] },
+                );
+                break;
+            case 'markAllRead':
+                maintenance.markAllRead(mailbox.accountId, row.alias, said);
+                break;
+            case 'editFolder':
+                if (row.alias !== null && row.remotePath !== null) {
+                    maintenance.revise(mailbox, { alias: row.alias, remotePath: row.remotePath }, above(row));
+                }
+
+                break;
+            case 'deleteFolder':
+                if (row.alias !== null && row.remotePath !== null) {
+                    maintenance.withdraw(mailbox, {
+                        alias: row.alias,
+                        remotePath: row.remotePath,
+                        name: said,
+                        holdsNested: row.children.length > 0,
+                    });
+                }
+
+                break;
+        }
+    }
+
     function focusRow(at: number): void {
         const moved = visible[Math.min(Math.max(at, 0), visible.length - 1)];
 
@@ -236,16 +325,32 @@ export function FolderTree({
         }
     }
 
-    function fold(key: string, away: boolean): void {
-        const folded = new Set(collapsed);
+    // What is recorded is the move away from what the row opens at rather than the fold itself, which is what lets
+    // one set answer both directions: a mailbox somebody folded away and a subfolder somebody opened are the same act.
+    function fold(row: FolderTreeRow, away: boolean): void {
+        const moved = new Set(foldsToggled);
 
-        if (away) {
-            folded.add(key);
+        if (away === row.opensCollapsed) {
+            moved.delete(row.key);
         } else {
-            folded.delete(key);
+            moved.add(row.key);
         }
 
-        revise({ collapsed: [...folded] });
+        revise({ foldsToggled: [...moved] });
+    }
+
+    // The folder a row sits inside, which an edit needs so that the path it proposes is composed under the same
+    // parent the folder already has. Read off the row's own alias and path rather than by walking the tree: both nest
+    // on the same levels, and a row that has neither is one nothing is being edited on.
+    function above(row: FolderTreeRow): { readonly alias: string; readonly remotePath: readonly string[] } | null {
+        const segments = row.alias === null ? [] : aliasSegments(row.alias);
+
+        return segments.length < 2
+            ? null
+            : {
+                  alias: segments.slice(0, -1).join('/'),
+                  remotePath: (row.remotePath ?? []).slice(0, -1),
+              };
     }
 
     // The parent of a row is the nearest row above it sitting one level out, which is what a flat list of rows that
@@ -280,7 +385,7 @@ export function FolderTree({
                 break;
             case 'ArrowRight':
                 if (visibleRow.expanded === false) {
-                    fold(visibleRow.row.key, false);
+                    fold(visibleRow.row, false);
                 } else if (visibleRow.expanded === true) {
                     focusRow(at + 1);
                 }
@@ -288,7 +393,7 @@ export function FolderTree({
                 break;
             case 'ArrowLeft':
                 if (visibleRow.expanded === true) {
-                    fold(visibleRow.row.key, true);
+                    fold(visibleRow.row, true);
                 } else {
                     focusRow(parentOf(at));
                 }
@@ -308,46 +413,85 @@ export function FolderTree({
         event.preventDefault();
     }
 
-    return (
-        <ul aria-label={translate('folders.label')} className="flex flex-col gap-0.5" role="tree">
-            {visible.map((visibleRow, at) => (
-                <FolderRow
-                    key={visibleRow.row.key}
-                    row={visibleRow.row}
-                    position={visibleRow.position}
-                    setSize={visibleRow.setSize}
-                    expanded={visibleRow.expanded}
-                    selected={visibleRow.row.key === inScope}
-                    focusable={visibleRow.row.key === carryingFocus?.row.key}
-                    folded={workspace.mailboxesFolded}
-                    groupOrdinal={groupOrdinals.get(visibleRow.row.key) ?? null}
-                    onSelect={() => {
-                        setFocused(visibleRow.row.key);
+    // The row whose menu is open, looked up rather than held, so a tree read again under an open menu draws the menu
+    // about the row as it now is rather than about a copy of the row it was opened on.
+    const pressed = menu === null ? undefined : visible.find((visibleRow) => visibleRow.row.key === menu.key)?.row;
 
-                        if (visibleRow.row.scope !== null) {
-                            revise({ scope: visibleRow.row.scope });
+    // A row can leave the tree while its menu is open — a read the deployment signalled that no longer names the
+    // folder, or an ancestor folded away — and the menu leaves with it while the state that opened it stays behind.
+    // Nothing would then close that state, so the row's own next press would reopen a menu the tree believes is
+    // already open. Cleared during render, where the row's absence is first known, rather than in an effect, which
+    // would leave one frame drawn with a menu whose row is gone. What `onClose` does beside this — putting focus back
+    // on the row — has nothing left to put it on here, and the tab stop the tree keeps is what a reader tabs back to.
+    if (menu !== null && pressed === undefined) {
+        setMenu(null);
+    }
+
+    return (
+        <>
+            <ul aria-label={translate('folders.label')} className="flex flex-col gap-0.5" role="tree">
+                {visible.map((visibleRow, at) => (
+                    <FolderRow
+                        key={visibleRow.row.key}
+                        row={visibleRow.row}
+                        position={visibleRow.position}
+                        setSize={visibleRow.setSize}
+                        expanded={visibleRow.expanded}
+                        selected={visibleRow.row.key === inScope}
+                        focusable={visibleRow.row.key === carryingFocus?.row.key}
+                        folded={workspace.mailboxesFolded}
+                        groupOrdinal={groupOrdinals.get(visibleRow.row.key) ?? null}
+                        onSelect={() => {
+                            setFocused(visibleRow.row.key);
+
+                            if (visibleRow.row.scope !== null) {
+                                revise({ scope: visibleRow.row.scope });
+                            }
+                        }}
+                        onToggle={() => {
+                            // The tab stop follows the row a pointer just acted on, exactly as selecting one moves it:
+                            // the browser has already put DOM focus on this row, and a tab stop left on another is a
+                            // reader tabbing out of the tree from somewhere they never were.
+                            setFocused(visibleRow.row.key);
+                            fold(visibleRow.row, visibleRow.expanded === true);
+                        }}
+                        onPress={
+                            actsFor(visibleRow.row).length === 0
+                                ? undefined
+                                : (at) => {
+                                      setFocused(visibleRow.row.key);
+                                      setMenu({ key: visibleRow.row.key, at });
+                                  }
                         }
+                        onKeyDown={(event) => {
+                            onKeyDown(event, at, visibleRow);
+                        }}
+                        onElement={(element) => {
+                            if (element === null) {
+                                elements.current.delete(visibleRow.row.key);
+                            } else {
+                                elements.current.set(visibleRow.row.key, element);
+                            }
+                        }}
+                    />
+                ))}
+            </ul>
+
+            {menu === null || pressed === undefined ? null : (
+                <FolderRowMenu
+                    acts={actsFor(pressed)}
+                    header={folderRowName(pressed, translate)}
+                    at={menu.at}
+                    onAct={(act) => {
+                        takeAct(act, pressed);
                     }}
-                    onToggle={() => {
-                        // The tab stop follows the row a pointer just acted on, exactly as selecting one moves it:
-                        // the browser has already put DOM focus on this row, and a tab stop left on another is a
-                        // reader tabbing out of the tree from somewhere they never were.
-                        setFocused(visibleRow.row.key);
-                        fold(visibleRow.row.key, visibleRow.expanded === true);
-                    }}
-                    onKeyDown={(event) => {
-                        onKeyDown(event, at, visibleRow);
-                    }}
-                    onElement={(element) => {
-                        if (element === null) {
-                            elements.current.delete(visibleRow.row.key);
-                        } else {
-                            elements.current.set(visibleRow.row.key, element);
-                        }
+                    onClose={() => {
+                        setMenu(null);
+                        elements.current.get(pressed.key)?.focus();
                     }}
                 />
-            ))}
-        </ul>
+            )}
+        </>
     );
 }
 
