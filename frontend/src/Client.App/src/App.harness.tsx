@@ -711,6 +711,25 @@ export function openingAt(address: string): void {
     window.history.replaceState(null, '', address);
 }
 
+/**
+ * Narrows the frame to the composition that draws one pane at a time, which is the phone.
+ *
+ * Called by a test before it renders, and only by one about that composition: the width is answered rather than
+ * measured, and `resetsBetweenTests` puts the wide answer back afterwards. No width query matches, which is what every
+ * width below the narrowest breakpoint is.
+ */
+export function inOnePane(): void {
+    Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: (query: string) => ({
+            media: query,
+            matches: false,
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+        }),
+    });
+}
+
 export async function goTo(space: string): Promise<void> {
     // Matched on the start of the name rather than the whole of it: a space with nothing behind it yet says so in its
     // own accessible name, and this helper is used to reach both kinds.

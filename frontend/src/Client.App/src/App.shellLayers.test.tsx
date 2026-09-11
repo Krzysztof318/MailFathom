@@ -9,6 +9,7 @@ import {
     framed,
     goTo,
     heldSession,
+    inOnePane,
     openSettings,
     renderApp,
     resetsBetweenTests,
@@ -49,20 +50,68 @@ describe('App shell layers', () => {
         expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
     });
 
-    // The reading column goes with them, and for a second reason as well: what stands in it is a step the back gesture
-    // has to unwind, so a message left open under another space is a press spent on something nobody can see.
-    it('takes the message being read off the screen when the navigation goes to another destination', async () => {
+    // The reading column does not go with them. The Mail space is stood aside rather than taken down, so the message
+    // standing beside the list outlives leaving it exactly as the list's own pages and scroll offset do — and what the
+    // back gesture counts asks which space is in front rather than being answered by an empty workspace.
+    it('leaves the message being read open when the navigation goes to another destination and comes back', async () => {
         renderApp(servedFrom, heldSession, deploymentDrawingAMessage());
         await framed();
         await goTo('Mail');
-
-        const list = await screen.findByRole('listbox', { name: 'Messages' });
-        fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
-        expect(await screen.findByText('A drawn message.')).toBeDefined();
+        await openTheInvoice();
 
         await goTo('Discover');
         await goTo('Mail');
 
-        expect(screen.queryByText('A drawn message.')).toBeNull();
+        expect(screen.getByText('A drawn message.')).toBeDefined();
+        expect(theInvoiceRow().getAttribute('aria-current')).toBe('true');
+    });
+
+    it('leaves the message in front of the list in the single-pane composition, still with its way back', async () => {
+        inOnePane();
+        renderApp(servedFrom, heldSession, deploymentDrawingAMessage());
+        await framed();
+        await goTo('Mail');
+        await openTheInvoice();
+
+        await goTo('Discover');
+        await goTo('Mail');
+
+        expect(screen.getByText('A drawn message.')).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to the list' }));
+
+        expect(await screen.findByRole('listbox', { name: 'Messages' })).toBeDefined();
+    });
+
+    // The message counts as a step only while Mail is in front of the screen. Counted from another space, the press
+    // that should have left that space would be spent closing a message nobody can see instead.
+    it('leaves the space a press was made on rather than closing the message standing on another one', async () => {
+        inOnePane();
+        renderApp(servedFrom, heldSession, deploymentDrawingAMessage());
+        await framed();
+        await goTo('Mail');
+        await openTheInvoice();
+
+        await goTo('Discover');
+
+        act(() => {
+            window.history.back();
+        });
+
+        expect(await screen.findByRole('main', { name: 'Mail' })).toBeDefined();
+        expect(screen.getByText('A drawn message.')).toBeDefined();
     });
 });
+
+// The one message the deployment draws, opened the way a reader opens it: a row picked out of the list.
+async function openTheInvoice(): Promise<void> {
+    fireEvent.pointerDown(await screen.findByRole('option', { name: /Quarterly invoice/ }));
+
+    await screen.findByText('A drawn message.');
+}
+
+function theInvoiceRow(): HTMLElement {
+    return within(screen.getByRole('listbox', { name: 'Messages' })).getByRole('option', {
+        name: /Quarterly invoice/,
+    });
+}

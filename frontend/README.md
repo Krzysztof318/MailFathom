@@ -412,8 +412,12 @@ The **back gesture** is answered by the same frame, and on all three heads by on
 records what stands over the screen as each surface opens, `src/shellOperations/backNavigation.ts` keeps one history
 entry per layer standing, and `src/App.tsx` unwinds them topmost first before the address moves at all. So a press closes a
 drawer, a dialog, a menu, or the message drawn in front of the list, one layer at a time, and only a screen with
-nothing over it lets the gesture leave the client. Taking the navigation to another destination closes every one of
-them instead of leaving a layer behind. Android reaches that through the committed `MainActivity`, which turns
+nothing over it lets the gesture leave the client. What a press unwinds is the space in front of it, so the message
+the Mail space holds is counted while that space is on the screen and not while another one is. Taking the navigation
+to another destination closes every layer standing over the space being left, and the surfaces standing over its
+reading column with them — but not what that column is drawing: the Mail space is stood aside rather than taken down,
+so coming back to it finds the folder, the pages read, the place scrolled to and the message open exactly as they were
+left. Android reaches that through the committed `MainActivity`, which turns
 `handleBackNavigation` back on so the gesture arrives in the page as `popstate` exactly as it does in a browser —
 which is why no module here asks which head it is on.
 
