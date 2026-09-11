@@ -394,7 +394,7 @@ signalBackplane:
   enabled: true
 ```
 
-That renders a single-replica Garnet Deployment with no volume, a ClusterIP Service, and the three keys the application
+That renders a single-replica Garnet Deployment on no claim, a ClusterIP Service, and the three keys the application
 reads. Point it at an endpoint you already operate instead — Redis, Valkey, or a managed cache — with
 `signalBackplane.garnet.deploy: false`, and nothing of a workload is rendered while the application is configured
 identically. The difference between the two is what is deployed and nothing the application reads, because the
@@ -414,7 +414,9 @@ password. That is not an omission: MailFathom reads one connection string, it ca
 templates no credential and creates no Secret — for the reason [what you supply](#what-you-supply) gives about the
 data-encryption key, which is that a Helm-generated value is replaced on any upgrade not guarded by `lookup`, and
 `lookup` returns nothing under `helm template`, under a dry run, and under Argo CD. For a Garnet the chart runs, what to
-write is the Service it rendered and the password you gave the server:
+write is the Service it rendered and the password you gave the server. That Service is the release's full name with
+`-garnet` appended, so the example below reads `mailfathom-garnet` because the release is installed as `mailfathom`; a
+release named `prod` gets `prod-mailfathom-garnet` instead, and the install notes print whichever it is:
 
 ```bash
 kubectl --namespace mailfathom create secret generic mailfathom-secrets \
@@ -440,7 +442,8 @@ does — which is why this is a few minutes to schedule rather than an outage.
 **Anyone who can subscribe on that endpoint reads every signal of every user of this deployment** — account and folder
 aliases, stored identities, flags, and a raised notification's two lines. No subject, address, body fragment, or
 attachment name crosses it, and nothing rests there at all: pub/sub delivers to whoever is subscribed at that moment and
-keeps nothing, which is why the Garnet the chart runs has no volume and why no retention, export, or erasure obligation
+keeps nothing, which is why the Garnet the chart runs is given no claim and nothing that outlives its pod — its two
+volumes are memory-backed scratch the runtime needs — and why no retention, export, or erasure obligation
 reaches it. What does reach it is confidentiality, so the endpoint belongs inside the same boundary as the database. An
 endpoint somebody else operates owes four things, and the connection string is where the first two are written:
 
@@ -987,9 +990,10 @@ the others.
 Some values documents are supposed to be refused rather than rendered, and a rendering cannot record that: a
 combination the chart accepts by accident produces a plausible manifest and no golden file shows anything. Those live
 under `ci/refusals/`, each carrying on a `# refuses:` line the wording its refusal has to contain, and the same script
-requires the chart to refuse each one and to name the setting while doing so. Two are there today, and they are one
-refusal reached two ways — more than one replica serving the page, and more than one replica serving the client surface
-from a configuration file — because what the chart reads to decide that is two different values.
+requires the chart to refuse each one and to name the setting while doing so. Three are there today, and they are one
+refusal reached three ways — more than one replica serving the page, more than one serving the client surface from a
+configuration file, and more than one serving it from the environment block — because what the chart reads to decide
+that is three different values, and a refusal walkable around by configuring the same thing another way is not one.
 
 The `Helm chart` job of `CI` runs the same script on every pull request that touches `deploy/helm/`, which is where a
 chart that stopped rendering is now found. The release run lints and renders again before it publishes anything, so a

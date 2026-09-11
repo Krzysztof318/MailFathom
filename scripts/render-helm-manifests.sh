@@ -214,7 +214,17 @@ done < <(find "$golden_directory" -maxdepth 1 -name '*.yaml' -type f | sort)
 # The expected wording lives in the document rather than here, on the `# refuses:` line, so a refusal and the reason it
 # is expected sit in one file. Matching it is what separates a chart that refused this document from one that refuses
 # every document: without it, a typo in the values would pass as a refusal.
-while IFS= read -r refusal_document; do
+#
+# Read as an array rather than streamed, for the reason the golden set is: a directory that went missing or documents
+# renamed off the glob would otherwise iterate zero times and report a clean run with no refusal exercised at all.
+mapfile -t refusal_documents < <(find "$refusals_directory" -maxdepth 1 -name '*-values.yaml' -type f | sort)
+
+if [[ "${#refusal_documents[@]}" -eq 0 ]]; then
+  printf 'No values document under %s matches *-values.yaml, so no refusal is exercised.\n' "$refusals_directory" >&2
+  exit 1
+fi
+
+for refusal_document in "${refusal_documents[@]}"; do
   printf '\n--- %s ---\n' "$refusal_document"
 
   expected_refusal="$(sed -n 's/^# refuses: //p' "$refusal_document" | head -1)"
@@ -244,7 +254,7 @@ while IFS= read -r refusal_document; do
   fi
 
   printf 'The chart refuses %s, naming the setting.\n' "$refusal_document"
-done < <(find "$refusals_directory" -maxdepth 1 -name '*-values.yaml' -type f | sort)
+done
 
 if [[ "$differing_charts" -ne 0 ]]; then
   exit 1

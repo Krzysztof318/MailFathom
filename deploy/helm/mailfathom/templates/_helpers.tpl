@@ -285,14 +285,16 @@ being found from a mailbox that stopped updating.
 
 Whether the client surface is served is read from three places rather than one, because `client.enabled` is the page
 and the surface is a configuration key the chart does not otherwise look inside. A file that switches `ClientEndpoint`
-on counts, and so does the environment block, which outranks every file. A file that is not a JSON object is skipped
-rather than failing the render: `config.files` is the operator's text, and a refusal about the backplane is the wrong
-place to report a malformed one.
+on counts, and so does the environment block, which outranks every file. Both are compared as the configuration binder
+compares them rather than for emptiness, because `"Enabled": "false"` is a spelling .NET binds to false while a Go
+template reads any non-empty string as true. A file that is not a JSON object is skipped rather than failing the
+render: `config.files` is the operator's text, and a refusal about the backplane is the wrong place to report a
+malformed one.
 */}}
 {{- $clientSurfaceServed := .Values.client.enabled -}}
 {{- range $name, $contents := .Values.config.files -}}
   {{- $document := fromJson $contents -}}
-  {{- if and (kindIs "map" $document) (dig "ClientEndpoint" "Enabled" false $document) -}}
+  {{- if and (kindIs "map" $document) (eq (lower (toString (dig "ClientEndpoint" "Enabled" false $document))) "true") -}}
     {{- $clientSurfaceServed = true -}}
   {{- end -}}
 {{- end -}}

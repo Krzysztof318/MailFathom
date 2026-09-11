@@ -619,9 +619,9 @@
               },
               {
                 "not": {
-                  "pattern": "^(ConnectionStrings__|Persistence__Password__|ConfigurationSources__|HealthEndpoints__|ASPNETCORE_|SensitiveContent__Pii__Enabled$|SensitiveContent__PersonalDataAnalyzer__|ClientEndpoint__Application__Enabled$|ContentStorage__Backend$|ContentStorage__ObjectStorage__(Endpoint|Bucket|KeyPrefix|Region|UsePathStyleAddressing|AccessKeyId__|SecretAccessKey__|TrustAnchor__))"
+                  "pattern": "^(ConnectionStrings__|Persistence__Password__|ConfigurationSources__|HealthEndpoints__|ASPNETCORE_|SensitiveContent__Pii__Enabled$|SensitiveContent__PersonalDataAnalyzer__|ClientEndpoint__Application__Enabled$|SignalBackplane__ConnectionString__|SignalBackplane__ChannelPrefix$|ContentStorage__Backend$|ContentStorage__ObjectStorage__(Endpoint|Bucket|KeyPrefix|Region|UsePathStyleAddressing|AccessKeyId__|SecretAccessKey__|TrustAnchor__))"
                 },
-                "description": "These settings are the chart's, not an override's. The environment block outranks every mounted file, so re-declaring one of them here would silently replace what the templates emit \u2014 and `ConnectionStrings__mailfathom` is the one that matters: the conventional Npgsql form carries `Password=`, which would put a credential into the rendered Deployment and bypass the mounted-file path entirely. `HealthEndpoints__` is the chart's for a different reason: `probes.port` sets both the container port the kubelet dials and the port the host binds, so moving one of them here would leave all three probes dialling a port nothing listens on and the pod never becoming ready. The personal-data switch and its analyzer block are the chart's for a third: `personalDataScanning` decides whether an analyzer workload exists at all, so an address stated here would send mail content somewhere else while the pod the release installed sat idle. Whether the client is served is the chart's for a fourth: `client.enabled` writes that switch beside the clear-text permission the application requires, and a switch stated here would turn the page on without it and refuse the start. Which store holds a payload is the chart's for a fifth: `contentStorage` writes the backend together with the endpoint it needs and the credential references into the mounted Secret, so a backend selected here alone would point mail at a bucket the chart named nothing about \u2014 the timeouts, the reclamation sweep, and the bounds on moving what is already stored are deliberately not among these, because they are tuning rather than deployment shape and belong in `config.files`. `ClientEndpoint__Application__AllowClearText` is deliberately not one of these either \u2014 it is the one an operator whose TLS terminates somewhere the chart cannot read has to state for themselves. Change `database`, `config`, `secrets`, `probes`, `personalDataScanning`, `client`, and `contentStorage` instead \u2014 the category list and its suppressions are ordinary configuration and belong in `config.files`."
+                "description": "These settings are the chart's, not an override's. The environment block outranks every mounted file, so re-declaring one of them here would silently replace what the templates emit \u2014 and `ConnectionStrings__mailfathom` is the one that matters: the conventional Npgsql form carries `Password=`, which would put a credential into the rendered Deployment and bypass the mounted-file path entirely. `HealthEndpoints__` is the chart's for a different reason: `probes.port` sets both the container port the kubelet dials and the port the host binds, so moving one of them here would leave all three probes dialling a port nothing listens on and the pod never becoming ready. The personal-data switch and its analyzer block are the chart's for a third: `personalDataScanning` decides whether an analyzer workload exists at all, so an address stated here would send mail content somewhere else while the pod the release installed sat idle. Whether the client is served is the chart's for a fourth: `client.enabled` writes that switch beside the clear-text permission the application requires, and a switch stated here would turn the page on without it and refuse the start. How replicas reach the backplane is the chart's for a fifth: `signalBackplane` writes the connection-string reference and the channel prefix together with the endpoint it renders or points at, so a prefix stated here would put the deployment on a channel that disagrees with the values document, the install notes, and the documentation, and a connection-string reference stated here would read a key the Secret was never given — `SignalBackplane__ChannelPrefix` is the whole of what is blocked, because everything else the section takes is the connection string the chart already resolves. Which store holds a payload is the chart's for a sixth: `contentStorage` writes the backend together with the endpoint it needs and the credential references into the mounted Secret, so a backend selected here alone would point mail at a bucket the chart named nothing about \u2014 the timeouts, the reclamation sweep, and the bounds on moving what is already stored are deliberately not among these, because they are tuning rather than deployment shape and belong in `config.files`. `ClientEndpoint__Application__AllowClearText` is deliberately not one of these either \u2014 it is the one an operator whose TLS terminates somewhere the chart cannot read has to state for themselves. Change `database`, `config`, `secrets`, `probes`, `personalDataScanning`, `client`, and `contentStorage` instead \u2014 the category list and its suppressions are ordinary configuration and belong in `config.files`."
               }
             ]
           },
@@ -673,8 +673,7 @@
         },
         "channelPrefix": {
           "type": "string",
-          "minLength": 1,
-          "description": "What every channel this deployment publishes to and subscribes to begins with. Two MailFathom deployments sharing one RESP endpoint at the same prefix receive each other's statements, so a shared endpoint needs one of its own."
+          "description": "What every channel this deployment publishes to and subscribes to begins with. Two MailFathom deployments sharing one RESP endpoint at the same prefix receive each other's statements, so a shared endpoint needs one of its own. An empty value is admitted here, as connectionStringSecretKey's pattern admits one, so that the chart's own refusal is what an operator who cleared it reads rather than a schema message that cannot say why leaving it unset is the right move."
         },
         "garnet": {
           "type": "object",
@@ -756,14 +755,40 @@
             "podSecurityContext": {
               "type": "object",
               "required": [
-                "runAsNonRoot"
+                "runAsNonRoot",
+                "seccompProfile"
               ],
               "properties": {
                 "runAsNonRoot": {
                   "const": true,
                   "description": "The image declares an unprivileged account and the server binds its port as it, so nothing here has to begin as root. Restated by the chart so the cluster enforces it rather than trusting the image's own USER, and kept from being switched off because leaving the restricted Pod Security Standard is not a values decision."
+                },
+                "runAsUser": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "runAsGroup": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "seccompProfile": {
+                  "type": "object",
+                  "required": [
+                    "type"
+                  ],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "RuntimeDefault",
+                        "Localhost"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
                 }
-              }
+              },
+              "additionalProperties": false
             },
             "containerSecurityContext": {
               "type": "object",
@@ -791,10 +816,16 @@
                       "contains": {
                         "const": "ALL"
                       }
+                    },
+                    "add": {
+                      "type": "array",
+                      "maxItems": 0
                     }
-                  }
+                  },
+                  "additionalProperties": false
                 }
-              }
+              },
+              "additionalProperties": false
             },
             "nodeSelector": {
               "type": "object"

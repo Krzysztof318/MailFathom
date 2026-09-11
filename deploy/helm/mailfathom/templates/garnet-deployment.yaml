@@ -19,6 +19,14 @@ spec:
     is a component to operate rather than a replica count — turn `deploy` off and point the connection string at one.
   */}}
   replicas: 1
+  {{- /*
+    Recreate rather than the default RollingUpdate, which at one replica surges a second pod to ready before the first
+    terminates. Both would be endpoints of the one Service for that window, which is exactly the split the paragraph
+    above says must never exist; a moment of no endpoint costs signals that are already best-effort, and a moment of
+    two costs signals that were delivered to the wrong half of the replicas.
+  */}}
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "mailfathom.backplaneSelectorLabels" . | nindent 6 }}

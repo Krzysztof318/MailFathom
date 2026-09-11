@@ -45,8 +45,9 @@ database:
 
 **And a signal backplane, once you run more than one replica.** A client's live updates arrive over one connection held
 by one replica, and a signal raised by whichever replica synchronized the account has to reach it. `signalBackplane`
-either runs a [Garnet](https://github.com/microsoft/garnet) Deployment beside MailFathom — one replica, no volume,
-because pub/sub keeps nothing — or is pointed at a Redis-compatible endpoint you already operate with
+either runs a [Garnet](https://github.com/microsoft/garnet) Deployment beside MailFathom — one replica on no claim and
+nothing that outlives the pod, because pub/sub keeps nothing — or is pointed at a Redis-compatible endpoint you already
+operate with
 `garnet.deploy: false`. **The chart refuses to render `replicaCount` above 1 with the client surface served and no
 backplane configured**, because that combination installs, starts, and answers every request while its clients are
 never told anything. The connection string is a key inside the Secret above in both shapes, beside the bare password a

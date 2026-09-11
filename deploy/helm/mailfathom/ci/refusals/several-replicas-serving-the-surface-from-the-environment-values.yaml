@@ -1,0 +1,28 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# refuses: signalBackplane.enabled is false while replicaCount is 2
+
+# The third and last way a deployment turns the client surface on, and the one that outranks the other two: the
+# environment block is layered over every mounted file, so an operator who left `client.enabled` off and wrote no
+# configuration file still serves the surface by stating this single entry. Reading `client.enabled` and the files
+# without reading this would leave the refusal walkable around by configuring the same thing a third way, which is why
+# each of the three is a document of its own rather than one document asserting all three at once.
+image:
+  repository: example/mailfathom
+  tag: 0.1.0-verification
+  allowVersionMismatch: true
+
+secrets:
+  existingSecret: mailfathom-secrets
+
+database:
+  deploy:
+    superuserPasswordSecret: mailfathom-postgres-superuser
+
+replicaCount: 2
+
+config:
+  extraEnvironment:
+    ClientEndpoint__Enabled: "true"

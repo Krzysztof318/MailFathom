@@ -399,7 +399,8 @@ client:
 #
 # Turning it on has two shapes, and `garnet.deploy` below is which one:
 #
-#   * **The chart runs Garnet**, as one replica with no volume, because pub/sub keeps nothing. This is the default once
+#   * **The chart runs Garnet**, as one replica on no claim and nothing that outlives the pod, because pub/sub keeps
+#     nothing. Its two volumes are memory-backed scratch the runtime needs. This is the default once
 #     the block is on, exactly as the analyzer and the spam scanner are deployed by default once theirs are.
 #   * **You point it at a RESP endpoint you already operate** — Redis, Valkey, or a managed cache — so you run one such
 #     service rather than two.
@@ -407,7 +408,8 @@ client:
 # Either way the connection string is yours to write, as a key inside `secrets.existingSecret`, and that is deliberate
 # rather than an omission: MailFathom reads one connection string, it carries the password, and this chart templates no
 # credential. For a Garnet the chart runs, what to write is the Service it renders and the password you gave it —
-# `<release>-garnet:6379,password=…` — which the install notes print for you.
+# the release's full name with `-garnet` appended, which is `<release>-mailfathom-garnet` unless the release name
+# already contains `mailfathom`, and then `:6379,password=…`. The install notes print the whole string for you.
 #
 # **Anyone who can subscribe on that endpoint reads every signal of every user of this deployment**, so it belongs
 # inside the same confidentiality boundary as the database. An endpoint somebody else operates owes `ssl=true` in the

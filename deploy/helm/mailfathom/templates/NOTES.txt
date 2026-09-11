@@ -73,7 +73,8 @@ Two stores now, so a pg_dump is no longer a whole backup: back the bucket up bes
 database first, or the reclamation sweep is entitled to delete objects nothing points at yet.
 {{ end }}
 {{ if and .Values.signalBackplane.enabled .Values.signalBackplane.garnet.deploy }}
-The signal backplane is this release's own: one Garnet, with no volume, because pub/sub keeps nothing. It is started
+The signal backplane is this release's own: one Garnet, on no claim and keeping nothing past the pod, because pub/sub
+keeps nothing. It is started
 with the password in {{ .Values.secrets.existingSecret }} under {{ .Values.signalBackplane.garnet.passwordSecretKey }},
 and MailFathom reaches it with the connection string in the same Secret under
 {{ .Values.signalBackplane.connectionStringSecretKey }} — which names this release's own Service and carries that same

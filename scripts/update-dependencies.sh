@@ -480,8 +480,9 @@ survey_action_references() {
 }
 
 # Every image reference this repository pins, read from the places that write one whole: the Dockerfile's `FROM` lines,
-# the Compose defaults, and the AppHost's container calls. The Helm values and the Quadlet unit sources carry the same
-# references split across keys; the count of files naming each one is what says how far a move reaches.
+# the Compose defaults, the AppHost's container calls, and the chart's own digest pins, which are the one family the
+# Helm values state completely enough to reassemble. Every other reference in those values and in the Quadlet unit
+# sources is split across keys; the count of files naming each one is what says how far a move reaches.
 collect_image_references() {
   # The Dockerfile names its two bases in build arguments and its `FROM` lines then expand them, which is what lets a
   # build override a base without editing the file. The argument default is the pin; the `FROM` line is not.
