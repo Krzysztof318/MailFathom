@@ -339,6 +339,22 @@
        this file that removes every animation. */
     --animate-spin: spin 1.2s linear infinite;
 
+    /* How a control says that what it asked for is under way without turning anything, which is the design project's
+       pulse: the symbol dims and brightens once a second. The rail's refresh is the surface drawing it. Removed under
+       `prefers-reduced-motion` by the same rule as the spin, which leaves the control's accent colours saying it. */
+    --animate-working: working 1s ease-in-out infinite;
+
+    @keyframes working {
+        0%,
+        100% {
+            opacity: 0.35;
+        }
+
+        50% {
+            opacity: 1;
+        }
+    }
+
     /* What a toast does beyond that: it arrives from the edge it is stacked against, it leaves the same way, and the
        bar along its bottom edge empties over its lifetime. All three are the design project's, and they are declared
        here for the reason every other duration is — a component writing one of its own is the same drift as one

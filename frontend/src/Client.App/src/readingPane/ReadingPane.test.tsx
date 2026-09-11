@@ -5,13 +5,7 @@
 import { useEffect } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type {
-    ClientRequest,
-    ClientResponse,
-    ClientSession,
-    ClientSignal,
-    MailFathomTransport,
-} from '@mailfathom/client-backend';
+import type { ClientRequest, ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { AttachmentExchangeContext, type AttachmentExchange } from '../deployment/attachmentExchange';
 import { OpenAttachmentContext, type OpenedAttachment } from '../workspace/openAttachment';
 import { LocalizationProvider } from '../localization/Localization';
@@ -31,6 +25,7 @@ import {
     SignalledChangesContext,
     nothingSignalled,
     type SignalListener,
+    type SignalledChange,
     type SignalledChanges,
 } from '../signals/signalledChanges';
 import { ReadingPane } from './ReadingPane';
@@ -191,11 +186,12 @@ function drawing(
 }
 
 /** A deployment with a channel open, and the handle a test says something over it with. */
-function deploymentSaying(): { changes: SignalledChanges; say: (signal: ClientSignal) => void } {
+function deploymentSaying(): { changes: SignalledChanges; say: (signal: SignalledChange) => void } {
     const listeners = new Set<SignalListener>();
 
     return {
         changes: {
+            refresh: () => undefined,
             listen: (listener) => {
                 listeners.add(listener);
 
@@ -597,6 +593,58 @@ describe('ReadingPane against a deployment that says what changed', () => {
         await waitFor(() => {
             expect(asked.filter((request) => !request.path.includes('/body')).length).toBe(before + 1);
         });
+    });
+
+    it('reads the message again on a refresh', async () => {
+        // Arrange
+        asked.length = 0;
+        const signalling = deploymentSaying();
+        drawing(deploymentDescribing(), messageId, true, deliversNothing, nothingMarkedRead, signalling.changes);
+        await screen.findByText('Quarterly invoice');
+        const before = asked.filter((request) => !request.path.includes('/body')).length;
+
+        // Act
+        act(() => {
+            signalling.say({ kind: 'refresh' });
+        });
+
+        // Assert
+        await waitFor(() => {
+            expect(asked.filter((request) => !request.path.includes('/body')).length).toBe(before + 1);
+        });
+    });
+
+    it('keeps the message on the screen when a refresh is not answered', async () => {
+        // Arrange
+        asked.length = 0;
+        const signalling = deploymentSaying();
+        const answering = deploymentDescribing();
+        let described = 0;
+        const answersOnce: MailFathomTransport = (request) => {
+            if (request.path.includes('/body')) {
+                return answering(request);
+            }
+
+            described += 1;
+
+            return described === 1 ? answering(request) : Promise.resolve({ status: 503, body: '', headers: {} });
+        };
+        drawing(answersOnce, messageId, true, deliversNothing, nothingMarkedRead, signalling.changes);
+        await screen.findByText('Quarterly invoice');
+
+        // Act
+        act(() => {
+            signalling.say({ kind: 'refresh' });
+        });
+        await waitFor(() => {
+            expect(described).toBe(2);
+        });
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        // Assert
+        expect(screen.getByText('Quarterly invoice')).toBeDefined();
     });
 
     it('applies a stated flag to the message it is drawing rather than reading it again', async () => {

@@ -33,6 +33,12 @@ export interface TimelineSlot {
     /** The rows, or `null` where they have been dropped and the cursor above is how they come back. */
     readonly emails: readonly MailTimelineEntry[] | null;
 
+    /**
+     * Whether the rows held here may no longer be what the deployment holds, because a refresh asked for everything to
+     * be read again. They stay drawn meanwhile, and the page is read again from its own cursor while it is on the screen.
+     */
+    readonly stale: boolean;
+
     readonly nextCursor: string | null;
     readonly previousCursor: string | null;
 }
@@ -175,14 +181,17 @@ export interface TimelineRead {
     readonly refilling: number | null;
 }
 
-/** The page a read the list has not made yet would ask for, or `null` where what is on the screen is all held. */
+/**
+ * The page a read the list has not made yet would ask for, or `null` where what is on the screen is all held and none of
+ * it is waiting to be read again.
+ */
 export function wantedFor(held: HeldTimeline, firstRow: number, lastRow: number): TimelineRead | null {
     let passed = 0;
 
     for (const [at, slot] of held.slots.entries()) {
         const beyond = passed + slot.rowCount;
 
-        if (slot.emails === null && passed <= lastRow && beyond > firstRow) {
+        if ((slot.emails === null || slot.stale) && passed <= lastRow && beyond > firstRow) {
             return { cursor: slot.askedWith, direction: slot.readAs, refilling: at };
         }
 
@@ -211,6 +220,7 @@ function slotFor(page: MailTimelinePage, read: TimelineRead): TimelineSlot {
         emails: page.emails,
         nextCursor: page.nextCursor,
         previousCursor: page.previousCursor,
+        stale: false,
     };
 }
 
@@ -256,6 +266,48 @@ export function changeNoticed(held: HeldTimeline, storedEmailIds: readonly strin
     }
 
     return { slots: held.slots.map((slot) => (holdsNamed(slot) ? { ...slot, emails: null } : slot)) };
+}
+
+/**
+ * What the list knows once a refresh asked for everything it holds to be read again.
+ *
+ * Every page holding rows is marked rather than dropped, which is what separates a refresh from a signal naming mail:
+ * the rows stay drawn while their page is read again, so a reader sees rows change rather than the list turning into
+ * its own skeleton every five minutes. What is on the screen is read again now and what is not when the reader reaches
+ * it, on the rule `arrivalNoticed` states.
+ *
+ * @param held What the list knows now.
+ * @returns What the list knows, and the list itself where it holds no rows.
+ */
+export function refreshAsked(held: HeldTimeline): HeldTimeline {
+    return held.slots.some((slot) => slot.emails !== null)
+        ? { slots: held.slots.map((slot) => (slot.emails === null ? slot : { ...slot, stale: true })) }
+        : held;
+}
+
+/**
+ * What the list knows once reading one of its stale pages again was not answered.
+ *
+ * The rows stay where they are and the page stops being asked for: they are still the truest thing the list has, and
+ * the next refresh asks again. Asking again at once would be a request per render against a deployment that is not
+ * answering.
+ *
+ * @param held What the list knows now.
+ * @param slot The page the read was refilling.
+ * @returns What the list knows.
+ */
+export function refreshUnanswered(held: HeldTimeline, slot: number): HeldTimeline {
+    return { slots: held.slots.map((standing, at) => (at === slot ? { ...standing, stale: false } : standing)) };
+}
+
+/**
+ * Whether a read refills a page whose rows are still drawn, which is the one read whose failure takes nothing off the
+ * screen: only a stale page is read again while it holds its rows.
+ */
+export function refillsHeldRows(held: HeldTimeline, read: TimelineRead | null): boolean {
+    const refilling = read?.refilling ?? null;
+
+    return refilling !== null && (held.slots[refilling]?.emails ?? null) !== null;
 }
 
 /**

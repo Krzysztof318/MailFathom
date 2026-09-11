@@ -15,6 +15,9 @@ import {
     nothingHeld,
     pagesKeptEitherSide,
     positionOfRow,
+    refillsHeldRows,
+    refreshAsked,
+    refreshUnanswered,
     rowAt,
     rowCountOf,
     rowOfSlot,
@@ -325,6 +328,72 @@ describe('arrivalNoticed', () => {
 
     it('leaves a list that has read nothing alone', () => {
         expect(arrivalNoticed(nothingHeld)).toBe(nothingHeld);
+    });
+});
+
+describe('refreshAsked', () => {
+    it('marks every page it holds to be read again, keeping each of its rows drawn', () => {
+        const held = refreshAsked(readForward(3));
+
+        expect(held.slots.every((slot) => slot.stale)).toBe(true);
+        expect(heldRows(held)).toStrictEqual(heldRows(readForward(3)));
+    });
+
+    it('asks for the page on the screen again, through the cursor it was read under', () => {
+        expect(wantedFor(refreshAsked(readForward(3)), 4, 7)).toStrictEqual({
+            cursor: 'after-4',
+            direction: 'forward',
+            refilling: 1,
+        });
+    });
+
+    it('stops asking once the page on the screen has answered, leaving the others for when they are reached', () => {
+        const refilling: TimelineRead = { cursor: 'after-4', direction: 'forward', refilling: 1 };
+        const held = answered(refreshAsked(readForward(3)), page(4), refilling);
+
+        expect(held.slots[1]?.stale).toBe(false);
+        expect(wantedFor(held, 4, 7)).toBeNull();
+        expect(wantedFor(held, 8, 9)?.refilling).toBe(2);
+    });
+
+    it('leaves a page it had already dropped as it was, which the list reads again once it is reached anyway', () => {
+        const held = refreshAsked(trimmedAround(readForward(6), 20, 23));
+
+        expect(held.slots[0]?.emails).toBeNull();
+        expect(held.slots[0]?.stale).toBe(false);
+    });
+
+    it('leaves a list that has read nothing alone', () => {
+        expect(refreshAsked(nothingHeld)).toBe(nothingHeld);
+    });
+});
+
+describe('refreshUnanswered', () => {
+    it('stops asking for a page the deployment did not answer, and keeps its rows', () => {
+        const held = refreshUnanswered(refreshAsked(readForward(1)), 0);
+
+        expect(held.slots[0]?.stale).toBe(false);
+        expect(heldRows(held)).toStrictEqual(heldRows(readForward(1)));
+        expect(wantedFor(held, 0, 3)?.refilling).toBeNull();
+    });
+});
+
+describe('refillsHeldRows', () => {
+    it('answers that a read of a page still drawn is one the reader is looking through', () => {
+        const held = refreshAsked(readForward(2));
+
+        expect(refillsHeldRows(held, wantedFor(held, 0, 3))).toBe(true);
+    });
+
+    it('answers that a read of a dropped page is not, since nothing of it is drawn', () => {
+        const held = trimmedAround(readForward(6), 20, 23);
+
+        expect(refillsHeldRows(held, wantedFor(held, 0, 3))).toBe(false);
+    });
+
+    it('answers that a read extending the list is not, and neither is no read at all', () => {
+        expect(refillsHeldRows(readForward(2), extending('after-8'))).toBe(false);
+        expect(refillsHeldRows(readForward(2), null)).toBe(false);
     });
 });
 

@@ -5,13 +5,7 @@
 import type { ReactElement } from 'react';
 import { act, fireEvent, render, screen, waitFor, within, type RenderResult } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type {
-    ClientRequest,
-    ClientSession,
-    ClientSignal,
-    MailAccount,
-    MailFathomTransport,
-} from '@mailfathom/client-backend';
+import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
 import { ComposingContext, type Composing } from '../composer/useComposing';
 import { swipeDistance } from '../controls/swipeAcross';
 import { MailboxActsContext, nothingActed, type MailboxActs } from '../mailboxActs/useMailboxActs';
@@ -20,6 +14,7 @@ import {
     SignalledChangesContext,
     nothingSignalled,
     type SignalListener,
+    type SignalledChange,
     type SignalledChanges,
 } from '../signals/signalledChanges';
 import { everything, type MailScope } from '../workspace/mailScope';
@@ -200,11 +195,12 @@ interface Drawn {
 }
 
 /** A deployment a test speaks for, so what a signal does to the list is asserted rather than waited for. */
-function deploymentSaying(): { changes: SignalledChanges; say: (signal: ClientSignal) => void } {
+function deploymentSaying(): { changes: SignalledChanges; say: (signal: SignalledChange) => void } {
     const listeners = new Set<SignalListener>();
 
     return {
         changes: {
+            refresh: () => undefined,
             listen: (listener) => {
                 listeners.add(listener);
 
@@ -906,6 +902,72 @@ describe('MessageList', () => {
 
         expect((await rows()).length).toBe(drawn);
         expect(screen.queryByText('Reading your mail…')).toBeNull();
+    });
+
+    it('reads the page on the screen again on a refresh, drawing its rows the whole time', async () => {
+        const deployment = deploymentSaying();
+        let reads = 0;
+
+        renderList(
+            () => {
+                reads += 1;
+
+                return reads === 1
+                    ? Promise.resolve({ status: 200, body: wholeFolder, headers: {} })
+                    : new Promise(() => undefined);
+            },
+            { changes: deployment.changes },
+        );
+
+        const drawn = (await rows()).length;
+
+        act(() => {
+            deployment.say({ kind: 'refresh' });
+        });
+
+        await waitFor(() => {
+            expect(reads).toBe(2);
+        });
+
+        // The rows themselves rather than their number: a page dropped and read again would still count as many rows,
+        // drawn as the skeleton of a page arriving.
+        expect((await rows()).length).toBe(drawn);
+        expect(row(0)).toBeDefined();
+    });
+
+    it('keeps its rows and says nothing when a refresh is not answered', async () => {
+        const deployment = deploymentSaying();
+        let reads = 0;
+
+        renderList(
+            () => {
+                reads += 1;
+
+                return Promise.resolve(
+                    reads === 1
+                        ? { status: 200, body: wholeFolder, headers: {} }
+                        : { status: 503, body: '', headers: {} },
+                );
+            },
+            { changes: deployment.changes },
+        );
+
+        await rows();
+
+        act(() => {
+            deployment.say({ kind: 'refresh' });
+        });
+
+        await waitFor(() => {
+            expect(reads).toBe(2);
+        });
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(row(0)).toBeDefined();
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(reads).toBe(2);
     });
 
     it('reads again for mail the deployment named as changed', async () => {

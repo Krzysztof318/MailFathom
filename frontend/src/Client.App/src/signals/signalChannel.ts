@@ -20,7 +20,7 @@ import { signalMethod, type MailFathomSignalChannel, type SignalStreamSchedule }
  * which is a second request carrying the same ticket — and a ticket opens exactly one connection, so the negotiation
  * would spend it and the socket that followed would be refused. Skipping it is permitted precisely because one
  * transport is named, and a deployment behind a proxy that will not pass the upgrade therefore fails to connect rather
- * than falling back to long polling: the client reads on its own interval, which is what it does anyway.
+ * than falling back to long polling: the client refreshes on its own interval, which is what it does anyway.
  *
  * Logging is off because the deployment already records what it refused, and a client that logged its own connection
  * attempts would write the address it presented a ticket to into a browser console.
@@ -44,11 +44,32 @@ export const openSignalChannel: MailFathomSignalChannel = async (opening) => {
     return { close: () => connection.stop() };
 };
 
-/** How the stream waits, which is the browser's own timer and the browser's own source of a spread. */
+/**
+ * How the stream waits, which is the browser's own timer and the browser's own source of a spread.
+ *
+ * A wait also ends the moment the browser gives a reason to think the deployment is reachable again — its network
+ * coming back, or the window coming back to the front — so a client somebody returns to tries at once rather than
+ * sitting out the rest of a thirty-second wait it began while nobody was looking.
+ */
 export const browserSchedule: SignalStreamSchedule = {
     wait: (milliseconds) =>
         new Promise((resolve) => {
-            window.setTimeout(resolve, milliseconds);
+            function over(): void {
+                window.clearTimeout(waiting);
+                window.removeEventListener('online', over);
+                document.removeEventListener('visibilitychange', returned);
+                resolve();
+            }
+
+            function returned(): void {
+                if (document.visibilityState === 'visible') {
+                    over();
+                }
+            }
+
+            const waiting = window.setTimeout(over, milliseconds);
+            window.addEventListener('online', over);
+            document.addEventListener('visibilitychange', returned);
         }),
     draw: () => Math.random(),
 };

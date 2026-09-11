@@ -77,13 +77,6 @@ export interface NotificationCentre {
     readonly show: () => void;
     readonly hide: () => void;
 
-    /**
-     * Reads what has happened again, whether or not the panel is open. It is what the rail's refresh asks of the
-     * centre: the count is polled on its own and a page is read when somebody looks, so a reader who wants to know
-     * now has nothing to press without it.
-     */
-    readonly readAgain: () => void;
-
     /** Puts one notification into the read state stated, which is what the row's own control does. */
     readonly markRead: (ids: readonly string[], read: boolean) => void;
 
@@ -174,12 +167,6 @@ export function useNotificationCentre(
         setFailure(null);
     }
 
-    // Reading the count as this effect is currently able to, held so that asking for one by hand does not have to
-    // restart the interval and the subscription that live beside it. It is written by the effect rather than declared
-    // outside it, because what a read needs — the session, the transport, the controller that abandons it — is the
-    // effect's own and none of it is this hook's for as long as this hook exists.
-    const countNow = useRef<(() => void) | null>(null);
-
     useEffect(() => {
         if (session === null || !online) {
             return;
@@ -215,10 +202,6 @@ export function useNotificationCentre(
             }
         }
 
-        countNow.current = () => {
-            void count(false);
-        };
-
         void count(true);
 
         const polling = window.setInterval(() => {
@@ -243,10 +226,19 @@ export function useNotificationCentre(
             if (signal.kind === 'notification.raised') {
                 void count(true);
             }
+
+            // A refresh asks for the page and for the count, and for the count as a count alone: the page is asked for
+            // here already, so a rise it finds must not ask for it a second time — the second answer would arrive
+            // against a centre the first had filled, and an arrival would be drawn as though it had always been there.
+            // The count is read rather than left to the interval because the badge is what a reader who does not open
+            // the panel is looking at.
+            if (signal.kind === 'refresh') {
+                setAsked((token) => token + 1);
+                void count(false);
+            }
         });
 
         return () => {
-            countNow.current = null;
             attempted.abort();
             window.clearInterval(polling);
             document.removeEventListener('visibilitychange', returned);
@@ -262,17 +254,6 @@ export function useNotificationCentre(
 
     const hide = useCallback((): void => {
         setShown(false);
-    }, []);
-
-    // The same token a rise in the count bumps, so asking for a page by hand and something having arrived stay one
-    // mechanism rather than two reads racing on the same route. The count is read beside it rather than left to the
-    // interval, because the badge is what a reader who does not open the panel is looking at — and it is the read the
-    // effect above is holding rather than a second one composed here, so a press cannot outlive the session it was
-    // made under. It is asked for as a count alone, so a press that finds notifications waiting costs the one page
-    // read bumped here rather than a second one the rise would otherwise ask for.
-    const readAgain = useCallback((): void => {
-        setAsked((token) => token + 1);
-        countNow.current?.();
     }, []);
 
     // Coming back through the notification the operating system showed is the same act as reaching for the bell, so it
@@ -537,7 +518,6 @@ export function useNotificationCentre(
         failure,
         show,
         hide,
-        readAgain,
         markRead,
         markAllRead,
         remove,

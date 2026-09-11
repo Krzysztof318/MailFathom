@@ -55,7 +55,6 @@ describe('ListedMailProvider', () => {
             selectAll: everything,
             takeFocus: () => undefined,
             stand: () => undefined,
-            readAgain: () => undefined,
         });
         listed.selectAll();
 
@@ -73,7 +72,6 @@ describe('ListedMailProvider', () => {
             selectAll: () => undefined,
             takeFocus: () => undefined,
             stand: stood,
-            readAgain: () => undefined,
         });
         listed.stand('commitments');
 
@@ -91,7 +89,6 @@ describe('ListedMailProvider', () => {
             selectAll: () => undefined,
             takeFocus: focused,
             stand: () => undefined,
-            readAgain: () => undefined,
         });
         listed.takeFocus();
 
