@@ -24,10 +24,10 @@ namespace MailFathom.Host.Hosting.Startup;
 /// their row holds and from nothing else.
 /// </para>
 /// <para>
-/// <b>A deployment holding nobody is an ordinary state.</b> Its first start finds no row, serves nobody, and says so.
-/// The first user arrives afterwards, through <c>mfctl user add</c> or the administrative route behind it, and the
-/// roster publication that provisioning and a record write already raise is what carries them and their mailboxes into
-/// this process without a restart.
+/// <b>A deployment holding nobody is a state a start admits.</b> A fresh database is seeded with one user, so a first
+/// start serves that user and no mailbox; a deployment whose every user was erased finds no row, serves nobody, and
+/// says so. A user or a mailbox recorded afterwards, through <c>mfctl</c> or the administrative routes behind it, is
+/// carried into this process without a restart by the roster publication that provisioning and a record write raise.
 /// </para>
 /// <para>
 /// It runs behind the schema gate, because it reads a table that migration creates, and ahead of the workers, so
@@ -256,10 +256,11 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
 
     /// <summary>Reports who is served, and says outright when that is nobody.</summary>
     /// <remarks>
-    /// The empty deployment gets a line of its own rather than a count of zero, because it is the state a first run is
-    /// in and the operator reading that line needs the command that ends it. A synchronization switch left on with
-    /// nothing to synchronize is reported beside it and refuses nothing: it is what every deployment looks like
-    /// between its first start and its first recorded mailbox.
+    /// The empty deployment gets a line of its own rather than a count of zero, because the operator reading it needs
+    /// the command that ends it. A synchronization switch left on with nothing to synchronize is reported beside it and
+    /// refuses nothing: it is what every deployment looks like between its first start, serving the one user a fresh
+    /// database is seeded with, and its first recorded mailbox. A mailbox identifier several users record is reported
+    /// too, because nothing refuses it and it costs every one of them but the first that mailbox.
     /// </remarks>
     private void Report(IReadOnlyList<ServedMailUser> served)
     {
@@ -277,6 +278,35 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         {
             this.LogNothingToSynchronize();
         }
+
+        this.ReportMailAccountIdentifiersSharedAcrossUsers(served);
+    }
+
+    /// <summary>Reports every mail-account identifier more than one served user records.</summary>
+    /// <remarks>
+    /// A report rather than a refusal, because an identifier names an account within its user and two people may each
+    /// call theirs <c>work</c>. What still resolves an account by the identifier alone is the catalogue of served
+    /// accounts and the settings lookup behind it, and both keep the user recorded first — so until
+    /// <see href="https://github.com/Krzysztof318/MailFathom/issues/1325">issue 1325</see> keys them by the user as well,
+    /// the others' mailbox under that identifier is not served, and this line is what tells the operator so.
+    /// </remarks>
+    private void ReportMailAccountIdentifiersSharedAcrossUsers(IReadOnlyList<ServedMailUser> served)
+    {
+        var shared = served
+            .SelectMany(user => user.MailAccounts
+                .Select(account => MailSynchronizationOptions.TryReadAccountId(account.AccountId))
+                .OfType<string>()
+                .Distinct(StringComparer.Ordinal)
+                .Select(accountId => (AccountId: accountId, user.DisplayName)))
+            .GroupBy(entry => entry.AccountId, StringComparer.Ordinal)
+            .Where(holders => holders.Skip(1).Any());
+
+        foreach (var holders in shared)
+        {
+            var labels = string.Join(", ", holders.Select(holder => $"'{holder.DisplayName}'"));
+
+            this.LogMailAccountIdentifierShared(holders.Key, labels);
+        }
     }
 
     /// <remarks>The record names no user. The identity is a generated identifier for a person this deployment serves, and what an operator needs from this line is how the roster came out rather than who is on it.</remarks>
@@ -285,10 +315,10 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         Message = "This deployment serves {ServedUserCount} users, each read from their own record; no configuration source reaches anybody's mail accounts. Change them with mfctl.")]
     private partial void LogUsersResolved(int servedUserCount);
 
-    /// <remarks>Reached on every start of a deployment nobody has been recorded on yet, which is what a first run is.</remarks>
+    /// <remarks>Reached on a start of a deployment whose every user was erased; a fresh database is seeded with one, so a first run holds that user rather than nobody.</remarks>
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "This deployment holds no user and therefore serves nobody. Record the first with 'mfctl user add', then give them a mailbox with 'mfctl user account add'.")]
+        Message = "This deployment holds no user and therefore serves nobody. Record one with 'mfctl user add', then give them a mailbox with 'mfctl user account add'.")]
     private partial void LogNoUserHeld();
 
     /// <remarks>A report rather than a refusal, because a deployment with the switch on and nothing recorded yet is the ordinary shape of a first run.</remarks>
@@ -296,4 +326,10 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         Level = LogLevel.Information,
         Message = "Mail synchronization is switched on and no user this deployment serves records a mail account, so there is nothing to synchronize. Record one with 'mfctl user account add'.")]
     private partial void LogNothingToSynchronize();
+
+    /// <remarks>The labels rather than the identifiers, because they are the operator's own text and the identifiers are generated handles for people.</remarks>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The mail account '{MailAccountId}' is recorded by more than one user ({UserDisplayNames}). Only the one recorded first is served under that name, so the others' mailbox under it is not synchronized or read; give each of those mailboxes a name no other user records.")]
+    private partial void LogMailAccountIdentifierShared(string mailAccountId, string userDisplayNames);
 }

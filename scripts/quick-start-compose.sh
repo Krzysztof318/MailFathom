@@ -12,8 +12,9 @@ set -euo pipefail
 #
 # The mailbox is not among the settings it writes. A deployment declares no mail account in its own file: every mailbox
 # belongs to the record of the user whose mail it is, and a record is written while the deployment runs. So the answers
-# collected here become mailbox.json, and the run that starts the deployment records the user and that mailbox through
-# the administrative endpoint — which is why that endpoint is served rather than optional.
+# collected here become mailbox.json, and the run that starts the deployment declares that mailbox in the record of the
+# one user a fresh database is seeded with, through the administrative endpoint — which is why that endpoint is served
+# rather than optional.
 #
 # It provisions no credential to sign in to that page with, and that is the current client rather than an omission: the
 # React client reads its own sample data and calls no endpoint yet, so a password would be a record nothing can present.
@@ -64,9 +65,8 @@ readonly documentation_base='https://krzysztof318.github.io/MailFathom'
 # the client's routes, and the page a browser downloads.
 readonly published_port='8080'
 
-# The administrative endpoint's own default port is 8080, which is the socket the MCP endpoint is already served on, and
-# compose.yaml publishes nothing for it. So enabling it here means stating a port of its own and publishing that one —
-# see the note on the missing mapping in compose.yaml.
+# The administrative endpoint's own default port is 8080, which is the socket the MCP endpoint is already served on. So
+# it is served on a port of its own — the one compose.yaml publishes for it, on loopback.
 readonly admin_port='8090'
 
 usage() {
@@ -512,7 +512,7 @@ write_secret() {
 
 refuse_existing "secrets/mailfathom/$imap_password_name"
 refuse_existing 'mailbox.json'
-refuse_existing 'compose.override.yaml'
+[[ "$relax_tls_policy" != 'yes' ]] || refuse_existing 'compose.override.yaml'
 [[ "$admin_endpoint" != 'api-key' ]] || refuse_existing "secrets/mailfathom/$admin_key_name"
 [[ "$relax_tls_policy" != 'yes' ]] || refuse_existing 'openssl-legacy.cnf'
 
@@ -690,23 +690,19 @@ if [[ "$relax_tls_policy" == 'yes' ]]; then
   chmod 644 openssl-legacy.cnf
 fi
 
-{
-  cat << 'YAML'
+# The whole process reads its TLS parameters from this file, which is what reaches a mail server offering only
+# parameters the platform's own policy refuses — a 1024-bit Diffie-Hellman group, a 1024-bit RSA key, a SHA-1
+# signature. It relaxes nothing else: the protocol floor stays where it was, and certificate validation is untouched.
+# It applies to every TLS session this process makes, the database's included, which is why the closing report names
+# it and --no-legacy-tls leaves the platform default in force.
+if [[ "$relax_tls_policy" == 'yes' ]]; then
+  cat > compose.override.yaml << 'YAML'
 # Written by scripts/quick-start-compose.sh, and ignored by Git.
 #
-# What compose.yaml leaves out on purpose, because it is tracked and this is not: a published port for an
-# administrative endpoint it keeps disabled, and a mount for a file that need not exist.
+# What compose.yaml leaves out on purpose, because it is tracked and this is not: a mount for a file that need not
+# exist.
 services:
   mailfathom:
-YAML
-
-  # The whole process reads its TLS parameters from this file, which is what reaches a mail server offering only
-  # parameters the platform's own policy refuses — a 1024-bit Diffie-Hellman group, a 1024-bit RSA key, a SHA-1
-  # signature. It relaxes nothing else: the protocol floor stays where it was, and certificate validation is untouched.
-  # It applies to every TLS session this process makes, the database's included, which is why the closing report names
-  # it and --no-legacy-tls leaves the platform default in force.
-  if [[ "$relax_tls_policy" == 'yes' ]]; then
-    cat << 'YAML'
     environment:
       OPENSSL_CONF: /etc/mailfathom/openssl-legacy.cnf
     volumes:
@@ -715,17 +711,9 @@ YAML
         target: /etc/mailfathom/openssl-legacy.cnf
         read_only: true
 YAML
-  fi
 
-  # Loopback, like every other port this deployment publishes: mfctl reaches it from this machine, and nothing else
-  # reaches it at all.
-  cat << YAML
-    ports:
-      - "127.0.0.1:$admin_port:$admin_port"
-YAML
-} > compose.override.yaml
-
-chmod 644 compose.override.yaml
+  chmod 644 compose.override.yaml
+fi
 
 printf 'Wrote .env, config/10-mailfathom.json, mailbox.json, and the credentials under secrets/.\n' >&2
 
@@ -768,12 +756,11 @@ report_connection() {
 # Printed wherever this script did not record the mailbox itself, which is every path that leaves the deployment not
 # running. Nothing is synchronized until this record exists, so it is a step rather than an afterthought.
 report_recording_commands() {
-  printf '\nThen record the user this deployment serves and the mailbox it reads:\n\n' >&2
+  printf '\nThen declare the mailbox it reads, in the record of the one user it serves:\n\n' >&2
   printf '  mfctl login --endpoint http://127.0.0.1:%s\n' "$admin_port" >&2
-  printf "  mfctl user add --display-name '%s'\n" "$display_name" >&2
   printf '  mfctl user account add --from-file %s/mailbox.json\n\n' "$compose_directory" >&2
-  printf 'A deployment declares no mail account in its own file, so until that record exists it holds\n' >&2
-  printf 'nobody and reads nothing. %s/users/administering.html\n' "$documentation_base" >&2
+  printf 'A deployment declares no mail account in its own file, so until that record carries one it\n' >&2
+  printf 'reads nothing. %s/users/administering.html\n' "$documentation_base" >&2
 }
 
 # One scalar out of a small administrative answer. A JSON parser is not a prerequisite of an evaluation, and every value
@@ -787,26 +774,24 @@ read_json_number() {
   grep --only-matching "\"$1\":[0-9]*" | head -n 1 | cut -d ':' -f 2
 }
 
-# The user this deployment serves and the mailbox it reads are rows it keeps rather than settings it reads, so both are
-# written through the administrative endpoint once the deployment is up. Recording them after the start is what the
-# product does rather than a way around a missing setting: a deployment holding no user starts and serves nobody, and
-# the write that commits a record publishes it to the running roster — so this mailbox is synchronized without a
-# restart. A refusal answers with what it refused rather than with a failing status, which is why the outcome is read
-# out of the body.
-record_the_user_and_the_mailbox() {
-  local origin="http://127.0.0.1:$admin_port" user record version outcome declaration
+# The mailbox this deployment reads is a row it keeps rather than a setting it reads, so it is written through the
+# administrative endpoint once the deployment is up, into the record of the one user a fresh database is seeded with.
+# Declaring it after the start is what the product does rather than a way around a missing setting: the write that
+# commits a record publishes it to the running roster, so this mailbox is synchronized without a restart. A refusal
+# answers with what it refused rather than with a failing status, which is why the outcome is read out of the body.
+record_the_mailbox() {
+  local origin="http://127.0.0.1:$admin_port" roster user record version outcome declaration
   local -a authorization=()
 
   if [[ "$admin_endpoint" == 'api-key' ]]; then
     authorization=(--header "Authorization: Bearer $admin_api_key")
   fi
 
-  user="$(
-    curl -fsS "${authorization[@]}" \
-      --header 'Content-Type: application/json' \
-      --data "{ \"displayName\": $(json_string "$display_name") }" \
-      "$origin/api/admin/users" | read_json_text 'id'
-  )" || return 1
+  # A database this script did not create may hold more than that one user, and which of several a mailbox belongs to
+  # is the operator's answer rather than this script's guess — so anything but exactly one leaves the commands to them.
+  roster="$(curl -fsS "${authorization[@]}" "$origin/api/admin/users")" || return 1
+  [[ "$roster" != *'"id":'*'"id":'* ]] || return 1
+  user="$(printf '%s' "$roster" | read_json_text 'id')"
   [[ -n "$user" ]] || return 1
 
   record="$(curl -fsS "${authorization[@]}" "$origin/api/admin/users/$user/record")" || return 1
@@ -983,15 +968,15 @@ if [[ "$started" != 'yes' ]]; then
   exit 1
 fi
 
-printf '\nMailFathom %s started, holding no user — which is what a first run looks like.\n' "$version" >&2
-printf 'Recording the person it serves, and the mailbox it reads.\n' >&2
+printf '\nMailFathom %s started, serving the one user a fresh database holds and no mailbox yet.\n' "$version" >&2
+printf 'Declaring the mailbox it reads.\n' >&2
 
-if record_the_user_and_the_mailbox; then
-  printf 'Recorded %s, and declared the mailbox %s in their record. It is served from now on, without\n' \
-    "$display_name" "$account_id" >&2
-  printf 'a restart, and the first synchronization starts on the next run.\n' >&2
+if record_the_mailbox; then
+  printf 'Declared the mailbox %s in their record. It is served from now on, without a restart, and the\n' \
+    "$account_id" >&2
+  printf 'first synchronization starts on the next run.\n' >&2
 else
-  printf '\nThe deployment is running and still holds nobody, so nothing is synchronized yet.\n' >&2
+  printf '\nThe deployment is running and reads no mailbox yet, so nothing is synchronized.\n' >&2
   report_recording_commands
 fi
 

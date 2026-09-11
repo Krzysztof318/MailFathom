@@ -188,12 +188,11 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode PrincipalNotAuthorized { get; } = new(14001);
 
-    /// <summary>Gets subcategory 4, principal authorization: this deployment does not hold the single user its configured mail accounts belong to.</summary>
+    /// <summary>Gets subcategory 4, principal authorization: this deployment cannot say which of the users it holds an act is for, or cannot serve them.</summary>
     /// <remarks>
-    /// It sits beside the refusal above because it is the same axis asked before any request arrives: a configured mail
-    /// account names no user, so a deployment holding none or several cannot say whose mail it is serving and refuses
-    /// to serve any. An operator resolves it in the user records rather than in a grant, which is what separates it
-    /// from the code above.
+    /// It sits beside the refusal above because it is the same axis — whose mail an act reaches. A request naming no
+    /// user meets a deployment serving nobody or several, or a start meets a roster it may not serve, and an operator
+    /// resolves either in the user records rather than in a grant, which is what separates it from the code above.
     /// </remarks>
     public static MailFathomErrorCode DeploymentMailUserUnresolved { get; } = new(14002);
 

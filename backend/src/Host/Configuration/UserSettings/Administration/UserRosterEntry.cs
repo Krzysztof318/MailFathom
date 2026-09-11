@@ -21,9 +21,9 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <para>
 /// The last three are separate facts and a reader needs all of them. Every user this deployment holds is served, so
 /// <c>Served</c> answers whether this process has settled its roster rather than whether anybody was left out of it; a
-/// user the deployment's own mail section supplies has an empty record, which is what makes a write to it something to
-/// refuse rather than apply; and a start records a user for that section wherever it holds none, so an erasure there
-/// would be followed by the person being recreated and their mail downloaded again.
+/// user a configuration source supplies has an empty record, which is what makes a write to it something to refuse
+/// rather than apply; and erasing that user is refused as well — two states nothing reaches in this release, which
+/// <see href="https://github.com/Krzysztof318/MailFathom/issues/1829">issue 1829</see> retires with their marker.
 /// </para>
 /// </remarks>
 internal sealed record UserRosterEntry(

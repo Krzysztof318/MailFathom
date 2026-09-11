@@ -174,8 +174,7 @@ internal sealed partial class UserRosterAdministration(
     /// <remarks>
     /// The label is what an administrator selects a user by and is keyed by nothing, so changing it moves no mail and
     /// invalidates no identifier — which is why this is the configuration grant rather than the erasing one. It reaches
-    /// every user this deployment holds, the one its own mail section belongs to included: a label lives on the row and
-    /// no configuration source states one.
+    /// every user this deployment holds: a label lives on the row and no configuration source states one.
     /// </remarks>
     internal async Task<UserRelabelOutcome> RelabelAsync(
         MailUserId user,
@@ -231,10 +230,10 @@ internal sealed partial class UserRosterAdministration(
     /// deployment the caller asked about rather than the roster the erasure left.
     /// </para>
     /// <para>
-    /// The user the deployment's own mail section belongs to is refused rather than erased. The next start records a
-    /// user for that section wherever it holds none, under an identifier it mints — so the erasure would run, the mail
-    /// would go, and the person would be recreated and their mailboxes downloaded again. A deletion request answered
-    /// that way is worse than one refused, so what comes back names the section to clear first.
+    /// A user a configuration source supplies is refused rather than erased — a refusal nothing reaches in this
+    /// release, no configuration source declaring a mailbox any longer, and one
+    /// <see href="https://github.com/Krzysztof318/MailFathom/issues/1829">issue 1829</see> retires with the marker it
+    /// reads.
     /// </para>
     /// </remarks>
     internal async Task<UserErasureOutcome> EraseAsync(MailUserId user, CancellationToken cancellationToken)

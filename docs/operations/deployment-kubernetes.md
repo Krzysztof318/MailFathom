@@ -82,8 +82,8 @@ The Secret is mounted read-only at `/etc/mailfathom/secrets`, one file per key, 
 reference — the same path and the same references the Compose deployment uses.
 
 The administrative key is in that list because a deployment that cannot be administered cannot be given a mailbox:
-every mail account belongs to a user's record, and [recording the user and the
-mailbox](#recording-the-user-and-the-mailbox) below is the write that puts one there. The mailbox password beside it is
+every mail account belongs to a user's record, and [recording the
+mailbox](#recording-the-mailbox) below is the write that puts one there. The mailbox password beside it is
 what that record's declaration will reference; nothing in the ConfigMap names it.
 
 **The encrypted systemd credentials the native installation uses do not reach a pod**, and they would work against this
@@ -246,23 +246,23 @@ not create — and PostgreSQL leaves whoever ran the DDL owning every object it 
 rather than a transfer of ownership. [Applying the database schema](database-schema.md) states both in full, along with
 the locks the script takes and what each startup failure means.
 
-## Recording the user and the mailbox
+## Recording the mailbox
 
-A started deployment holds nobody, and no ConfigMap entry changes that: who a deployment serves and which mailboxes it
-reads are rows it keeps rather than settings it reads. Both are written over the administrative endpoint, which is why
-the values above turn it on — reach it with a port-forward and record them:
+A started deployment serves the one user a fresh database is seeded with and reads no mailbox, and no ConfigMap entry
+changes that: which mailboxes a deployment reads are rows it keeps rather than settings it reads. Each is declared over
+the administrative endpoint, which is why the values above turn it on — reach it with a port-forward and record it:
 
 ```bash
 kubectl --namespace mailfathom port-forward service/mailfathom 8080:8080 &
 
 mfctl login --endpoint http://127.0.0.1:8080
-mfctl user add --display-name 'Alex'
 mfctl user account add --from-file mailbox.json
 ```
 
 `mailbox.json` is the JSON object one mail account is declared as, and its `Secrets.Password` reference names the same
 mounted path every other credential here does — `file:/etc/mailfathom/secrets/imap-primary-password`, one of the keys
-of the Secret above. The mailbox is served from the moment the write commits, without a rollout.
+of the Secret above. The mailbox is served from the moment the write commits, without a rollout. `mfctl user add`
+records a second person, and `--user` then says whose record a command writes.
 [Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes in the
 file.
 

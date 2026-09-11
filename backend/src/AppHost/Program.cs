@@ -369,8 +369,8 @@ if (runsIntegrationTests)
         // serves is one a user's record declares. The suite records the account it stores its mail under once the host
         // is running, through the administrative surface below, which is what lets a tool call over the MCP endpoint
         // answer from mail rather than from an empty scope. Recording it after the start is the point as much as the
-        // means: a deployment holding no user starts, and the first mailbox recorded at runtime is served without a
-        // restart.
+        // means: a deployment starts serving the one user a fresh database is seeded with and no mailbox, and a mailbox
+        // recorded at runtime is served without a restart.
         // The endpoint is served under the posture worth proving end to end — a credential is required, and the origins
         // are narrowed. Leaving the permissive origin default would let a suite pass while the check was never wired in.
         .WithEnvironment("McpEndpoint__Enabled", "true")

@@ -36,16 +36,16 @@ It provisions no credential to sign in with, because the client reads its own sa
 its closing report says so.
 
 **The mailbox it asked about is not written into the configuration**, because no configuration source declares one:
-the answers become `mailbox.json` beside `compose.yaml`, and the run that started the deployment records a user and
-that mailbox through the administrative endpoint once the deployment is up. A run that started nothing — `--no-start`,
-or one that declined the schema step — leaves the file and prints the two `mfctl` commands that record it instead. Until
-that record exists the deployment holds nobody and reads nothing, which is an ordinary first-run state rather than a
-failure.
+the answers become `mailbox.json` beside `compose.yaml`, and the run that started the deployment declares that mailbox
+in the record of the one user a fresh database is seeded with, through the administrative endpoint, once the deployment
+is up. A run that started nothing — `--no-start`, or one that declined the schema step — leaves the file and prints the
+`mfctl` commands that declare it instead. Until then the deployment reads nothing, which is an ordinary first-run state
+rather than a failure.
 
 **It also relaxes the platform's TLS policy for this deployment**, by copying
 [`deploy/openssl/legacy-mail-server.cnf.example`](https://github.com/Krzysztof318/MailFathom/blob/main/deploy/openssl/legacy-mail-server.cnf.example)
-to `openssl-legacy.cnf` beside `compose.yaml` and naming it in `OPENSSL_CONF` through the same
-`compose.override.yaml` the administrative port is published from. That is what makes a mailbox on a server offering
+to `openssl-legacy.cnf` beside `compose.yaml` and naming it in `OPENSSL_CONF` through a generated
+`compose.override.yaml`. That is what makes a mailbox on a server offering
 only a 1024-bit group, a 1024-bit key, or a SHA-1 signature reachable from a first run instead of failing it with a
 handshake error that names nothing. It covers every TLS session the process makes, the database's included, it is
 listed in the closing report, and `--no-legacy-tls` prepares the same deployment under the platform default —
@@ -75,11 +75,11 @@ client presents to that endpoint is a record beside the user whose mail it reach
 `mfctl credential create` once the deployment is running, and the script prints that command when it finishes.
 
 The administrative endpoint comes with what the deployment needs rather than from an answer, and every run serves it.
-Recording a user is an administrative operation and there is no other way to reach one, so a deployment without that
+Declaring a mailbox is an administrative operation and there is no other way to reach one, so a deployment without that
 endpoint is one that could never be given a mailbox; minting the MCP key is the second operation with nowhere else to
-go. It is served on port 8090 through a generated `compose.override.yaml`, with a generated key of its own — its own
-default port is 8080, which is the socket the MCP endpoint is already served on, and `compose.yaml` publishes nothing
-for it. `--admin-endpoint none` serves it without a key, which anything reaching that port can then administer.
+go. It is served on port 8090, which `compose.yaml` publishes on loopback, with a generated key of its own — its own
+default port is 8080, which is the socket the MCP endpoint is already served on. `--admin-endpoint none` serves it
+without a key, which anything reaching that port can then administer.
 
 **Every credential here crosses an unencrypted hop.** On a port published to `127.0.0.1` that hop is this machine.
 MailFathom reports it at every startup, naming the surface and the port, and does not refuse it: this process reads the
@@ -156,6 +156,7 @@ into `secrets/mailfathom/`, which is mounted read-only at `/etc/mailfathom/secre
 
 ```bash
 printf '%s' 'the-mailbox-password' > secrets/mailfathom/imap-primary-password
+openssl rand -base64 33 | tr -d '\n'  > secrets/mailfathom/admin-api-key
 openssl rand -base64 32 | tr -d '\n'  > secrets/mailfathom/mailfathom-data-key   # only for an OAuth mailbox
 chmod 444 secrets/mailfathom/*
 ```
@@ -170,6 +171,9 @@ chmod 444 secrets/mailfathom/*
   }
 }
 ```
+
+`admin-api-key` is what the example configuration's administrative endpoint takes — the endpoint every mailbox is
+recorded through, served on port 8090, which `compose.yaml` publishes on loopback. `mfctl login` asks for it.
 
 That is the same path the Helm chart mounts its Secret at, so a `SecretReference` written for one deployment reads
 correctly in the other. [Secret provisioning](secret-provisioning.md) is the full contract, including what a leaked
@@ -244,22 +248,23 @@ Read the SQL before applying it, and take a backup first. The script is idempote
 that already carries some of its migrations applies only what is missing. [Applying the database
 schema](database-schema.md) states the privileges it needs, the locks it takes, and what each startup failure means.
 
-### Recording the user and the mailbox
+### Recording the mailbox
 
-A started deployment holds nobody. Who it serves and which mailboxes it reads are rows it keeps rather than settings it
-reads, so neither is in the file above and both are written over the administrative endpoint once the stack is up:
+A started deployment serves the one user a fresh database is seeded with, and reads no mailbox. Which mailboxes it reads
+are rows it keeps rather than settings it reads, so none is in the file above, and each is declared over the
+administrative endpoint once the stack is up — `mfctl login` asks for the key in `secrets/mailfathom/admin-api-key`:
 
 ```bash
 mfctl login --endpoint http://127.0.0.1:8090
-mfctl user add --display-name 'Alex'
 mfctl user account add --from-file mailbox.json
 ```
 
 `mailbox.json` is the JSON object one mail account is declared as — the same shape a configuration source used to carry,
 with the same `file:` reference into `/etc/mailfathom/secrets`. The mailbox is served from the moment that write
-commits, without a restart, and the next synchronization run is its first one.
-[Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes in the
-file, and [administering your deployment](../users/administering.md) the command group around it.
+commits, without a restart, and the next synchronization run is its first one. Neither command names a user, because
+the deployment holds one; `mfctl user add` records a second person, and `--user` then says whose record a command
+writes. [Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes
+in the file, and [administering your deployment](../users/administering.md) the command group around it.
 
 ### What the first `up` of PostgreSQL does
 

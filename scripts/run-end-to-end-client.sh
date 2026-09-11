@@ -20,7 +20,7 @@ set -euo pipefail
 #   3. the database and the mail server, started from this repository's own app model
 #   4. the schema artifact applied to that database
 #   5. MailFathom published and started against both servers, serving the bundle from its client endpoint
-#   6. the user this deployment serves, and their mailbox, recorded through the administrative API
+#   6. the mailbox of the one user a fresh database holds, recorded through the administrative API
 #   7. a client credential provisioned through the same API
 #   8. the corpus replayed into the mailbox over SMTP
 #   9. the account's synchronization run reporting no failed folder
@@ -317,20 +317,15 @@ host_pid=$!
 
 wait_until 'MailFathom' 300 "$host_pid" curl --fail --silent "$health_origin/started"
 
-step 'recording the user and their mailbox'
+step 'recording the mailbox'
 
-# The host started holding nobody, because no configuration source names a user and none declares a mailbox: both are
-# rows this deployment keeps, and both arrive here the way an operator writes them, through the administrative API. That
-# ordering is the point rather than a detour around a missing setting — a deployment serving nobody starts, and the
-# first user recorded against it is served without a restart, because the write that commits the record publishes it to
-# the running roster.
+# The host started serving the one user a fresh database is seeded with, and no mailbox: no configuration source
+# declares one, because a mailbox is a row in that user's record, and it arrives here the way an operator writes it,
+# through the administrative API. That ordering is the point rather than a detour around a missing setting — the write
+# that commits the record publishes it to the running roster, so the mailbox is served without a restart.
 served_user="$(
-  curl --fail --silent --show-error \
-    --header "Authorization: Bearer $admin_api_key" \
-    --header 'Content-Type: application/json' \
-    --data '{"displayName":"End-to-end user"}' \
-    "$admin_origin/api/admin/users" \
-    | jq --raw-output '.id'
+  curl --fail --silent --header "Authorization: Bearer $admin_api_key" "$admin_origin/api/admin/users" \
+    | jq --raw-output '[.users[] | select(.served)] | if length == 1 then .[0].id else ("expected one served user, found " + (length | tostring) | halt_error(1)) end'
 )"
 
 # The mailbox is a declaration in that user's record, written against the version the record stands at. The three

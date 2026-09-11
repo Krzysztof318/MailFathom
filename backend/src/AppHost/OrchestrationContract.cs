@@ -592,6 +592,14 @@ public static class OrchestrationContract
     /// </remarks>
     public const string ComposedHostSubmissionPasswordName = "integration-tests-submission-password";
 
+    /// <summary>The name the composed host's reading password is configured under.</summary>
+    /// <remarks>
+    /// Its own name rather than the submission password's, although the material is the same: a user's record is
+    /// judged in one walk and a secret name is claimed once within it, so the mailbox's reading block and its delivery
+    /// block naming one secret would be refused as a repeated declaration and the host would never get its mailbox.
+    /// </remarks>
+    public const string ComposedHostReadingPasswordName = "integration-tests-reading-password";
+
     /// <summary>The one organization the composed host's recipient policy refuses, whoever a caller says asked for it.</summary>
     /// <remarks>
     /// A subdomain of the reserved testing domain the rest of this topology composes under, which is what keeps the

@@ -37,9 +37,9 @@ public sealed class ServedMailUsersStartupGateTests
     private static readonly Guid RecordedIdentifier = new("33333333-3333-3333-3333-333333333333");
 
     /// <summary>
-    /// The state a deployment is in before anybody has been recorded on it, and the one the release makes ordinary: it
-    /// starts, completes its gate, serves nobody, and says so. Refusing here would leave a first run with no start to
-    /// record its first user from.
+    /// The state a deployment whose every user was erased is in — a fresh database is seeded with one — and one a start
+    /// admits: it starts, completes its gate, serves nobody, and says so. Refusing here would leave that deployment
+    /// with no start to record a user from.
     /// </summary>
     [Fact]
     public async Task StartAsync_NoUserHeld_ServesNobodyAndCompletesTheGate()
@@ -468,6 +468,33 @@ public sealed class ServedMailUsersStartupGateTests
 
         // Assert
         await directory.Received(1).ReadUsersAsync(Arg.Any<int>(), cancellation.Token);
+    }
+
+    /// <summary>
+    /// Two people may each call a mailbox <c>work</c>, and nothing refuses it — but the catalogue of served accounts
+    /// still keys by the name alone and keeps the first, so a start says so, naming the name and both people.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_TwoUsersRecordingOneMailAccountName_ReportsTheNameAndBothUsers()
+    {
+        // Arrange
+        var startupLog = new RecordingLogger<ServedMailUsersStartupGate>();
+
+        // Act
+        await CreateGate(
+                TwoRecordedUsers(),
+                documents: RecordsHolding(
+                    (MailUserId.Create(RecordedIdentifier), RecordDeclaring("work", "alex@example.test")),
+                    (SyntheticMailUser.Another, RecordDeclaring("work", "sam@example.test"))),
+                startupLog: startupLog)
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains(
+            startupLog.Messages,
+            message => message.Contains("'work'", StringComparison.Ordinal)
+                && message.Contains("'alex'", StringComparison.Ordinal)
+                && message.Contains("'sam'", StringComparison.Ordinal));
     }
 
     private static MailUserRecord Held(MailUserId user, string displayName) =>

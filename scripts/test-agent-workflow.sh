@@ -7425,9 +7425,8 @@ quick_start_says_it_is_an_evaluation_rather_than_a_recommended_deployment() {
   assert_contains 'users/installation.html' "$output_file"
 }
 
-# The administrative endpoint's own default port is the socket the MCP endpoint is served on, and compose.yaml
-# publishes nothing for it. So enabling it means a port of its own, published from an override rather than by editing a
-# tracked file — and on loopback, like every other port this deployment publishes.
+# The administrative endpoint's own default port is the socket the MCP endpoint is served on, so it is served on a port
+# of its own — 8090, which compose.yaml publishes on loopback like every other port this deployment publishes.
 quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own() {
   local checkout_root compose_directory
   local keyless_root
@@ -7441,16 +7440,15 @@ quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own() {
   assert_contains '"Port": 8090' "$compose_directory/config/10-mailfathom.json"
   assert_contains '"SecretReference": "file:/etc/mailfathom/secrets/admin-workstation-key"' \
     "$compose_directory/config/10-mailfathom.json"
-  assert_contains '"127.0.0.1:8090:8090"' "$compose_directory/compose.override.yaml"
+  assert_contains '${MAILFATHOM_ADMIN_BIND:-127.0.0.1}:${MAILFATHOM_ADMIN_PORT:-8090}:8090' \
+    "$source_repository_root/deploy/compose/compose.yaml"
 
-  # Served and published even where no MCP key is minted, because the MCP key is not the only thing recorded through
-  # it: the user this deployment serves and the mailbox it reads are, and a deployment without the endpoint could never
-  # be given either.
+  # Served even where no MCP key is minted, because the MCP key is not the only thing recorded through it: the mailbox
+  # this deployment reads is, and a deployment without the endpoint could never be given one.
   keyless_root="$(stage_quick_start_checkout 'quick-start-admin-keyless')"
   run_quick_start "$keyless_root" --provider yahoo --mcp-authentication none > /dev/null 2>&1
 
   assert_contains '"AdminEndpoint"' "$keyless_root/deploy/compose/config/10-mailfathom.json"
-  assert_contains '"127.0.0.1:8090:8090"' "$keyless_root/deploy/compose/compose.override.yaml"
 }
 
 # The quick start prepares the client, and this is what holds it to both halves of that. The bundle travels inside the
@@ -7537,7 +7535,6 @@ quick_start_serves_the_administrative_endpoint_every_deployment_is_recorded_thro
   run_quick_start "$derived_root" --provider yahoo > "$derived_log" 2>&1
 
   assert_contains '"Port": 8090' "$derived_root/deploy/compose/config/10-mailfathom.json"
-  assert_contains '"127.0.0.1:8090:8090"' "$derived_root/deploy/compose/compose.override.yaml"
   assert_contains 'mfctl credential create --method api-key' "$derived_log"
 
   # `none` is still served, only without a key of its own: what it decides is whether the endpoint takes a

@@ -72,7 +72,7 @@ public sealed class ServedMailUsersTests
         Assert.Equal(MailFathomErrorCode.DeploymentMailUserUnresolved, refusal.ErrorCode);
     }
 
-    /// <summary>A deployment holding no user serves nobody, which is the state every deployment starts its first time in.</summary>
+    /// <summary>A deployment holding no user serves nobody, which is where one whose every user was erased stands.</summary>
     [Fact]
     public void Resolved_ARosterServingNobody_ServesNobodyRatherThanRefusing()
     {
@@ -85,6 +85,25 @@ public sealed class ServedMailUsersTests
         // Assert
         Assert.Empty(servedUsers.Users);
         Assert.Throws<DeploymentMailUserUnresolvedException>(() => servedUsers.User);
+    }
+
+    /// <summary>
+    /// A caller naming no user on a deployment holding nobody is told so, and what records somebody — not the sentence
+    /// meant for several users, whose remedy would be a credential for a person who does not exist.
+    /// </summary>
+    [Fact]
+    public void User_WhenNobodyIsServed_NamesTheCommandThatRecordsSomebody()
+    {
+        // Arrange
+        var servedUsers = new ServedMailUsers();
+        servedUsers.Resolved([]);
+
+        // Act
+        var refusal = Assert.Throws<DeploymentMailUserUnresolvedException>(() => servedUsers.User);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.DeploymentMailUserUnresolved, refusal.ErrorCode);
+        Assert.Contains("mfctl user add", refusal.Message, StringComparison.Ordinal);
     }
 
     [Fact]

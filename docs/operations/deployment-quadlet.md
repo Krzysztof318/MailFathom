@@ -152,10 +152,16 @@ openssl rand -base64 33 | tr -d '\n' \
 systemd-ask-password -n \
   | systemd-creds --user encrypt --name=imap-primary-password - \
       ~/.config/credstore.encrypted/imap-primary-password
+
+openssl rand -base64 33 | tr -d '\n' \
+  | systemd-creds --user encrypt --name=admin-api-key - \
+      ~/.config/credstore.encrypted/admin-api-key
 ```
 
 The mailbox password arrives through `systemd-ask-password -n` so that it is neither a shell-history entry nor a file
-you have to remember to delete. `-n` is what keeps a trailing newline out of the material.
+you have to remember to delete. `-n` is what keeps a trailing newline out of the material. `admin-api-key` is the key
+the example configuration's administrative endpoint takes; nothing but the encrypted file holds it, and
+`systemd-creds --user decrypt` reads it back for `mfctl login` below.
 
 No credential is provisioned here for the MCP endpoint. What a client presents there resolves a record beside the user
 whose mail it reaches, so the key is minted by the running deployment with
@@ -164,10 +170,10 @@ host holds it, and the configuration names only which methods the endpoint accep
 
 The mailbox password above is encrypted here all the same, because the record that will reference it is not a
 credential store: a declaration carries a `systemd-credential:` reference exactly as a configuration file would, and
-[recording the user and the mailbox](#recording-the-user-and-the-mailbox) below is what writes it.
+[recording the mailbox](#recording-the-mailbox) below is what writes it.
 
 **Each unit reaches only the credentials it lists**, which is what the two `LoadCredentialEncrypted=` lines in
-`mailfathom-postgres.container` and the two in `mailfathom.container` are: a grant rather than a manifest. The
+`mailfathom-postgres.container` and the three in `mailfathom.container` are: a grant rather than a manifest. The
 database superuser password is on the first list and not the second, so it is never on a path MailFathom can read —
 the same property the Compose deployment gets by keeping those two credentials out of the mounted secrets directory.
 
@@ -214,10 +220,10 @@ Read [configuration sources](configuration-sources.md) for the precedence and
 than by this file, so it is deliberately absent from the example — and so is the mailbox, which belongs to a user's
 record rather than to any configuration source.
 
-**Enable the administrative endpoint here**, in this file, because both of the acts this deployment still needs go
-through it: recording the person it serves and the mailbox it reads, and minting the key an MCP client presents.
-[The administrative endpoint](admin-endpoint.md#what-the-endpoint-serves) is what to write and how the credential it
-takes is provisioned — encrypted into the same store as everything else on this host.
+**The example enables the administrative endpoint**, on port 8090 with the `admin-api-key` credential above, because
+both of the acts this deployment still needs go through it: declaring the mailbox it reads, and minting the key an MCP
+client presents. `mailfathom.container` publishes that port on loopback and loads the credential.
+[The administrative endpoint](admin-endpoint.md#what-the-endpoint-serves) is the rest of what it serves.
 
 ## Starting
 
@@ -257,20 +263,22 @@ podman exec --interactive mailfathom-postgres sh -c \
 [applying the database schema](database-schema.md) states the privileges it needs, the locks it takes, why the role
 that runs it becomes the user of everything it creates, and what each startup failure means.
 
-### Recording the user and the mailbox
+### Recording the mailbox
 
-The started deployment holds nobody. Who it serves and which mailboxes it reads are rows it keeps rather than settings
-it reads, so both are written over the administrative endpoint enabled above:
+The started deployment serves the one user a fresh database is seeded with, and reads no mailbox. Which mailboxes it
+reads are rows it keeps rather than settings it reads, so each is declared over the administrative endpoint enabled
+above, signed in with the key encrypted beside the other credentials:
 
 ```bash
-mfctl login --endpoint http://127.0.0.1:8090
-mfctl user add --display-name 'Alex'
+systemd-creds --user decrypt ~/.config/credstore.encrypted/admin-api-key - \
+  | mfctl login --endpoint http://127.0.0.1:8090
 mfctl user account add --from-file mailbox.json
 ```
 
 `mailbox.json` is the JSON object one mail account is declared as — the object the example configuration's comments
 show, `systemd-credential:` reference and all, so the mailbox password encrypted into the store above is what it names.
-The mailbox is served from the moment the write commits, without restarting the unit.
+The mailbox is served from the moment the write commits, without restarting the unit. `mfctl user add` records a
+second person, and `--user` then says whose record a command writes.
 [Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes in the
 file.
 

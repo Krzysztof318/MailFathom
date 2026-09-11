@@ -41,9 +41,9 @@ internal sealed class PersistedMailUserProvisioning(MailFathomDbContext dbContex
         var provisionedAt = timeProvider.GetUtcNow();
 
         // The conflict clause names no target, so it covers the label's unique index as well as the primary key. Two
-        // replicas of a deployment holding no user at all each mint an identifier and provision it under the one
-        // label such a deployment uses, and a clause guarding the key alone would leave the loser raising the server's
-        // own unique-violation sentence out of its start. The read below is what turns the silence into an answer.
+        // administrators recording one label at once each mint an identifier and reach this insert, and a clause
+        // guarding the key alone would leave the loser raising the server's own unique-violation sentence instead of
+        // an answer. The read below is what turns the silence into one.
         await dbContext.Database.ExecuteSqlAsync(
             $"""
              INSERT INTO settings_accounts ("Id", "DisplayName", "Document", "Version", "CreatedAt", "UpdatedAt", "DocumentWrittenAtRuntime")

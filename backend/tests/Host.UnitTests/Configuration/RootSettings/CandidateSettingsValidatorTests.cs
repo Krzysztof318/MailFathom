@@ -4,8 +4,11 @@
 
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.RootSettings;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -256,8 +259,38 @@ public sealed class CandidateSettingsValidatorTests
         Assert.Contains(errors, error => error.Contains("EmailDelivry", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A rule scoped to a mailbox nobody records is refused by the write rather than committed, because the start that
+    /// would refuse it is one the operator could no longer reach the persisted layer from to take the write back.
+    /// </summary>
+    [Fact]
+    public void FindErrors_ARuleScopedToAMailboxNoServedUserRecords_NamesTheMailbox()
+    {
+        // Arrange
+        var roster = new ServedMailUsers();
+        roster.Resolved(
+        [
+            new ServedMailUser(
+                SyntheticMailUser.Deployment,
+                "alex",
+                [new MailSynchronizationAccountOptions { AccountId = "alex-work" }]),
+        ]);
+        var validator = new CandidateSettingsValidator(new FakeTimeProvider(Today), [], roster);
+
+        // Act
+        var errors = validator.FindErrors(Compose(new()
+        {
+            ["MailRules:Rules:0:Name"] = "file-invoices",
+            ["MailRules:Rules:0:Condition"] = "isSeen",
+            ["MailRules:Rules:0:Accounts:0"] = "work",
+        }));
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("mail account named 'work'", StringComparison.Ordinal));
+    }
+
     private static CandidateSettingsValidator Validator(params ISensitiveContentCatalog[] catalogs) =>
-        new(new FakeTimeProvider(Today), catalogs);
+        new(new FakeTimeProvider(Today), catalogs, new ServedMailUsers());
 
     private static IConfiguration Compose(Dictionary<string, string?> settings) =>
         new ConfigurationBuilder().AddInMemoryCollection(settings).Build();

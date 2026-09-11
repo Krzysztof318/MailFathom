@@ -69,6 +69,18 @@
     "Enabled": true,
     "Interval": "00:05:00"
   },
+  // The administrative endpoint, which is how the mailbox above is recorded: `mfctl user account add` is a client of
+  // this surface, and nothing else writes a user's record. It is on for that reason rather than as an extra. Its own
+  // default port is 8080, which is the socket the endpoints below are served on, so it states 8090 — the port
+  // compose.yaml publishes for it, on loopback. The key is a reference like every credential here: write a long random
+  // value into ./secrets/mailfathom/admin-api-key before the first start, and give it to `mfctl login` when it asks.
+  "AdminEndpoint": {
+    "Enabled": true,
+    "Port": 8090,
+    "Authentication": [
+      { "ApiKey": { "Name": "admin", "SecretReference": "file:/etc/mailfathom/secrets/admin-api-key" } }
+    ]
+  },
   // The surface MailFathom's own client calls, and the listeners its page is served from. It shares the container's
   // 8080 with the endpoint below, which is the port compose.yaml publishes, so no port is stated here.
   //
@@ -83,7 +95,8 @@
   // says so at every startup.
   //
   // It is commented out, like everything else here that costs anything: serving a mailbox to a browser is always
-  // something an operator turned on, so a file copied verbatim serves the MCP endpoint and nothing else. Uncomment it
+  // something an operator turned on, so a file copied verbatim serves no browser — only the MCP endpoint and the
+  // administrative one. Uncomment it
   // beside MAILFATHOM_CLIENT=true in .env, and provision a credential to sign in with; scripts/quick-start-compose.sh
   // writes the first two. It provisions no credential, because the page it prepares reads its own sample data and
   // calls nothing yet. The empty origin list is the same posture as the endpoint below and for the same reason: the

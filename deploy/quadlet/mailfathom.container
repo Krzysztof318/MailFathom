@@ -76,6 +76,9 @@ PublishPort=127.0.0.1:8080:8080
 # The probes, on a listener of their own. They answer without a credential, so which address their port is published on
 # is what controls who can ask them. A probe path asked on 8080 is answered with 404, and so is /mcp asked on 8081.
 PublishPort=127.0.0.1:8081:8081
+# The administrative endpoint, on the port config/10-mailfathom.json.example gives it. It is where the mailboxes this
+# deployment reads are recorded and every credential is minted, so it stays on loopback: mfctl reaches it from here.
+PublishPort=127.0.0.1:8090:8090
 
 # The invoking user is uid 1654 — the image's own unprivileged account — inside this container. That is what makes the
 # credentials directory below readable: systemd restricts it to the unit's user, and under the default rootless mapping
@@ -253,6 +256,7 @@ StopTimeout=60
 # systemd 258. docs/operations/deployment-quadlet.md states what an older systemd leaves available and what it gives up.
 LoadCredentialEncrypted=mailfathom-database-password:%h/.config/credstore.encrypted/mailfathom-database-password
 LoadCredentialEncrypted=imap-primary-password:%h/.config/credstore.encrypted/imap-primary-password
+LoadCredentialEncrypted=admin-api-key:%h/.config/credstore.encrypted/admin-api-key
 # Only when a mailbox authenticates with OAuth. See config/10-mailfathom.json.example.
 #LoadCredentialEncrypted=mailfathom-data-key:%h/.config/credstore.encrypted/mailfathom-data-key
 # Only when message content is stored in a bucket — uncommented together with the ContentStorage lines above. The third

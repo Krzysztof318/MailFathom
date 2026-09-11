@@ -60,15 +60,18 @@ public sealed class ComposedSettingsWithdrawnUserCollectionTests
         Assert.Contains("Nothing imports what the section declared", error, StringComparison.Ordinal);
     }
 
-    /// <summary>A mail section left behind with no account in it declares no mailbox, so it stops no start.</summary>
+    /// <summary>
+    /// An upgraded file whose accounts were emptied rather than deleted declares no mailbox, so it stops no start. It is
+    /// read from JSON because an empty array is a shape only a file can state.
+    /// </summary>
     [Fact]
-    public void FindWithdrawnUserCollectionRefusals_AMailSectionCarryingNoAccount_IsNotRefused()
+    public void FindWithdrawnUserCollectionRefusals_AMailSectionCarryingAnEmptyAccountList_IsNotRefused()
     {
         // Arrange
-        var configuration = Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
-        {
-            ["MailSynchronization:Enabled"] = "true",
-        });
+        var configuration = new ConfigurationBuilder()
+            .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(
+                """{ "MailSynchronization": { "Enabled": true, "Accounts": [] } }""")))
+            .Build();
 
         // Act
         var refusals = ComposedSettings.FindWithdrawnUserCollectionRefusals(configuration);
@@ -110,7 +113,7 @@ public sealed class ComposedSettingsWithdrawnUserCollectionTests
         });
 
         // Act
-        var refusals = ComposedSettings.FindRefusals(configuration);
+        var refusals = ComposedSettings.FindRefusals(configuration, declaredAccounts: null);
 
         // Assert
         Assert.Equal("Accounts", refusals[0].SectionName);

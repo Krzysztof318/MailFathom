@@ -1165,10 +1165,11 @@ MailFathom setting, which is every override written for this deployment on purpo
 ### Users and their records
 
 A user is a person this deployment reads mail for, and a record is what it reads for them: the mailboxes, the
-credentials each one is reached with, and the settings that are theirs rather than the deployment's. A deployment
-starts holding nobody and serves nobody until these routes are used, whether it will end up serving one person or a
-household: no configuration section names a user, and none declares a mailbox. **A user is recorded here rather than
-declared anywhere**, and the first one recorded is served without a restart.
+credentials each one is reached with, and the settings that are theirs rather than the deployment's. A fresh
+deployment starts holding one user — the row its database is seeded with, labelled `user` and declaring nothing — and
+reads no mail until these routes declare some, whether it will end up serving one person or a household: no
+configuration section names a user, and none declares a mailbox. **A user is recorded here rather than declared
+anywhere**, and one recorded is served without a restart.
 
 **Every route here is administrative, and the listing exists here and nowhere else.** [The client
 surface](client-endpoint.md#the-record-routes) publishes the signed-in user's own record and nothing beside it, so

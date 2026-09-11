@@ -112,9 +112,10 @@ self-service and no default, so a username and password are written over
 - **An IMAP account to synchronize** and its password or app password, provisioned as a
   [secret reference](../operations/secret-provisioning.md) rather than written into configuration. The account itself
   is not configuration either: it is declared in the record of the user whose mailbox it is, which is the bullet below.
-- **The administrative endpoint, and `mfctl` to reach it.** A deployment holds no user until one is recorded, and no
-  configuration source records one — so every shape here starts, completes its startup gates, serves nobody, and says
-  so once, until `mfctl user add` and `mfctl user account add` write the person it serves and the mailbox it reads.
+- **The administrative endpoint, and `mfctl` to reach it.** No configuration source declares a mailbox: a fresh
+  deployment serves the one user its database is seeded with and reads nothing, in every shape here, until
+  `mfctl user account add` declares a mailbox in that user's record — and `mfctl user add` is how a second person is
+  recorded.
   That makes the endpoint part of an installation rather than an extra: [the administrative
   endpoint](../operations/admin-endpoint.md) is what to enable and how the credential it takes is provisioned, and
   [getting the command](../operations/admin-endpoint.md#getting-the-command) is where `mfctl` comes from.

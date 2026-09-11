@@ -60,13 +60,24 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
         return new(refusal);
     }
 
+    /// <summary>Reports a request that names no user reaching a deployment that serves nobody.</summary>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// Kept apart from <see cref="NoSoleUserToActFor" /> because the remedy is the opposite one. A fresh database is
+    /// seeded with one user, so a roster of none is a deployment whose every user was erased, and what ends it is
+    /// recording somebody rather than naming which of several a caller is.
+    /// </remarks>
+    public static DeploymentMailUserUnresolvedException NoUserToActFor() => new(
+        "This deployment holds no user record, so a request that names none has nobody to act for. Record one with "
+        + "'mfctl user add', then give them a mailbox with 'mfctl user account add'.");
+
     /// <summary>Reports a request that names no user reaching a deployment that serves several.</summary>
     /// <returns>The failure to raise.</returns>
     /// <remarks>
-    /// The only member here raised while the process serves requests rather than while it starts. Every other one
-    /// refuses a start; this one refuses one act, because a deployment serving several users is a state a start now
-    /// admits — the several-user bound holds over the surfaces that serve a person their own mail, and the
-    /// administrative surface is deliberately outside it. What is left is an administrative act reached by a
+    /// Raised while the process serves requests rather than while it starts, as <see cref="NoUserToActFor" /> is;
+    /// every other member refuses a start. This one refuses one act, because a deployment serving several users is a
+    /// state a start admits — the several-user bound holds over the surfaces that serve a person their own mail, and
+    /// the administrative surface is deliberately outside it. What is left is an administrative act reached by a
     /// credential naming nobody and asking about one person's contacts, mail accounts, or mailbox, which has no answer
     /// rather than a first one. It is classified so that a caller reads which failure it is instead of an unclassified
     /// fault, and so that the sentence names the credential that would have been answered.
@@ -84,9 +95,9 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
     /// <exception cref="ArgumentException">Thrown when <paramref name="displayName" /> is <see langword="null" />, empty, or white space.</exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="refusals" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// Separate from the deployment section's own secret refusal because a user's mailboxes are in a record that
-    /// section cannot reach, and an operator reading a path alone would not know whose mailbox it names. The
-    /// refusals carry no material and no length, exactly as the ones raised over the deployment's own section do.
+    /// Separate from the secret gate's own refusal because a user's mailboxes are in a record the configuration that
+    /// gate walks cannot reach, and an operator reading a path alone would not know whose mailbox it names. The
+    /// refusals carry no material and no length, exactly as the ones that gate raises over configuration do.
     /// </remarks>
     public static DeploymentMailUserUnresolvedException UserMailAccountsUnusable(
         string displayName,
@@ -116,7 +127,7 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
 
         return new(
             $"The record of the user labelled '{displayName}' is not the settings a user's document holds, and that "
-            + "user is served from it rather than from configuration: "
+            + "user is served from it and from nothing else: "
             + string.Join(" ", refusals));
     }
 }

@@ -4,6 +4,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Host.Configuration.Rules;
+using MailFathom.Host.Configuration.UserSettings;
 using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Configuration.RootSettings;
@@ -21,10 +23,11 @@ namespace MailFathom.Host.Configuration.RootSettings;
 /// <para>
 /// The container is thrown away with the answer. Nothing resolved from it ever runs: the options are materialized to
 /// be judged, the failures are collected, and the provider is disposed, so a candidate that would have configured a
-/// scanner, a client, or a worker configures none of them. The two dependencies the custom validators need are handed
-/// in from the running process rather than rebuilt, because what a deployment registered is a property of the
-/// deployment rather than of the candidate: the clock and the scanners a write is judged against are the ones the
-/// process actually has.
+/// scanner, a client, or a worker configures none of them. What the rules need from outside the candidate is handed in
+/// from the running process rather than rebuilt, because what a deployment registered is a property of the deployment
+/// rather than of the candidate: the clock and the scanners a write is judged against are the ones the process actually
+/// has, and so is the roster a rule's mailbox scope is judged against — no candidate file states who this deployment
+/// serves.
 /// </para>
 /// <para>
 /// Four shapes of failure arrive and all four are an operator's to fix. A data annotation or a custom validator
@@ -40,7 +43,8 @@ namespace MailFathom.Host.Configuration.RootSettings;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this validator.")]
 internal sealed class CandidateSettingsValidator(
     TimeProvider timeProvider,
-    IEnumerable<ISensitiveContentCatalog> sensitiveContentCatalogs)
+    IEnumerable<ISensitiveContentCatalog> sensitiveContentCatalogs,
+    ServedMailUsers servedUsers)
 {
     /// <summary>Finds what an operator must change before a candidate configuration could be the deployment's.</summary>
     /// <param name="candidate">The composed configuration the candidate document would produce.</param>
@@ -64,13 +68,26 @@ internal sealed class CandidateSettingsValidator(
     {
         try
         {
-            return [.. ComposedSettings.FindRefusals(candidate).SelectMany(refusal => refusal.Errors)];
+            return [.. ComposedSettings.FindRefusals(candidate, this.DeclaredAccounts()).SelectMany(refusal => refusal.Errors)];
         }
         catch (InvalidOperationException refusal)
         {
             return [refusal.Message];
         }
     }
+
+    /// <summary>Reads the mailboxes a rule may be scoped to off the roster this process serves.</summary>
+    /// <remarks>
+    /// Nothing, before the startup gate has settled the roster, which leaves a rule's claims about mailboxes to that
+    /// gate exactly as composition does. After it, the running roster is what the next start would judge the candidate
+    /// against, so a write naming a mailbox nobody records is refused here rather than committed — and a committed one
+    /// would stop that start in a way nobody could undo, the persisted layer outranking every file and being writable
+    /// only while the deployment runs.
+    /// </remarks>
+    private IReadOnlyCollection<DeclaredMailAccount>? DeclaredAccounts() =>
+        servedUsers.TryGetUsers() is { } users
+            ? DeclaredMailAccounts.ReadFrom(users.SelectMany(user => user.MailAccounts))
+            : null;
 
     /// <summary>Registers the bound sections over the candidate and runs the validators a start runs.</summary>
     /// <remarks>

@@ -60,9 +60,9 @@ says about mail:
 ```
 
 **The mailbox itself is not configuration.** Every mail account belongs to the record of the person whose mail it is,
-and a record is written while the deployment runs rather than read from a file — so a deployment holding no user starts,
-completes every startup gate, serves nobody, and says so once.
-[Step 6](#6-record-the-user-and-their-mailbox) is where this mailbox is recorded, and it is served from that moment
+and a record is written while the deployment runs rather than read from a file — so a fresh deployment serves the one
+user its database is seeded with, reads no mail, and says so once.
+[Step 6](#6-record-the-mailbox) is where this mailbox is recorded, and it is served from that moment
 without a restart. What to write now is the account's own JSON object, saved as `mailbox.json` on the machine you
 administer the deployment from:
 
@@ -248,30 +248,30 @@ Then let the first synchronization run. Its progress is visible in the log — e
 and, once you can call a tool, in the `folderFreshness` every result carries. A large mailbox takes a while on the
 first pass; later runs move only what changed, every five minutes by default.
 
-## 6. Record the user and their mailbox
+## 6. Record the mailbox
 
-A deployment holds no user until one is recorded, and no configuration source records one: who this deployment serves
-is its own to keep, and the [administrative endpoint](administering.md) is where it is written. So the deployment
-started above serves nobody and said so once, in a line naming the two commands below —
-[a deployment that records no user](../operations/configuration-sources.md#a-deployment-that-records-no-user) is what
-that state is, and it refuses no start.
+A fresh deployment holds one user: its database is seeded with a first row, labelled `user`, whose record declares
+nothing. So the deployment started above serves that one person and reads no mail yet, and said so once — in a line
+naming `mfctl user account add`. Who a deployment serves and which mailboxes it reads are its own to keep, and the
+[administrative endpoint](administering.md) is where both are written;
+[a deployment that records no user](../operations/configuration-sources.md#a-deployment-that-records-no-user) is the
+rest of that story.
 
-`mfctl` is the client for that endpoint; [administering a deployment](administering.md) covers reaching it. From there,
-two commands:
+`mfctl` is the client for that endpoint; [administering a deployment](administering.md) covers reaching it. From there:
 
 ```console
-$ mfctl user add --display-name "Alex"
-Recorded Alex as 6f1c….
+$ mfctl user rename --display-name "Alex"
 $ mfctl user account add --from-file mailbox.json
 ```
 
-The second reads the file written in [step 2](#2-write-down-the-mailbox) and declares that mailbox in Alex's record.
-Neither command names a user here, because this deployment holds one: `--user` is how a deployment serving several says
-which of them, and an invocation that omits it where there are several is refused rather than guessed at.
+The first is optional and changes only the label the user is told apart by. The second reads the file written in
+[step 2](#2-write-down-the-mailbox) and declares that mailbox in their record. Neither names a user, because this
+deployment holds one: `--user` is how a deployment serving several says which of them — `mfctl user add` records a
+second person — and an invocation that omits it where there are several is refused rather than guessed at.
 
 **The mailbox is served from that moment, without a restart.** The write that commits the record publishes it to the
-running roster, so the next synchronization run is this account's first one — and the same holds for the first user a
-deployment ever records.
+running roster, so the next synchronization run is this account's first one — and the same holds for every user
+recorded later.
 
 A declaration the deployment will not accept is refused whole rather than committed in part, naming what it refused: an
 account identifier the record already carries, a missing `Host` or `UserName`, a transport weakening that was not

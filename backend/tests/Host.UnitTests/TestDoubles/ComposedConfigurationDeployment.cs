@@ -9,6 +9,7 @@ using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Administration;
 using MailFathom.Host.Configuration.Provisioning;
 using MailFathom.Host.Configuration.RootSettings;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
@@ -72,7 +73,7 @@ internal sealed class ComposedConfigurationDeployment : IDisposable
             row,
             row,
             new CandidateConfigurationComposer(configuration, layer),
-            new CandidateSettingsValidator(new FakeTimeProvider(AnyInstant), []),
+            new CandidateSettingsValidator(new FakeTimeProvider(AnyInstant), [], new ServedMailUsers()),
             new RootSettingsReloader(layer.Provider, row, new RecordingLogger<RootSettingsReloader>()),
             new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
             new RecordingLogger<RootSettingsWriter>());

@@ -73,7 +73,7 @@ internal static class ComposedHostMailbox
         ["DisplayName"] = OrchestrationContract.ServedMailAccountDisplayName,
         ["Host"] = OrchestrationContract.ComposedHostSubmissionHost,
         ["UserName"] = OrchestrationContract.ComposedHostSendingAddress,
-        ["Secrets"] = PasswordBlock(),
+        ["Secrets"] = PasswordBlock(OrchestrationContract.ComposedHostReadingPasswordName),
         ["Folders"] = new JsonArray
         {
             new JsonObject
@@ -87,15 +87,20 @@ internal static class ComposedHostMailbox
             ["Enabled"] = true,
             ["Host"] = OrchestrationContract.ComposedHostSubmissionHost,
             ["FromAddress"] = OrchestrationContract.ComposedHostSendingAddress,
-            ["Secrets"] = PasswordBlock(),
+            ["Secrets"] = PasswordBlock(OrchestrationContract.ComposedHostSubmissionPasswordName),
         },
     };
 
-    private static JsonObject PasswordBlock() => new()
+    /// <summary>Composes one secret block, under the name it is declared by.</summary>
+    /// <remarks>
+    /// The name is the caller's rather than a constant here, because the reading block and the delivery block carry
+    /// the same material under two names: a record is judged in one walk and a secret name is claimed once within it.
+    /// </remarks>
+    private static JsonObject PasswordBlock(string name) => new()
     {
         ["Password"] = new JsonObject
         {
-            ["Name"] = OrchestrationContract.ComposedHostSubmissionPasswordName,
+            ["Name"] = name,
             ["SecretReference"] = $"plaintext:{OrchestrationContract.MailServerAccountPassword}",
         },
     };

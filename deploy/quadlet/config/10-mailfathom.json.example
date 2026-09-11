@@ -75,6 +75,18 @@
     "Enabled": true,
     "Interval": "00:05:00"
   },
+  // The administrative endpoint, which is how the mailbox above is recorded: `mfctl user account add` is a client of
+  // this surface, and nothing else writes a user's record. It is on for that reason rather than as an extra. Its own
+  // default port is 8080, which is the socket the MCP endpoint below is served on, so it states 8090 — the port
+  // mailfathom.container publishes for it, on loopback. The key is a systemd credential like every other one here,
+  // encrypted under the name `admin-api-key` and loaded by its own LoadCredentialEncrypted= line.
+  "AdminEndpoint": {
+    "Enabled": true,
+    "Port": 8090,
+    "Authentication": [
+      { "ApiKey": { "Name": "admin", "SecretReference": "systemd-credential:admin-api-key" } }
+    ]
+  },
   "McpEndpoint": {
     "Enabled": true,
     "Authentication": [

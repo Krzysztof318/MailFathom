@@ -12,21 +12,19 @@ using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Configuration.Spam;
 
-/// <summary>Reads each user's classification settings from whichever source their own record is read from.</summary>
+/// <summary>Reads each user's classification settings from their own record.</summary>
 /// <remarks>
 /// <para>
-/// Two sources and no layer between them. A user still served from a configuration source takes the deployment's
-/// <c>SpamClassification</c> section, and a user whose document has been written takes the block that document
-/// carries — which of the two applies is the per-user marker the roster holds, and nothing here unions them. That is
-/// what makes switching classification off in a written record actually switch it off, rather than reverting to
-/// whatever the file still says.
+/// One source and no layer over it. Whether a user's mail is classified, which of their folders are scanned, and at
+/// what threshold are the block their record carries and nothing else, so switching classification off in a record
+/// switches it off — there is no deployment section behind it to revert to.
 /// </para>
 /// <para>
 /// The wait comes from the deployment's section for every user, because it bounds how long the index may be held back
 /// by a scanner that has stopped answering — a cost the process bears rather than a decision about somebody's mail.
 /// </para>
 /// <para>
-/// The default scope is resolved here rather than in either section because it is not a constant: it is whichever alias
+/// The default scope is resolved here rather than stated in a record because it is not a constant: it is whichever alias
 /// each of that user's own accounts maps to its inbox. An operator whose server presents the inbox under another name
 /// configures the role, and the default has to follow the role rather than the literal text.
 /// </para>
