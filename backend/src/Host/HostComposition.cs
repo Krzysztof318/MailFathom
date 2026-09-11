@@ -10,6 +10,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Configuration;
 using MailFathom.Application.Contacts.Collection;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Move;
 using MailFathom.Application.EmailContent.Release;
@@ -641,6 +642,20 @@ internal static class HostComposition
         // per-scope value, and mapping it onto the application's settings is where the bound options stop being the host's shape.
         builder.Services.AddSingleton(provider =>
             provider.GetRequiredService<IOptions<JobQueueOptions>>().Value.ToExecutionSettings());
+        // The lease a job-carried walk holds its scope under is held on the job's own terms. A segment refused the scope
+        // defers its successor by the job's lease duration, which is long enough for a holder that stopped renewing to
+        // lose the scope only while the two durations are one.
+        builder.Services.AddSingleton<IWorkLeaseRunner>(provider =>
+        {
+            var jobSettings = provider.GetRequiredService<JobExecutionSettings>();
+
+            return new WorkLeaseRunner(
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                provider.GetRequiredService<ILoggerFactory>(),
+                provider.GetRequiredService<TimeProvider>(),
+                jobSettings.LeaseDuration,
+                jobSettings.LeaseRenewalInterval);
+        });
         // How much of this instance background work may take is one statement about the instance, so the capacity and the
         // gate that hands it out are singletons: a per-scope ceiling would be a ceiling per pass, which bounds nothing.
         builder.Services.AddSingleton(provider =>

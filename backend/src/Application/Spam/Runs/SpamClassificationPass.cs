@@ -16,7 +16,10 @@ namespace MailFathom.Application.Spam.Runs;
 /// run already has per-account isolation, a jittered backoff, a slot count that stops one account starving another, and
 /// a failure path that defers the account instead of the process; a classification walk needs every one of those and
 /// none of them differently. It follows that only one pass per account is ever in flight, structurally rather than by a
-/// lock — which is the other half of what makes one outstanding run per account mean one walk of one mailbox.
+/// lock of its own — which is the other half of what makes one outstanding run per account mean one walk of one mailbox.
+/// That holds across replicas as well, because an account's run happens only on the replica holding the account's
+/// synchronization lease and a lost hold cancels the pass with the rest of that run: whichever replica an operator's
+/// request reached only wrote the run down, and a second lease for the run would be a second mechanism for one scope.
 /// </para>
 /// <para>
 /// It reaches no mail server for the mail it reads. Every message it scores was committed by an earlier run and is read
