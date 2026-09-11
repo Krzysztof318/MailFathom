@@ -59,6 +59,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    // The address is read by the hook and one test moves it, so it is put back rather than left for the next file.
+    window.location.hash = '';
+
     if (declaredState === undefined) {
         Reflect.deleteProperty(window.history, 'state');
     } else {
@@ -223,6 +226,27 @@ describe('useBackNavigation', () => {
         theGestureIsUsed();
 
         expect(unwound).toHaveBeenCalledExactlyOnceWith(1);
+    });
+
+    // Moving to another space is a new entry at another address rather than a step back through the screen, and it
+    // arrives as the same event a press does — before the space being arrived at has rendered, so what is standing is
+    // still the screen being left. Read as a press it would spend itself on that screen, closing a message on a space
+    // the reader has already gone from.
+    it('unwinds nothing where the event arrived at another address', () => {
+        const unwound = vi.fn();
+
+        renderHook(() => {
+            useBackNavigation(1, unwound);
+        });
+
+        act(() => {
+            window.location.hash = '#/discover';
+        });
+
+        theEntryShowing(null);
+        theGestureIsUsed();
+
+        expect(unwound).not.toHaveBeenCalled();
     });
 
     // A reload is the one time the entry showing describes a screen that no longer exists: the marks were written by

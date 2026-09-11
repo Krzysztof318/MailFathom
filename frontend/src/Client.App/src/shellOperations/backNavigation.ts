@@ -121,9 +121,16 @@ export function useBackNavigation(steps: number, unwind: (used: number) => void)
     const reconciled = useRef(false);
     const travelling = useRef(0);
 
+    // The address the steps above were counted at. A fragment navigation is a new entry rather than a step back
+    // through the screen, and it announces itself the way a press does — the event arrives before the new address has
+    // been rendered, so what is standing is still the screen being left. Comparing the address is what tells the two
+    // apart: a press unwinds the screen it was made on, and moving somewhere else unwinds nothing.
+    const countedAt = useRef('');
+
     useEffect(() => {
         standing.current = steps;
         unwinding.current = unwind;
+        countedAt.current = window.location.hash;
     });
 
     useEffect(() => {
@@ -146,6 +153,13 @@ export function useBackNavigation(steps: number, unwind: (used: number) => void)
                     travelling.current += 1;
                 }
 
+                return;
+            }
+
+            // An entry at another address, which is somebody moving to another space rather than back through this
+            // one. What is standing was counted for the space being left, and the space arriving counts its own the
+            // moment it renders, so nothing is unwound here.
+            if (window.location.hash !== countedAt.current) {
                 return;
             }
 

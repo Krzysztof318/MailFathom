@@ -500,15 +500,23 @@ export function App({
     // them does to go away are one fact read twice. A press that unwinds two of them at once is what makes the
     // difference: asking the workspace again for the second step would answer with the surface the first has already
     // taken away, this event holding the revision that closed one no more than it holds the one that opened it.
-    const inFrontOfTheList = [
-        inTabs && workspace.attachment !== null ? openTabs.closeAttachment : null,
-        inTabs && workspace.fullHtml !== null ? openTabs.closeFullHtml : null,
-        twoPanes || (workspace.selection === null && workspace.conversation === null)
-            ? null
-            : () => {
-                  revise({ selection: null, conversation: null });
-              },
-    ].filter((close) => close !== null);
+    //
+    // They are the Mail space's own steps, so they count only while that space is in front. It is stood aside rather
+    // than taken down and goes on holding what it had open, which is what makes the question worth asking at all: a
+    // step counted from another space is a press spent closing a message the reader cannot see instead of leaving the
+    // space they are on.
+    const inFrontOfTheList =
+        space !== 'mail'
+            ? []
+            : [
+                  inTabs && workspace.attachment !== null ? openTabs.closeAttachment : null,
+                  inTabs && workspace.fullHtml !== null ? openTabs.closeFullHtml : null,
+                  twoPanes || (workspace.selection === null && workspace.conversation === null)
+                      ? null
+                      : () => {
+                            revise({ selection: null, conversation: null });
+                        },
+              ].filter((close) => close !== null);
 
     useBackNavigation(layers.depth + inFrontOfTheList.length, (used) => {
         let left = used;
@@ -528,15 +536,21 @@ export function App({
     // that screen rather than the layer somebody had over it. A layer that survived would be one they cannot get rid of
     // without finding its own close control, which on a phone is where it is hardest to find.
     //
-    // The reading column's own surfaces go with them, and for a second reason as well as that one: they are steps the
-    // back gesture has to unwind, and a step left standing while another space is on the screen is a press that closes
-    // something nobody can see instead of leaving the space they are in.
+    // The surfaces standing in front of the message go with them, for the same reason: a file being read and a
+    // message's own markup each stand over the reading column, and coming back to a column with one of them still on
+    // it is coming back to something nobody left it on.
+    //
+    // The message itself does not. It stands beside the list rather than over it, so there is nothing to get rid of and
+    // nothing hidden behind it — and the Mail space is stood aside rather than taken down exactly so that what it holds
+    // survives a reader going elsewhere. Emptying the workspace here is what made the space keep its pages and its
+    // scroll offset and lose the message they were reading, which is #1914. What that leaves behind is the counting
+    // above, which asks which space is in front rather than being answered by an empty workspace.
     const destination = useRef(space);
     const { closeAttachment, closeFullHtml } = openTabs;
 
     // The first destination is arrived at rather than moved to: the space is unknown until the session says which ones
     // this credential is offered, so the client's own opening screen would otherwise read as somewhere it had been
-    // taken away from — and would clear a reader's place the moment a reload restored it.
+    // taken away from.
     useEffect(() => {
         const left = destination.current;
 
@@ -549,8 +563,7 @@ export function App({
         layers.closeEvery();
         closeAttachment();
         closeFullHtml();
-        revise({ selection: null, conversation: null });
-    }, [space, layers, closeAttachment, closeFullHtml, revise]);
+    }, [space, layers, closeAttachment, closeFullHtml]);
 
     function signedIn(reached: DeploymentAddress, session: KeptSession, keptBeyondTheTab: boolean): void {
         if (adopted === null) {
