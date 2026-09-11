@@ -1423,9 +1423,9 @@ else: no shell, no editor, no writer, no network tool, no MCP tool, no subagent,
 and no read access to `.git`, where the action leaves a token for its own use.
 None of them holds a credential it could use and none posts anything. The judge's
 findings are the run's own answer, and the step after it validates them and submits
-a single review: `event: COMMENT` when the answer holds findings that withhold
-approval, `event: APPROVE` when it holds none and when the ones it holds are all P3,
-described under **What a later pass is for** below.
+a single review: `event: COMMENT` when the answer holds any finding at all, and
+`event: APPROVE` when it holds none, described under **What a later pass is for**
+below.
 
 The model is named exactly rather than by alias: `claude-sonnet-5` at
 `--effort high`. An alias re-points at whatever ships next, and findings are only
@@ -1731,10 +1731,9 @@ grow:
   about the subscription rather than about any one change;
 - a later pass starts readers only for the groups holding a path that moved since the
   previous review, so the second and later rounds cost a fraction of the first;
-- a P3 never withholds approval, and from the fourth automatic pass neither does a
-  P2, so no round is ever spent on a finding whose own severity says it can wait —
-  and the pass that raises that bar leaves the `security` label's wide sweep behind
-  with it.
+- from the fourth automatic pass the reviewer reports P1 alone, so no round is ever
+  spent on a finding whose own severity says it can wait — and the pass that raises
+  that bar leaves the `security` label's wide sweep behind with it.
 
 The last four are the only ones that bound how *hard* a run works rather than how
 often one starts, and they are the set worth re-measuring rather than tuning by
@@ -1976,38 +1975,36 @@ coverage line then separates the two shapes of unread — a file inside a re-rea
 group that no report names, which is a gap and is named, and a file in a group
 nobody re-read, which carries the previous review's verdict and is counted.
 
-**A P3 never withholds approval.** A P1 breaks something and a P2 is owed by a rule,
-so either holds the change however late it arrives. A P3 is paid for later by
-definition, and a round spent holding a change for one costs more than the finding
-is worth. So a review carrying nothing above P3 is published as an approval with
-those findings attached as inline comments, at every pass including the first.
-Nothing is hidden and nothing is postponed silently: the findings are published
-exactly as they would have been, and the thread-resolution rule the `main` ruleset
-carries still makes each one answerable before the merge. What changes is only the
-verdict they arrive under.
+**An approval carries no findings.** The verdict follows the list rather than the
+severities in it: an empty answer is published as `event: APPROVE` under an
+`APPROVED` heading with the summary and nothing else, and an answer holding anything
+at all is published as `event: COMMENT` under `NEEDS CHANGES` with its findings as
+inline threads. So `APPROVED` means the reviewer found nothing, and reading the
+verdict is the whole of reading an approval.
 
-This started at the fourth pass and became unconditional on measurement. Across 106
-published reviews on 36 pull requests, 72 withheld approval and exactly one of them
-carried nothing but P3 findings — so the threshold bought one review, at the price of
-a verdict that depended on which round a finding happened to be noticed in and a pass
-counter threaded into the submission. P3 findings themselves are not rare, at 95 of
-326, which is the other half of the reading: they arrive beside P1 and P2 findings,
-where the verdict was never theirs to decide.
+A finding is a round the reviewer asks the author for, so what a pass weighs is
+whether each one is worth a round — and it weighs it before writing the finding
+rather than afterwards in the verdict. A verdict that softened for a low severity
+would spare the author nothing, the thread being there to answer either way, while
+costing every reader of an approval the question of what was still owed under it.
+**A fourth pass raises its own bar** below is where that weighing happens.
 
-The prompt states the severities and the consequence together, because the
-reviewer writing a P3 as a P2 to make it hold the change would be arranging a
-verdict rather than reporting one.
+The severity is therefore a property of the defect and nothing else. It ranks a
+finding for whoever answers it and decides whether a settling pass writes it at all;
+it steers no verdict, so the prompt states it with nothing for a reviewer to arrange
+by writing one level as another.
 
 **A fourth pass raises its own bar.** The three rules above bound what a later pass
 concludes about and re-reads; this one bounds what is worth an author's round at
 all. The gate resolves a *posture* beside the pass count it already keeps —
 `settling` for an automatic pass with three or more automatic reviews already
-published, `full` otherwise — and hands the same value to the readers' prompts, the
-reviewer's prompt, and the verdict, so what a review was written to and what it is
-published under cannot come apart. Under `settling` the reviewer reports P1 and P2
-only, the wide sweep the `security` label asks for is behind it, and a P1 alone
-withholds approval; a P2 arrives as a thread under an approval exactly as a P3 does
-under `full`. Nothing else moves: the same rubrics apply, the coverage ledger and
+published, `full` otherwise — and hands the same value to the readers' prompts and
+the reviewer's prompt, so what one pass looks for and what another judges it by
+cannot come apart. Under `settling` the reviewer reports P1 alone and the wide sweep
+the `security` label asks for is behind it: a P2 or a P3 noticed that late is left
+out of the answer entirely rather than published under a softer verdict. The
+submission reads the posture nowhere, because a finding never written needs no
+threshold. Nothing else moves: the same rubrics apply, the coverage ledger and
 `obligations.json` are unchanged, the `security` label still selects the costlier
 model on every pass, and the severity written is still the one the defect has.
 
@@ -2029,12 +2026,11 @@ requested reviews. The run records the posture beside the pass count in its metr
 artifact rather than leaving it to be recomputed, because a requested pass and a
 settling one can carry the same count and mean opposite things.
 
-This is not the P3 threshold returning. That one settled a review carrying nothing
-but P3 findings from the fourth pass, and the measurement above it is what removed
-it; a P3 withholds approval at no pass, in either posture. What moves here is P2,
-which is what the numbers say actually holds a late change — and unlike its
-predecessor it is one value resolved in one place, rather than a threshold each
-reader of it evaluates again.
+What those 27 rounds argue is that the findings were not worth the passes they cost,
+and a pass that does not write a finding does not cost one. That is the whole of what
+the posture buys, and it buys it with one value resolved in one place: the verdict
+holds every finding that was written, so nothing at the submission has to agree with
+this bar and nothing there can drift from it.
 
 Both failure modes that split addresses are real and opposite. Judging a
 candidate while still looking suppresses findings that were not yet understood,
