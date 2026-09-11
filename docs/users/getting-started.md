@@ -9,7 +9,8 @@ from [installing MailFathom](installation.md); a developer evaluating from the c
 [Aspire orchestration](../operations/local-development.md#running-locally-with-aspire) instead, which provisions
 PostgreSQL and applies the schema on its own.
 
-**Somebody evaluating MailFathom on the Compose shape can have steps 1 to 7 performed for them.**
+**Somebody evaluating MailFathom on the Compose shape can have steps 1 to 5 and 7 performed for them, and the
+`mfctl` commands of step 6 printed.**
 `scripts/quick-start-compose.sh` asks the same questions this page does, writes the same values, prints the `mfctl`
 commands of step 6 — recording the user a deployment serves is yours, so it leaves that step to you — and ends by
 printing the two a client needs in step 8 — plus an address the [MailFathom client](../operations/client-endpoint.md) answers on

@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AppHost;
 
-/// <summary>Records the local mailbox and provisions the synthetic Basic credential once the normal local host is ready.</summary>
+/// <summary>Records the local user where the database holds none, then the local mailbox and the synthetic Basic credential, once the normal local host is ready.</summary>
 /// <remarks>
 /// Both writes go through the existing administrative API rather than through persistence, so the same validation,
 /// password policy, hashing, audit, and ownership rules apply here as to an operator performing them. Each is skipped
@@ -39,15 +39,10 @@ internal sealed partial class DevelopmentCredentialProvisioningWorker(
         using var client = httpClientFactory.CreateClient(HttpClientName);
         var provisioner = new DevelopmentCredentialProvisioner(client, timeProvider);
 
-        // A user is recorded before anything is declared for them, and never by this worker: a fresh database holds
-        // nobody until the developer records somebody, and this run provisions for them on the next launch.
-        if (await provisioner.WaitForSoleServedUserAsync(new Uri(healthAddress, "started"), adminAddress, stoppingToken)
-            is not { } user)
-        {
-            NoUserToProvisionFor(logger);
-
-            return;
-        }
+        var user = await provisioner.WaitForSoleServedUserAsync(
+            new Uri(healthAddress, "started"),
+            adminAddress,
+            stoppingToken);
 
         // The mailbox first, because it is what the deployment exists to read: a credential provisioned against a
         // record declaring no account would sign a client in to an empty deployment.
@@ -113,7 +108,4 @@ internal sealed partial class DevelopmentCredentialProvisioningWorker(
 
     [LoggerMessage(4, LogLevel.Information, "The local user's record already declares the mail account {AccountId} and was left unchanged.")]
     private static partial void MailAccountAlreadyDeclared(ILogger logger, string accountId);
-
-    [LoggerMessage(5, LogLevel.Warning, "The local host holds no user, so no mailbox or credential was provisioned. Record one with 'mfctl user add', then restart the AppHost.")]
-    private static partial void NoUserToProvisionFor(ILogger logger);
 }

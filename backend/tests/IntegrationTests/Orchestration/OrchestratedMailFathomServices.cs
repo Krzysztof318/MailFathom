@@ -518,28 +518,17 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         }
 
         var host = builder.Build();
-
-        // Before the start rather than after it, because the startup gate reads the roster once: a fresh database holds
-        // nobody, and a row written behind a started host would reach a roster that never asks again.
-        try
-        {
-            await RecordTheSuiteUserUnlessOneIsHeldAsync(host, cancellationToken);
-        }
-        catch
-        {
-            host.Dispose();
-
-            throw;
-        }
-
         await host.StartAsync(cancellationToken);
 
         // Nothing owns the host between starting it and handing it to the wrapper, and the read below throws whenever
         // the database holds anything but exactly one user — the state a class that provisions a second user leaves
         // if its erasure did not run. Without this the caller's `await using` never binds, so the started host keeps
-        // its data source and pooled connections for the rest of the suite and every later start leaks another.
+        // its data source and pooled connections for the rest of the suite and every later start leaks another. The
+        // user is recorded after the start rather than before it, because the connection string that reaching the
+        // database needs is composed while the host starts.
         try
         {
+            await RecordTheSuiteUserUnlessOneIsHeldAsync(host, cancellationToken);
             deploymentUser.Resolved(await ReadSoleUserAsync(host, cancellationToken));
         }
         catch

@@ -47,12 +47,13 @@ public sealed class DevelopmentCredentialProvisionerTests
     }
 
     [Fact]
-    public async Task WaitForSoleServedUserAsync_AHostHoldingNobody_NamesNoUserAndRecordsNone()
+    public async Task WaitForSoleServedUserAsync_AHostHoldingNobody_RecordsTheUserAndNamesThem()
     {
         // Arrange
         using var responses = new RecordingHandler(
             Response(HttpStatusCode.OK),
-            JsonResponse("""{"users":[]}"""));
+            JsonResponse("""{"users":[]}"""),
+            JsonResponse($$"""{"id":"{{UserId}}"}"""));
         using var client = new HttpClient(responses);
         var provisioner = new DevelopmentCredentialProvisioner(client, new FakeTimeProvider());
 
@@ -63,13 +64,16 @@ public sealed class DevelopmentCredentialProvisionerTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Null(user);
+        Assert.Equal(UserId, user);
         Assert.Equal(
             [
                 $"GET {StartedEndpoint}",
                 "GET http://127.0.0.1:5200/api/admin/users",
+                "POST http://127.0.0.1:5200/api/admin/users",
             ],
             responses.Requests.Select(static request => $"{request.Method} {request.Address}"));
+        using var body = JsonDocument.Parse(responses.Requests[^1].Body!);
+        Assert.Equal("user", body.RootElement.GetProperty("displayName").GetString());
     }
 
     [Fact]

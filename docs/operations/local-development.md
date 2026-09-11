@@ -514,10 +514,10 @@ The block shape is identical to production, so moving a working development conf
 **A mailbox is not configured this way and cannot be.** No configuration source declares a mail account, so a locally
 started host reads its mailbox from the record of a user it holds: `mfctl user add` records one, and
 `mfctl user account add --from-file mailbox.json` against its administrative endpoint declares the mailbox, carrying
-the same JSON object a configuration source used to. The app model declares that mailbox for you, out of the three
-mailbox parameters it collects, in the record of the one user the database holds — but it never records the user: a
-fresh database holds nobody, the launch logs a warning naming `mfctl user add`, and the next launch after you record
-somebody provisions the mailbox and the local credential for them.
+the same JSON object a configuration source used to. The app model does both for you when the orchestration starts the
+host, because a local launch is a quick start: where the database holds nobody it records a user labelled `user`, then
+declares the mailbox, out of the three mailbox parameters it collects, in that user's record. A deployment does neither
+— its first user is the one its administrator records.
 
 Neither file nor user secrets is a production secret store. User secrets are stored unencrypted in the developer's profile directory and exist only to keep credentials out of the repository; `appsettings.Development.json` is committed and must never hold a real credential. [Secret provisioning](secret-provisioning.md) describes the deployment paths.
 

@@ -12,12 +12,20 @@ namespace MailFathom.AppHost;
 
 internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimeProvider timeProvider)
 {
+    /// <summary>The label the local launch records its user under where the database holds nobody.</summary>
+    private const string RecordedUserDisplayName = "user";
+
     private static readonly TimeSpan ReadinessRetryDelay = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan ReadinessTimeout = TimeSpan.FromMinutes(2);
 
-    /// <summary>Waits for the local host to start, then names the one user it holds.</summary>
-    /// <returns>That user, or <see langword="null" /> where the host holds nobody — which a fresh database does until a developer records somebody.</returns>
-    internal async Task<Guid?> WaitForSoleServedUserAsync(
+    /// <summary>Waits for the local host to start, then names the one user it holds, recording them first where it holds nobody.</summary>
+    /// <returns>That user.</returns>
+    /// <remarks>
+    /// The local launch is a quick start, so it records the user a fresh database lacks rather than leaving the developer a
+    /// step before anything is provisioned — through the administrative API, as <c>mfctl user add</c> would. Nothing a
+    /// deployment runs does this: a deployment's first user is the one its administrator records.
+    /// </remarks>
+    internal async Task<Guid> WaitForSoleServedUserAsync(
         Uri startedEndpoint,
         Uri adminEndpoint,
         CancellationToken cancellationToken)
@@ -224,7 +232,7 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
         }
     }
 
-    private async Task<Guid?> ReadSoleServedUserAsync(Uri adminEndpoint, CancellationToken cancellationToken)
+    private async Task<Guid> ReadSoleServedUserAsync(Uri adminEndpoint, CancellationToken cancellationToken)
     {
         using var response = await client.GetAsync(
             new Uri(adminEndpoint, "api/admin/users"),
@@ -242,11 +250,29 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
 
         return users switch
         {
-            [] => null,
+            [] => await this.RecordUserAsync(adminEndpoint, cancellationToken),
             [var only] => only,
             _ => throw new InvalidOperationException(
                 $"The normal Aspire launch expected one recorded user but found {users.Length.ToString(CultureInfo.InvariantCulture)}."),
         };
+    }
+
+    private async Task<Guid> RecordUserAsync(Uri adminEndpoint, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(adminEndpoint, "api/admin/users"))
+        {
+            Content = new StringContent(
+                new JsonObject { ["displayName"] = RecordedUserDisplayName }.ToJsonString(),
+                Encoding.UTF8,
+                "application/json"),
+        };
+        using var response = await client.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        await using var content = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(content, cancellationToken: cancellationToken);
+
+        return document.RootElement.GetProperty("id").GetGuid();
     }
 
     private async Task<bool> CredentialExistsAsync(
