@@ -62,15 +62,15 @@ public sealed class OrchestratedStoredContentClaimTests(MailFathomOrchestrationF
         var user = OrchestratedDeploymentUser.Shared.User;
         var ceilings = await CeilingsWithRoomForAsync(onOneHost, payloadCount: 1, cancellationToken);
 
-        StoredContentClaimRecord? taken = null;
-        StoredContentClaimRecord? refusedElsewhere = null;
-        StoredContentClaimRecord? admittedElsewhere = null;
+        var claimed = new List<(OrchestratedMailFathomServices Host, StoredContentClaimRecord Record)>();
 
         try
         {
             // Act
-            taken = await ClaimAsync(onOneHost, user, ceilings, cancellationToken);
-            refusedElsewhere = await ClaimAsync(onAnotherHost, user, ceilings, cancellationToken);
+            var taken = await ClaimAsync(onOneHost, user, ceilings, cancellationToken);
+            claimed.Add((onOneHost, taken));
+            var refusedElsewhere = await ClaimAsync(onAnotherHost, user, ceilings, cancellationToken);
+            claimed.Add((onAnotherHost, refusedElsewhere));
 
             // Assert
             Assert.True(taken.IsGranted);
@@ -78,22 +78,27 @@ public sealed class OrchestratedStoredContentClaimTests(MailFathomOrchestrationF
 
             // Act
             await ReleaseAsync(onOneHost, taken.ClaimId!.Value, cancellationToken);
-            taken = null;
-            admittedElsewhere = await ClaimAsync(onAnotherHost, user, ceilings, cancellationToken);
+            var admittedElsewhere = await ClaimAsync(onAnotherHost, user, ceilings, cancellationToken);
+            claimed.Add((onAnotherHost, admittedElsewhere));
 
             // Assert
             Assert.True(admittedElsewhere.IsGranted);
         }
         finally
         {
-            // Every claim this test can be granted is released here whatever the assertions decided — including the
-            // one that should have been refused, since that is exactly what the regression this class exists for would
+            // Every claim this test was granted is released here whatever the assertions decided — including the one
+            // that should have been refused, since that is exactly what the regression this class exists for would
             // grant. A claim that outlives a failing test reserves its bytes for the whole of ClaimLifetime in a
             // database this collection shares, and every claim test states its room from the catalogue alone, so the
-            // next one would report an arrangement with no room rather than the defect that actually failed.
-            await ReleaseIfGrantedAsync(onOneHost, taken, cancellationToken);
-            await ReleaseIfGrantedAsync(onAnotherHost, refusedElsewhere, cancellationToken);
-            await ReleaseIfGrantedAsync(onAnotherHost, admittedElsewhere, cancellationToken);
+            // next one would report an arrangement with no room rather than the defect that actually failed. Releasing
+            // the one already given back is harmless: a release that meets no claim is not an error.
+            foreach (var (host, record) in claimed)
+            {
+                if (record.ClaimId is { } claimId)
+                {
+                    await ReleaseAsync(host, claimId, cancellationToken);
+                }
+            }
         }
     }
 
@@ -149,17 +154,6 @@ public sealed class OrchestratedStoredContentClaimTests(MailFathomOrchestrationF
             (scope, token) => scope.GetRequiredService<IStoredContentClaimStore>()
                 .ClaimAsync(user, PayloadByteCount, ceilings, ClaimLifetime, token),
             cancellationToken);
-
-    private static async Task ReleaseIfGrantedAsync(
-        OrchestratedMailFathomServices services,
-        StoredContentClaimRecord? record,
-        CancellationToken cancellationToken)
-    {
-        if (record?.ClaimId is { } claimId)
-        {
-            await ReleaseAsync(services, claimId, cancellationToken);
-        }
-    }
 
     /// <summary>Gives one claim's room back, through a scope of its own the way the ceiling's own disposal does.</summary>
     private static Task<Guid> ReleaseAsync(
