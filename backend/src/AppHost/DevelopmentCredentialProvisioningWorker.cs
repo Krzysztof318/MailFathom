@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AppHost;
 
-/// <summary>Records the local mailbox and provisions the synthetic Basic credential once the normal local host is ready.</summary>
+/// <summary>Records the local user where the database holds none, then the local mailbox and the synthetic Basic credential, once the normal local host is ready.</summary>
 /// <remarks>
 /// Both writes go through the existing administrative API rather than through persistence, so the same validation,
 /// password policy, hashing, audit, and ownership rules apply here as to an operator performing them. Each is skipped

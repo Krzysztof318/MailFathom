@@ -15,8 +15,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
     /// foreign key at a row nothing had inserted, which fails on any database that already holds a mailbox. The three
     /// statements between the generated operations are what make it apply forward instead: the user this deployment is
     /// already serving is provisioned, every mailbox already stored is carried onto it, and only then does the column
-    /// become required and keyed. A database with no mailbox in it gets the user row all the same, because binding the
-    /// first folder of a configured account reads that record rather than inventing one.
+    /// become required and keyed. A database holding nothing this chain carries onto a user gets no row at all: a user
+    /// is somebody an administrator records, so a fresh deployment starts holding nobody.
     /// </remarks>
     public partial class AddUserAccounts : Migration
     {
@@ -42,11 +42,35 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
             // share a user identity and nothing downstream can come to depend on a well-known one. The document
             // starts empty: what belongs in it is the user's mail-account declarations and settings, which are still
             // read from configuration at this release and are imported into it by the change that moves them.
+            // The row exists to own what the database already stored, so it is written only where one of the tables
+            // this migration and the three after it carry onto the first user holds a row — every one of them exists
+            // by now, and a later one filling a column from this row would otherwise meet no row and refuse to make
+            // the column required. A fresh database gets none, and its first user is the one an administrator records.
             migrationBuilder.Sql(
                 """
                 INSERT INTO settings_accounts ("Id", "Document", "Version", "CreatedAt", "UpdatedAt")
                 SELECT gen_random_uuid(), '{}'::jsonb, 1, now(), now()
-                WHERE NOT EXISTS (SELECT 1 FROM settings_accounts);
+                WHERE NOT EXISTS (SELECT 1 FROM settings_accounts)
+                  AND (EXISTS (SELECT 1 FROM mailbox_accounts)
+                    OR EXISTS (SELECT 1 FROM embedding_spend_periods)
+                    OR EXISTS (SELECT 1 FROM contacts)
+                    OR EXISTS (SELECT 1 FROM email_thread_identifiers)
+                    OR EXISTS (SELECT 1 FROM email_threads)
+                    OR EXISTS (SELECT 1 FROM mail_answering_audit_entries)
+                    OR EXISTS (SELECT 1 FROM mailbox_mutation_audit_entries)
+                    OR EXISTS (SELECT 1 FROM mailbox_mutations)
+                    OR EXISTS (SELECT 1 FROM mailbox_refresh_tokens)
+                    OR EXISTS (SELECT 1 FROM mail_drafts)
+                    OR EXISTS (SELECT 1 FROM mail_folders)
+                    OR EXISTS (SELECT 1 FROM mail_rederivation_positions)
+                    OR EXISTS (SELECT 1 FROM mail_rederivation_runs)
+                    OR EXISTS (SELECT 1 FROM mail_rule_evaluation_runs)
+                    OR EXISTS (SELECT 1 FROM mail_rule_executions)
+                    OR EXISTS (SELECT 1 FROM outgoing_email_filings)
+                    OR EXISTS (SELECT 1 FROM outgoing_emails)
+                    OR EXISTS (SELECT 1 FROM recurring_sends)
+                    OR EXISTS (SELECT 1 FROM spam_classification_runs)
+                    OR EXISTS (SELECT 1 FROM stored_emails));
                 """);
 
             migrationBuilder.AddColumn<Guid>(

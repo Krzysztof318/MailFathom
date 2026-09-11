@@ -153,9 +153,9 @@ public sealed class UserCommandTests : IDisposable
         Assert.Single(deployment.UserRequestsTo(HttpMethod.Put, AdminEndpointRoutes.UserDisplayNamePath(User)));
     }
 
-    /// <summary>An empty roster is a deployment whose users have all been removed, which is worth saying rather than printing nothing.</summary>
+    /// <summary>An empty roster is where every fresh deployment stands, so it names the command that records the first user rather than printing nothing.</summary>
     [Fact]
-    public async Task List_ADeploymentHoldingNoUser_SaysWhatAnEmptyRosterMeans()
+    public async Task List_ADeploymentHoldingNoUser_NamesTheCommandThatRecordsTheFirst()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.HoldingNobody();
@@ -167,7 +167,7 @@ public sealed class UserCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
             this.harness.Console.Lines,
-            line => line.Contains("have all been removed", StringComparison.Ordinal));
+            line => line.Contains("Record the first one with 'user add'", StringComparison.Ordinal));
     }
 
     /// <summary>A deployment serving one user needs no identifier typed, which is what makes the ordinary invocation short.</summary>

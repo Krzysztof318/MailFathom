@@ -265,20 +265,22 @@ that runs it becomes the user of everything it creates, and what each startup fa
 
 ### Recording the mailbox
 
-The started deployment serves the one user a fresh database is seeded with, and reads no mailbox. Which mailboxes it
-reads are rows it keeps rather than settings it reads, so each is declared over the administrative endpoint enabled
-above, signed in with the key encrypted beside the other credentials:
+The started deployment holds no user, and reads no mailbox. Who it serves and which mailboxes it reads are rows it
+keeps rather than settings it reads, so each is recorded over the administrative endpoint enabled above, signed in with
+the key encrypted beside the other credentials:
 
 ```bash
 systemd-creds --user decrypt ~/.config/credstore.encrypted/admin-api-key - \
   | mfctl login --endpoint http://127.0.0.1:8090
+mfctl user add --display-name Alex
 mfctl user account add --from-file mailbox.json
 ```
 
 `mailbox.json` is the JSON object one mail account is declared as — the object the example configuration's comments
 show, `systemd-credential:` reference and all, so the mailbox password encrypted into the store above is what it names.
-The mailbox is served from the moment the write commits, without restarting the unit. `mfctl user add` records a
-second person, and `--user` then says whose record a command writes.
+The mailbox is served from the moment the write commits, without restarting the unit. `mfctl user account add` names
+no user, because the deployment then holds exactly one; once `mfctl user add` records a second person, `--user` says
+whose record a command writes.
 [Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes in the
 file.
 

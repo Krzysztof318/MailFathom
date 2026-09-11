@@ -53,9 +53,8 @@ internal static class ListUsersCommand
         if (roster.Users is not { Count: > 0 } users)
         {
             context.Console.WriteLine(
-                "This deployment holds no user records. A fresh database is seeded with one and 'user add' records "
-                + "others, so an empty roster is a deployment whose users have all been removed; 'user add' records "
-                + "one again.");
+                "This deployment holds no user records. Record the first one with 'user add', then give them a "
+                + "mailbox with 'user account add'.");
 
             return CliExitCode.Success;
         }

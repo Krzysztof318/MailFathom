@@ -201,9 +201,9 @@ A label is applied only where nobody else holds it, because a label names one us
 
 ### A deployment that records no user
 
-**A fresh database holds one user.** The migration that creates the table of users seeds its first row, labelled `user`, with a record declaring nothing — so a first run serves that one person and reads no mail yet, and `mfctl user account add` gives them a mailbox without naming them. `mfctl user rename` changes the label, and `mfctl user add` records a second person.
+**A fresh database holds no user.** A user is somebody an administrator records, so a first run serves nobody and reads no mail until `mfctl user add` records the first person and `mfctl user account add` gives them a mailbox — without naming them, while they are the only one. The migration that creates the table of users writes a row of its own only where it upgrades a database already holding mail from a release before users were recorded, so that the stored mail has somebody to belong to: one user, labelled `user`, with a record declaring nothing. `mfctl user rename` changes that label.
 
-**A deployment holding no user starts, completes every startup gate, reports itself started, and serves nobody.** That is where a deployment whose every user was erased stands, and nothing about it is a failure: there is no roster to compose, no mailbox to read, and no surface answering for anybody. It says so once, at `Information`:
+**A deployment holding no user starts, completes every startup gate, reports itself started, and serves nobody.** That is where every new deployment stands on its first start, and where one whose every user was erased returns to, and nothing about it is a failure: there is no roster to compose, no mailbox to read, and no surface answering for anybody. It says so once, at `Information`:
 
 ```
 This deployment holds no user and therefore serves nobody. Record one with 'mfctl user add', then give them a mailbox with 'mfctl user account add'.

@@ -523,9 +523,12 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // Nothing owns the host between starting it and handing it to the wrapper, and the read below throws whenever
         // the database holds anything but exactly one user — the state a class that provisions a second user leaves
         // if its erasure did not run. Without this the caller's `await using` never binds, so the started host keeps
-        // its data source and pooled connections for the rest of the suite and every later start leaks another.
+        // its data source and pooled connections for the rest of the suite and every later start leaks another. The
+        // user is recorded after the start rather than before it, because the connection string that reaching the
+        // database needs is composed while the host starts.
         try
         {
+            await RecordTheSuiteUserUnlessOneIsHeldAsync(host, cancellationToken);
             deploymentUser.Resolved(await ReadSoleUserAsync(host, cancellationToken));
         }
         catch
@@ -542,7 +545,32 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         return new OrchestratedMailFathomServices(host);
     }
 
-    /// <summary>Reads the one user the orchestrated database holds, which the migrations provisioned.</summary>
+    /// <summary>The label the suite records its user under, which is the composed host's too, so both converge on one row.</summary>
+    private const string SuiteUserDisplayName = "user";
+
+    /// <summary>Records the user this suite's mail belongs to, unless an earlier start over this database already did.</summary>
+    /// <remarks>
+    /// The suite's own arrangement rather than anything a deployment does: a fresh database holds nobody, and a user is
+    /// recorded before anything is stored for them, through the port an administrator's <c>mfctl user add</c> reaches.
+    /// Only while the table is empty, because the suite starts several hosts over one database and every row an earlier
+    /// start stored already names the user it recorded. Two starts racing here both insert under one label, and the
+    /// label's unique index keeps one.
+    /// </remarks>
+    private static async Task RecordTheSuiteUserUnlessOneIsHeldAsync(IHost host, CancellationToken cancellationToken)
+    {
+        await using var scope = host.Services.CreateAsyncScope();
+
+        if (await scope.ServiceProvider.GetRequiredService<MailFathomDbContext>().UserAccounts.AnyAsync(cancellationToken))
+        {
+            return;
+        }
+
+        await scope.ServiceProvider
+            .GetRequiredService<IMailUserProvisioning>()
+            .ProvisionAsync(MailUserId.Create(Guid.NewGuid()), SuiteUserDisplayName, cancellationToken);
+    }
+
+    /// <summary>Reads the one user the orchestrated database holds, which the harness recorded before the first start.</summary>
     /// <remarks>
     /// The identifier is the database's rather than the harness's because the schema keys onto it: a contact names its
     /// user through a foreign key, so a stated identifier would name a row that does not exist. It is read once, after

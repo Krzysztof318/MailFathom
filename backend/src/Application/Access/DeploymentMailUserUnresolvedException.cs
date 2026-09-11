@@ -63,9 +63,9 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
     /// <summary>Reports a request that names no user reaching a deployment that serves nobody.</summary>
     /// <returns>The failure to raise.</returns>
     /// <remarks>
-    /// Kept apart from <see cref="NoSoleUserToActFor" /> because the remedy is the opposite one. A fresh database is
-    /// seeded with one user, so a roster of none is a deployment whose every user was erased, and what ends it is
-    /// recording somebody rather than naming which of several a caller is.
+    /// Kept apart from <see cref="NoSoleUserToActFor" /> because the remedy is the opposite one: a roster of none — a
+    /// fresh database, or a deployment whose every user was erased — is ended by recording somebody rather than by
+    /// naming which of several a caller is.
     /// </remarks>
     public static DeploymentMailUserUnresolvedException NoUserToActFor() => new(
         "This deployment holds no user record, so a request that names none has nobody to act for. Record one with "

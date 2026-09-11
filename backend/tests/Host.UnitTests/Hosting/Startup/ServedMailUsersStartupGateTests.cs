@@ -38,7 +38,7 @@ public sealed class ServedMailUsersStartupGateTests
     private static readonly Guid RecordedIdentifier = new("33333333-3333-3333-3333-333333333333");
 
     /// <summary>
-    /// The state a deployment whose every user was erased is in — a fresh database is seeded with one — and one a start
+    /// The state a fresh database is in, and so is a deployment whose every user was erased, and one a start
     /// admits: it starts, completes its gate, serves nobody, and says so. Refusing here would leave that deployment
     /// with no start to record a user from.
     /// </summary>
