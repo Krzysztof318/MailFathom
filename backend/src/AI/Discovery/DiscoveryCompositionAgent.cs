@@ -243,7 +243,7 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
             // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
             // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
             // the run's and the period's: this call is one of the two a Discover run makes, and both are charged.
-            using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
+            await using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
 
             var agent = DiscoveryCompositionAgentComposition.Compose(
                 chatClient,

@@ -130,7 +130,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
         // rather than being a second, unmetered way of reaching the provider. The refusal travels because a person
         // pressed a button: falling back here would leave them typing into a composer and waiting for a draft that
         // this deployment had already decided not to pay for.
-        if (!this.spendLedger.TryAdmitRun())
+        if (!await this.spendLedger.TryAdmitRunAsync(cancellationToken))
         {
             throw MailAnsweringBudgetExhaustedException.PeriodSpent();
         }
@@ -270,7 +270,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
             // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
             // this request's and the period's: what an operator pays a provider does not change because the call was
             // started from a composer.
-            using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
+            await using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
 
             var agent = ReplyDraftAgentComposition.Compose(
                 chatClient,

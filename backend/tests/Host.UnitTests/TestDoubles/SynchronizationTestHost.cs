@@ -163,7 +163,10 @@ internal static class SynchronizationTestHost
         // Bounded generously, so no test here waits on a budget it never meant to exercise: what these tests are about
         // is the supervisor's scheduling and failure isolation, and the budget itself is asserted where it lives.
         services.AddSingleton(new RawMimeMemoryBudget(long.MaxValue));
-        services.AddSingleton(new StoredContentCeiling(ceilingBytes: null));
+        services.AddSingleton<IStoredContentClaimStore>(new InMemoryStoredContentClaimStore());
+        services.AddSingleton(provider => new StoredContentCeiling(
+            provider.GetRequiredService<IStoredContentClaimStore>(),
+            ceilingBytes: null));
         services.AddSingleton(CreateMimeReaderThatExtractsEverything());
         services.AddSingleton(CreateReconciliationStoreWithNothingToDo());
         services.AddSingleton(CreateMutationStoreWithNothingRecorded());
@@ -323,7 +326,11 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<ISensitiveContentPostures>());
         services.AddSingleton(Substitute.For<ISensitiveContentDerivationTelemetry>());
         services.AddScoped<SensitiveContentDerivationGuard>();
-        services.AddSingleton(ProviderRequestPacer.Create(maxRequestsPerMinute: 0, TimeProvider.System));
+        // Named for the workload the deriver below actually paces: the real composition hands that type the keyed
+        // image-description pacer, and the two workloads are two quotas on two marker rows precisely so neither
+        // spends the other's slots. The clock is the suite's own, because a rate declared here later would otherwise
+        // be measured against the machine's.
+        services.AddSingleton(UnpacedImageDescription());
         services.AddScoped<EmailAttachmentTextDeriver>();
 
         // The two aggregate ceilings the pass reads before it opens a message, composed against an empty ledger and a
@@ -687,5 +694,17 @@ internal static class SynchronizationTestHost
                 SenderAuthentication.NotEstablished()))));
 
         return mimeReader;
+    }
+
+    /// <summary>A pacer that never waits, for the workload the attachment-text deriver composed here sends through.</summary>
+    private static ProviderRequestPacer UnpacedImageDescription()
+    {
+        var pacingClock = new FakeTimeProvider();
+
+        return ProviderRequestPacer.Create(
+            ProviderPacedWorkloads.AttachmentImageDescription,
+            maxRequestsPerMinute: 0,
+            new InMemoryProviderPaceMarker(pacingClock),
+            pacingClock);
     }
 }

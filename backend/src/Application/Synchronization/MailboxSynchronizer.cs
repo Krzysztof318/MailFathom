@@ -217,16 +217,16 @@ public sealed class MailboxSynchronizer
         // in flight, which is what let the previous read be one per run.
         var user = account.User;
 
-        // The mark is captured before the measurements, so bytes another run claims while these queries are in flight
-        // are carried onto the readings rather than being overwritten by them. Both levels are measured here because
-        // both bound this run, and neither figure answers for the other: the deployment's is what the disk fills with
-        // and the user's is what their payloads hold.
-        var measurementMark = this.storedContentCeiling.MarkBefore(user);
-        this.storedContentCeiling.Observe(
-            user,
-            await this.contentInventory.GetStoredContentBytesAsync(cancellationToken),
-            await this.userContentLedger.ReadStoredContentBytesAsync(user, cancellationToken),
-            measurementMark);
+        // Neither population is measured here any more: what a claim is admitted against is read inside the statement
+        // that takes it, so every replica claims against one reading rather than against its own. What this still owes
+        // is the user's counter row where nothing has ever written one — a deployment upgraded before their first
+        // message, or a user provisioned since — because the claim reads that row and an absence would read as an empty
+        // mailbox. The figure it returns is deliberately discarded: it is the derivation that matters, and it happens
+        // once per run rather than once per message.
+        if (this.storedContentCeiling.IsConfiguredPerUser)
+        {
+            await this.userContentLedger.ReadStoredContentBytesAsync(user, cancellationToken);
+        }
 
         var budget = new SynchronizationContentBudget(this.options.MaxContentBytesPerRun);
 
@@ -249,6 +249,13 @@ public sealed class MailboxSynchronizer
         var relocatedCount = 0;
         var hasMore = true;
         var stoppedForContentBudget = false;
+
+        // The bound that refused this run's first storage claim, once one has. Every occurrence discovered after it is
+        // recorded as awaiting headroom under the same bound without asking again, on the trade the deferred-content
+        // refill states: a smaller payload behind the refused one might still fit, but finding it would cost a claim —
+        // a transaction on the deployment's one claim serialization point — per message of the run, and nothing is lost
+        // by not asking, because the next run refills what this one deferred against whatever headroom exists by then.
+        StoredContentBound? storageRefusal = null;
         var inspectedBatchCount = 0;
         var suppressedChanges = new List<SuppressedMailboxChange>();
 
@@ -332,6 +339,7 @@ public sealed class MailboxSynchronizer
                         user,
                         budget,
                         collection,
+                        storageRefusal,
                         cancellationToken);
                     processedThroughUid = metadata.OccurrenceId.Uid;
 
@@ -340,6 +348,11 @@ public sealed class MailboxSynchronizer
                         // The folder stopped holding the occurrence between the batch that described it and the fetch. There
                         // is no message to record and nothing local to correct, so the checkpoint simply moves past it.
                         continue;
+                    }
+
+                    if (occurrence.Availability == StoredEmailContentAvailability.AwaitingStorageHeadroom)
+                    {
+                        storageRefusal ??= occurrence.ReachedStorageBound;
                     }
 
                     switch (occurrence.Availability)
@@ -467,6 +480,11 @@ public sealed class MailboxSynchronizer
             refillingContent.Completed();
         }
 
+        // Measured once, as the run ends, and reported rather than acted on: what admits a payload is read inside the
+        // statement that claims room for it, so this is the operator's reading of what storage holds and never the
+        // figure a decision was taken against.
+        var storedContentBytes = await this.contentInventory.GetStoredContentBytesAsync(cancellationToken);
+
         return MailboxSynchronizationResult.Synchronized(
             folder,
             storedCount,
@@ -481,7 +499,7 @@ public sealed class MailboxSynchronizer
             new MailboxContentVolume(
                 budget.FetchedBytes,
                 budget.StoredBytes,
-                this.storedContentCeiling.OccupiedBytes,
+                storedContentBytes,
                 deferredForStorageCount,
                 deferredForUserStorageCount,
                 refill.RefilledEmailCount,
@@ -655,6 +673,7 @@ public sealed class MailboxSynchronizer
                 user,
                 budget,
                 collection,
+                storageAlreadyRefused: null,
                 cancellationToken);
 
             // A ceiling filled up again while this pass ran. The pass stops asking rather than working down the queue
@@ -881,6 +900,7 @@ public sealed class MailboxSynchronizer
         MailUserId user,
         SynchronizationContentBudget budget,
         ContactCollectionRun collection,
+        StoredContentBound? storageAlreadyRefused,
         CancellationToken cancellationToken)
     {
         if (!this.WouldFetchContentOf(metadata))
@@ -895,13 +915,31 @@ public sealed class MailboxSynchronizer
                 cancellationToken);
         }
 
+        // A ceiling already refused this run, so the occurrence is deferred under the bound that refused it without a
+        // claim of its own — see where the refusal is carried for why asking again is not worth its cost.
+        if (storageAlreadyRefused is { } refusedBound)
+        {
+            return await this.RecordOccurrenceWithoutContentAsync(
+                user,
+                metadata,
+                placement,
+                filing,
+                StoredEmailContentAvailability.AwaitingStorageHeadroom,
+                refusedBound,
+                cancellationToken);
+        }
+
         // Room is claimed before the fetch rather than checked before the write, because a payload retrieved into a
         // full store would have cost the network read and the buffer for nothing, and because a check that every
         // concurrent run made against the same reading would let each of them believe it had the room the others were
-        // taking. The occurrence is still recorded, so the gap is queryable and a later run with room fetches exactly
-        // what this one left.
-        var storageAttempt = this.storedContentCeiling.TryClaim(user, this.AssumedContentCostOf(metadata));
-        using var storageClaim = storageAttempt.Claim;
+        // taking — which is as true of two replicas as it is of two runs in one process, and is why the claim is
+        // written where both can see it. The occurrence is still recorded, so the gap is queryable and a later run with
+        // room fetches exactly what this one left.
+        var storageAttempt = await this.storedContentCeiling.TryClaimAsync(
+            user,
+            this.AssumedContentCostOf(metadata),
+            cancellationToken);
+        await using var storageClaim = storageAttempt.Claim;
 
         if (storageClaim is null)
         {
@@ -998,7 +1036,6 @@ public sealed class MailboxSynchronizer
             cancellationToken);
 
         budget.RecordStored(content.RawMime.Length);
-        storageClaim.Settle(content.RawMime.Length);
 
         // Asked for after the commit rather than inside it, because the queue takes no persistence session by design:
         // work enqueued against a transaction that then rolled back would name a message no local state holds. It is one

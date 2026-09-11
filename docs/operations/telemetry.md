@@ -226,8 +226,8 @@ without their content, and `user_storage_ceiling` for one whose user was at thei
 still had room. The last two are separate values rather than one because they ask an operator for different things —
 more disk or a higher instance ceiling against the first, a larger share for one person or a wait against the second —
 and a run that left messages for both reasons reports both, one measurement each. One message is deferred by one of
-them rather than by both, because the instance's room is claimed first and a user is never charged for a payload the
-instance had no room for. All are counted rather than only logged
+them rather than by both, because a single claim decides against both ceilings at once and names the instance's where
+both are reached, so a user is never charged for a payload the instance had no room for. All are counted rather than only logged
 because each is a condition that persists — a run that stopped for its budget will stop again next interval, and a
 deployment or a user at a ceiling stays there until somebody acts — so a rising count says it has been running that
 way rather than that it did once.
@@ -1039,6 +1039,14 @@ counts what the provider reported those runs consuming.
 Beside them, `mailfathom.answering.period.runs` and `mailfathom.answering.period.tokens` report how much of the current
 period is already spent. The counter and the gauges answer opposite questions — how often the ceiling was reached, and
 how close the deployment is to reaching it now — and neither is visible from the other.
+
+**The two gauges report the deployment's figures as this replica last observed them, not this replica's own spend.**
+The period is a ledger row every replica admits and charges against, so what a gauge publishes is what that row held
+when this process last read it — which it does on every admission and every spend. So a replica answering questions
+publishes current numbers and one answering none publishes what it last saw, which is the honest reading and is what
+matters when several replicas' instruments are aggregated: **take the maximum across replicas rather than the sum**,
+because each is reporting the same shared figure and adding them multiplies it. A replica that has observed nothing in
+the current window reports it unspent, which is what that replica knows rather than what the deployment holds.
 
 An endpoint that reports no usage advances neither token figure, which is why the run and period ceilings exist in a
 call-count form as well. [Mail answering § What one question may

@@ -119,7 +119,7 @@ internal static class DiscoveryRuns
     public static IMailAnsweringSpendLedger PeriodAdmitting()
     {
         var ledger = Substitute.For<IMailAnsweringSpendLedger>();
-        ledger.TryAdmitRun().Returns(true);
+        ledger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(true);
 
         return ledger;
     }
@@ -129,7 +129,7 @@ internal static class DiscoveryRuns
     public static IMailAnsweringSpendLedger PeriodSpent()
     {
         var ledger = Substitute.For<IMailAnsweringSpendLedger>();
-        ledger.TryAdmitRun().Returns(false);
+        ledger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(false);
 
         return ledger;
     }

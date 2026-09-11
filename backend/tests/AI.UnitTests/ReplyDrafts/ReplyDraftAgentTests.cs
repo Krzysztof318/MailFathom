@@ -168,7 +168,7 @@ public sealed class ReplyDraftAgentTests
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion(Reply));
         var spendLedger = Substitute.For<IMailAnsweringSpendLedger>();
-        spendLedger.TryAdmitRun().Returns(false);
+        spendLedger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(false);
         var agent = provider.WriterOver(spendLedger: spendLedger);
 
         // Act and assert
@@ -306,7 +306,7 @@ public sealed class ReplyDraftAgentTests
         private static IMailAnsweringSpendLedger AdmittingSpendLedger()
         {
             var spendLedger = Substitute.For<IMailAnsweringSpendLedger>();
-            spendLedger.TryAdmitRun().Returns(true);
+            spendLedger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(true);
 
             return spendLedger;
         }

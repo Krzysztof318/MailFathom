@@ -378,7 +378,10 @@ one leaves every stored vector exactly as comparable as it was.
 - **How fast requests may go out.** `MaxRequestsPerMinute` spaces requests so a deployment never sends faster than it
   declared. It paces nothing by default, and it is for a provider whose quota is stated per minute: being refused for
   exceeding one costs an attempt, a retry, and a place in a circuit-breaker window other work is measured in. A caller
-  takes the next free slot and waits for it; nothing polls and nothing spins.
+  takes the next free slot and waits for it; nothing polls and nothing spins. **The rate is the deployment's rather
+  than each replica's** — the slot marker is a row every replica moves forward in one statement, which is what makes
+  the declared rate the one the provider sees however many replicas are sending. It paces the embedding workload alone:
+  describing pictures has a rate and a marker of its own, so neither workload's burst spends the other's slots.
 - **What one period may cost.** `MaxInputCharactersPerPeriod` and `SpendPeriod` are the aggregate ceiling, counted in
   the characters actually sent to a provider — the one quantity a price is approximately proportional to that this
   deployment can count exactly without carrying a model's own tokenizer. The period is a fixed window anchored at the

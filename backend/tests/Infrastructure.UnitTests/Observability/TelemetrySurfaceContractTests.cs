@@ -45,6 +45,7 @@ using MailFathom.Infrastructure.Embeddings;
 using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -107,6 +108,7 @@ public sealed class TelemetrySurfaceContractTests
 
     private static readonly MailAnsweringSpendTracker AnsweringSpend = new(
         MailAnsweringPeriodBounds.Create(TimeSpan.FromHours(1), maximumRuns: 30, maximumTokens: 300_000),
+        AnsweringSpendScopes(),
         Clock,
         NullLogger<MailAnsweringSpendTracker>.Instance);
 
@@ -183,10 +185,10 @@ public sealed class TelemetrySurfaceContractTests
     /// that would have been seen.
     /// </remarks>
     [Fact]
-    public void EmittedSurface_EveryPublisherDriven_ReportsASurfaceWithThePoisonedInputInIt()
+    public async Task EmittedSurface_EveryPublisherDriven_ReportsASurfaceWithThePoisonedInputInIt()
     {
         // Arrange
-        using var surface = DriveEveryPublisher();
+        using var surface = await DriveEveryPublisherAsync();
 
         // Act
 
@@ -199,10 +201,10 @@ public sealed class TelemetrySurfaceContractTests
 
     /// <summary>Nothing this process publishes is named after a message, a person, or a secret.</summary>
     [Fact]
-    public void EmittedSurface_EveryPublisherDriven_IsNamedAfterNothingInAMailbox()
+    public async Task EmittedSurface_EveryPublisherDriven_IsNamedAfterNothingInAMailbox()
     {
         // Arrange
-        using var surface = DriveEveryPublisher();
+        using var surface = await DriveEveryPublisherAsync();
 
         // Act — the drive is the act; what is asserted is everything it emitted.
 
@@ -212,10 +214,10 @@ public sealed class TelemetrySurfaceContractTests
 
     /// <summary>Every instrument and every dimension sits under the one name an operator filters this process by.</summary>
     [Fact]
-    public void EmittedSurface_EveryPublisherDriven_IsNamespacedUnderMailFathom()
+    public async Task EmittedSurface_EveryPublisherDriven_IsNamespacedUnderMailFathom()
     {
         // Arrange
-        using var surface = DriveEveryPublisher();
+        using var surface = await DriveEveryPublisherAsync();
 
         // Act
 
@@ -225,10 +227,10 @@ public sealed class TelemetrySurfaceContractTests
 
     /// <summary>Every span is named after the operation it reports rather than after anything that operation saw.</summary>
     [Fact]
-    public void EmittedSurface_EveryPublisherDriven_NamesEverySpanAfterItsOperation()
+    public async Task EmittedSurface_EveryPublisherDriven_NamesEverySpanAfterItsOperation()
     {
         // Arrange
-        using var surface = DriveEveryPublisher();
+        using var surface = await DriveEveryPublisherAsync();
 
         // Act
 
@@ -243,10 +245,10 @@ public sealed class TelemetrySurfaceContractTests
     /// to, on the dimensions named for it.
     /// </remarks>
     [Fact]
-    public void EmittedSurface_EveryPublisherDrivenWithPoisonedInput_LetsNoneOfItReachAnExporter()
+    public async Task EmittedSurface_EveryPublisherDrivenWithPoisonedInput_LetsNoneOfItReachAnExporter()
     {
         // Arrange
-        using var surface = DriveEveryPublisher();
+        using var surface = await DriveEveryPublisherAsync();
 
         // Act
 
@@ -261,6 +263,20 @@ public sealed class TelemetrySurfaceContractTests
             typeof(MailSynchronizationTelemetry).Assembly,
             DrivenPublishers);
 
+    /// <summary>Opens the scopes the answering tracker writes each admission and each spend through.</summary>
+    /// <remarks>
+    /// The ledger behind it is in memory, because what this suite reads is what the tracker published rather than what
+    /// the deployment has spent; a real one would need a database to drive a telemetry contract.
+    /// </remarks>
+    private static IServiceScopeFactory AnsweringSpendScopes()
+    {
+        var periods = new InMemoryMailAnsweringSpendPeriodStore();
+        var services = new ServiceCollection();
+        services.AddScoped<IMailAnsweringSpendPeriodStore>(_ => periods);
+
+        return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+    }
+
     /// <summary>Reports whether one dimension came out carrying the alias the drive supplied.</summary>
     /// <remarks>
     /// Case-insensitively, because a folder alias is upper-cased on its way into the domain value: the sentinel that
@@ -274,7 +290,7 @@ public sealed class TelemetrySurfaceContractTests
             TelemetryRedactionContract.ConfiguredAliasSentinel);
 
     /// <summary>Puts every publisher through the work it reports, with every string it accepts poisoned.</summary>
-    private static EmittedTelemetrySurface DriveEveryPublisher()
+    private static async Task<EmittedTelemetrySurface> DriveEveryPublisherAsync()
     {
         var surface = new EmittedTelemetrySurface();
 
@@ -284,7 +300,7 @@ public sealed class TelemetrySurfaceContractTests
         DriveDerivedWorkGate();
         DriveEmbedding();
         DriveJobQueue();
-        DriveAnswering();
+        await DriveAnsweringAsync();
         DriveMailbox();
         DriveMutations();
         DriveDelivery();
@@ -515,10 +531,12 @@ public sealed class TelemetrySurfaceContractTests
         JobQueue.RecordQueueDepth([new JobQueueDepthReading(JobType.ClassifyEmailSpam, 61_013)]);
     }
 
-    private static void DriveAnswering()
+    private static async Task DriveAnsweringAsync()
     {
-        AnsweringSpend.TryAdmitRun();
-        AnsweringSpend.RecordSpend(new ChatTokenUsage(InputTokens: 61_017, OutputTokens: 61_019));
+        await AnsweringSpend.TryAdmitRunAsync(TestContext.Current.CancellationToken);
+        await AnsweringSpend.RecordSpendAsync(
+            new ChatTokenUsage(InputTokens: 61_017, OutputTokens: 61_019),
+            TestContext.Current.CancellationToken);
 
         var observation = PoisonedAnsweringRun();
 

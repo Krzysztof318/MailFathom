@@ -129,7 +129,7 @@ public sealed class EmailEnrichmentAgentTests
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion(Marks));
         var spendLedger = Substitute.For<IMailAnsweringSpendLedger>();
-        spendLedger.TryAdmitRun().Returns(false);
+        spendLedger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(false);
         var agent = provider.EnricherOver(spendLedger: spendLedger);
 
         // Act
@@ -146,14 +146,14 @@ public sealed class EmailEnrichmentAgentTests
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion(Marks, inputTokens: 11, outputTokens: 7));
         var spendLedger = Substitute.For<IMailAnsweringSpendLedger>();
-        spendLedger.TryAdmitRun().Returns(true);
+        spendLedger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(true);
         var agent = provider.EnricherOver(spendLedger: spendLedger);
 
         // Act
         await agent.DeriveAsync(Enrichable(), TestContext.Current.CancellationToken);
 
         // Assert
-        spendLedger.Received(1).RecordSpend(new ChatTokenUsage(11, 7));
+        await spendLedger.Received(1).RecordSpendAsync(new ChatTokenUsage(11, 7), Arg.Any<CancellationToken>());
     }
 
     /// <summary>A message with nothing cut from it has no evidence to cite, so it costs no call at all.</summary>
@@ -322,7 +322,7 @@ public sealed class EmailEnrichmentAgentTests
         private static IMailAnsweringSpendLedger AdmittingSpendLedger()
         {
             var spendLedger = Substitute.For<IMailAnsweringSpendLedger>();
-            spendLedger.TryAdmitRun().Returns(true);
+            spendLedger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(true);
 
             return spendLedger;
         }

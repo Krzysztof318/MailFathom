@@ -657,6 +657,32 @@ Every movement is issued inside the transaction that stores or removes the paylo
 
 Unlike `embedding_spend_periods` beside it, this cascades from `settings_accounts`: it describes mail that user holds rather than money this deployment spent, so erasing them takes it with everything else derived from their mail.
 
+## What a replica has reserved of that storage
+
+`stored_content_claims` holds one row per payload a run has room reserved for and has not yet stored: `Id`, `UserId`, a `bigint` `ClaimedByteCount`, and an `ExpiresAt` instant. It exists because the two storage ceilings are the deployment's rather than each replica's, and the gap between deciding there is room and having written the payload is the only part of that decision a process could otherwise keep to itself — several folder runs, in one process and in several, would each measure the same room and each take it.
+
+A claim is written by the same statement that decides it. That statement sweeps what has expired, measures what the content table occupies plus what every unexpired claim reserves, tests both ceilings against one reading, and inserts the row only where both admit — reporting which ceiling refused where one did not. It serializes on a transaction-level advisory lock, because a claim is an insert and an insert takes no lock a second insert would wait behind; [ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) is where a short database-only critical section is the case an advisory lock is right for. Every instant in it is the database's `now()`, so replicas with drifting clocks agree on what is still reserved.
+
+The row is deleted once the payload has reached storage or been abandoned, and the expiry is what bounds the failure the deletion cannot cover: a replica that stopped answering while holding room releases it five minutes later rather than never. The lifetime is a constant rather than a setting, because what it bounds is a failure rather than a tuning decision, and `IX_stored_content_claims_ExpiresAt` is what the sweep reads.
+
+Nothing cascades into it or out of it, and it holds no personal data: a generated identifier, a generated user identifier, a byte count, and an instant say that somebody's payload is about to be written and how large it is, and none of them names a message. A deployment that configures neither ceiling never writes a row here at all.
+
+## Where a paced workload's next slot is
+
+`provider_pace_markers` holds one row per paced workload, keyed by a `Workload` name of at most 64 characters, with a `NextSlotAt` instant. There are two names today — the embedding workload's and the attachment image description's — because each is a bulk workload against its own declared endpoint with its own published quota, and one marker shared between them would let either workload's burst spend the other's slots.
+
+A caller takes its slot in one `INSERT … ON CONFLICT DO UPDATE` that moves the marker to one interval past whichever is later, the marker's own value or `now()`, and returns the *wait* the caller owes rather than the instant it may send at — so nothing subtracts a database instant from a process clock. That is what makes the configured rate the deployment's: three replicas queue on one row rather than each pacing itself to the whole rate. A marker left behind by an idle stretch owes nobody the slots nobody took, because the `GREATEST` is against `now()`.
+
+It holds no personal data — a workload name MailFathom chose and an instant — and nothing cascades into it. A deployment pacing nothing never writes a row here.
+
+## What answering has spent this period
+
+`mail_answering_spend_periods` holds one row per period, keyed by `PeriodStartsAt`, with an `AdmittedRunCount` and a `bigint` `ConsumedTokenCount`. It is `embedding_spend_periods` in the shape a ceiling with no per-user half needs: the period's start is derived by every process from the configured period length and the Unix epoch rather than read from anywhere, so nothing has to be stored to say where a window begins and an instance idle for a day is not owed the windows that passed.
+
+A run is admitted by one conditional `INSERT … ON CONFLICT DO UPDATE` that increments the run count only where both ceilings still have room, and answers with the count it became — a refusal answering with no row at all, which is what a caller tells the two apart by. A spend adds unconditionally, because what a call cost is not knowable until it is answered. Both are one statement, so two replicas admitting at once cannot both be admitted against the same reading.
+
+Nothing cascades into it, for the reason `embedding_spend_periods` has none: a run count, a token count, and an instant say what a deployment spent and when, and none of them names a message, a question, or a person. So it outlives the mail those runs read, and erasing a user leaves the record that the period was paid for.
+
 ## Outstanding content repair requests
 
 `email_content_repair_requests` is one-to-one with `stored_emails` and exists only while a read has found an email's
@@ -1599,6 +1625,7 @@ account reach these four tables through the same cascade every other table is re
 | `ix_spent_client_assertions_expires_at` | `(ExpiresAt)` | The order the served assertions are aged out through. Nothing reads a spent assertion, so the column is indexed for the removal alone — which is what keeps that removal proportional to what has expired since the last one rather than to everything ever spent |
 | `ix_notifications_user_occurred` | `(UserId, OccurredAt, Id)` | The two ways the notification centre is worked: a page of one person's notifications newest first, and the retention sweep that erases the same person's oldest. The identifier is in the key because two notifications raised in one instant need a total order for a keyset page to continue from |
 | `IX_notifications_TargetStoredEmailId` | `(TargetStoredEmailId)` | The foreign key back to the message a notification leads to, which is what erasing that message reaches its notifications by rather than scanning |
+| `IX_stored_content_claims_ExpiresAt` | `(ExpiresAt)` | The sweep every claim statement opens with, which is what keeps the table the size of the payloads currently in flight rather than of every claim a replica ever died holding. Unfiltered, because what an expiry divides the table into changes with the clock rather than with a row |
 
 The recipient, keyword, and search-vector indexes are GIN rather than B-tree because all of them serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 

@@ -8,9 +8,9 @@ namespace MailFathom.Application.Synchronization;
 /// <remarks>
 /// This is the bound that belongs to a run: it paces how fast a mailbox is ingested, so an initial backfill fills
 /// storage over many runs instead of in one. How much may be kept in total is a different question with a different
-/// user — <see cref="EmailContent.Storage.StoredContentCeiling" /> answers it for the whole process, because several
-/// folder runs write into one content store at the same moment and a per-run view of the total would let each of them
-/// believe it had the room the others were already taking.
+/// user — <see cref="EmailContent.Storage.StoredContentCeiling" /> answers it for the whole deployment, because several
+/// folder runs in several replicas write into one content store at the same moment and a per-run view of the total
+/// would let each of them believe it had the room the others were already taking.
 /// </remarks>
 internal sealed class SynchronizationContentBudget
 {

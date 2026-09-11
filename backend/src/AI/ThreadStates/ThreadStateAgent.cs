@@ -142,7 +142,7 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
 
         // Admitted before anything is composed or scanned, so a period this deployment has already spent costs nothing
         // to refuse. The count is what stops this from spending an allowance a question would otherwise have.
-        if (!this.spendLedger.TryAdmitRun())
+        if (!await this.spendLedger.TryAdmitRunAsync(cancellationToken))
         {
             return this.Withhold(ThreadStateWithholding.AllowanceExhausted);
         }
@@ -256,7 +256,7 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
             // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
             // never reaches the endpoint's circuit, its concurrency budget, or its health record. The run ledger is
             // this derivation's own — one conversation is one run — and the period ledger is the deployment's.
-            using var chatClient = new BudgetedChatClient(
+            await using var chatClient = new BudgetedChatClient(
                 resilientClient,
                 new MailAnsweringRunLedger(this.runBounds),
                 this.spendLedger);

@@ -167,7 +167,7 @@ public sealed class MailSearchPhraseAgentTests
 
         // Assert
         Assert.Equal(new MailAnsweringRunSpend(1, 14, 0, 0), runLedger.Read());
-        spendLedger.Received(1).RecordSpend(new ChatTokenUsage(9, 5));
+        await spendLedger.Received(1).RecordSpendAsync(new ChatTokenUsage(9, 5), Arg.Any<CancellationToken>());
     }
 
     /// <summary>The one failure that is not a fallback: a ceiling has to reach the person, or a deployment silently spends past it.</summary>

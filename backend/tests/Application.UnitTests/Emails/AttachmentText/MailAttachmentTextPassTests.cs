@@ -564,6 +564,10 @@ public sealed class MailAttachmentTextPassTests
             Substitute.For<IEmailContentRepairRequestStore>(),
             new AttachmentTextExtractionOptions(),
             EmailAttachmentTextBounds.Disabled with { IsEnabled = true },
-            ProviderRequestPacer.Create(maxRequestsPerMinute: 0, TimeProvider.System));
+            ProviderRequestPacer.Create(
+                ProviderPacedWorkloads.AttachmentImageDescription,
+                maxRequestsPerMinute: 0,
+                new InMemoryProviderPaceMarker(TimeProvider.System),
+                TimeProvider.System));
     }
 }

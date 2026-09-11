@@ -79,7 +79,7 @@ public sealed class ThreadStateAgentTests
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion(Statements));
         var spendLedger = Substitute.For<IMailAnsweringSpendLedger>();
-        spendLedger.TryAdmitRun().Returns(true);
+        spendLedger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(true);
         var agent = provider.DeriverOver(spendLedger: spendLedger);
         var thread = Derivable() with { ExceedsBound = true };
 
@@ -91,7 +91,7 @@ public sealed class ThreadStateAgentTests
         Assert.Equal(ThreadStateCoverage.ThreadTooLarge, derivation.Coverage);
         Assert.Empty(derivation.Entries);
         Assert.Equal(0, provider.RequestCount);
-        spendLedger.DidNotReceive().TryAdmitRun();
+        await spendLedger.DidNotReceive().TryAdmitRunAsync(Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -154,7 +154,7 @@ public sealed class ThreadStateAgentTests
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion(Statements));
         var spendLedger = Substitute.For<IMailAnsweringSpendLedger>();
-        spendLedger.TryAdmitRun().Returns(false);
+        spendLedger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(false);
         var agent = provider.DeriverOver(spendLedger: spendLedger);
 
         // Act
@@ -171,14 +171,14 @@ public sealed class ThreadStateAgentTests
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion(Statements, inputTokens: 11, outputTokens: 7));
         var spendLedger = Substitute.For<IMailAnsweringSpendLedger>();
-        spendLedger.TryAdmitRun().Returns(true);
+        spendLedger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(true);
         var agent = provider.DeriverOver(spendLedger: spendLedger);
 
         // Act
         await agent.DeriveAsync(Derivable(), TestContext.Current.CancellationToken);
 
         // Assert
-        spendLedger.Received(1).RecordSpend(new ChatTokenUsage(11, 7));
+        await spendLedger.Received(1).RecordSpendAsync(new ChatTokenUsage(11, 7), Arg.Any<CancellationToken>());
     }
 
     /// <summary>A conversation the store handed over with no messages has nothing to cite, so it costs no call.</summary>
@@ -355,7 +355,7 @@ public sealed class ThreadStateAgentTests
         private static IMailAnsweringSpendLedger AdmittingSpendLedger()
         {
             var spendLedger = Substitute.For<IMailAnsweringSpendLedger>();
-            spendLedger.TryAdmitRun().Returns(true);
+            spendLedger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(true);
 
             return spendLedger;
         }

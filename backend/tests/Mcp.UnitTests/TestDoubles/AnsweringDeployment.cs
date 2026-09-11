@@ -105,7 +105,7 @@ internal static class AnsweringDeployment
     public static IMailAnsweringSpendLedger LedgerAdmitting()
     {
         var ledger = Substitute.For<IMailAnsweringSpendLedger>();
-        ledger.TryAdmitRun().Returns(true);
+        ledger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(true);
 
         return ledger;
     }

@@ -290,7 +290,7 @@ public sealed class EmbeddingGenerationUpkeepTests
                         new InMemoryEmbeddingSpendLedger(),
                         EmbeddingSpendBudget.Unbounded,
                         new FakeTimeProvider()),
-                    ProviderRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider()),
+                    UnpacedEmbedding(),
                     new StubMailOwnership(),
                     SensitiveContentEgressGuards.Inactive()),
                 concurrencyRetryPolicy,
@@ -360,5 +360,22 @@ public sealed class EmbeddingGenerationUpkeepTests
 
             return serving;
         }
+    }
+
+    /// <summary>A pacer that never waits, over a clock of the test's own so no arrangement here can measure a real one.</summary>
+    /// <remarks>
+    /// The marker and the pacer share the clock, because the wait one hands out is measured on the other. A rate of
+    /// zero reaches neither today, and that is exactly why the arrangement has to be right: the first test here to
+    /// declare a rate would otherwise be measured against the machine's clock.
+    /// </remarks>
+    private static ProviderRequestPacer UnpacedEmbedding()
+    {
+        var pacingClock = new FakeTimeProvider();
+
+        return ProviderRequestPacer.Create(
+            ProviderPacedWorkloads.EmailEmbedding,
+            maxRequestsPerMinute: 0,
+            new InMemoryProviderPaceMarker(pacingClock),
+            pacingClock);
     }
 }

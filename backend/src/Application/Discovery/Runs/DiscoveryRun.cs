@@ -128,7 +128,7 @@ public sealed class DiscoveryRun
         // spends. It is never handed back, cancellation included: the allowance is what keeps concurrent questions from
         // all believing they are first, and returning it would let a client cycle admissions while spending the
         // period's tokens.
-        if (!this.spendLedger.TryAdmitRun())
+        if (!await this.spendLedger.TryAdmitRunAsync(cancellationToken))
         {
             throw MailAnsweringBudgetExhaustedException.PeriodSpent();
         }

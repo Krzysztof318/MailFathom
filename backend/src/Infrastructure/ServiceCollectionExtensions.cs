@@ -120,6 +120,7 @@ using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Accounts;
+using MailFathom.Infrastructure.Persistence.AiProviders;
 using MailFathom.Infrastructure.Persistence.Answering;
 using MailFathom.Infrastructure.Persistence.ClientAssertions;
 using MailFathom.Infrastructure.Persistence.Connections;
@@ -500,6 +501,10 @@ public static class ServiceCollectionExtensions
         // fact about the instance rather than about an activation, and an operator deciding whether to declare a
         // ceiling reads it before there is anything to bound.
         services.AddScoped<IEmbeddingSpendLedger, EmbeddingSpendLedger>();
+        // When each paced workload of this deployment may send next. Beside the spend ledger because the two bound the
+        // same provider from opposite ends — one how much a period may cost, the other how quickly that cost may
+        // accumulate — and both are the deployment's rather than a process's for the same reason.
+        services.AddScoped<IProviderPaceMarker, ProviderPaceMarker>();
         // The gate over that ledger is registered here rather than beside the generation work for the same reason.
         // Where a period stands is what an activation weighs its estimate against and what a status command reports,
         // and both are asked of an instance that has declared nothing at all.
@@ -623,6 +628,10 @@ public static class ServiceCollectionExtensions
         // read-only over the mail graph while this keeps a figure of its own, moved by whichever adapter owns the
         // payloads.
         services.AddScoped<IUserStoredContentLedger, UserStoredContentLedger>();
+        // The room every replica has reserved for a payload it is about to store. Beside the two above rather than part
+        // of either, because what it holds is neither a reading of the mail graph nor a maintained figure: it is what
+        // the other replicas are about to add to both, and the one thing a process cannot measure for itself.
+        services.AddScoped<IStoredContentClaimStore, StoredContentClaimStore>();
         services.AddScoped<IStoredEmailExtractionBackfillStore, StoredEmailExtractionBackfillStore>();
         // What the move of already-stored content reads and rewrites: the four content tables as one walk, and the one
         // row that says what an operator asked for. Registered whatever the selected backend is, because reading how
@@ -1068,10 +1077,15 @@ public static class ServiceCollectionExtensions
         // a response rather than a provider, so an instance that answers no questions simply resolves them and never
         // publishes one.
         services.AddSingleton(answeringBudget.Answer);
-        // A singleton because a ceiling over a period is one answer about the deployment: a ledger per scope would let
-        // every concurrent question believe it was the first one of the period. Registered for every deployment for the
-        // reason the bounds above are — an instance that answers nothing admits nothing and spends nothing.
+        // A singleton because it owns this process's answering instruments, created once on the shared meter: a second
+        // instance would publish the same instrument names twice. What the ceilings are decided against is the period
+        // row below, not anything held here. Registered for every deployment for the reason the bounds above are — an
+        // instance that answers nothing admits nothing and spends nothing.
         services.AddSingleton<MailAnsweringSpendTracker>();
+        // The row the tracker admits against, scoped because it reaches the database through the session that owns a
+        // connection. Registered for every deployment for the reason the tracker is: an instance that answers nothing
+        // never inserts a period.
+        services.AddScoped<IMailAnsweringSpendPeriodStore, MailAnsweringSpendPeriodStore>();
         services.AddSingleton<IMailAnsweringSpendLedger>(provider => provider.GetRequiredService<MailAnsweringSpendTracker>());
     }
 

@@ -277,12 +277,21 @@ whose capacity a request spends, and [administering a deployment](admin-endpoint
 behavioural difference on the administrative endpoint — its burst is the endpoint's rather than one caller's, because
 that surface judges a credential behind the limiter.
 
+**Every value here is one process's, and a deployment of *n* replicas admits up to *n* × it.** The limiter counts in
+this process's own memory, which is what a limiter in front of a socket can count: a caller whose requests reach two
+replicas spends a bucket on each. That is deliberate rather than a gap — the thing being protected is each process's
+capacity to serve, and a deployment behind a load balancer bounds a caller at the balancer, where every one of that
+caller's requests is visible.
+[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) records the rule these
+follow: a rate that names a *provider's* quota becomes the deployment's, and an in-flight count over this process's own
+resources stays a process's and says so.
+
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `…:Enabled` | bool | `true` | Turning it off costs a startup warning | restart |
-| `…:MaxConcurrentRequests` | int | `20` | 1 – 1000; process-wide, per endpoint | restart |
+| `…:MaxConcurrentRequests` | int | `20` | 1 – 1000; process-wide, per endpoint — *n* replicas admit *n* × this | restart |
 | `…:ConcurrencyQueueLimit` | int | `0` | 0 – 1000; `0` refuses instead of queueing | restart |
-| `…:TokenCapacity` | int | `60` | 1 – 1000000; the largest burst one caller may spend | restart |
+| `…:TokenCapacity` | int | `60` | 1 – 1000000; the largest burst one caller may spend **at one replica** | restart |
 | `…:TokensPerReplenishmentPeriod` | int | `60` | 1 – 1000000, and not above `TokenCapacity` | restart |
 | `…:ReplenishmentPeriod` | TimeSpan | `00:01:00` | 1 s – 1 h | restart |
 | `…:RequestQueueLimit` | int | `0` | 0 – 1000, and below `MaxConcurrentRequests` | restart |

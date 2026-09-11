@@ -186,7 +186,7 @@ public sealed class MailboxQuestionReaderTests
         // Arrange
         var answerer = new RecordingMailQuestionAnswerer();
         var spentLedger = Substitute.For<IMailAnsweringSpendLedger>();
-        spentLedger.TryAdmitRun().Returns(false);
+        spentLedger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(false);
         var reader = ReaderOver(answerer, spendLedger: spentLedger);
 
         // Act
@@ -207,7 +207,7 @@ public sealed class MailboxQuestionReaderTests
     {
         // Arrange
         var ledger = Substitute.For<IMailAnsweringSpendLedger>();
-        ledger.TryAdmitRun().Returns(true);
+        ledger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(true);
         var reader = ReaderOver(answerer: null, spendLedger: ledger);
 
         // Act
@@ -215,7 +215,7 @@ public sealed class MailboxQuestionReaderTests
             () => AnswerAsync(reader, new AskMailRequest { QuestionText = "was the invoice attached" }));
 
         // Assert
-        ledger.DidNotReceive().TryAdmitRun();
+        await ledger.DidNotReceive().TryAdmitRunAsync(Arg.Any<CancellationToken>());
     }
 
     /// <summary>A run stopped from reading further answered a narrower reading of the mailbox, and only saying so keeps that distinguishable.</summary>
@@ -534,7 +534,7 @@ public sealed class MailboxQuestionReaderTests
     {
         // Arrange
         var spendLedger = Substitute.For<IMailAnsweringSpendLedger>();
-        spendLedger.TryAdmitRun().Returns(false);
+        spendLedger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(false);
         var runTelemetry = new RecordingMailAnsweringRunTelemetry();
         var auditTrail = new RecordingMailAnsweringAuditTrail();
         var reader = ReaderOver(
@@ -810,7 +810,7 @@ public sealed class MailboxQuestionReaderTests
     private static IMailAnsweringSpendLedger LedgerAdmitting()
     {
         var ledger = Substitute.For<IMailAnsweringSpendLedger>();
-        ledger.TryAdmitRun().Returns(true);
+        ledger.TryAdmitRunAsync(Arg.Any<CancellationToken>()).Returns(true);
 
         return ledger;
     }

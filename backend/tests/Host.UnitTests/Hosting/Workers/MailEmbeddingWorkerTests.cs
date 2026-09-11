@@ -349,7 +349,11 @@ public sealed class MailEmbeddingWorkerTests
         services.AddSingleton(new PersistenceConcurrencyOptions());
         services.AddSingleton(spendBudget);
         services.AddSingleton(spendLedger);
-        services.AddSingleton(ProviderRequestPacer.Create(maxRequestsPerMinute: 0, timeProvider));
+        services.AddSingleton(ProviderRequestPacer.Create(
+            ProviderPacedWorkloads.EmailEmbedding,
+            maxRequestsPerMinute: 0,
+            new InMemoryProviderPaceMarker(timeProvider),
+            timeProvider));
         services.AddScoped<EmbeddingSpendGate>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddSingleton<IMailOwnership>(new StubMailOwnership());

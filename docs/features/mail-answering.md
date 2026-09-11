@@ -274,8 +274,10 @@ enthusiastic its client is rather than of what its operator agreed to.
 | The period itself | `MailAnswering:AggregatePeriod` | 1 hour |
 
 Two ceilings for the reason a run has three: the run count always works, and the token count is stated in what a
-provider bills. The allowance is taken when a question is **admitted** rather than when it finishes, so a run still in
-flight already occupies its place — counting them afterwards would admit every concurrent question, which is precisely
+provider bills. **Both are the deployment's rather than each replica's**: the period is one durable ledger row, and a
+run is admitted by a single conditional write against it, so three replicas share the configured allowance instead of
+each getting the whole of it. The allowance is taken when a question is **admitted** rather than when it finishes, so a
+run still in flight already occupies its place — counting them afterwards would admit every concurrent question, which is precisely
 the burst the ceiling exists to bound. It is taken after the capability is read and before the run begins, which is the
 last point at which nothing has been spent: a question a deployment was never going to answer is not charged against
 what it spends.
@@ -294,11 +296,17 @@ anything being stored to say so. An instance that answered nothing all day is no
 fixed window costs is stated rather than hidden — a client that spends the whole allowance at the end of one window and
 again at the start of the next has spent twice the ceiling across an interval of the same length.
 
-The ledger is **process-local and not durable**, and that is where it differs from the embedding one, which keeps its
-count in a table so a crash-restart loop cannot begin every period again from zero. The reasoning applies here in kind
-and not in degree: an embedding sweep charges inside a transaction that was committing vectors anyway, while a question
-opens no write of its own, so a durable count would add a database write to the path of every provider call in every
-run. A restart therefore begins the current window with nothing spent.
+The ledger is **the deployment's and it is durable**, which is where it agrees with the embedding one rather than
+differing from it: both keep their count in a table, so neither a crash-restart loop nor a second replica begins a
+period again from zero. It was process-local until
+[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md),
+on the reasoning that a question opens no write of its own and a durable count would add one to the path of every
+provider call. What that reasoning missed is the replica count: a ceiling worded as the deployment's and counted in
+each process admits as many times what an operator agreed to as there are processes, at a provider that bills for it.
+So the writes are the admission and the run's own total as it ends, rather than one per provider call: a run is
+already about to spend a provider's tokens, while a tool loop turns once per message of a backfill and a round trip per
+turn is the cost that reasoning does not pay for. A restart resumes the window where the deployment left it, and a run
+that failed, was refused, or was cancelled part way through still charges what it spent.
 
 ### What it is observable as
 

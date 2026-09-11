@@ -32,18 +32,22 @@ internal sealed class ScriptedChatClient : IChatClient
     public static ScriptedChatClient Answering(string text) =>
         new([new ChatResponse(new ChatMessage(ChatRole.Assistant, text)) { FinishReason = ChatFinishReason.Stop }]);
 
-    /// <summary>Builds a client that answers with text and reports what the call consumed.</summary>
+    /// <summary>Builds a client that answers with text and reports what each call consumed.</summary>
     /// <param name="text">What to answer.</param>
     /// <param name="inputTokens">The tokens the provider reports the conversation occupied.</param>
     /// <param name="outputTokens">The tokens the provider reports the answer occupied.</param>
-    public static ScriptedChatClient AnsweringWithUsage(string text, long inputTokens, long outputTokens) =>
-        new([
+    /// <param name="answers">How many such answers the script holds, for a test about what a run of several calls adds up to.</param>
+    public static ScriptedChatClient AnsweringWithUsage(
+        string text,
+        long inputTokens,
+        long outputTokens,
+        int answers = 1) =>
+        new(Enumerable.Range(0, answers).Select(_ =>
             new ChatResponse(new ChatMessage(ChatRole.Assistant, text))
             {
                 FinishReason = ChatFinishReason.Stop,
                 Usage = new UsageDetails { InputTokenCount = inputTokens, OutputTokenCount = outputTokens },
-            },
-        ]);
+            }));
 
     /// <summary>Builds a client that looks mail up with a query alone and then answers with text.</summary>
     /// <param name="toolName">The tool to call, which the run must have offered.</param>

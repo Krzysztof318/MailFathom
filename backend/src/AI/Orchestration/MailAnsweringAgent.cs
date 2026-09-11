@@ -187,7 +187,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
 
         // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused never
         // reaches the endpoint's circuit, its concurrency budget, or its health record.
-        using var chatClient = new BudgetedChatClient(resilientClient, runLedger, this.spendLedger);
+        await using var chatClient = new BudgetedChatClient(resilientClient, runLedger, this.spendLedger);
 
         // The question is the one turn of the prompt a person wrote, so it is guarded like every other text that leaves
         // this deployment: somebody asking what to do about the key a colleague sent them has put that key into the
