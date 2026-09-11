@@ -141,6 +141,7 @@ using MailFathom.Infrastructure.Persistence.Rules;
 using MailFathom.Infrastructure.Persistence.Secrets;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using MailFathom.Infrastructure.Persistence.Settings;
+using MailFathom.Infrastructure.Persistence.Signals;
 using MailFathom.Infrastructure.Persistence.Spam;
 using MailFathom.Infrastructure.Persistence.Synchronization;
 using MailFathom.Infrastructure.Persistence.ThreadStates;
@@ -392,6 +393,10 @@ public static class ServiceCollectionExtensions
         // served assertion belongs to the deployment whether or not the request that produced it goes on to commit
         // anything.
         services.AddSingleton<IClientAssertionSpendStore, ClientAssertionSpendStore>();
+        // A singleton over the pool for the same reasons, and registered here rather than beside the hub because a
+        // deployment serving no client surface still carries the table in its schema: what the client endpoint's switch
+        // decides is whether anything ever mints a ticket, not whether the deployment knows where one would go.
+        services.AddSingleton<IClientSignalTicketStore, ClientSignalTicketStore>();
         // Reads the persisted configuration layer once the process is running, which is what a reload asks. The
         // bootstrap read that composed the configuration happened before this container existed and built its own
         // data source for it; this registration is the same statement over the pool everything else uses.

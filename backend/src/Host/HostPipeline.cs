@@ -427,7 +427,7 @@ internal static class HostPipeline
         // Outside the group deliberately, and the reasoning is in ClientSignalEndpoints: a long-lived connection is not
         // a request, so this surface's request timeout and its rate limiter are the wrong treatment for it, and what
         // bounds a client reconnecting is the ticket route inside the group that every reconnection has to spend.
-        app.MapHub<ClientSignalHub>(ClientSignalEndpoints.HubPath);
+        app.MapHub<ClientSignalHub>(ClientSignalEndpoints.HubPath, ClientSignalEndpoints.ServeOverWebSocketsAlone);
 
         if (composition.Client.AllowsOAuth)
         {

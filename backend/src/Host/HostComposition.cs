@@ -1497,9 +1497,12 @@ internal static class HostComposition
     /// <see cref="ClientSignals" /> folds nothing — which is what keeps a service with no client from holding state
     /// about signals nobody can receive.
     /// <para>
-    /// The ticket store is a singleton because it holds what is outstanding across requests, and the hub reads it from a
-    /// connection rather than from a request. The publisher itself is registered with the rest of the application graph,
-    /// unconditionally, because every raise site reaches it whether or not anything is listening.
+    /// The ticket minting is a singleton because it spans requests — a route mints and a connection spends — and the hub
+    /// reaches it from a connection rather than from a request. What it holds is the sweep interval and the count of
+    /// redemptions this process has in flight; the tickets themselves live in PostgreSQL, registered with the rest of
+    /// the infrastructure graph, so any replica redeems what any other minted. The publisher itself is registered with
+    /// the rest of the application graph, unconditionally, because every raise site reaches it whether or not anything
+    /// is listening.
     /// </para>
     /// </remarks>
     private static void AddClientSignalChannel(WebApplicationBuilder builder)

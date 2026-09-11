@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using MailFathom.Application.Signals;
 using MailFathom.Domain.Access;
 using Microsoft.AspNetCore.SignalR;
 
@@ -19,8 +20,10 @@ namespace MailFathom.Host.Signals;
 /// <b>A connection is authenticated by a ticket and by nothing else.</b> It carries no <c>Authorization</c> header,
 /// because a browser cannot put one on a WebSocket, so <see cref="ClientSignalTickets" /> is what names the user —
 /// minted over an authenticated route that already required <see cref="MailFathomPermission.MailRead" />, spent here
-/// once, and never seen again. A connection presenting nothing, something malformed, something expired, or something
-/// already spent is aborted without being told which.
+/// once against the store every replica shares, and never seen again. A connection presenting nothing, something
+/// malformed, something expired, or something already spent is aborted without being told which, and so is one whose
+/// ticket could not be reached at all — which is the one refusal an operator has to act on, and the one logged as
+/// such.
 /// </para>
 /// <para>
 /// <b>A connection joins its user's group and no other.</b> The group is the whole of the addressing: a signal is
@@ -64,8 +67,25 @@ internal sealed partial class ClientSignalHub : Hub
     public override async Task OnConnectedAsync()
     {
         var presented = this.Context.GetHttpContext()?.Request.Query[TicketParameter].ToString();
+        MailUserId? user;
 
-        if (this.tickets.Redeem(presented) is not { } user)
+        try
+        {
+            user = await this.tickets.RedeemAsync(presented, this.Context.ConnectionAborted);
+        }
+        catch (ClientSignalTicketStoreUnavailableException failure)
+        {
+            // Told apart from every other refusal because it is the only one an operator acts on: a wrong, spent, or
+            // expired ticket is the mechanism working, and this is the deployment unable to say whether a ticket stands
+            // at all. It is a refusal either way — a connection admitted on a store that could not answer would be one
+            // opened against no ticket.
+            this.LogTicketStoreUnavailable(failure);
+            this.Context.Abort();
+
+            return;
+        }
+
+        if (user is not { } admitted)
         {
             this.LogConnectionRefused();
             this.Context.Abort();
@@ -73,7 +93,7 @@ internal sealed partial class ClientSignalHub : Hub
             return;
         }
 
-        await this.Groups.AddToGroupAsync(this.Context.ConnectionId, GroupOf(user), this.Context.ConnectionAborted);
+        await this.Groups.AddToGroupAsync(this.Context.ConnectionId, GroupOf(admitted), this.Context.ConnectionAborted);
 
         await base.OnConnectedAsync();
     }
@@ -82,4 +102,9 @@ internal sealed partial class ClientSignalHub : Hub
         Level = LogLevel.Debug,
         Message = "A signal connection presented no usable ticket and was refused.")]
     private partial void LogConnectionRefused();
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "A signal connection was refused because this deployment's unspent tickets could not be reached, so whether the ticket it presented stands is unknown.")]
+    private partial void LogTicketStoreUnavailable(Exception failure);
 }

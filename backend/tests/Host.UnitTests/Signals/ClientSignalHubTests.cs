@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Host.Signals;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Connections.Features;
@@ -25,8 +26,8 @@ public sealed class ClientSignalHubTests
     public async Task OnConnectedAsync_WithALiveTicket_JoinsTheUsersGroup()
     {
         // Arrange
-        var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));
-        var minted = tickets.Mint(SyntheticMailUser.Deployment);
+        var tickets = new ClientSignalTickets(new InMemoryClientSignalTicketStore(), new FakeTimeProvider(Instant));
+        var minted = await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
         var groups = Substitute.For<IGroupManager>();
         var context = ConnectionPresenting(minted!.Value);
 
@@ -55,7 +56,7 @@ public sealed class ClientSignalHubTests
     public async Task OnConnectedAsync_WithoutAUsableTicket_AbortsWithoutJoiningAnyGroup(string presented)
     {
         // Arrange
-        var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));
+        var tickets = new ClientSignalTickets(new InMemoryClientSignalTicketStore(), new FakeTimeProvider(Instant));
         var groups = Substitute.For<IGroupManager>();
         var context = ConnectionPresenting(presented);
 
@@ -81,8 +82,8 @@ public sealed class ClientSignalHubTests
     public async Task OnConnectedAsync_ReplayingATicketASecondConnectionAlreadySpent_RefusesTheSecondConnection()
     {
         // Arrange
-        var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));
-        var minted = tickets.Mint(SyntheticMailUser.Deployment);
+        var tickets = new ClientSignalTickets(new InMemoryClientSignalTicketStore(), new FakeTimeProvider(Instant));
+        var minted = await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
         var groups = Substitute.For<IGroupManager>();
         var replayed = ConnectionPresenting(minted!.Value);
 
@@ -104,6 +105,37 @@ public sealed class ClientSignalHubTests
 
         // Assert
         replayed.Received(1).Abort();
+        await groups.DidNotReceive().AddToGroupAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A deployment that cannot reach its own tickets refuses the connection rather than admitting one opened against
+    /// a ticket nothing could confirm, and the outage travels no further than the log an operator reads.
+    /// </summary>
+    [Fact]
+    public async Task OnConnectedAsync_WhenTheTicketStoreCannotBeReached_AbortsWithoutJoiningAnyGroup()
+    {
+        // Arrange
+        var tickets = new ClientSignalTickets(
+            new UnreachableClientSignalTicketStore(),
+            new FakeTimeProvider(Instant));
+        var groups = Substitute.For<IGroupManager>();
+        var context = ConnectionPresenting($"identifier.{new string('A', 43)}");
+
+        using var hub = new ClientSignalHub(tickets, NullLogger<ClientSignalHub>.Instance)
+        {
+            Context = context,
+            Groups = groups,
+        };
+
+        // Act
+        await hub.OnConnectedAsync();
+
+        // Assert
+        context.Received(1).Abort();
         await groups.DidNotReceive().AddToGroupAsync(
             Arg.Any<string>(),
             Arg.Any<string>(),

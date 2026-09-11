@@ -4,10 +4,15 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Failures;
+using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Signals;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -31,40 +36,97 @@ public sealed class ClientSignalEndpointsTests
 
     /// <summary>A minted ticket is answered with the value to present and the moment presenting it stops working.</summary>
     [Fact]
-    public void MintTicket_ACallerActingForAUser_AnswersTheTicketAndWhenItExpires()
+    public async Task MintTicket_ACallerActingForAUser_AnswersTheTicketAndWhenItExpires()
     {
         // Arrange
-        var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));
+        var tickets = new ClientSignalTickets(new InMemoryClientSignalTicketStore(), new FakeTimeProvider(Instant));
 
         // Act
-        var result = ClientSignalEndpoints.MintTicket(AuthorizationFor(SyntheticMailUser.Deployment), tickets);
+        var result = await ClientSignalEndpoints.MintTicket(
+            AuthorizationFor(SyntheticMailUser.Deployment),
+            tickets,
+            NullLoggerFactory.Instance,
+            TestContext.Current.CancellationToken);
 
         // Assert
         var answered = Assert.IsType<Ok<ClientSignalTicketResponse>>(result.Result);
         Assert.NotNull(answered.Value);
         Assert.Equal(Instant + ClientSignalTickets.Lifetime, answered.Value.ExpiresAt);
-        Assert.Equal(SyntheticMailUser.Deployment, tickets.Redeem(answered.Value.Ticket));
+        Assert.Equal(
+            SyntheticMailUser.Deployment,
+            await tickets.RedeemAsync(answered.Value.Ticket, TestContext.Current.CancellationToken));
     }
 
     /// <summary>A deployment already holding every ticket it will hold says so as a condition that passes, not as a fault.</summary>
     [Fact]
-    public void MintTicket_WithAsManyTicketsOutstandingAsAreHeld_AnswersServiceUnavailableRatherThanATicket()
+    public async Task MintTicket_WithAsManyTicketsOutstandingAsAreHeld_AnswersServiceUnavailableRatherThanATicket()
     {
         // Arrange
-        var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));
+        var tickets = new ClientSignalTickets(new InMemoryClientSignalTicketStore(), new FakeTimeProvider(Instant));
         var authorization = AuthorizationFor(SyntheticMailUser.Deployment);
 
         for (var minted = 0; minted < ClientSignalTickets.MostOutstandingTickets; minted++)
         {
-            tickets.Mint(SyntheticMailUser.Deployment);
+            await tickets.MintAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
         }
 
         // Act
-        var result = ClientSignalEndpoints.MintTicket(authorization, tickets);
+        var result = await ClientSignalEndpoints.MintTicket(
+            authorization,
+            tickets,
+            NullLoggerFactory.Instance,
+            TestContext.Current.CancellationToken);
 
         // Assert
         var refused = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, refused.StatusCode);
+    }
+
+    /// <summary>
+    /// A deployment whose tickets cannot be reached answers the condition the client waits on rather than a fault,
+    /// because what the client does about it is what it does about the bound: wait and mint again.
+    /// </summary>
+    [Fact]
+    public async Task MintTicket_WhenTheTicketStoreCannotBeReached_AnswersServiceUnavailableCarryingTheErrorCode()
+    {
+        // Arrange
+        var tickets = new ClientSignalTickets(
+            new UnreachableClientSignalTicketStore(),
+            new FakeTimeProvider(Instant));
+
+        // Act
+        var result = await ClientSignalEndpoints.MintTicket(
+            AuthorizationFor(SyntheticMailUser.Deployment),
+            tickets,
+            NullLoggerFactory.Instance,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refused = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, refused.StatusCode);
+        Assert.Equal(
+            MailFathomErrorCode.ClientSignalTicketStoreUnavailable.Value,
+            Assert.Contains(RouteAuthorization.ErrorCodeExtension, refused.ProblemDetails.Extensions));
+    }
+
+    /// <summary>
+    /// The hub serves WebSockets and nothing else, so a server-sent-events or long-polling connection is refused to
+    /// every caller rather than served to one the client never is. That is what lets a deployment scale out without
+    /// session affinity: a connection that never negotiates is one request, and there is no second one to route with it.
+    /// </summary>
+    [Fact]
+    public void ServeOverWebSocketsAlone_AppliedToTheHubsOptions_LeavesNoTransportButWebSockets()
+    {
+        // Arrange
+        var options = new HttpConnectionDispatcherOptions();
+
+        // Act
+        ClientSignalEndpoints.ServeOverWebSocketsAlone(options);
+
+        // Assert
+        Assert.Equal(HttpTransportType.WebSockets, options.Transports);
+        Assert.False(options.Transports.HasFlag(HttpTransportType.ServerSentEvents));
+        Assert.False(options.Transports.HasFlag(HttpTransportType.LongPolling));
     }
 
     private static AccessAuthorization AuthorizationFor(MailUserId user)

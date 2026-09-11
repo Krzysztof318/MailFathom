@@ -453,6 +453,15 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode ClientAssertionSpendUnrecordable { get; } = new(33001);
 
+    /// <summary>Gets subcategory 3, the anti-replay record: the deployment's unspent signal tickets could not be reached, so the connection or the mint was refused.</summary>
+    /// <remarks>
+    /// It shares the subcategory with the code above because both are a single-use client credential the deployment
+    /// remembers exactly once, and a store that cannot answer refuses rather than serves in either. It is a code of its
+    /// own because what it costs is different: a refused connection costs live updates while the client's own re-read
+    /// still carries the screen, where a refused assertion costs the request outright.
+    /// </remarks>
+    public static MailFathomErrorCode ClientSignalTicketStoreUnavailable { get; } = new(33002);
+
     /// <summary>Gets subcategory 4, durable jobs: a job payload serialized to more than the enqueue boundary accepts.</summary>
     /// <remarks>
     /// It is a subcategory of its own rather than one more schema-state failure, because nothing about the database is
@@ -1084,6 +1093,7 @@ public readonly record struct MailFathomErrorCode
         DatabaseSchemaStateUnreadable,
         DatabaseSchemaTextSearchConfigurationMismatch,
         ClientAssertionSpendUnrecordable,
+        ClientSignalTicketStoreUnavailable,
         JobPayloadTooLarge,
         JobHandOnRefusedAtCapacity,
         PersistenceTransientFailure,

@@ -2349,6 +2349,14 @@ judged, its request is bounded, and its act is recorded.
 | `POST /api/client/signals/ticket` | Mints the single-use ticket a connection is opened against |
 | `/api/client/signals` | The hub itself, reached over a WebSocket carrying that ticket |
 
+**The hub serves WebSockets and nothing else.** A server-sent-events or long-polling connection is refused to every
+caller, and the client never asks for one: it opens the connection with negotiation skipped, which makes the whole
+handshake a single request rather than a negotiation followed by the transport it chose. That is what removes every
+reason for session affinity — there is no pair of requests for a load balancer to keep together, and the one request
+that opens the connection is the one that presents the ticket. What it costs is stated rather than discovered: a
+network or a proxy that will not pass the WebSocket upgrade gives that client no live updates at all, and the client
+reads its screens over the ordinary routes on its own schedule instead.
+
 **A connection is opened against a ticket, because a browser cannot put a header on a WebSocket.** The client mints one
 over the route above — an ordinary authenticated route on this surface, requiring `mailfathom.mail.read` like the mail
 it announces — and hands it to the connection. A ticket names the user the credential behind it already named, is
@@ -2356,6 +2364,15 @@ drawn from a cryptographically secure source, lives 30 seconds, and stops workin
 read out of a proxy's access log or a browser's own history is already spent or already expired. Nothing else opens a
 connection: a connection presenting nothing, something malformed, something expired, or something already spent is
 closed without being told which.
+
+**The deployment holds its unspent tickets in PostgreSQL, so any replica accepts a connection any other replica minted
+a ticket for.** Minting is one insert and spending is one statement that removes the row and hands back what it held,
+so exactly one presentation of a ticket wins whichever replica each of them reaches. What the row holds is the user, a
+digest of the ticket's secret half, and the expiry — never the secret itself, so a row read out of the database or out
+of a backup opens no connection. The ticket does not live in the signal backplane, because that component is optional
+and an authentication path must not depend on one: a deployment running no backplane loses signals between replicas and
+never loses connections. A deployment that cannot reach its database refuses the connection rather than admitting it,
+and says so in its log as an outage rather than as a ticket that was wrong.
 
 **One user's signals reach that user's connections and no other's.** A connection joins a group named from the user's
 own identifier the moment it is admitted, and every statement is published to one group; nothing here reads a group name
@@ -2424,11 +2441,25 @@ answer leaves what is drawn in place for the next to try again.
 buffering or idle timeout shorter than a connection that is meant to stand open. Nothing here fails when it does not;
 the client falls back to its interval, which is what makes this safe to deploy behind a proxy nobody reconfigured.
 
+**It needs no session affinity, at any replica count**, and configuring it anyway gains nothing while pinning load: a
+cookie pins every request a client makes and hashing the source address puts every client behind one NAT on one
+replica, both of which distort the load the replicas were added to share.
+
 **The hub is deliberately outside this surface's request timeout and rate limiter**, and the minting route is
 deliberately inside both. `ClientEndpoint:RequestTimeout` would abandon a connection meant to stand open at the same
 bound it abandons a request for a page of mail, and `ClientEndpoint:RateLimiting` would count an open connection
 against the capacity a browser is spending reading mail. What is bounded instead is the minting, which a reconnect
-cannot avoid — and a deployment holding as many unspent tickets as it will hold answers `503` rather than growing.
+cannot avoid — and a deployment holding as many unspent tickets as it will hold answers `503` rather than growing. That
+ceiling is the deployment's rather than each replica's: it is counted in the same statement that writes the ticket, so
+raising the replica count does not multiply it. A deployment that cannot reach those tickets at all answers the same
+`503` on the same route, because what a client does about either is identical — wait, and mint again. The two are told
+apart by the error code the answer carries: `33002` is the database that could not be asked, and the ceiling carries
+none. An operator meeting `33002` is looking for an unreachable database rather than for ten thousand unspent tickets,
+and the log entry the refusal wrote is where that failure is. What bounds the other end is the hub itself, which has authenticated
+nothing when a connection arrives: a value without the shape of a minted ticket is refused before any statement runs,
+and each replica has only so many redemptions in flight at once, sized well below the connection pool the rest of the
+deployment reads mail through. A flood of handshakes therefore costs live updates while it lasts and never costs mail,
+because the client's own refresh is what the screen is promised on.
 
 **The connection is served only where this endpoint is.** The hub sits beneath this surface's route prefix, so a
 listener that does not serve the client surface answers it `404` exactly as it answers every other route here, and a

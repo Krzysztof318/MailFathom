@@ -24,6 +24,7 @@ using MailFathom.Infrastructure.Persistence.Preferences.Configurations;
 using MailFathom.Infrastructure.Persistence.Rules.Configurations;
 using MailFathom.Infrastructure.Persistence.Secrets.Configurations;
 using MailFathom.Infrastructure.Persistence.Settings.Configurations;
+using MailFathom.Infrastructure.Persistence.Signals.Configurations;
 using MailFathom.Infrastructure.Persistence.Spam.Configurations;
 using MailFathom.Infrastructure.Persistence.Synchronization.Configurations;
 using MailFathom.Infrastructure.Persistence.ThreadStates.Configurations;
@@ -76,6 +77,8 @@ internal sealed class MailFathomDbContext : DbContext
     internal DbSet<UserPortraitEntity> UserPortraits => this.Set<UserPortraitEntity>();
 
     internal DbSet<SpentClientAssertionEntity> SpentClientAssertions => this.Set<SpentClientAssertionEntity>();
+
+    internal DbSet<ClientSignalTicketEntity> ClientSignalTickets => this.Set<ClientSignalTicketEntity>();
 
     internal DbSet<StoredSecretEntity> StoredSecrets => this.Set<StoredSecretEntity>();
 
@@ -221,6 +224,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new ClientPreferencesConfiguration());
         modelBuilder.ApplyConfiguration(new UserPortraitConfiguration());
         modelBuilder.ApplyConfiguration(new SpentClientAssertionConfiguration());
+        modelBuilder.ApplyConfiguration(new ClientSignalTicketConfiguration());
         modelBuilder.ApplyConfiguration(new UserStoredContentConfiguration());
         modelBuilder.ApplyConfiguration(new StoredContentClaimConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxAccountConfiguration());
