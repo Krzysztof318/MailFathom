@@ -404,7 +404,7 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         // Act
         using (telemetry.BeginPass())
         {
-            // Disposed without a result, which is what each of the worker's three catch paths produces.
+            // Disposed without a result, which is what an unresolved conflict and an unexpected failure both produce.
         }
 
         // Assert
@@ -414,6 +414,27 @@ public sealed class BackgroundWorkSpanTests : IDisposable
 
         Assert.Null(span.GetTagItem(EmailEmbeddingBackfillTelemetry.PassageCountTagName));
         Assert.Equal(ActivityStatusCode.Error, span.Status);
+    }
+
+    /// <summary>A pass stopped from outside is not published as a failure, because replicas hand the sweep to each other routinely.</summary>
+    [Fact]
+    public void BeginPass_APassThatWasInterrupted_LeavesItsStatusUnsetAndNoOutcome()
+    {
+        // Arrange
+        var telemetry = new EmailEmbeddingBackfillTelemetry();
+
+        // Act
+        using (var pass = telemetry.BeginPass())
+        {
+            pass.Interrupted();
+        }
+
+        // Assert
+        var span = this.Abandoned(
+            EmailEmbeddingBackfillTelemetry.PassSpanName,
+            EmailEmbeddingBackfillTelemetry.OutcomeTagName);
+
+        Assert.Equal(ActivityStatusCode.Unset, span.Status);
     }
 
     /// <summary>None of the three spans is named after anything a mailbox holds, whatever the work touched.</summary>
@@ -472,8 +493,9 @@ public sealed class BackgroundWorkSpanTests : IDisposable
 
     /// <summary>Selects the one span of its name that reported no outcome, which is what an abandoned unit of work leaves.</summary>
     /// <remarks>
-    /// An abandoned span carries no tag to select it by, so the absence of the outcome is what identifies it — and one
-    /// test per span name reaches this, which is what keeps the selection single.
+    /// An abandoned span carries no tag to select it by, so the absence of the outcome is what identifies it — and each
+    /// test leaves at most one such span of a name behind, which is what keeps the selection single. An interrupted pass
+    /// carries no outcome either, so it is selected the same way.
     /// </remarks>
     private Activity Abandoned(string spanName, string outcomeTagName) => Assert.Single(
         this.published,

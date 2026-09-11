@@ -201,6 +201,10 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            // Shutdown or a lost hold rather than a failure, so a rolling restart or a handover between replicas does
+            // not read as a pass that broke.
+            pass.Interrupted();
+
             throw;
         }
         catch (PersistenceConcurrencyConflictException exception)
