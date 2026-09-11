@@ -5,13 +5,14 @@
 import type { ReactElement } from 'react';
 import { act, fireEvent, render, screen, waitFor, within, type RenderResult } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ClientSession, ClientSignal, MailFathomTransport } from '@mailfathom/client-backend';
+import type { ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { ReadMarkingContext, nothingMarkedRead, type MarkedIn, type ReadMarking } from '../readMarking/useReadMarking';
 import {
     SignalledChangesContext,
     nothingSignalled,
     type SignalListener,
+    type SignalledChange,
     type SignalledChanges,
 } from '../signals/signalledChanges';
 import { WorkspaceProvider } from '../workspace/Workspace';
@@ -216,11 +217,12 @@ function pressed(on: HTMLElement): readonly (string | null)[] {
 }
 
 /** A deployment a test speaks for, so what a signal does to the tree is asserted rather than waited for. */
-function deploymentSaying(): { changes: SignalledChanges; say: (signal: ClientSignal) => void } {
+function deploymentSaying(): { changes: SignalledChanges; say: (signal: SignalledChange) => void } {
     const listeners = new Set<SignalListener>();
 
     return {
         changes: {
+            refresh: () => undefined,
             listen: (listener) => {
                 listeners.add(listener);
 
@@ -901,7 +903,8 @@ describe('FolderTree, in a folded column', () => {
         expect(reads).toBe(2);
     });
 
-    it.each<{ signal: ClientSignal; named: string }>([
+    it.each<{ signal: SignalledChange; named: string }>([
+        { signal: { kind: 'refresh' }, named: 'a refresh' },
         { signal: { kind: 'folders.changed', account: 'work' }, named: 'the mapping moving' },
         { signal: { kind: 'mail.changed', account: 'work', folder: 'INBOX', emails: ['m-1'] }, named: 'mail changing' },
         {
@@ -936,6 +939,41 @@ describe('FolderTree, in a folded column', () => {
 
         await drawn();
         expect(reads).toBe(2);
+    });
+
+    it('keeps the tree on the screen when a refresh is not answered', async () => {
+        const deployment = deploymentSaying();
+        let reads = 0;
+
+        renderTree(
+            () => {
+                reads += 1;
+
+                return Promise.resolve(
+                    reads === 1
+                        ? { status: 200, headers: {}, body: JSON.stringify(tree) }
+                        : { status: 503, headers: {}, body: '' },
+                );
+            },
+            true,
+            undefined,
+            deployment.changes,
+        );
+
+        await drawn();
+
+        act(() => {
+            deployment.say({ kind: 'refresh' });
+        });
+
+        await waitFor(() => {
+            expect(reads).toBe(2);
+        });
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(row(/^Work/)).toBeDefined();
     });
 
     it('reads nothing again for a star, which moves no count this tree draws', async () => {

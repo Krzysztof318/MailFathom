@@ -67,6 +67,7 @@ function renderSummary(connection: Partial<Connection>, pending: PendingChanges 
                         online: true,
                         attempts: 0,
                         reread: () => undefined,
+                        refresh: () => undefined,
                         ...connection,
                     }}
                 />

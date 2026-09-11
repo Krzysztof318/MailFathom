@@ -229,7 +229,18 @@ function OpenMessage({
                 return;
             }
 
-            setAnswer({ read, result: answered });
+            // A quiet read the deployment did not answer leaves the message it was reading again where it stands: what a
+            // reader is part-way through is still the truest thing anybody has, and the next signal or refresh asks
+            // again. `missing` is not that — it is the deployment saying the message is gone — and is let go of below.
+            setAnswer((current) =>
+                read.quietly &&
+                answered.outcome === 'failed' &&
+                answered.failure.reason !== 'missing' &&
+                current?.result.outcome === 'read' &&
+                current.read.storedEmailId === read.storedEmailId
+                    ? current
+                    : { read, result: answered },
+            );
 
             // A message the deployment no longer holds is let go of rather than drawn as a failure to press through.
             // What is open outlives the message across a reload, so somebody returning to a client whose message has
@@ -286,11 +297,15 @@ function OpenMessage({
 
     // A message the deployment says has changed is read again where it is the one on the screen, quietly, so what a
     // reader is part-way through stays in front of them until the new answer replaces it. A signal naming other mail is
-    // not this message's business: the list it names re-reads its own rows.
+    // not this message's business: the list it names re-reads its own rows. A refresh is every message's business, and
+    // reads this one again the same way.
     useEffect(
         () =>
             signalledChanges.listen((signal) => {
-                if (signal.kind === 'mail.changed' && signal.emails.includes(storedEmailId)) {
+                if (
+                    signal.kind === 'refresh' ||
+                    (signal.kind === 'mail.changed' && signal.emails.includes(storedEmailId))
+                ) {
                     setRead((current) => ({ storedEmailId, attempt: current.attempt + 1, quietly: true }));
                 }
 

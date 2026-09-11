@@ -373,7 +373,7 @@ export function App({
     // What the deployment says has changed while somebody is looking at it, held on the same three conditions every
     // read above is: a credential that may not read mail is told nothing about it, and a machine with no network has
     // no connection to open. A screen subscribes to decide what to read again; nothing here renders, and a deployment
-    // that serves no channel leaves every screen on the interval it already had.
+    // that serves no channel leaves every screen on the interval the hook refreshes it on.
     const signalledChanges = useSignals(
         readsMail && connection.online ? session : null,
         readMail,
@@ -382,23 +382,28 @@ export function App({
     );
 
     // The account's own state is the frame's to re-read, because what it moves is what the frame draws: how current
-    // each account is, and the freshness line beside it. Every other kind is a screen's, and each of them subscribes
-    // where it decides what to ask for again.
+    // each account is, and the freshness line beside it. A refresh reads it again too, and quietly — one the deployment
+    // does not answer leaves the frame as it stands. Every other kind is a screen's, and each of them subscribes where
+    // it decides what to ask for again.
     //
     // Through a ref because the way to ask is a new function on every render while the subscription is not: reading it
     // when a signal arrives is what keeps one subscription across the renders, instead of one torn down and rebuilt
     // every time anything on this frame changes.
-    const rereadConnection = useRef(connection.reread);
+    const connectionNow = useRef(connection);
 
     useEffect(() => {
-        rereadConnection.current = connection.reread;
-    }, [connection.reread]);
+        connectionNow.current = connection;
+    }, [connection]);
 
     useEffect(
         () =>
             signalledChanges.listen((signal) => {
                 if (signal.kind === 'account.state') {
-                    rereadConnection.current();
+                    connectionNow.current.reread();
+                }
+
+                if (signal.kind === 'refresh') {
+                    connectionNow.current.refresh();
                 }
             }),
         [signalledChanges],
@@ -875,16 +880,10 @@ export function App({
                                                                     onPointerDown={swipe.onNavigationPointerDown}
                                                                     onClickCapture={swipe.onNavigationClickCapture}
                                                                     refresh={
-                                                                        // On the same grant the bell is, and for the same reason: today
-                                                                        // the two things it reads again are the mail and the centre, and
-                                                                        // a credential that may read neither would press it for nothing.
-                                                                        readsMail ? (
-                                                                            <Refresh
-                                                                                readNotificationsAgain={
-                                                                                    notifications.readAgain
-                                                                                }
-                                                                            />
-                                                                        ) : null
+                                                                        // On the same grant the bell is, and for the same reason: what it
+                                                                        // reads again is the mail and the centre, and a credential that may
+                                                                        // read neither would press it for nothing.
+                                                                        readsMail ? <Refresh /> : null
                                                                     }
                                                                     notifications={
                                                                         // Offered on the grant the routes are admitted under, and absent

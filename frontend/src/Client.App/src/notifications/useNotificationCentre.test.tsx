@@ -9,7 +9,6 @@ import type {
     ClientNotification,
     ClientRequest,
     ClientSession,
-    ClientSignal,
     MailFathomTransport,
     NotificationTarget,
 } from '@mailfathom/client-backend';
@@ -20,6 +19,7 @@ import {
     SignalledChangesContext,
     nothingSignalled,
     type SignalListener,
+    type SignalledChange,
     type SignalledChanges,
 } from '../signals/signalledChanges';
 import { ToastsProvider } from '../toasts/Toasts';
@@ -193,11 +193,12 @@ function looking(at: boolean): void {
 let signedInAs: ClientSession | null = session;
 
 /** A deployment a test speaks for, so what a raised notification does to the bell is asserted rather than polled for. */
-function deploymentSaying(): { changes: SignalledChanges; say: (signal: ClientSignal) => void } {
+function deploymentSaying(): { changes: SignalledChanges; say: (signal: SignalledChange) => void } {
     const listeners = new Set<SignalListener>();
 
     return {
         changes: {
+            refresh: () => undefined,
             listen: (listener) => {
                 listeners.add(listener);
 
@@ -389,9 +390,10 @@ describe('useNotificationCentre', () => {
         expect([...result.current.arrived]).toEqual(['n-second']);
     });
 
-    it('reads the page and the count again when it is asked to by hand, which is what the rail refresh asks', async () => {
+    it('reads the page and the count again on a refresh, whoever asked for it', async () => {
         const { transport, requests, hold } = deployment({ unreadCount: 1, notifications: [mail] });
-        const { result } = centreOf(transport);
+        const signalling = deploymentSaying();
+        const { result } = centreOf(transport, session, signalling.changes);
 
         await settled();
 
@@ -401,7 +403,7 @@ describe('useNotificationCentre', () => {
         hold(2, [{ ...mail, id: 'n-second' }, mail]);
 
         act(() => {
-            result.current.readAgain();
+            signalling.say({ kind: 'refresh' });
         });
         await settled();
 
@@ -411,9 +413,54 @@ describe('useNotificationCentre', () => {
         expect(result.current.notifications.map((row) => row.id)).toEqual(['n-second', 'n-mail']);
     });
 
+    // An empty centre is the one that would show it: the panel draws the failure wherever it has no row to draw, so a
+    // refresh nobody pressed would otherwise turn a quiet bell into an error.
+    it('says nothing when a refresh is not answered, leaving an empty centre empty', async () => {
+        const { transport } = deployment({ unreadCount: 0, notifications: [] });
+        let refusing = false;
+        const refusingThePage: MailFathomTransport = (request) =>
+            refusing && new URL(request.path).pathname === '/api/client/notifications'
+                ? Promise.resolve({ status: 503, headers: {}, body: '' })
+                : transport(request);
+        const signalling = deploymentSaying();
+        const { result } = centreOf(refusingThePage, session, signalling.changes);
+
+        act(() => {
+            result.current.show();
+        });
+        await settled();
+
+        refusing = true;
+
+        act(() => {
+            signalling.say({ kind: 'refresh' });
+        });
+        await settled();
+
+        expect(result.current.failure).toBeNull();
+        expect(result.current.notifications).toEqual([]);
+    });
+
+    it('still says a page read failed when it was the panel opening that asked for it', async () => {
+        const { transport } = deployment({ unreadCount: 0, notifications: [] });
+        const refusingThePage: MailFathomTransport = (request) =>
+            new URL(request.path).pathname === '/api/client/notifications'
+                ? Promise.resolve({ status: 503, headers: {}, body: '' })
+                : transport(request);
+        const { result } = centreOf(refusingThePage);
+
+        act(() => {
+            result.current.show();
+        });
+        await settled();
+
+        expect(result.current.failure).toBe('unavailable');
+    });
+
     it('costs one page read when the refresh finds something waiting, and marks it as having arrived', async () => {
         const { transport, requests, hold } = deployment({ unreadCount: 1, notifications: [mail] });
-        const { result } = centreOf(transport);
+        const signalling = deploymentSaying();
+        const { result } = centreOf(transport, session, signalling.changes);
 
         // Opened first, so the centre has been read once and what a later read brings is an arrival rather than the
         // list appearing — which is the case the count rising and the press are both about.
@@ -426,7 +473,7 @@ describe('useNotificationCentre', () => {
         hold(2, [{ ...mail, id: 'n-second' }, mail]);
 
         act(() => {
-            result.current.readAgain();
+            signalling.say({ kind: 'refresh' });
         });
         await settled();
 

@@ -2387,7 +2387,7 @@ else that moved — a message that changed folder, was deleted, or whose keyword
 whole of what a run found, and a client re-reads. A flag a publisher did not observe is left out rather than reported as
 cleared: a reconciliation window states both, and a change this deployment authored states the one it wrote.
 
-**A client that does not know the sixth kind ignores it and re-reads on its own interval**, exactly as it ignores any
+**A client that does not know the sixth kind ignores it and catches up on its next refresh**, exactly as it ignores any
 other kind it does not know; the client and the service ship under one version, so this is an addition rather than a
 break.
 
@@ -2404,8 +2404,21 @@ arrivals stay two statements so a client is never told that mail arrived without
 
 **A client with no channel behaves exactly as one that never had it.** Every screen re-reads over the routes above, and
 the channel only decides when. So a deployment behind a reverse proxy that does not pass the WebSocket upgrade, or one
-whose client could not connect for any other reason, serves the same client with the same data on its own interval;
-the client says nothing about a channel that is merely down, and reconnects on a bounded jittered backoff.
+whose client could not connect for any other reason, serves the same client with the same data on the client's own
+interval; the client says nothing about a channel that is merely down. It reconnects on a jittered backoff that stops
+growing at thirty seconds and never stops while somebody is signed in, and it tries at once when its window comes back
+to the front or the browser reports its network back.
+
+**A client catches up on what it could not be told.** Nothing buffers a statement for a connection that is not open, so
+a gap in the channel is a gap in what the client heard — a dropped socket, a rolling upgrade, a network that went and
+came back, and, above one replica, a statement lost behind a connection that stayed open. So the client refreshes: it
+reads again everything it draws — the folder tree and its counts, the pages of the list it holds, the open message, the
+accounts, and the notification centre — whenever a connection stands again after one stood for the same sign-in, and
+every five minutes while its window is visible, counted from the last refresh rather than on a fixed clock. It never
+refreshes while the window is hidden, and refreshes at once when a window hidden past those five minutes comes back. A
+refresh is the act the client's *Refresh* control performs, it keeps what the person is in the middle of — the
+selection, the open message, where they are in the list, and any change still pending — and one the deployment does not
+answer leaves what is drawn in place for the next to try again.
 
 **A proxy in front of this endpoint has to pass the upgrade** — `Upgrade` and `Connection` on the request, and no
 buffering or idle timeout shorter than a connection that is meant to stand open. Nothing here fails when it does not;

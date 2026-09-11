@@ -180,6 +180,62 @@ describe('useConnection', () => {
         expect(result.current.readAt).toEqual(readAt);
     });
 
+    it('reads the session and the accounts again on a refresh', async () => {
+        const paths: string[] = [];
+        const recording: DeploymentTransport = () => (request) => {
+            paths.push(request.path);
+
+            return Promise.resolve(request.path.endsWith('/session') ? readsMail : oneAccount);
+        };
+
+        const { result } = renderHook(() => useConnection(baseAddress, firstPerson, recording, nothingToDo, clock));
+
+        await waitFor(() => {
+            expect(result.current.accounts?.outcome).toBe('read');
+        });
+
+        const readSoFar = paths.length;
+
+        act(() => {
+            result.current.refresh();
+        });
+
+        await waitFor(() => {
+            expect(paths.slice(readSoFar).some((path) => path.endsWith('/session'))).toBe(true);
+            expect(paths.slice(readSoFar).some((path) => !path.endsWith('/session'))).toBe(true);
+        });
+    });
+
+    // A refresh is the client's own and nobody is waiting on it, so one the deployment did not answer is the next one's
+    // to repeat: the frame that stood stays, rather than being replaced by a deployment that stopped answering.
+    it('keeps what it read on the screen when a refresh is not answered', async () => {
+        let failing = false;
+        const failingLater: DeploymentTransport = () => (request) =>
+            failing
+                ? Promise.resolve({ status: 503, body: '', headers: {} })
+                : Promise.resolve(request.path.endsWith('/session') ? readsMail : oneAccount);
+
+        const { result } = renderHook(() => useConnection(baseAddress, firstPerson, failingLater, nothingToDo, clock));
+
+        await waitFor(() => {
+            expect(result.current.accounts?.outcome).toBe('read');
+        });
+
+        failing = true;
+
+        act(() => {
+            result.current.refresh();
+        });
+        await act(async () => {
+            for (let turn = 0; turn < 10; turn += 1) {
+                await Promise.resolve();
+            }
+        });
+
+        expect(result.current.session?.outcome).toBe('read');
+        expect(result.current.accounts?.outcome).toBe('read');
+    });
+
     // The other half of keeping what was read: a grant that stopped reading mail asks for no accounts at all, so
     // nothing later in the attempt replaces the tree that stands — and one left up goes on offering mail the
     // deployment has begun refusing, for as long as that person stays signed in.

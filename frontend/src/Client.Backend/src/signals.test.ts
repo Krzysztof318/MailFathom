@@ -58,6 +58,19 @@ function scheduleRecording(waits: number[]): SignalStreamSchedule {
     };
 }
 
+// The same, except that the wait after the last one it was told to allow never ends. A stream that never stops trying
+// would otherwise try forever inside one test, so this is what lets a test count how far past the budget it went.
+function scheduleWaiting(waits: number[], allowed: number): SignalStreamSchedule {
+    return {
+        wait: (milliseconds) => {
+            waits.push(milliseconds);
+
+            return waits.length < allowed ? Promise.resolve() : new Promise<void>(() => undefined);
+        },
+        draw: () => 0.5,
+    };
+}
+
 /** Lets a test drive the channel the way a deployment would: opening it, sending a payload, and dropping it. */
 function channelUnderTest(): {
     channel: MailFathomSignalChannel;
@@ -276,6 +289,7 @@ describe('openSignalStream', () => {
             answering({ status: 200, body: minted }),
             channel.channel,
             () => undefined,
+            () => undefined,
             scheduleRecording([]),
         );
 
@@ -295,6 +309,7 @@ describe('openSignalStream', () => {
             answering({ status: 200, body: minted }),
             channel.channel,
             (signal) => told.push(signal),
+            () => undefined,
             scheduleRecording([]),
         );
 
@@ -315,6 +330,7 @@ describe('openSignalStream', () => {
             answering({ status: 200, body: minted }),
             channel.channel,
             () => undefined,
+            () => undefined,
             scheduleRecording(waits),
         );
 
@@ -328,20 +344,66 @@ describe('openSignalStream', () => {
         await stream.close();
     });
 
-    it('gives up after the bounded number of attempts against a deployment serving no channel', async () => {
+    it('says a connection stands each time one does, the first and every one reopened after a drop', async () => {
+        let stood = 0;
+        const channel = channelUnderTest();
+        const stream = openSignalStream(
+            session,
+            answering({ status: 200, body: minted }),
+            channel.channel,
+            () => undefined,
+            () => {
+                stood += 1;
+            },
+            scheduleRecording([]),
+        );
+
+        await settle();
+        expect(stood).toBe(1);
+
+        channel.openings[0]?.dropped();
+        await settle();
+
+        expect(stood).toBe(2);
+
+        await stream.close();
+    });
+
+    it('says nothing stands against a deployment serving no channel', async () => {
+        let stood = 0;
+        const stream = openSignalStream(
+            session,
+            answering({ status: 404, body: '' }),
+            () => Promise.reject(new Error('never asked')),
+            () => undefined,
+            () => {
+                stood += 1;
+            },
+            scheduleWaiting([], 3),
+        );
+
+        await settle();
+
+        expect(stood).toBe(0);
+
+        await stream.close();
+    });
+
+    it('goes on trying past the budget at the longest wait rather than stopping', async () => {
         const waits: number[] = [];
         const stream = openSignalStream(
             session,
             answering({ status: 404, body: '' }),
             () => Promise.reject(new Error('never asked')),
             () => undefined,
-            scheduleRecording(waits),
+            () => undefined,
+            scheduleWaiting(waits, mostReconnectionAttempts + 3),
         );
 
         await settle();
 
-        expect(waits).toHaveLength(mostReconnectionAttempts);
-        expect(waits.at(-1)).toBe(30_000);
+        expect(waits).toHaveLength(mostReconnectionAttempts + 3);
+        expect(waits.slice(mostReconnectionAttempts - 1)).toStrictEqual([30_000, 30_000, 30_000, 30_000]);
 
         await stream.close();
     });
@@ -352,6 +414,7 @@ describe('openSignalStream', () => {
             session,
             answering({ status: 200, body: minted }),
             channel.channel,
+            () => undefined,
             () => undefined,
             scheduleRecording([]),
         );

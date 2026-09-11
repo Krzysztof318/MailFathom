@@ -48,6 +48,13 @@ export interface Connection {
 
     /** Reads everything again, from a person asking rather than from the client trying on its own. */
     readonly reread: () => void;
+
+    /**
+     * Reads everything again on the client's own account — a refresh — leaving what stands on the screen where the
+     * deployment does not answer: a refresh that failed is one the next repeats, not a frame replaced by a deployment
+     * that stopped answering.
+     */
+    readonly refresh: () => void;
 }
 
 /**
@@ -120,6 +127,15 @@ function accountsStillStanding(
         : { accounts: null, readAt: null };
 }
 
+/** Whether what stands was read, and for this same address and identity, which is what a refresh that failed leaves up. */
+function readFor(previous: Answered, baseAddress: string, presenting: string): boolean {
+    return (
+        previous.presentedAt === baseAddress &&
+        previous.presenting === presenting &&
+        previous.session?.outcome === 'read'
+    );
+}
+
 /**
  * How many automatic attempts have been made, and against which identity.
  *
@@ -184,6 +200,10 @@ export function useConnection(
     const presenting = signedIn?.identity ?? null;
     const authorization = signedIn?.authorization ?? null;
     const carried = useRef(authorization);
+
+    // Whether the next read is a refresh, handed from the call asking for one to the read it starts. A ref because
+    // nothing is drawn from it and setting it must not start a read of its own.
+    const quietly = useRef(false);
     const [read, setRead] = useState(0);
     const [reaching, setReaching] = useState<Reaching>(noneMade);
     const [answered, setAnswered] = useState<Answered>(nothingRead);
@@ -205,6 +225,11 @@ export function useConnection(
         if (baseAddress === null || presenting === null || !online) {
             return;
         }
+
+        // Taken by the read it was set for, so every read after it — a person's, an automatic retry — is not a refresh
+        // unless it was asked for as one.
+        const keepsWhatStands = quietly.current;
+        quietly.current = false;
 
         // Abandoning is what says an answer is nobody's to render any more, and it is one mechanism rather than two:
         // the signal already has to travel to the transport, so a second flag beside it would be a second thing to
@@ -248,13 +273,17 @@ export function useConnection(
             }
 
             if (session.outcome === 'failed') {
-                setAnswered({
+                const unanswered: Answered = {
                     session,
                     accounts: null,
                     readAt: null,
                     presentedAt: baseAddress,
                     presenting,
-                });
+                };
+
+                setAnswered((previous) =>
+                    keepsWhatStands && readFor(previous, baseAddress, presenting) ? previous : unanswered,
+                );
 
                 return;
             }
@@ -294,6 +323,12 @@ export function useConnection(
             if (accounts.outcome === 'failed' && accounts.failure.reason === 'unauthenticated') {
                 refused(presentedToList);
 
+                return;
+            }
+
+            // The accounts the previous attempt answered with already stand, above, so a refresh that could not read
+            // them again leaves them there.
+            if (keepsWhatStands && accounts.outcome === 'failed') {
                 return;
             }
 
@@ -350,7 +385,12 @@ export function useConnection(
         online,
         attempts,
         reread: () => {
+            quietly.current = false;
             setReaching(noneMade);
+            setRead((token) => token + 1);
+        },
+        refresh: () => {
+            quietly.current = true;
             setRead((token) => token + 1);
         },
     };

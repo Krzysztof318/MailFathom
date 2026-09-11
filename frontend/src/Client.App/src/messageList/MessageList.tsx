@@ -47,6 +47,9 @@ import {
     heldRows,
     nothingHeld,
     positionOfRow,
+    refillsHeldRows,
+    refreshAsked,
+    refreshUnanswered,
     rowAt,
     rowCountOf,
     trimmedAround,
@@ -228,6 +231,10 @@ export function MessageList({
     const wantedDirection = wanted?.direction ?? null;
     const wantedRefilling = wanted?.refilling ?? null;
 
+    // Whether the page wanted is one a refresh marked while its rows stay drawn, which decides what its failure does: a
+    // read the reader is still looking at rows through says nothing when it is not answered, and the rows stay.
+    const wantedQuietly = refillsHeldRows(shown, wanted);
+
     // The one effect that puts a request on the wire, which is what an effect is for. What it asked for travels with
     // the answer, so a page knows where it belongs and an answer to a read this list has moved on from is discarded.
     useEffect(() => {
@@ -249,7 +256,11 @@ export function MessageList({
                     return;
                 }
 
-                if (result.outcome === 'failed') {
+                const refilled = asked.refilling;
+
+                if (result.outcome === 'failed' && wantedQuietly && refilled !== null) {
+                    setHeld((current) => refreshUnanswered(current, refilled));
+                } else if (result.outcome === 'failed') {
                     setFailure(result.failure);
                 } else {
                     // Where each message belongs, written down as the page arrives, because the surfaces that act on a
@@ -272,7 +283,7 @@ export function MessageList({
         return () => {
             listening = false;
         };
-    }, [session, transport, scope, listing, wantedCursor, wantedDirection, wantedRefilling, listed]);
+    }, [session, transport, scope, listing, wantedCursor, wantedDirection, wantedRefilling, wantedQuietly, listed]);
 
     // Where the reader is, written down once they have stopped moving, and again the moment the page goes away —
     // whichever comes first. The second is what makes a reload a continuation rather than a race with the first: a
@@ -348,6 +359,13 @@ export function MessageList({
     useEffect(
         () =>
             signalledChanges.listen((signal) => {
+                // A refresh marks every page the list holds rather than dropping one, so the rows stay drawn while the
+                // pages on the screen are read again — and a list that had stopped on a failure is let try again.
+                if (signal.kind === 'refresh') {
+                    setFailure(null);
+                    setHeld(refreshAsked);
+                }
+
                 if (signal.kind === 'mail.arrived' && scopeReaches(scope, signal.account, signal.folder)) {
                     setHeld(arrivalNoticed);
                 }
@@ -494,14 +512,6 @@ export function MessageList({
             // then drawn in the panel where every other narrowing is.
             stand: (view) => {
                 readWith({ ...listing, filters: narrowedToView(listing.filters, view, new Date()) });
-            },
-
-            // The same act the deployment's own arrival signal performs, and deliberately the same one: the leading
-            // page is let go of and read again while the reader is looking at it, so the list is never emptied and
-            // never stands as a skeleton of itself. A reader who has scrolled away keeps every row in front of them
-            // and meets the new leading page when they come back to it.
-            readAgain: () => {
-                setHeld(arrivalNoticed);
             },
         });
 

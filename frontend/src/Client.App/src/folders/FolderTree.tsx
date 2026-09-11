@@ -124,7 +124,15 @@ export function FolderTree({
 
         void readMailFolders(session, transport).then((result) => {
             if (listening) {
-                setAnswered({ attempt, result });
+                // A read under a tree already drawn — a signal, a refresh — that the deployment did not answer leaves the
+                // tree standing rather than replacing it with a sentence about a failure: what is drawn is still the
+                // truest thing anybody has, and the next signal or refresh asks again. A first read and a retry have
+                // nothing drawn under them, so their failure is said.
+                setAnswered((current) =>
+                    result.outcome === 'failed' && current?.attempt === attempt && current.result.outcome === 'read'
+                        ? current
+                        : { attempt, result },
+                );
             }
         });
 
@@ -165,7 +173,8 @@ export function FolderTree({
 
     // Four of the six kinds move this tree, because all four move a count it draws: mail arriving in a folder, a
     // message changing folder, the mapping itself moving, and a read mark. It re-reads under whatever is drawn rather
-    // than replacing it, so a reader whose pointer is on a row keeps the row.
+    // than replacing it, so a reader whose pointer is on a row keeps the row. A refresh reads it again the same way, for
+    // the reason it reads everything again: something may have moved that nobody said.
     //
     // A stated flag is the one that is read rather than acted on wholesale. A count is derived from every message in a
     // folder rather than from the ones a statement names, so there is nothing to apply in place — but a statement about
@@ -174,6 +183,7 @@ export function FolderTree({
         () =>
             signalledChanges.listen((signal) => {
                 if (
+                    signal.kind === 'refresh' ||
                     signal.kind === 'folders.changed' ||
                     signal.kind === 'mail.arrived' ||
                     signal.kind === 'mail.changed' ||

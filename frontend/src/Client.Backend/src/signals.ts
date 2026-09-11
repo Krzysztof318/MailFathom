@@ -4,7 +4,7 @@
 
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord } from './json';
-import { mostReconnectionAttempts, reconnectionDelay } from './reconnection';
+import { reconnectionDelay } from './reconnection';
 import { headersFor, routeFor, type ClientSession } from './session';
 import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
@@ -208,15 +208,19 @@ export function parseClientSignal(payload: unknown): ClientSignal | null {
  * Opens a connection and keeps one open, telling the caller what the deployment says changed.
  *
  * A connection is opened by minting a ticket and handing it to the channel, and a ticket opens exactly one — so every
- * reopening mints another. Both halves are retried on the same bounded, spread schedule the shell reaches a lost
- * deployment on, and after `mostReconnectionAttempts` the stream stops trying: a client whose channel never came back
- * reads on its own interval, which is what it does when a deployment serves no channel at all.
+ * reopening mints another. Both halves are retried on the same spread schedule the shell reaches a lost deployment on,
+ * and the stream never stops trying on its own: past `mostReconnectionAttempts` it goes on at the longest wait the
+ * schedule has. A rolling upgrade that keeps the hub away for longer than a minute is no reason for an open client to
+ * stop hearing about mail until somebody reloads it, so only the caller closing the stream ends it.
  *
  * **Nothing here reports a failure.** A deployment that serves no hub, a proxy that will not pass the upgrade, and a
  * connection that dropped are all the same thing to a person looking at the screen — a client reading on its interval
  * — and saying so would be a client complaining about an optimization it never promised.
  *
- * @param told Called once per statement, after the payload has been read as one of the five.
+ * @param told Called once per statement, after the payload has been read as one of the six.
+ * @param opened Called each time a connection has opened and stands. Whatever was said while none stood was said to
+ * nobody, so this is the moment a caller reads again what it draws — except after the first opening, which only the
+ * caller can tell apart, since only it knows whether anything was drawn before it.
  * @returns The subscription, which the caller closes when the person signs out or the deployment changes.
  */
 export function openSignalStream(
@@ -224,6 +228,7 @@ export function openSignalStream(
     transport: MailFathomTransport,
     channel: MailFathomSignalChannel,
     told: (signal: ClientSignal) => void,
+    opened: () => void,
     schedule: SignalStreamSchedule,
 ): SignalStream {
     let open: SignalChannelHandle | null = null;
@@ -246,12 +251,9 @@ export function openSignalStream(
             // A connection that stood and then dropped is not the next failed attempt in a row: the schedule measures
             // how long a deployment has been unreachable, and one that answered is reachable. It is still waited out
             // before another is opened, so a deployment closing every connection at once costs one attempt a second
-            // rather than a loop.
+            // rather than a loop. Past the budget the wait stops growing rather than the stream stopping, because the
+            // schedule caps it at its longest.
             refusals = outcome === 'opened' ? 0 : refusals + 1;
-
-            if (refusals > mostReconnectionAttempts) {
-                return;
-            }
 
             await schedule.wait(reconnectionDelay(refusals, schedule.draw()));
         }
@@ -289,6 +291,7 @@ export function openSignalStream(
             return 'opened';
         }
 
+        opened();
         await ended.reached;
         open = null;
 
