@@ -2662,6 +2662,7 @@
           <div style="height:1px;background:var(--line2);margin:4px 0"></div>
           <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">MESSAGE VIEW</div>
           <div style="display:flex;gap:4px;padding:3px;max-width:620px;border:1px solid var(--border2);border-radius:9px;background:var(--sub)">
+            <div onClick="{{ setViewAi }}" style="{{ viewAiStyle }}" style-hover="cursor:pointer">AI simplified</div>
             <div onClick="{{ setViewSimple }}" style="{{ viewSimpleStyle }}" style-hover="cursor:pointer">Simplified</div>
             <div onClick="{{ setViewHtml }}" style="{{ viewHtmlStyle }}" style-hover="cursor:pointer">Original</div>
           </div>
@@ -3475,6 +3476,8 @@ const avatarOf = (name) => AVATARS[name] || "";
 const ME = "Karolina Kowalska";
 const initialsOf = (n) => (n || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 const lowerFirst = (s) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+const segStyle = (on) => "flex:1;text-align:center;padding:6px 8px;border-radius:7px;font-size:12.5px;white-space:nowrap;" + (on ? "background:var(--accent);color:var(--onaccent)" : "color:var(--muted)");
+
 const M = (from, when, paras, atts, html) => ({ from, when, initials: initialsOf(from), mine: from === ME, paras, atts: atts || [], html: html || "" });
 
 /* The original messages as their senders wrote them — what actually arrives from the server; the thread window
@@ -8384,13 +8387,17 @@ class Component extends DCLogic {
         else this.setState({ htmlDoc: ask.doc, htmlSrcMode: false, htmlLoading: true });
         this.loadHtml();
       },
+      setViewAi: () => this.setState({ msgView: "ai" }),
       setViewSimple: () => this.setState({ msgView: "simple" }),
       setViewHtml: () => this.setState({ msgView: "html", htmlDoc: null }),
-      viewSimpleStyle: "flex:1;text-align:center;padding:6px 8px;border-radius:7px;font-size:12.5px;" + (st.msgView === "html" ? "color:var(--muted)" : "background:var(--accent);color:var(--onaccent)"),
-      viewHtmlStyle: "flex:1;text-align:center;padding:6px 8px;border-radius:7px;font-size:12.5px;" + (st.msgView === "html" ? "background:var(--accent);color:var(--onaccent)" : "color:var(--muted)"),
+      viewAiStyle: segStyle(st.msgView === "ai"),
+      viewSimpleStyle: segStyle(st.msgView !== "ai" && st.msgView !== "html"),
+      viewHtmlStyle: segStyle(st.msgView === "html"),
       viewHint: st.msgView === "html"
         ? "Messages show the original as its sender wrote it, inline; the control on the message head goes."
-        : "Messages are shown as cleaned-up text; the original is one control away on the message head.",
+        : st.msgView === "ai"
+          ? "The same deterministic cleanup as Simplified, with AI deciding only what to keep and what to drop — it never rewrites a word, so the text stays exactly as the sender wrote it; only the presentation changes. Usually cleaner than plain Simplified, especially on newsletters and long reply chains."
+          : "Messages are shown as cleaned-up text; the original is one control away on the message head.",
       telemetryOptOut: !!st.telemetryOptOut,
       telemetrySwitchStyle: "flex:0 0 auto;margin-top:2px;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (st.telemetryOptOut ? "--accent" : "--border2") + ");justify-content:" + (st.telemetryOptOut ? "flex-end" : "flex-start"),
       toggleTelemetry: () => this.setState(s => ({ telemetryOptOut: !s.telemetryOptOut })),
