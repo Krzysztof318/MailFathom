@@ -53,9 +53,10 @@ internal static partial class ClientSignalEndpoints
     /// A SignalR handshake is ordinarily two requests — a negotiation and the transport it chose — and both have to
     /// reach the same process, which is why the framework's scale-out guidance asks for session affinity. It names
     /// WebSockets alone with negotiation skipped as one of the arrangements that needs none, and that is what the
-    /// client already does. Refusing the other two transports here is what makes that a property of the deployment
-    /// rather than a habit of one client: nothing can open a connection that would then have to be routed back to the
-    /// replica that answered its negotiation.
+    /// client already does. What this setting decides is what the deployment offers rather than what a caller may ask
+    /// for: the negotiate endpoint still answers, and it now offers WebSockets and nothing else, so a connection that
+    /// skips it is one request no replica has to be chosen twice for. A caller that does negotiate holds a token the
+    /// replica that answered it issued, and arranges its own routing back there; no first-party client asks for one.
     /// </para>
     /// <para>
     /// What it costs is stated in

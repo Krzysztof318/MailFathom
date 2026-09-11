@@ -471,9 +471,12 @@ must not depend on a component a deployment may not run.
 | `SecretDigest` | The SHA-256 digest of the ticket's secret half, 32 bytes. The secret itself is never stored, so a row read out of the database or out of a backup opens no connection; the presented secret is hashed and the two digests compared in constant time |
 | `ExpiresAt` | When presenting the ticket stops working, thirty seconds after it was minted. It is the one index beside the key and the foreign key's own, and the index is what makes the removal proportional to what has expired rather than to everything the deployment holds |
 
-**Nothing here is mail, and nothing an unauthenticated caller sends reaches it.** Only a request that already
-authenticated against a credential holding `mailfathom.mail.read` produces a row, so a row is a generated user
-identity, a digest, and an instant — no message, no header, no address, and no credential.
+**Nothing here is mail, and only an authenticated request writes a row.** A request that already authenticated against
+a credential holding `mailfathom.mail.read` is the only thing that produces one, so a row is a generated user identity,
+a digest, and an instant — no message, no header, no address, and no credential. A value an unauthenticated caller
+presents reaches this table in one place only: as the identifier the spend is parameterized by, once the connection it
+arrived on has been refused for anything without a ticket's shape and admitted under the replica's bound on redemptions
+in flight. It is read back rather than stored.
 
 **It cannot grow without bound, and two things hold it.** A ticket lives thirty seconds, and the removal keeps the
 table proportional to the connections opened since the last one. Beside that is a ceiling on how many unspent tickets

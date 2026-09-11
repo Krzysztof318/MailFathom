@@ -25,9 +25,6 @@ internal sealed class InMemoryClientSignalTicketStore : IClientSignalTicketStore
     /// <remarks>The sweep is throttled rather than issued per mint, and nothing else observes that: the tickets it drops could not have been presented anyway.</remarks>
     internal int RemovalCount { get; private set; }
 
-    /// <summary>Gets how many identifiers the deployment currently holds.</summary>
-    internal int OutstandingCount => this.outstanding.Count;
-
     /// <inheritdoc />
     public Task<bool> TryMintAsync(
         string identifier,
