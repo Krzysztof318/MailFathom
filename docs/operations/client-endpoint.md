@@ -2451,7 +2451,11 @@ bound it abandons a request for a page of mail, and `ClientEndpoint:RateLimiting
 against the capacity a browser is spending reading mail. What is bounded instead is the minting, which a reconnect
 cannot avoid — and a deployment holding as many unspent tickets as it will hold answers `503` rather than growing. That
 ceiling is the deployment's rather than each replica's: it is counted in the same statement that writes the ticket, so
-raising the replica count does not multiply it. What bounds the other end is the hub itself, which has authenticated
+raising the replica count does not multiply it. A deployment that cannot reach those tickets at all answers the same
+`503` on the same route, because what a client does about either is identical — wait, and mint again. The two are told
+apart by the error code the answer carries: `33002` is the database that could not be asked, and the ceiling carries
+none. An operator meeting `33002` is looking for an unreachable database rather than for ten thousand unspent tickets,
+and the log entry the refusal wrote is where that failure is. What bounds the other end is the hub itself, which has authenticated
 nothing when a connection arrives: a value without the shape of a minted ticket is refused before any statement runs,
 and each replica has only so many redemptions in flight at once, sized well below the connection pool the rest of the
 deployment reads mail through. A flood of handshakes therefore costs live updates while it lasts and never costs mail,

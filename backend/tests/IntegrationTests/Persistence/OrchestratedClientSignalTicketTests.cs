@@ -169,13 +169,14 @@ public sealed class OrchestratedClientSignalTicketTests(MailFathomOrchestrationF
 
             // Act
             var guessed = await tickets.RedeemAsync($"{identifier}.{new string('A', 43)}", cancellationToken);
+            var respent = await tickets.RedeemAsync(guessedAt.Value, cancellationToken);
             clock.Advance(ClientSignalTickets.Lifetime + TimeSpan.FromSeconds(1));
             var expired = await tickets.RedeemAsync(expiring?.Value, cancellationToken);
 
             // Assert
             Assert.Null(guessed);
+            Assert.Null(respent);
             Assert.Null(expired);
-            Assert.Null(await tickets.RedeemAsync(guessedAt.Value, cancellationToken));
         }
         finally
         {

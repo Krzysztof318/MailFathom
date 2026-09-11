@@ -12,6 +12,7 @@ using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -44,6 +45,7 @@ public sealed class ClientSignalEndpointsTests
         var result = await ClientSignalEndpoints.MintTicket(
             AuthorizationFor(SyntheticMailUser.Deployment),
             tickets,
+            NullLoggerFactory.Instance,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -72,6 +74,7 @@ public sealed class ClientSignalEndpointsTests
         var result = await ClientSignalEndpoints.MintTicket(
             authorization,
             tickets,
+            NullLoggerFactory.Instance,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -95,6 +98,7 @@ public sealed class ClientSignalEndpointsTests
         var result = await ClientSignalEndpoints.MintTicket(
             AuthorizationFor(SyntheticMailUser.Deployment),
             tickets,
+            NullLoggerFactory.Instance,
             TestContext.Current.CancellationToken);
 
         // Assert

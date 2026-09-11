@@ -16,7 +16,9 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// <para>
 /// Nothing here is mail, a message, a header, or key material. A generated user identity, a digest, and an instant are
 /// the whole row, and only a request that already authenticated against a credential holding
-/// <c>mailfathom.mail.read</c> produces one — so nothing an unauthenticated caller sends can reach this table.
+/// <c>mailfathom.mail.read</c> writes one. A value an unauthenticated caller presents reaches this table in one place
+/// only — as the identifier the delete is parameterized by, once the host has refused anything without the shape of a
+/// ticket and admitted only so many redemptions at once — and it is read back rather than stored.
 /// </para>
 /// <para>
 /// It carries no concurrency token and no generated key, because it is written once and never updated. The three

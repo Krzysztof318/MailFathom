@@ -37,7 +37,7 @@ namespace MailFathom.Host.Signals;
 /// scaling out configures no session affinity.
 /// </para>
 /// </remarks>
-internal static class ClientSignalEndpoints
+internal static partial class ClientSignalEndpoints
 {
     /// <summary>The route a connection ticket is minted on, relative to the client prefix.</summary>
     internal const string TicketRoute = "/signals/ticket";
@@ -85,6 +85,7 @@ internal static class ClientSignalEndpoints
     /// <summary>Mints a ticket for the person the credential named.</summary>
     /// <param name="authorization">Reports the grant the caller holds and the user it acts for.</param>
     /// <param name="tickets">Mints the ticket and holds it until it is spent or expires.</param>
+    /// <param name="loggerFactory">Opens the logger the one refusal an operator acts on is recorded through.</param>
     /// <param name="cancellationToken">Cancels the mint with the request that asked for it.</param>
     /// <returns><c>200</c> with the ticket, or <c>503</c> where the deployment already holds every ticket it will hold or could not be asked.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required service is <see langword="null" />.</exception>
@@ -104,10 +105,12 @@ internal static class ClientSignalEndpoints
     internal static async Task<Results<Ok<ClientSignalTicketResponse>, ProblemHttpResult>> MintTicket(
         [FromServices] AccessAuthorization authorization,
         [FromServices] ClientSignalTickets tickets,
+        [FromServices] ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(tickets);
+        ArgumentNullException.ThrowIfNull(loggerFactory);
 
         MintedClientSignalTicket? minted;
 
@@ -117,6 +120,11 @@ internal static class ClientSignalEndpoints
         }
         catch (ClientSignalTicketStoreUnavailableException unreachable)
         {
+            // The one refusal on this route an operator acts on, and the only record of why the database could not be
+            // reached: the status it answers with is the deployment's own ceiling's as well, and the error code below
+            // tells a client the two apart without telling anybody what failed.
+            LogTicketStoreUnavailable(loggerFactory.CreateLogger(typeof(ClientSignalEndpoints)), unreachable);
+
             return TypedResults.Problem(
                 unreachable.Message,
                 statusCode: StatusCodes.Status503ServiceUnavailable,
@@ -132,6 +140,11 @@ internal static class ClientSignalEndpoints
                 statusCode: StatusCodes.Status503ServiceUnavailable)
             : TypedResults.Ok(new ClientSignalTicketResponse(minted.Value, minted.ExpiresAt));
     }
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "A signal ticket was not minted because this deployment's unspent tickets could not be reached.")]
+    private static partial void LogTicketStoreUnavailable(ILogger logger, Exception failure);
 }
 
 /// <summary>What the minting route answers with.</summary>
