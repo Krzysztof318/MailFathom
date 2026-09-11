@@ -798,7 +798,6 @@ for as long as it walks, so on the gauge a walk in progress is one series, publi
 segment, and it moves between replicas as the segments do. A refused claim for such a scope is a segment that found
 another one holding it; it walked nothing and deferred the rest of the walk by `Jobs:LeaseDuration`, so an occasional
 one is ordinary and a steady stream for one scope is worth a look at the lease table.
->>>>>>> f650b670a ([#1834] State the re-derivation lease on the telemetry and job-queue configuration pages)
 
 ### What a synchronization cycle emits
 

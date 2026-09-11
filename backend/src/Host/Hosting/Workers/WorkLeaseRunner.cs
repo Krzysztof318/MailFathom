@@ -61,22 +61,13 @@ internal sealed class WorkLeaseRunner : IWorkLeaseRunner
             return false;
         }
 
-        using var renewalStop = new CancellationTokenSource();
-        using var heldWork = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, hold.Lost);
+        return await hold.RunWhileHeldAsync(
+            async heldToken =>
+            {
+                await work(heldToken);
 
-        var renewals = hold.KeepAsync(renewalStop.Token);
-
-        try
-        {
-            await work(heldWork.Token);
-        }
-        finally
-        {
-            await renewalStop.CancelAsync();
-            await renewals;
-            await hold.ReleaseAsync();
-        }
-
-        return true;
+                return true;
+            },
+            cancellationToken);
     }
 }
