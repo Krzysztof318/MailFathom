@@ -346,6 +346,11 @@ if (openSslConfigurationPath is not null)
     mailFathomHost.WithEnvironment(OrchestrationContract.OpenSslConfigurationVariable, openSslConfigurationPath);
 }
 
+// Declared out here rather than inside the branch that builds it, because the migration resource below is what it has
+// to wait for and that resource is declared after both branches have run. A replica that started while the chain was
+// still being applied would meet the schema gate and refuse, on the first run of the one shape the switch exists for.
+IResourceBuilder<ProjectResource>? signalBackplaneReplicaHost = null;
+
 if (runsIntegrationTests)
 {
     // Nothing starts the host with the application. Most of the suite verifies classes against a real database and a
@@ -490,6 +495,7 @@ else
     // other; a pinned value then replaces the one it was found for and the others stay where they were put. The last
     // one belongs to the client below, and is found here rather than beside it for that reason: a second call would
     // release these before choosing, and two sockets handed one number is a run that fails on whichever binds second.
+
     // Off unless a developer asked for it, because what it adds is a container and a second MailFathom process: the
     // shape of a scaled-out deployment rather than of the one this topology is for.
     var runsSignalBackplane = OrchestrationContract.ResolveSignalBackplaneEnabled(
@@ -742,6 +748,8 @@ else
                 // developer's run honest about what is up.
                 .WaitFor(signalBackplane);
         }
+
+        signalBackplaneReplicaHost = replicaHost;
     }
 }
 
@@ -774,6 +782,10 @@ var migrations = mailFathomHost.AddEFMigrations(OrchestrationContract.Migrations
 // Applying migrations before the host starts is what lets the host refuse to serve traffic against a schema it does not
 // recognize without that refusal firing on every local run.
 mailFathomHost.WaitForCompletion(migrations);
+
+// The second replica of the backplane shape is held to the same gate, and for a sharper reason: it is started only on
+// a run that asked for the backplane, which is as likely as any other to be the first run against a fresh volume.
+signalBackplaneReplicaHost?.WaitForCompletion(migrations);
 
 if (runsIntegrationTests)
 {

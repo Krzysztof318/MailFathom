@@ -1450,9 +1450,10 @@ export path from feeding itself.
 A deployment that configured [a signal backplane](client-endpoint.md#fanning-signals-across-replicas) publishes one
 counter about it, **`mailfathom.client_signals.backplane.transitions`**, in units of `{transition}`. It counts the
 times this replica lost the connection to the RESP endpoint and the times it had it back, broken down by
-`mailfathom.client_signals.backplane.state`, whose values are `lost` and `restored` and nothing else. A deployment that
-configured no backplane creates the instrument at all only where the section was written, so an absent series is a
-deployment without one rather than one that never lost it.
+`mailfathom.client_signals.backplane.state`, whose values are `lost` and `restored` and nothing else. **It is written
+only on a transition**, so an absent series is either a deployment that configured no backplane or one whose backplane
+has never dropped, and this instrument alone cannot tell the two apart. Whether a replica is fanning signals at all is
+read from the section it was configured with rather than from here.
 
 **Every transition is also a log record at `Warning`**, on both sides. The backplane is silent while it works, which is
 what makes losing it worth a level an operator watching a deployment actually sees: nothing else in the process says

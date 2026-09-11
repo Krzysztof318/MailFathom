@@ -115,7 +115,15 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
 
         while (!delivered.IsCompleted)
         {
-            budget.Token.ThrowIfCancellationRequested();
+            // Named rather than left as a bare cancellation, because this is the one failure the class exists to
+            // report and a suite reading an unnamed one here would read it as a host that failed to start.
+            if (budget.IsCancellationRequested)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                throw new InvalidOperationException(
+                    "The signal raised on one replica did not reach the connection held by the other within the crossing budget.");
+            }
 
             await channel.PublishAsync(signal, cancellationToken);
 

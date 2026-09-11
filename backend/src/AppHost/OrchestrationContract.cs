@@ -457,7 +457,13 @@ public static class OrchestrationContract
     /// Off unless asked for, and the opposite default from <see cref="ClientEnabledKey" />: what it adds is a container
     /// and a second MailFathom process, which is the shape of a scaled-out deployment rather than of the one a
     /// developer works in. Stated where the pinned ports are — the app host's own user secrets, out of every checkout —
-    /// and its environment form is <c>SignalBackplane__Enabled</c>.
+    /// and its environment form is <c>Backplane__Enabled</c>.
+    /// </para>
+    /// <para>
+    /// <b>Under a root the host binds nothing at all</b>, like every other switch here and unlike the section it turns
+    /// on. A child process inherits this one's environment, so <c>SignalBackplane__Enabled</c> would reach every host
+    /// this app model starts, land inside the section <c>SignalBackplaneOptions</c> binds with
+    /// <c>ErrorOnUnknownConfiguration</c>, and stop the process on a key it has no property for.
     /// </para>
     /// <para>
     /// Read from configuration rather than from the argument list, for the reason the client switch is: it adds
@@ -465,7 +471,7 @@ public static class OrchestrationContract
     /// the ephemeral database.
     /// </para>
     /// </remarks>
-    public const string SignalBackplaneEnabledKey = "SignalBackplane:Enabled";
+    public const string SignalBackplaneEnabledKey = "Backplane:Enabled";
 
     /// <summary>The second MailFathom host project resource a developer's backplane run starts, which holds its own client connections.</summary>
     /// <remarks>

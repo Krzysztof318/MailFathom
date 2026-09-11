@@ -100,6 +100,16 @@ internal sealed class SignalBackplaneConnection : IConfigureOptions<RedisOptions
             }
         };
 
+        // The one transition no handler can see. With AbortOnConnectFail off the connect completes against an endpoint
+        // that answered nothing, and whatever the library raised during that first attempt was raised before anything
+        // above was subscribed — so a replica whose backplane was never reachable would otherwise be the one case that
+        // reports nothing at all, which is exactly the case an operator has to be told about. The library's own
+        // reconnection then raises the restoration, so the pair still reads as a transition rather than as a state.
+        if (!connection.IsConnected)
+        {
+            this.telemetry.RecordLost();
+        }
+
         return connection;
     }
 

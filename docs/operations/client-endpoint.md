@@ -2458,11 +2458,16 @@ does not stop the host from serving, a lost or regained connection is logged at 
 failing a readiness probe, and nothing is buffered for a replica that was not listening — a statement is an
 instruction to look again, and the next refresh is the catch-up.
 
-**Only what a signal already carries crosses it.** The backplane transports the same payload the hub would have sent
-over the WebSocket: a kind, a count, an account alias, a folder alias, stored identities, the two server flags, and a
-raised notification's own two lines. No subject, address, body fragment, filename, or attachment name reaches it, for
-the same reason none reaches the connection. That still makes it **personal data in transit**: an account alias, a
-folder alias, and a notification's headline are about a person, and a RESP server sees them. It is **stored nowhere** —
+**Only what a signal already carries crosses it, plus the name of the group it is addressed to.** The backplane
+transports the same payload the hub would have sent over the WebSocket: a kind, a count, an account alias, a folder
+alias, stored identities, the two server flags, and a raised notification's own two lines. No subject, address, body
+fragment, filename, or attachment name reaches it, for the same reason none reaches the connection. One value crosses
+that the payload deliberately leaves out: a statement is published on a channel named after the group it is for, and
+that group is named from the user's own identifier — so the RESP server sees a stable per-person identifier on every
+statement and on every subscription, where a connection is told only what changed. It is an identifier this deployment
+generated rather than an address or a name, and nothing on that server resolves it to a person. All of it is
+**personal data in transit**: an account alias, a folder alias, a notification's headline, and that identifier are
+about a person, and a RESP server sees them. It is **stored nowhere** —
 publish and subscribe keeps no message, this deployment sets no key, and a replica that was not subscribed at the
 moment is simply not told — so there is nothing on that server to retain, export, or erase, and nothing about it enters
 a data-subject workflow.
