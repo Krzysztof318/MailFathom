@@ -31,7 +31,7 @@ Issue 1287 refused a message broker or a coordination service for every part of 
 - **There is no first-party SignalR fan-out over PostgreSQL.** ASP.NET Core ships a backplane for Redis and a hosted service for Azure, and nothing else. Anything else is a `HubLifetimeManager` this project writes, owns, and keeps correct across SignalR's own releases.
 - **A signal is already best effort, and nothing can make it otherwise.** The ASP.NET Core documentation states that the Redis backplane buffers nothing while the backplane is unreachable, and a group holding no connection delivers a message nowhere. So the guarantee a client is given has to be something that survives any gap, and a signal is not that thing.
 - **Personal data in transit should rest nowhere.** A signal names account and folder aliases, stored identities, flags, and a notification's two lines. Whatever carries it between replicas should keep none of it.
-- **The client already connects the way this needs.** `signalChannel.ts` opens the hub with `transport: HttpTransportType.WebSockets, skipNegotiation: true`, because a negotiation request would spend the single-use ticket before the socket presented it. Every supported head — the web bundle, the Tauri desktop application, and the Android WebView — speaks WebSockets.
+- **The client already connects the way this needs.** `signalChannel.ts` opens the hub with `transport: HttpTransportType.WebSockets, skipNegotiation: true`. Both heads ADR 0021 ships — the web bundle and the Tauri desktop application — speak WebSockets, and so does the Android artifact, which ADR 0027 leaves supported by nothing.
 
 ## Considered Options
 
@@ -58,11 +58,11 @@ Three questions are answered together, because the answer to each constrains the
 
 Chosen options: **WebSockets alone with negotiation skipped**, **a ticket store in PostgreSQL**, and **an optional RESP pub/sub backplane with Garnet as the deployed default**. Together they remove every reason for session affinity, keep authentication on the one store every deployment already runs, and add a second kind of shared infrastructure only where it is needed: to carry client signals between replicas, and for nothing else.
 
-### The hub serves WebSockets alone, and never negotiates
+### The hub serves WebSockets alone, and the client never negotiates
 
 SignalR's default handshake is two requests. The first negotiates a transport and returns a connection token, and the second opens the transport carrying that token. Both must reach the same process, which is why the ASP.NET Core scale-out guidance requires sticky sessions. It names three exceptions: one process on one server, Azure SignalR Service, and every client configured to use WebSockets **only** with `SkipNegotiation` enabled. The guidance states that the third holds with the Redis backplane as well.
 
-A connection that skips negotiation is one HTTP request, upgraded. It lives on whichever replica accepted it for as long as it stands, so there is nothing for affinity to keep together. The client already connects this way. The server is brought into line: the hub is mapped with `HttpTransportType.WebSockets` alone, so the negotiate endpoint, server-sent events, and long polling are refused to any caller rather than served to one the client never is.
+A connection that skips negotiation is one HTTP request, upgraded. It lives on whichever replica accepted it for as long as it stands, so there is nothing for affinity to keep together. The client already connects this way. The server is brought into line: the hub is mapped with `HttpTransportType.WebSockets` as its only transport, so a server-sent-events or long-polling connection is refused to any caller rather than served to one the client never is. The negotiate endpoint still answers, and the only transport it offers is WebSockets. Nothing here depends on it, because the client never calls it. A caller that does negotiate has to open its socket on the replica that answered, and arranging that is the caller's concern rather than the deployment's.
 
 What this costs is stated here so it is not discovered later:
 
@@ -85,7 +85,7 @@ The table costs one insert and one delete per connection. That is once per conne
 
 ### Signals cross replicas through a RESP pub/sub backplane
 
-`Microsoft.AspNetCore.SignalR.StackExchangeRedis` is the first-party backplane. Every replica subscribes. A message published to a user's group travels to whichever replica holds that user's connections, and that replica delivers it. The channel names carry a prefix that defaults to `mailfathom`, so two deployments can share one endpoint without either one's replicas receiving the other's messages.
+`Microsoft.AspNetCore.SignalR.StackExchangeRedis` is the first-party backplane. Every replica subscribes. A message published to a user's group travels to whichever replica holds that user's connections, and that replica delivers it. The channel names carry a prefix, which is `mailfathom` unless the deployment sets one.
 
 **The endpoint speaks RESP.** Where a deployment needs one of its own, the project deploys **Garnet**. Where the operator already runs a Redis-compatible endpoint — Redis, Valkey, or a managed cache — the deployment is pointed at it instead, and the operator runs one RESP service rather than two.
 
@@ -122,7 +122,7 @@ It would buy no stronger delivery either: a notification reaches only sessions l
 
 - **Encryption in transit**, which StackExchange.Redis takes as `ssl=true` in the connection string.
 - **A credential of its own**, held as a secret reference like every other credential the deployment carries. Where the endpoint supports per-channel permissions, an ACL user limited to publishing and subscribing under the deployment's prefix.
-- **A channel prefix no other deployment on that endpoint uses.**
+- **A channel prefix no other deployment on that endpoint uses.** The default is the same string in every deployment, so two deployments sharing one endpoint at the default would each receive the other's signals. A shared endpoint needs the prefix set explicitly.
 - **Network reach limited to the replicas**, in the same data centre, which is also what the ASP.NET Core guidance asks of a Redis backplane for latency's sake.
 - **A recipient entry in the operator's own processing record** where the endpoint is a managed service run by somebody else, since signals are then disclosed to that processor.
 
@@ -169,7 +169,7 @@ Above one replica, an operator configures four things:
 
 ## Validation
 
-- **The transport.** A unit test over the hub's mapping requires a negotiate request, a server-sent-events request, and a long-polling request to be refused. Issue 1878 owns it.
+- **The transport.** A unit test over the hub's mapping requires a server-sent-events connection and a long-polling connection to be refused. Issue 1878 owns it.
 - **The ticket.** Unit tests over the store require a ticket to be spent once, a second presentation to be refused, an expired ticket to be refused, and a ticket minted through one store instance to be redeemed through another. Issue 1878 owns them.
 - **The backplane.** Startup validation refuses a backplane section that names no connection, and a unit test requires nothing to be registered when the section is absent or the client surface is not served. Issue 1879 owns both.
 - **The chart.** The golden manifests carry a values case for each mode — Garnet deployed, an external endpoint, and none. A case of `replicaCount: 2` with the client surface served and no backplane must fail to render, and `scripts/render-helm-manifests.sh` holds it. Issue 1880 owns this.
@@ -183,7 +183,7 @@ Above one replica, an operator configures four things:
 
 - Good, because a connection is one request and needs no affinity, with or without a backplane, as the ASP.NET Core scale-out guidance states.
 - Good, because the client already connects this way, so the change is a server refusing what no client asks for.
-- Good, because negotiation would spend the single-use ticket, so skipping it is required by the ticket's own design rather than chosen alongside it.
+- Good, because the one request that opens the connection is the one that presents the ticket, so there is no pair of requests for anything to route together.
 - Neutral, because every supported head speaks WebSockets, so no supported client loses anything.
 - Bad, because a network or proxy that blocks the upgrade has no fallback transport, and its client gets no live updates at all.
 - Bad, because stateful reconnect cannot be enabled without negotiation.
@@ -193,7 +193,7 @@ Above one replica, an operator configures four things:
 - Good, because a network that blocks WebSockets could fall back to server-sent events or long polling.
 - Neutral, because the client does not use any other transport today, so the fallback would be new client work.
 - Bad, because every operator above one replica would have to configure affinity, and would learn that from a screen that stopped updating.
-- Bad, because the fallback transports need negotiation, and negotiation spends the ticket, so the ticket's design would have to change with it.
+- Bad, because the fallback transports need negotiation, which brings back the pair of requests that must reach one process.
 
 ### A ticket store in PostgreSQL
 
@@ -248,7 +248,7 @@ Above one replica, an operator configures four things:
 
 - **The issues.** Issue 1838 asks the question. Issue 1870 is the plan and the measurements this record is written against. Issue 1878 delivers the WebSocket-only hub and the PostgreSQL ticket. Issue 1879 delivers the backplane. Issue 1880 puts Garnet or an external endpoint into the chart, together with the refusal. Issue 1881 does the same for Compose and Quadlet. Issue 1877 is the client's catch-up, which this record names as the guarantee. It waits on nothing here, because a single replica already loses signals across a dropped connection. Issue 1287 carries the exception to its broker refusal, and issues 1294 and 1295 wait on the four server-side children.
 - **ADR 0009 and ADR 0031.** [ADR 0009](0009-durable-job-store-and-execution-identity.md) states the refusal of a message broker that this record makes one exception to, and that refusal stands for everything else. [ADR 0031](0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) divides the work between replicas, and this record does not touch it. This is a new record rather than an amendment to ADR 0031, because it adds a second kind of shared infrastructure beside PostgreSQL rather than refining the lease. The three records are linked in both directions.
-- **Other records.** [ADR 0016](0016-third-party-licence-obligations-per-artifact.md) governs how the Garnet image and the backplane package are reviewed in `THIRD_PARTY_LICENSES.md`. [ADR 0021](0021-client-stack-react-typescript-tailwind-tauri-and-pnpm.md) is where the heads that must all speak WebSockets are decided.
+- **Other records.** [ADR 0016](0016-third-party-licence-obligations-per-artifact.md) governs how the Garnet image and the backplane package are reviewed in `THIRD_PARTY_LICENSES.md`. [ADR 0021](0021-client-stack-react-typescript-tailwind-tauri-and-pnpm.md) decides the two heads that ship, and [ADR 0027](0027-an-android-head-built-every-night-and-supported-by-nothing.md) the Android artifact beside them that nothing supports. All three speak WebSockets.
 - **Out of scope.** Azure SignalR Service and every other hosted backplane, any change to what a signal carries, and any use of the RESP endpoint other than client signals.
 - **The `describes:` marker.** It names the code this decision is about as that code exists today: the hub, the ticket, and the channel under `backend/src/Host/Signals/`, and the client's transport and reconnection. It gains the ticket store, the backplane's registration, and the deployment assets as issues 1878 to 1881 land them.
 - **When to revisit.** Revisit when a supported head cannot speak WebSockets, or a deployment's network blocks the upgrade and needs a fallback. Revisit when the RESP endpoint is wanted for anything but client signals, which is a record of its own. Revisit when a first-party SignalR backplane over PostgreSQL appears. And revisit when signals lost during a backplane outage are measured as a problem the five-minute re-read does not cover.
