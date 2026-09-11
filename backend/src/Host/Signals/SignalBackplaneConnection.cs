@@ -21,9 +21,12 @@ namespace MailFathom.Host.Signals;
 /// starting.
 /// </para>
 /// <para>
-/// <b>The connection string is resolved per connection rather than once.</b> The factory runs again whenever the
-/// lifetime manager has no usable connection, so a password rotated behind an unchanged reference is picked up by the
-/// next attempt with no restart to schedule — the same promise every other credential in this deployment carries.
+/// <b>The connection string is read when a connection is first wanted, and the endpoint is then kept for the life of
+/// the process.</b> <c>RedisHubLifetimeManager</c> holds the multiplexer the factory handed it and calls the factory
+/// again only after an attempt that threw, so what a later reconnection uses is the
+/// <see cref="ConfigurationOptions" /> parsed at first use rather than the reference read again. A credential rotated
+/// behind an unchanged reference therefore takes effect at the next start — unlike the material behind a request-path
+/// credential, and unlike a host that never reached the endpoint at all, whose next attempt does re-read it.
 /// </para>
 /// <para>
 /// <b>The endpoint never being reachable is not a startup failure.</b> <c>AbortOnConnectFail</c> is forced off over
@@ -79,7 +82,25 @@ internal sealed class SignalBackplaneConnection : IConfigureOptions<RedisOptions
     /// </remarks>
     private async Task<IConnectionMultiplexer> ConnectAsync(TextWriter log)
     {
-        var connection = await ConnectionMultiplexer.ConnectAsync(await this.ReadEndpointAsync(), log);
+        ConfigurationOptions endpoint;
+
+        try
+        {
+            endpoint = await this.ReadEndpointAsync();
+        }
+        catch
+        {
+            // A reference that resolves to nothing and a connection string the client refuses are both endpoints this
+            // replica will never dial, which is the same condition to every screen that stops being told things as one
+            // it dialled and could not reach. Neither is proved at startup — the gate there proves the reference
+            // resolves, not that what it resolved to is a connection string — so without this the whole symptom of a
+            // typo is a deployment that serves correctly and fans nothing out.
+            this.telemetry.RecordLost();
+
+            throw;
+        }
+
+        var connection = await ConnectionMultiplexer.ConnectAsync(endpoint, log);
 
         // Both events are raised once per connection the multiplexer holds, and the interactive one is left out for
         // the reason the library leaves it out of its own logging: a drop raises the same condition twice, and it is
@@ -100,11 +121,11 @@ internal sealed class SignalBackplaneConnection : IConfigureOptions<RedisOptions
             }
         };
 
-        // The one transition no handler can see. With AbortOnConnectFail off the connect completes against an endpoint
-        // that answered nothing, and whatever the library raised during that first attempt was raised before anything
-        // above was subscribed — so a replica whose backplane was never reachable would otherwise be the one case that
-        // reports nothing at all, which is exactly the case an operator has to be told about. The library's own
-        // reconnection then raises the restoration, so the pair still reads as a transition rather than as a state.
+        // The other transition no handler can see. With AbortOnConnectFail off the connect completes against an
+        // endpoint that answered nothing, and whatever the library raised during that first attempt was raised before
+        // anything above was subscribed — so a replica whose backplane was never reachable would otherwise report
+        // nothing at all, which is exactly the case an operator has to be told about. The library's own reconnection
+        // then raises the restoration, so the pair still reads as a transition rather than as a state.
         if (!connection.IsConnected)
         {
             this.telemetry.RecordLost();

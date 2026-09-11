@@ -2482,6 +2482,13 @@ operator's obligation: reach it over TLS by writing `ssl=true` in the connection
 answer from. A clear-text RESP connection across a network somebody else runs publishes those aliases to whoever is on
 the path, and nothing in MailFathom can tell one network from another.
 
+**What the credential and the address restriction guard is injection as well as disclosure.** Anything able to *write*
+to the endpoint can publish onto the channel named for a user, and the replica holding that user's connections forwards
+what arrives — including a raised notification's headline and second line, which are free text a person reads. So a
+RESP server shared with something else, even inside the deployment's own network, is one whose other writers can put a
+statement on somebody's screen; what keeps that from being true is the same password and the same address restriction,
+rather than an additional measure.
+
 **A proxy in front of this endpoint has to pass the upgrade** — `Upgrade` and `Connection` on the request, and no
 buffering or idle timeout shorter than a connection that is meant to stand open. Nothing here fails when it does not;
 the client falls back to its interval, which is what makes this safe to deploy behind a proxy nobody reconfigured.

@@ -50,8 +50,9 @@ internal sealed class SignalBackplaneOptions
     /// Absent by default rather than an empty block, so secret discovery does not find an unresolvable reference nobody
     /// wrote. It is required once the section exists at all: a section naming no endpoint describes nothing, and
     /// starting on it would leave an operator reading their own file as proof of a backplane that was never connected.
-    /// The material is resolved when a connection is opened rather than while the host is composed, so a rotated
-    /// password takes effect on the next reconnection with no restart to schedule.
+    /// The material is resolved when a connection is first wanted rather than while the host is composed, which is what
+    /// lets a host whose endpoint is down finish starting. It is not re-read afterwards: the lifetime manager keeps the
+    /// multiplexer it was handed, so a password rotated behind an unchanged reference takes effect at the next start.
     /// </remarks>
     public ConfiguredSecret? ConnectionString { get; set; }
 
