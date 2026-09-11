@@ -177,18 +177,58 @@ function deploymentAnswering(
     };
 }
 
+/**
+ * The same deployment with its answers to submissions held back from `hold` on until `answer`, which is how an answer
+ * is made to arrive after somebody else has signed in.
+ */
+function answeringLate(deployment: Deployment): {
+    readonly deployment: Deployment;
+    readonly hold: () => void;
+    readonly answer: () => void;
+} {
+    let holding = false;
+    const waiting: (() => void)[] = [];
+
+    return {
+        deployment: {
+            requests: deployment.requests,
+            transport: (request) =>
+                holding && request.path.includes('/mutations/')
+                    ? new Promise((resolve) => {
+                          waiting.push(() => {
+                              resolve(deployment.transport(request));
+                          });
+                      })
+                    : deployment.transport(request),
+        },
+        hold: () => {
+            holding = true;
+        },
+        answer: () => {
+            for (const release of waiting.splice(0)) {
+                release();
+            }
+        },
+    };
+}
+
+/** Somebody else, signed in on the same tab, which is a different credential handed to providers that stay mounted. */
+const someoneElse: ClientSession = { baseAddress: 'https://mail.example.invalid', authorization: 'Basic b3RoZXI=' };
+
 function acting(
     deployment: Deployment,
     { flags = true, moves = true, deletes = true }: { flags?: boolean; moves?: boolean; deletes?: boolean } = {},
-): { readonly held: () => MailboxActs } {
+): { readonly held: () => MailboxActs; readonly signIn: (next: ClientSession) => void } {
+    let signedIn = session;
+
     function Surrounded({ children }: { readonly children: ReactNode }) {
         return (
             <LocalizationProvider>
                 <ToastsProvider>
-                    <PendingChangesProvider session={session} transport={deployment.transport}>
+                    <PendingChangesProvider session={signedIn} transport={deployment.transport}>
                         <PendingChangeLines />
                         <MailboxActsProvider
-                            session={session}
+                            session={signedIn}
                             transport={deployment.transport}
                             online
                             flags={flags}
@@ -205,7 +245,13 @@ function acting(
 
     const drawn = renderHook(() => useMailboxActs(), { wrapper: Surrounded });
 
-    return { held: () => drawn.result.current };
+    return {
+        held: () => drawn.result.current,
+        signIn: (next) => {
+            signedIn = next;
+            drawn.rerender();
+        },
+    };
 }
 
 /** What was submitted to a mutation route, which is the whole of what the deployment was asked to write down. */
@@ -759,6 +805,43 @@ describe('MailboxActsProvider', () => {
 
         expect(held().asked.has('message-1')).toBe(false);
         expect(screen.queryByText('Archived')).toBeNull();
+    });
+
+    // An act answers after the render that asked has gone, and somebody else may have signed in on the tab by then:
+    // what the first person's act came to is neither the next person's to be told about nor their queue's to follow.
+    it('tells nobody what an act came to when somebody else signed in before it answered', async () => {
+        vi.useFakeTimers();
+
+        const late = answeringLate(deploymentAnswering());
+        const { held, signIn } = acting(late.deployment);
+
+        await pass(0);
+        late.hold();
+        perform(held, 'flag', [invoice]);
+        signIn(someoneElse);
+        late.answer();
+        await pass(followedChangeInterval);
+
+        expect(screen.queryByText('Flagged')).toBeNull();
+        expect(screen.queryByText('One change has not reached your mailbox yet.')).toBeNull();
+    });
+
+    it('tells nobody a message was put back when somebody else signed in before the way back answered', async () => {
+        vi.useFakeTimers();
+
+        const late = answeringLate(deploymentAnswering());
+        const { held, signIn } = acting(late.deployment);
+
+        await pass(0);
+        perform(held, 'archive', [invoice]);
+        await pass(0);
+        late.hold();
+        fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+        signIn(someoneElse);
+        late.answer();
+        await pass(followedChangeInterval);
+
+        expect(screen.queryByText('Put back where it was')).toBeNull();
     });
 
     it('asks a deployment for nothing where the credential may not write what the act writes', () => {

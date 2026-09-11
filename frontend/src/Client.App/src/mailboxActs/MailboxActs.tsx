@@ -408,8 +408,9 @@ export function MailboxActsProvider({
      *
      * Two submissions at most rather than one per batch: the batches that answered are one answer, so a reason is said
      * once however many batches it happened in, and the batches that never reached the deployment are one silence with
-     * the way to ask again on it. Asking again is the producer's, because only it knows what performing its act afresh
-     * means — and it is asked only while the credential it was performed under is still the one signed in.
+     * the way to ask again on it. Both ways out are the producer's, because only it knows what performing its act afresh,
+     * or no longer claiming it, means — and neither is taken unless the credential it was performed under is still the
+     * one signed in.
      */
     function handOver(
         asking: ClientSession,
@@ -435,7 +436,11 @@ export function MailboxActsProvider({
                         askAgain(carried.filter((message) => named.has(message.storedEmailId)));
                     }
                 },
-                letGo,
+                letGo: (storedEmailIds) => {
+                    if (signedIn.current === asking) {
+                        letGo(storedEmailIds);
+                    }
+                },
             };
         }
 
