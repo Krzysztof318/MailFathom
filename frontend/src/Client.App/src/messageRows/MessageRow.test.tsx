@@ -69,6 +69,19 @@ function drawMoved(moved: {
     return screen.getByRole('option');
 }
 
+// What the row carries, which is the element holding the row's own background — and therefore the one the going
+// animation is played on, since an inset shadow on the row around it would be painted underneath that background and
+// never appear. `styles.css` holds the whole of that reasoning.
+function carriedBy(row: HTMLElement): HTMLElement {
+    const carried = row.querySelector('div');
+
+    if (carried === null) {
+        throw new Error('The row drew nothing to carry.');
+    }
+
+    return carried;
+}
+
 function drawRow(
     note?: string,
     unread = false,
@@ -177,8 +190,9 @@ function asking(
     storedEmailId = email.id,
     from = email.folder,
     leaves = act === 'archive' || act === 'move' || act === 'delete',
+    destroys = act === 'delete' && !leaves,
 ): MailboxActs {
-    return { ...nothingActed, asked: new Map([[storedEmailId, { act, from, leaves }]]) };
+    return { ...nothingActed, asked: new Map([[storedEmailId, { act, from, leaves, destroys }]]) };
 }
 
 /** What a client that has marked exactly this message read carries, which is what a row reads its state through. */
@@ -614,13 +628,26 @@ describe('MessageRow, a row that moved', () => {
         { named: 'filed', asked: 'move', drawn: 'animate-row-filed' },
         { named: 'deleted', asked: 'delete', drawn: 'animate-row-deleted' },
     ])('goes out in the colour of the act where the message is being $named', ({ asked, drawn }) => {
-        expect(drawMoved({ acts: asking(asked) }).className).toContain(drawn);
+        expect(carriedBy(drawMoved({ acts: asking(asked) })).className).toContain(drawn);
+    });
+
+    // The wash is an inset shadow and the carried element is what holds the row's own background, so a wash put on the
+    // row around it plays underneath that background and a reader sees a row travelling and fading without ever
+    // changing colour — which is what the demo showed. The leaving stays on the row, because that is where the row
+    // reports having gone from.
+    it('plays the wash on what carries the row and the leaving on the row, so both are drawn', () => {
+        const row = drawMoved({ acts: asking('archive') });
+
+        expect(row.className).toContain('animate-row-going');
+        expect(row.className).toContain('pointer-events-none');
+        expect(row.className).not.toContain('animate-row-filed');
+        expect(carriedBy(row).className).toContain('animate-row-filed');
     });
 
     it('goes out rather than landing where a row that had just arrived was acted on, having left either way', () => {
         const row = drawMoved({ arrived: true, acts: asking('archive') });
 
-        expect(row.className).toContain('animate-row-filed');
+        expect(carriedBy(row).className).toContain('animate-row-filed');
         expect(row.className).not.toContain('animate-row-landing');
     });
 
@@ -629,12 +656,12 @@ describe('MessageRow, a row that moved', () => {
     it('stays where it is for a delete that destroys the mail rather than filing it in the trash', () => {
         const row = drawMoved({ acts: asking('delete', email.id, email.folder, false) });
 
-        expect(row.className).not.toContain('animate-row-deleted');
-        expect(row.className).not.toContain('animate-row-filed');
+        expect(carriedBy(row).className).not.toContain('animate-row-deleted');
+        expect(carriedBy(row).className).not.toContain('animate-row-filed');
     });
 
     it('draws neither for a flag act, which takes the row nowhere', () => {
-        expect(drawMoved({ acts: asking('flag') }).className).not.toContain('animate-row-filed');
+        expect(carriedBy(drawMoved({ acts: asking('flag') })).className).not.toContain('animate-row-filed');
     });
 
     it('says it has gone rather than settled once the animation it went out on has run', () => {

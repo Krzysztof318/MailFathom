@@ -453,13 +453,35 @@
 
        The wash arrives quickly and holds, because the row is gone before it could settle back — a row that faded out
        of a wash still half drawn would be saying the act was half performed. The shadows are inset for the reason
-       `row-changed`'s are: the row keeps its own place in the column while it goes. */
+       `row-changed`'s are: the row keeps its own place in the column while it goes.
+
+       **The wash and the going are two animations on two elements, which is the design's own arrangement and is
+       forced here rather than chosen.** An inset shadow is painted between an element's background and its content,
+       so one inset into the row sits underneath the opaque element the row carries and never appears at all — which
+       leaves the travel and the fade playing over a row that never changes colour. So the wash below is played on
+       what carries the row, where the background it has to cover is, and `row-going` beside it is played on the row,
+       where the leaving has to be reported from. */
+
+    --animate-row-going: row-going 460ms cubic-bezier(0.4, 0, 0.2, 1) both;
+
+    /* The leaving half, which says *this one is going* and carries no colour: the act names the colour and the two
+       washes below are where it is drawn. The row keeps the space the window drew for it, for the reason stated
+       above, so nothing here closes a height. */
+    @keyframes row-going {
+        0% {
+            opacity: 1;
+        }
+
+        100% {
+            opacity: 0;
+            transform: translateX(-22px);
+        }
+    }
     @keyframes row-deleted {
         0% {
             box-shadow:
                 inset 3px 0 0 transparent,
                 inset 0 0 0 0 var(--color-error-soft);
-            opacity: 1;
         }
 
         28% {
@@ -472,8 +494,6 @@
             box-shadow:
                 inset 3px 0 0 var(--color-error),
                 inset 0 0 0 40px var(--color-error-soft);
-            opacity: 0;
-            transform: translateX(-22px);
         }
     }
 
@@ -482,7 +502,6 @@
             box-shadow:
                 inset 3px 0 0 transparent,
                 inset 0 0 0 0 var(--color-warning-soft);
-            opacity: 1;
         }
 
         28% {
@@ -495,8 +514,6 @@
             box-shadow:
                 inset 3px 0 0 var(--color-warning),
                 inset 0 0 0 40px var(--color-warning-soft);
-            opacity: 0;
-            transform: translateX(-22px);
         }
     }
 

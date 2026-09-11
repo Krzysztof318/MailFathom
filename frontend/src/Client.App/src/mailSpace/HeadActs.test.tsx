@@ -6,10 +6,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ComposingContext, type Composing } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
-import { MailboxActsContext, nothingActed, type MailboxActs } from '../mailboxActs/useMailboxActs';
-import { HeadActs, type HeadMessage } from './HeadActs';
+import { MailboxActsContext, nothingActed, type ActedMessage, type MailboxActs } from '../mailboxActs/useMailboxActs';
+import { HeadActs } from './HeadActs';
 
-const message: HeadMessage = {
+const message: ActedMessage = {
     storedEmailId: '00000000-0000-4000-8000-000000000000',
     account: 'work',
     folder: 'work-inbox',
@@ -24,7 +24,7 @@ function drawHead({
     compact = false,
 }: {
     readonly offered?: boolean;
-    readonly acting?: HeadMessage | null;
+    readonly acting?: ActedMessage | null;
     readonly acts?: MailboxActs;
     readonly compact?: boolean;
 } = {}): { composed: ReturnType<typeof vi.fn> } {
@@ -98,18 +98,24 @@ describe('HeadActs', () => {
         expect(performed).not.toHaveBeenCalled();
     });
 
-    it('says an act already on its way is on its way rather than submitting it twice', () => {
+    // A flag already on its way is what the next press is read against, exactly as the read control reads one: the
+    // control turns round at once rather than saying the first press is still travelling, so pressing it twice gives
+    // the two directions rather than the same act submitted again.
+    it('turns the flag round where one is already on its way, so the next press takes it off', () => {
         const performed = vi.fn();
         drawHead({
             acts: {
                 ...actsOffering(performed),
-                asked: new Map([[message.storedEmailId, { act: 'flag', from: message.folder, leaves: false }]]),
+                asked: new Map([
+                    [message.storedEmailId, { act: 'flag', from: message.folder, leaves: false, destroys: false }],
+                ]),
             },
         });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Flag — this is already on its way to your mail server.' }));
+        expect(screen.queryByRole('button', { name: 'Flag' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Unflag' }));
 
-        expect(performed).not.toHaveBeenCalled();
+        expect(performed).toHaveBeenCalledWith('unflag', [message]);
     });
 
     it('draws the three as what they are where the deployment refuses writing at all', () => {

@@ -33,9 +33,27 @@ import { useMailboxActs, type ActedMessage, type MailboxAct, type MailboxActs } 
 
 const session: ClientSession = { baseAddress: 'https://mail.example.invalid', authorization: 'Basic dGVzdA==' };
 
-const invoice: ActedMessage = { storedEmailId: 'message-1', account: 'work', folder: 'work-inbox', unread: false };
-const receipt: ActedMessage = { storedEmailId: 'message-2', account: 'work', folder: 'work-inbox', unread: false };
-const discarded: ActedMessage = { storedEmailId: 'message-3', account: 'work', folder: 'work-trash', unread: false };
+const invoice: ActedMessage = {
+    storedEmailId: 'message-1',
+    account: 'work',
+    folder: 'work-inbox',
+    unread: false,
+    flagged: false,
+};
+const receipt: ActedMessage = {
+    storedEmailId: 'message-2',
+    account: 'work',
+    folder: 'work-inbox',
+    unread: false,
+    flagged: false,
+};
+const discarded: ActedMessage = {
+    storedEmailId: 'message-3',
+    account: 'work',
+    folder: 'work-trash',
+    unread: false,
+    flagged: false,
+};
 
 const folders = JSON.stringify({
     synchronizationEnabled: true,
@@ -287,6 +305,7 @@ const heapedInTrash: ActedMessage[] = Array.from({ length: mostMessagesPerMutati
     account: 'work',
     folder: 'work-trash',
     unread: false,
+    flagged: false,
 }));
 
 /** The records each call to a delete's withdrawal or release route named, one list per call. */
@@ -453,7 +472,12 @@ describe('MailboxActsProvider', () => {
             body: { deletes: [{ storedEmailId: 'message-3' }] },
         });
         expect(screen.getByRole('button', { name: 'Undo' })).toBeDefined();
-        expect(held().asked.get('message-3')).toStrictEqual({ act: 'delete', from: 'work-trash', leaves: false });
+        expect(held().asked.get('message-3')).toStrictEqual({
+            act: 'delete',
+            from: 'work-trash',
+            leaves: false,
+            destroys: true,
+        });
     });
 
     // The delete waits for exactly as long as the toast stands, so taking it back is cancelling the records it wrote
@@ -755,6 +779,7 @@ describe('MailboxActsProvider', () => {
             account: 'work',
             folder: 'work-inbox',
             unread: false,
+            flagged: false,
         }));
 
         const deployment: Deployment = {
@@ -861,7 +886,12 @@ describe('MailboxActsProvider', () => {
         const filedInto = { moves: [{ storedEmailId: 'message-1', destinationFolder: 'work-archive' }] };
 
         expect(submitted(deployment).map(({ body }) => body)).toStrictEqual([filedInto, filedInto]);
-        expect(held().asked.get('message-1')).toStrictEqual({ act: 'move', from: 'work-inbox', leaves: true });
+        expect(held().asked.get('message-1')).toStrictEqual({
+            act: 'move',
+            from: 'work-inbox',
+            leaves: true,
+            destroys: false,
+        });
     });
 
     it('stops claiming an act the account stopped retrying once the person lets it go', async () => {

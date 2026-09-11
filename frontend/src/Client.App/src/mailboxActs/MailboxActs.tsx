@@ -268,12 +268,12 @@ export function MailboxActsProvider({
      * The folder each message was in is written down with it, because an act is about a message *in a place*: it is
      * what the sentence a row wears is drawn against, and what says the row is to leave this list and no other.
      */
-    function remember(act: MailboxAct, messages: readonly ActedMessage[], leaves: boolean): void {
+    function remember(act: MailboxAct, messages: readonly ActedMessage[], leaves: boolean, destroys: boolean): void {
         setKept((current) => {
             const asked = new Map(current.session === session ? current.asked : []);
 
             for (const message of messages) {
-                asked.set(message.storedEmailId, { act, from: message.folder, leaves });
+                asked.set(message.storedEmailId, { act, from: message.folder, leaves, destroys });
             }
 
             return { session, directory: current.session === session ? current.directory : null, asked };
@@ -563,7 +563,7 @@ export function MailboxActsProvider({
             return;
         }
 
-        remember('delete', messages, true);
+        remember('delete', messages, true, true);
 
         for (const batch of batchesOf(records)) {
             // Nothing is reported and nothing is waited for: what this asks for is what would have happened anyway
@@ -656,7 +656,7 @@ export function MailboxActsProvider({
 
         const asking = session;
 
-        remember(act, messages, leaves);
+        remember(act, messages, leaves, destroying);
 
         void submitted(asking, act, messages, destination, destroying).then((answered) => {
             // An answer arriving after somebody else has signed in is neither theirs to be told about nor their queue's

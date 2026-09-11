@@ -16,9 +16,9 @@ namespace MailFathom.Host.UnitTests.Configuration.Chat;
 /// </remarks>
 public sealed class ReplyDraftingOptionsTests
 {
-    /// <summary>Off is the default and a supported deployment: the composer is the one somebody writes in themselves.</summary>
+    /// <summary>On is the default wherever an endpoint is declared, so a deployment that wrote no block drafts replies.</summary>
     [Fact]
-    public void Validate_AChatEndpointWithNoReplyDraftingBlock_IsAcceptedAndLeavesTheDraftingOff()
+    public void Validate_AChatEndpointWithNoReplyDraftingBlock_IsAcceptedAndLeavesTheDraftingOn()
     {
         // Arrange
         var settings = Declared();
@@ -27,7 +27,22 @@ public sealed class ReplyDraftingOptionsTests
         var errors = Validate(settings);
 
         // Assert
-        Assert.False(settings.ReplyDrafting.Enabled);
+        Assert.True(settings.ReplyDrafting.Enabled);
+        Assert.Empty(errors);
+    }
+
+    /// <summary>Turning it off is a supported deployment, and it is the operator's spend decision rather than a lesser instance.</summary>
+    [Fact]
+    public void Validate_ADeclinedDraftingOnADeclaredEndpoint_IsAccepted()
+    {
+        // Arrange
+        var settings = Declared();
+        settings.ReplyDrafting.Enabled = false;
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
         Assert.Empty(errors);
     }
 
@@ -60,19 +75,23 @@ public sealed class ReplyDraftingOptionsTests
         Assert.Empty(errors);
     }
 
-    /// <summary>The drafting runs against the declared endpoint and has nowhere to send a conversation without one.</summary>
+    /// <summary>
+    /// A drafting left on declares no provider, because on is what a section nobody wrote already reads: taking it as
+    /// intent would refuse every deployment that never opened the block, which is most of them.
+    /// </summary>
     [Fact]
-    public void Validate_AnEnabledDraftingWithoutAChatEndpoint_IsRefused()
+    public void Validate_TheDraftingLeftOnWithNoChatEndpoint_DeclaresNoProvider()
     {
         // Arrange
         var settings = new ChatModelOptions();
-        settings.ReplyDrafting.Enabled = true;
 
         // Act
         var errors = Validate(settings);
 
         // Assert
-        Assert.Contains(errors, error => error.Contains("no Alias", StringComparison.Ordinal));
+        Assert.False(settings.IsConfigured);
+        Assert.True(settings.ReplyDrafting.Enabled);
+        Assert.Empty(errors);
     }
 
     /// <summary>

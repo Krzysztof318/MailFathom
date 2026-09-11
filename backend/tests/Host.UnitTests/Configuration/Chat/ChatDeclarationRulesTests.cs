@@ -297,11 +297,11 @@ public sealed class ChatDeclarationRulesTests
     /// deployment had stopped writing, or withholding one it had started writing.
     /// </summary>
     [Fact]
-    public void FindChangesNeedingRestart_ReplyDraftingTurnedOn_RefusesRatherThanBeingIgnored()
+    public void FindChangesNeedingRestart_ReplyDraftingTurnedOff_RefusesRatherThanBeingIgnored()
     {
         // Arrange
         var candidate = Declared();
-        candidate.ReplyDrafting.Enabled = true;
+        candidate.ReplyDrafting.Enabled = false;
 
         // Act
         var errors = ChatDeclarationRules.FindChangesNeedingRestart(candidate, Declared());

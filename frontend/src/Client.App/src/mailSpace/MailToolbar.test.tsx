@@ -19,7 +19,7 @@ const declaredMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia')
 
 const messageId = '00000000-0000-4000-8000-000000000000';
 
-const place = { storedEmailId: messageId, account: 'work', folder: 'work-inbox', unread: false };
+const place = { storedEmailId: messageId, account: 'work', folder: 'work-inbox', unread: false, flagged: false };
 
 function Opens({ selection }: { readonly selection: string | null }) {
     const { revise } = useWorkspace();

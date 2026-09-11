@@ -46,6 +46,7 @@ export interface ListedMail {
             readonly account: string;
             readonly folder: string;
             readonly unread: boolean;
+            readonly flagged: boolean;
         }[],
     ) => void;
 

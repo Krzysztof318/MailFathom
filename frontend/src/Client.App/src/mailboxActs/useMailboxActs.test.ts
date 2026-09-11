@@ -41,8 +41,9 @@ function asking(
     storedEmailId = email.id,
     from = email.folder,
     leaves = act === 'archive' || act === 'move' || act === 'delete',
+    destroys = act === 'delete' && !leaves,
 ): MailboxActs {
-    return { ...nothingActed, asked: new Map([[storedEmailId, { act, from, leaves }]]) };
+    return { ...nothingActed, asked: new Map([[storedEmailId, { act, from, leaves, destroys }]]) };
 }
 
 // What retires a pending act, which is the whole of why this client polls nothing: an act writes a record and the

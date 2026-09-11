@@ -13,8 +13,15 @@ function drawn(at: number): {
     readonly account: string;
     readonly folder: string;
     readonly unread: boolean;
+    readonly flagged: boolean;
 } {
-    return { id: `message-${String(at)}`, account: 'work', folder: 'work-inbox', unread: at % 2 === 0 };
+    return {
+        id: `message-${String(at)}`,
+        account: 'work',
+        folder: 'work-inbox',
+        unread: at % 2 === 0,
+        flagged: at % 3 === 0,
+    };
 }
 
 function held(): ListedMail {
@@ -36,6 +43,7 @@ describe('ListedMailProvider', () => {
             account: 'work',
             folder: 'work-inbox',
             unread: false,
+            flagged: false,
         });
     });
 

@@ -49,13 +49,19 @@ const wholeMailbox = directoryOf({
 });
 
 function inWork(storedEmailId: string): ActedMessage {
-    return { storedEmailId, account: 'work', folder: 'work-inbox', unread: false };
+    return { storedEmailId, account: 'work', folder: 'work-inbox', unread: false, flagged: false };
 }
 
-const atHome: ActedMessage = { storedEmailId: 'message-9', account: 'home', folder: 'home-inbox', unread: false };
+const atHome: ActedMessage = {
+    storedEmailId: 'message-9',
+    account: 'home',
+    folder: 'home-inbox',
+    unread: false,
+    flagged: false,
+};
 
 function inWorkTrash(storedEmailId: string): ActedMessage {
-    return { storedEmailId, account: 'work', folder: 'work-trash', unread: false };
+    return { storedEmailId, account: 'work', folder: 'work-trash', unread: false, flagged: false };
 }
 
 describe('folderWithRole', () => {
@@ -158,6 +164,7 @@ describe('refusalFor', () => {
             account: 'work',
             folder: 'work-clients',
             unread: false,
+            flagged: false,
         };
 
         expect(refusalFor('move', [inWork('message-1'), filed], twoFolders, everythingOffered)).toBeNull();
@@ -216,6 +223,7 @@ describe('deletesPermanently', () => {
             account: 'home',
             folder: 'work-trash',
             unread: false,
+            flagged: false,
         };
 
         expect(deletesPermanently(wholeMailbox, [elsewhere])).toBe(false);

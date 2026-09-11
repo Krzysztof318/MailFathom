@@ -9,8 +9,20 @@ import { MailboxActControls } from './MailboxActControls';
 import type { ActRefusal, MoveDestination, MoveDestinationGroup } from './mailboxDestinations';
 import { MailboxActsContext, nothingActed, type ActedMessage, type MailboxActs } from './useMailboxActs';
 
-const invoice: ActedMessage = { storedEmailId: 'message-1', account: 'work', folder: 'work-inbox', unread: false };
-const receipt: ActedMessage = { storedEmailId: 'message-2', account: 'work', folder: 'work-inbox', unread: false };
+const invoice: ActedMessage = {
+    storedEmailId: 'message-1',
+    account: 'work',
+    folder: 'work-inbox',
+    unread: false,
+    flagged: false,
+};
+const receipt: ActedMessage = {
+    storedEmailId: 'message-2',
+    account: 'work',
+    folder: 'work-inbox',
+    unread: false,
+    flagged: false,
+};
 
 const clients: MoveDestination = { alias: 'work-clients', name: 'Projects / Clients', role: null };
 const work: MoveDestinationGroup = {
@@ -82,6 +94,30 @@ describe('MailboxActControls', () => {
         expect(performed).toHaveBeenCalledWith('markRead', unread);
     });
 
+    // The same one control read the same way: the design draws the flag slot as a toggle on the toolbar and in a row's
+    // menu, so a strip standing over a flagged selection offers taking the flag off rather than putting a second one on.
+    it('offers to take the flag off where every message is flagged, and performs that rather than its opposite', () => {
+        const performed = vi.fn();
+        const flagged = [
+            { ...invoice, flagged: true },
+            { ...receipt, flagged: true },
+        ];
+
+        drawControls({ perform: performed }, flagged);
+
+        expect(screen.queryByRole('button', { name: 'Flag' })).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Unflag' }));
+
+        expect(performed).toHaveBeenCalledWith('unflag', flagged);
+    });
+
+    it('offers to put a flag on where the messages are a mixture, which is the one act all of them can take', () => {
+        drawControls({}, [invoice, { ...receipt, flagged: true }]);
+
+        expect(screen.getByRole('button', { name: 'Flag' })).toBeDefined();
+    });
+
     it('offers to mark read where the messages are a mixture, which is the one act all of them can take', () => {
         drawControls({}, [invoice, { ...receipt, unread: true }]);
 
@@ -143,7 +179,7 @@ describe('MailboxActControls', () => {
         const performed = vi.fn();
 
         drawControls({
-            asked: new Map([['message-1', { act: 'archive', from: invoice.folder, leaves: true }]]),
+            asked: new Map([['message-1', { act: 'archive', from: invoice.folder, leaves: true, destroys: false }]]),
             perform: performed,
         });
 
@@ -159,10 +195,14 @@ describe('MailboxActControls', () => {
     });
 
     it('goes on offering an act asked of only some of the messages, the rest of them not having it yet', () => {
-        drawControls({ asked: new Map([['message-1', { act: 'archive', from: invoice.folder, leaves: true }]]) }, [
-            invoice,
-            receipt,
-        ]);
+        drawControls(
+            {
+                asked: new Map([
+                    ['message-1', { act: 'archive', from: invoice.folder, leaves: true, destroys: false }],
+                ]),
+            },
+            [invoice, receipt],
+        );
 
         expect(screen.getByRole('button', { name: 'Archive' })).toBeDefined();
     });

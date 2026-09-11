@@ -741,10 +741,11 @@ Writing a first version of the reply somebody is about to send, out of the conve
 their own account writes, so a composer opens on a draft they edit rather than on a blank field. A block inside `Chat`
 for the reason the blocks above are: it drafts with that endpoint and has nowhere to send a conversation without one.
 
-Off by default, and off is a supported deployment: the composer asks this deployment once whether it drafts at all, is
-told it does not, and offers nothing — every reply is written by hand exactly as before. Turning it on is a spend
-decision, and a smaller one than the derivations above: it costs one call per reply somebody deliberately asked for
-rather than one per message or conversation arriving.
+On by default, on the reading that puts the phrase search below it on: what decides the default is who spends the
+money and when. A drafting costs one call per reply somebody deliberately pressed a button for, rather than one per
+message or conversation arriving, so a deployment that declared an endpoint is already paying for that shape of call.
+Turning it off is a supported deployment and a spend decision: the composer asks this deployment once whether it
+drafts at all, is told it does not, and offers nothing — every reply is then written by hand exactly as before.
 
 **Nothing it produces is sent, queued, or stored.** The draft comes back as text in the client, and saving it as a
 draft or sending it stays behind the person confirming those acts.
@@ -761,7 +762,7 @@ reaches the provider, and what a drafting that produced nothing answers with.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `Chat:ReplyDrafting:Enabled` | bool | `false` | turning it on requires a declared `Chat:Alias` | restart |
+| `Chat:ReplyDrafting:Enabled` | bool | `true` | it is read only where `Chat:Alias` declares an endpoint, so a deployment without one drafts nothing whatever this says | restart |
 | `Chat:ReplyDrafting:StyleFromSentMail` | bool | `true` | written off, no sent mail is read and the draft is written from the conversation alone. It changes what leaves the deployment rather than only what the draft reads like, which is why it is an operator's decision rather than a constant | restart |
 
 ### Reading a typed sentence into filters — `Chat:SearchPhrasing`

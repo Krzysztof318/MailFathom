@@ -6,7 +6,7 @@ import type { MailTimelineEntry } from '@mailfathom/client-backend';
 import { useComposing, type Composing } from '../composer/useComposing';
 import { ContextMenu, type ContextMenuItem } from '../contextMenu/ContextMenu';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
-import { actsDrawn, actsInARowMenu, actsSaidInAMenu, readActFor, underway } from '../mailboxActs/drawnActs';
+import { actsDrawn, actsInARowMenu, actsSaidInAMenu, flagActFor, readActFor, underway } from '../mailboxActs/drawnActs';
 import { useMailboxActs, type ActedMessage, type MailboxActs } from '../mailboxActs/useMailboxActs';
 import type { Translate } from '../localization/useLocalization';
 import { useLocalization } from '../localization/useLocalization';
@@ -133,10 +133,16 @@ function rowItems({
         : [];
 
     const mailbox = actsInARowMenu
-        // The read item is the one slot that goes both ways, and which way is the message's own state rather than the
-        // menu's — `mailboxActs/drawnActs.ts` holds the rule, and it is the same rule a strip reads, so a row's menu
-        // and the toolbar over it never offer opposite directions for one message.
-        .map((slot) => (slot === 'markUnread' ? readActFor(acts, marking, messages) : slot))
+        // The read item and the flag item are the two slots that go both ways, and which way is the message's own
+        // state rather than the menu's — `mailboxActs/drawnActs.ts` holds both rules, and they are the rules a strip
+        // reads, so a row's menu and the toolbar over it never offer opposite directions for one message.
+        .map((slot) =>
+            slot === 'markUnread'
+                ? readActFor(acts, marking, messages)
+                : slot === 'flag'
+                  ? flagActFor(acts, messages)
+                  : slot,
+        )
         .filter((act) => acts.refusalOf(act, messages) === null && !underway(acts, act, messages))
         .map((act) => ({
             icon: actsDrawn[act].icon,

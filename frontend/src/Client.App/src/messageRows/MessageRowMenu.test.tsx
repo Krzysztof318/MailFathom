@@ -38,7 +38,7 @@ const email = {
 } as unknown as MailTimelineEntry;
 
 const messages: readonly ActedMessage[] = [
-    { storedEmailId: email.id, account: 'work', folder: 'INBOX', unread: false },
+    { storedEmailId: email.id, account: 'work', folder: 'INBOX', unread: false, flagged: false },
 ];
 
 function actsWhere(refusalOf: (act: MailboxAct) => ActRefusal | null, perform = vi.fn()): MailboxActs {
@@ -101,10 +101,23 @@ describe('MessageRowMenu', () => {
         ]);
     });
 
+    // The design draws the row's context menu with *Remove the flag* over a flagged message, so the menu reads the flag
+    // the way it reads the read mark: the opposite of the state the row is in.
+    it('offers to take the flag off a flagged row, which is the other direction of the one act', () => {
+        menuUnder({
+            about: [{ storedEmailId: email.id, account: 'work', folder: 'INBOX', unread: false, flagged: true }],
+        });
+
+        expect(drawn()).toContain('Remove the flag');
+        expect(drawn()).not.toContain('Flag');
+    });
+
     // The same one control read the same way the strip reads it: the menu offers the opposite of the state the row is
     // in, so what it says is decided by the row rather than fixed in the list of acts.
     it('offers to mark an unread row read, which is the other direction of the one act', () => {
-        menuUnder({ about: [{ storedEmailId: email.id, account: 'work', folder: 'INBOX', unread: true }] });
+        menuUnder({
+            about: [{ storedEmailId: email.id, account: 'work', folder: 'INBOX', unread: true, flagged: false }],
+        });
 
         expect(drawn()).toContain('Mark as read');
         expect(drawn()).not.toContain('Mark as unread');
