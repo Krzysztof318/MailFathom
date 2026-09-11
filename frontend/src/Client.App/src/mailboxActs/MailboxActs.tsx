@@ -23,6 +23,7 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import type { ChangeAct, ChangeSubmission } from '../pendingChanges/changeStandings';
 import { usePendingChanges } from '../pendingChanges/usePendingChanges';
+import { useTelemetry } from '../telemetry/clientTelemetry';
 import { useToasts, type Toast } from '../toasts/useToasts';
 import {
     deletesPermanently,
@@ -175,6 +176,7 @@ export function MailboxActsProvider({
 }) {
     const { locale, translate } = useLocalization();
     const toasts = useToasts();
+    const telemetry = useTelemetry();
     const pending = usePendingChanges();
     const [kept, setKept] = useState<Held>(heldForNobody);
 
@@ -656,6 +658,14 @@ export function MailboxActsProvider({
 
         const asking = session;
 
+        // The act and how many messages it was asked over. Which messages is a list of stored identities and is not
+        // written down; how many is what separates somebody pressing archive on one row from a select-all across two
+        // hundred, which is the difference an operator reading a mail server complaining about write volume needs.
+        telemetry.happened('act_asked', {
+            'mailfathom.client.act': act,
+            'mailfathom.client.messages': messages.length,
+        });
+
         remember(act, messages, leaves, destroying);
 
         void submitted(asking, act, messages, destination, destroying).then((answered) => {
@@ -675,6 +685,18 @@ export function MailboxActsProvider({
             // of it: a message already where it was asked to go is a refusal nobody is told about, and an act filing
             // it into the folder it is already in has not taken it out of the list it is drawn in either.
             forget(messages.filter((message) => !written.has(message.storedEmailId)).map((one) => one.storedEmailId));
+
+            // The one thing this client does that a deployment's own records do not already show: the screen had drawn
+            // the act as done and has just put itself back, which somebody using it experiences as the client undoing
+            // their work. It is above the default floor because it is a deployment refusing writes it accepted the
+            // request for, which is a thing to look at rather than a thing to read.
+            if (recorded.length < messages.length) {
+                telemetry.happened('act_refused', {
+                    'mailfathom.client.act': act,
+                    'mailfathom.client.messages': messages.length - recorded.length,
+                });
+            }
+
             report(act, recorded, destination, destroying, recordsWritten(answered));
 
             // Asking again is the same act performed afresh over the same messages, naming the folder a move named, so

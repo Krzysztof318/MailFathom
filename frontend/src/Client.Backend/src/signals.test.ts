@@ -2,8 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { logs, SeverityNumber } from '@opentelemetry/api-logs';
+import { InMemoryLogRecordExporter, LoggerProvider, SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { mostReconnectionAttempts } from './reconnection';
+import { defaultTelemetryLevel, recordDownTo } from './telemetry';
 import type { ClientSession } from './session';
 import {
     hubAddressFor,
@@ -425,5 +428,132 @@ describe('openSignalStream', () => {
 
         expect(channel.closed).toStrictEqual([0]);
         expect(channel.openings).toHaveLength(1);
+    });
+});
+
+describe('what the connection records for an operator', () => {
+    let records: InMemoryLogRecordExporter;
+    let loggers: LoggerProvider;
+
+    beforeEach(() => {
+        records = new InMemoryLogRecordExporter();
+        loggers = new LoggerProvider({ processors: [new SimpleLogRecordProcessor({ exporter: records })] });
+
+        logs.setGlobalLoggerProvider(loggers);
+
+        // The connection's whole life is written below the level a collector keeps by default, so a test asserting it
+        // has to ask for it — which is the same thing an operator does when somebody reports a client that feels stale.
+        recordDownTo('trace');
+    });
+
+    afterEach(async () => {
+        logs.disable();
+        recordDownTo(defaultTelemetryLevel);
+        await loggers.shutdown();
+    });
+
+    function occurrences(): readonly unknown[] {
+        return records.getFinishedLogRecords().map((one) => one.attributes['mailfathom.client.event']);
+    }
+
+    it('says when a connection stood and when it ended', async () => {
+        const channel = channelUnderTest();
+        const stream = openSignalStream(
+            session,
+            answering({ status: 200, body: minted }),
+            channel.channel,
+            () => undefined,
+            () => undefined,
+            scheduleRecording([]),
+        );
+
+        await settle();
+        channel.openings[0]?.dropped();
+        await settle();
+
+        expect(occurrences()).toContain('signals_opened');
+        expect(occurrences()).toContain('signals_dropped');
+
+        await stream.close();
+    });
+
+    // The moment worth an operator's attention is the one where nothing about the client changes: past the budget the
+    // wait stops growing and every screen is being read on the interval alone, which nobody looking at one can tell.
+    it('says once, and above the default level, that the hub has been unreachable past the budget', async () => {
+        const stream = openSignalStream(
+            session,
+            answering({ status: 404, body: '' }),
+            () => Promise.reject(new Error('never asked')),
+            () => undefined,
+            () => undefined,
+            scheduleWaiting([], mostReconnectionAttempts + 3),
+        );
+
+        await settle();
+
+        const written = records.getFinishedLogRecords();
+        const unreachable = written.filter(
+            (one) => one.attributes['mailfathom.client.event'] === 'signals_unreachable',
+        );
+
+        expect(unreachable).toHaveLength(1);
+        expect(unreachable[0]?.severityNumber).toBe(SeverityNumber.WARN);
+        expect(unreachable[0]?.attributes['mailfathom.client.attempt']).toBe(mostReconnectionAttempts);
+        expect(
+            written.filter((one) => one.attributes['mailfathom.client.event'] === 'signals_refused').length,
+        ).toBeGreaterThan(0);
+
+        await stream.close();
+    });
+
+    it('names the kind of statement that arrived and nothing else about it', async () => {
+        const channel = channelUnderTest();
+        const stream = openSignalStream(
+            session,
+            answering({ status: 200, body: minted }),
+            channel.channel,
+            () => undefined,
+            () => undefined,
+            scheduleRecording([]),
+        );
+
+        await settle();
+        channel.openings[0]?.arrived({ kind: 'folders.changed', account: 'work' });
+        await settle();
+
+        const arrived = records
+            .getFinishedLogRecords()
+            .find((one) => one.attributes['mailfathom.client.event'] === 'signal_received');
+
+        expect(arrived?.severityNumber).toBe(SeverityNumber.TRACE);
+        expect(arrived?.attributes).toEqual({
+            'mailfathom.client.event': 'signal_received',
+            'mailfathom.client.signal': 'folders.changed',
+        });
+
+        await stream.close();
+    });
+
+    // A payload this client does not act on means a deployment speaking a vocabulary the client in front of it does
+    // not have, which is a version skew rather than a network — and it is silent to everybody but this record.
+    it('says that a payload it does not act on arrived', async () => {
+        const channel = channelUnderTest();
+        const stream = openSignalStream(
+            session,
+            answering({ status: 200, body: minted }),
+            channel.channel,
+            () => undefined,
+            () => undefined,
+            scheduleRecording([]),
+        );
+
+        await settle();
+        channel.openings[0]?.arrived({ kind: 'mail.rearranged', account: 'work' });
+        await settle();
+
+        expect(occurrences()).toContain('signal_refused');
+        expect(occurrences()).not.toContain('signal_received');
+
+        await stream.close();
     });
 });

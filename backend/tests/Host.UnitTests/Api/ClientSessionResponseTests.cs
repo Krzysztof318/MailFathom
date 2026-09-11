@@ -6,6 +6,7 @@ using System.Text.Json;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
+using MailFathom.Host.Observability.ClientTelemetry;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Api;
@@ -29,7 +30,7 @@ public sealed class ClientSessionResponseTests
             [MailFathomPermission.MailSend, MailFathomPermission.MailRead]);
 
         // Act
-        var session = ClientSessionResponse.For(principal, forwardsTelemetry: true);
+        var session = ClientSessionResponse.For(principal, forwardsTelemetry: true, ClientTelemetryLevel.Info);
 
         // Assert
         Assert.Equal(
@@ -47,10 +48,10 @@ public sealed class ClientSessionResponseTests
         // Act
         var first = ClientSessionResponse.For(
             AuthorizedPrincipal.Caller("one", [MailFathomPermission.MailRead, MailFathomPermission.MailSend]),
-            forwardsTelemetry: true);
+            forwardsTelemetry: true, ClientTelemetryLevel.Info);
         var second = ClientSessionResponse.For(
             AuthorizedPrincipal.Caller("two", [MailFathomPermission.MailSend, MailFathomPermission.MailRead]),
-            forwardsTelemetry: true);
+            forwardsTelemetry: true, ClientTelemetryLevel.Info);
 
         // Assert
         Assert.Equal(first.Permissions, second.Permissions);
@@ -59,12 +60,12 @@ public sealed class ClientSessionResponseTests
     /// <summary>A credential granted nothing reaches this route and nowhere else, and "nothing" is the accurate answer.</summary>
     [Fact]
     public void For_ACallerGrantedNothing_ReportsAnEmptyGrantRatherThanFailing() =>
-        Assert.Empty(ClientSessionResponse.For(AuthorizedPrincipal.Caller("retired", []), forwardsTelemetry: true).Permissions);
+        Assert.Empty(ClientSessionResponse.For(AuthorizedPrincipal.Caller("retired", []), forwardsTelemetry: true, ClientTelemetryLevel.Info).Permissions);
 
     /// <summary>A request that established no principal is answered rather than faulted, for the same reason.</summary>
     [Fact]
     public void For_ARequestThatEstablishedNoPrincipal_ReportsAnEmptyGrant() =>
-        Assert.Empty(ClientSessionResponse.For(principal: null, forwardsTelemetry: true).Permissions);
+        Assert.Empty(ClientSessionResponse.For(principal: null, forwardsTelemetry: true, ClientTelemetryLevel.Info).Permissions);
 
     /// <summary>
     /// The one way this differs from the administrative session route. The name is the deployment's own configured
@@ -81,7 +82,7 @@ public sealed class ClientSessionResponseTests
         var body = JsonSerializer.Serialize(
             ClientSessionResponse.For(
                 AuthorizedPrincipal.Caller(credentialName, [MailFathomPermission.MailRead]),
-                forwardsTelemetry: true));
+                forwardsTelemetry: true, ClientTelemetryLevel.Info));
 
         // Assert
         Assert.DoesNotContain(credentialName, body, StringComparison.OrdinalIgnoreCase);
@@ -92,7 +93,7 @@ public sealed class ClientSessionResponseTests
     public void For_AnyCaller_NamesTheProductAndTheRunningVersion()
     {
         // Act
-        var session = ClientSessionResponse.For(principal: null, forwardsTelemetry: true);
+        var session = ClientSessionResponse.For(principal: null, forwardsTelemetry: true, ClientTelemetryLevel.Info);
 
         // Assert
         Assert.Equal("MailFathom", session.Service);
@@ -100,22 +101,53 @@ public sealed class ClientSessionResponseTests
     }
 
     /// <summary>
-    /// What lets a client say there is nothing behind its telemetry switch. It follows the deployment rather than the
-    /// grant, so a credential granted nothing is told the same thing as one granted everything.
+    /// What lets a client say there is nothing behind its telemetry switch, and how much this deployment asks of it.
+    /// Both follow the deployment rather than the grant, so a credential granted nothing is told the same thing as one
+    /// granted everything.
     /// </summary>
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void For_ADeploymentThatDoesOrDoesNotForwardTelemetry_ReportsThatToEveryCaller(bool forwardsTelemetry)
+    /// <summary>
+    /// Written over every member rather than over a chosen few, so a level added without a spelling fails here rather
+    /// than reaching a client as whatever the enum happened to be called.
+    /// </summary>
+    [Fact]
+    public void For_ADeploymentThatForwardsTelemetry_ReportsEveryLevelItCouldAskForInItsPublishedSpelling()
     {
         // Act
-        var granted = ClientSessionResponse.For(
-            AuthorizedPrincipal.Caller("reader", [MailFathomPermission.MailRead]),
-            forwardsTelemetry);
-        var ungranted = ClientSessionResponse.For(principal: null, forwardsTelemetry);
+        var granted = Enum.GetValues<ClientTelemetryLevel>().ToDictionary(
+            level => level,
+            level => ClientSessionResponse.For(
+                AuthorizedPrincipal.Caller("reader", [MailFathomPermission.MailRead]),
+                forwardsTelemetry: true,
+                level).Telemetry);
+        var ungranted = Enum.GetValues<ClientTelemetryLevel>().ToDictionary(
+            level => level,
+            level => ClientSessionResponse.For(principal: null, forwardsTelemetry: true, level).Telemetry);
 
         // Assert
-        Assert.Equal(forwardsTelemetry, granted.Telemetry);
-        Assert.Equal(forwardsTelemetry, ungranted.Telemetry);
+        Assert.Equal(
+            new Dictionary<ClientTelemetryLevel, string>
+            {
+                [ClientTelemetryLevel.Trace] = "trace",
+                [ClientTelemetryLevel.Debug] = "debug",
+                [ClientTelemetryLevel.Info] = "info",
+                [ClientTelemetryLevel.Warn] = "warn",
+                [ClientTelemetryLevel.Error] = "error",
+                [ClientTelemetryLevel.Fatal] = "fatal",
+            },
+            granted);
+        Assert.Equal(granted, ungranted);
     }
+
+    /// <summary>
+    /// A deployment that named no collector answers <c>off</c> whatever level it configured. The two cannot disagree
+    /// because they are one field: what is configured is how much to ask for, and whether to ask at all is decided by
+    /// whether there is anywhere to forward it to.
+    /// </summary>
+    [Fact]
+    public void For_ADeploymentThatForwardsNothing_ReportsOffWhateverLevelItConfigured() =>
+        Assert.Equal(
+            ["off"],
+            Enum.GetValues<ClientTelemetryLevel>()
+                .Select(level => ClientSessionResponse.For(principal: null, forwardsTelemetry: false, level).Telemetry)
+                .Distinct());
 }

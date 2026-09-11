@@ -49,7 +49,7 @@ export const sessionAnswer = {
     service: 'MailFathom',
     version: '0.0.0',
     permissions: ['mailfathom.mail.read', 'mailfathom.mail.ask'],
-    telemetry: true,
+    telemetry: 'info',
 };
 
 /** Who the signed-in person is, as the frame reads it for the account menu and the settings screen. */

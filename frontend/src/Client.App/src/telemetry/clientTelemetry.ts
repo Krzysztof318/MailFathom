@@ -4,8 +4,17 @@
 
 import { createContext, useContext } from 'react';
 import { metrics, trace } from '@opentelemetry/api';
-import { logs, SeverityNumber } from '@opentelemetry/api-logs';
-import { telemetryName, type ClientSession } from '@mailfathom/client-backend';
+import { SeverityNumber } from '@opentelemetry/api-logs';
+import {
+    recordDownTo,
+    severityOf,
+    telemetryName,
+    worthRecording,
+    writeClientEvent,
+    type ClientEvent,
+    type ClientSession,
+    type DeploymentTelemetryLevel,
+} from '@mailfathom/client-backend';
 import { isSpace } from '../routing/spaces';
 import type { ClientPipeline } from './exporting';
 
@@ -28,9 +37,14 @@ import type { ClientPipeline } from './exporting';
 // Nothing here records what was on the screen. A space is named, a route template is named, and an occurrence is
 // named; no address, no message, no correspondent, no search text, and no part of a credential reaches a span, a
 // measurement, or a log record.
+//
+// What may be recorded, and at what severity, is not this module's either. Both halves of the client write occurrences
+// and the wire package declares the closed set of them, so what is composed here is the pipeline, the queue, and the
+// switch — never a name or a level. The floor beneath the whole vocabulary is the deployment's answer, stated here
+// through `exportFor` because it arrives with the session, and held by that same package because the wire package
+// writes a record per request from where a screen asked and holds no pipeline of its own.
 
-/** Something that happened to this client's session, which is an occurrence rather than a quantity to measure. */
-export type ClientEvent = 'session_started' | 'credential_no_longer_accepted' | 'render_failed';
+export type { ClientEvent };
 
 /**
  * A part of the client a failure can be contained in, which is what a contained one is reported under.
@@ -67,8 +81,17 @@ export interface ClientTelemetry {
      * from one effect, and two ways of saying "stop" would be two orderings to reason about. `false` records nothing
      * from the moment it is stated and discards what was held before it, which is the difference between a switch and
      * a filter on the way out.
+     * @param level How much the deployment asks this client to record. It arrives here for the reason `permitted` does
+     * — one effect reads the session answer and the person's own switch together — and it answers a different
+     * question: `permitted` is whether this person is reported on at all, and this is how much a deployment wants from
+     * whoever is. A person who declined is `off` whatever the deployment asked, which is what keeps the switch the
+     * stronger of the two.
      */
-    readonly exportFor: (session: ClientSession | null, permitted: boolean) => () => void;
+    readonly exportFor: (
+        session: ClientSession | null,
+        permitted: boolean,
+        level: DeploymentTelemetryLevel,
+    ) => () => void;
 
     /**
      * A person reached a space, having asked for it at `askedAt` — an epoch instant in milliseconds.
@@ -80,8 +103,16 @@ export interface ClientTelemetry {
      */
     readonly navigated: (space: string, askedAt: number) => void;
 
-    /** Records that something happened to the session, with no measurement attached to it. */
-    readonly happened: (event: ClientEvent) => void;
+    /**
+     * Records that something happened, with no measurement attached to it.
+     *
+     * @param event Which occurrence it is, out of the closed set the wire package declares beside the severity each one
+     * is written at.
+     * @param attributes What else may be said about it, every value of which is drawn from a closed set or is a plain
+     * count. The argument exists because most of what this client has to report is only legible with one — which act,
+     * which failure, which attempt — and its bound is the same one every record here is held to.
+     */
+    readonly happened: (event: ClientEvent, attributes?: Readonly<Record<string, string | number>>) => void;
 
     /**
      * A region failed while it was being drawn and the boundary around it contained the failure.
@@ -164,22 +195,34 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
     // than where the record is written, for the reason a move above is: the queue may be waiting on an export the
     // deployment is slow to answer, and a record timestamped then would say a session began at the moment the client
     // next got a word in.
-    function report(event: ClientEvent, attributes: Readonly<Record<string, string>>): void {
+    //
+    // The floor is asked before the queue rather than inside it, which is what makes a rich vocabulary free: a record
+    // the deployment does not want costs one comparison here instead of a closure the queue carries and then drops.
+    function report(
+        event: ClientEvent,
+        attributes: Readonly<Record<string, string | number>>,
+        severity = severityOf[event],
+    ): void {
+        if (!worthRecording(severity)) {
+            return;
+        }
+
         const at = performance.timeOrigin + performance.now();
 
         record(() => {
-            logs.getLogger(telemetryName).emit({
-                timestamp: at,
-                severityNumber: severities[event],
-                body: bodies[event],
-                attributes: { 'mailfathom.client.event': event, ...attributes },
-            });
+            writeClientEvent({ event, attributes, severity, at });
         });
     }
 
     return {
-        exportFor(session, allowed) {
+        exportFor(session, allowed, level) {
             permitted = allowed;
+
+            // Both halves of the client are held to it, which is why it is stated on the package that owns the
+            // vocabulary rather than kept here: the wire package writes a record per request from wherever a screen
+            // asked, and it holds none of this pipeline. A person who declined reads as `off`, so their decision stops
+            // the wire package writing exactly as it stops the queue below.
+            recordDownTo(allowed ? level : 'off');
 
             if (!allowed) {
                 // Read rather than exported, and read before anything else this queue holds: what was recorded while
@@ -236,17 +279,26 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
                     .createHistogram('mailfathom.client.navigation.duration', { unit: 's' })
                     .record((reached - askedAt) / 1_000, at);
             });
+
+            // Beside the span and the two measurements and at the quietest level there is, for the reason a request is
+            // recorded there: what it adds is the order somebody moved in, which is what makes a stream of requests
+            // read as somebody using the client rather than as traffic.
+            report('navigated', { ...at, 'mailfathom.client.navigation.duration_ms': Math.round(reached - askedAt) });
         },
 
-        happened(event) {
-            report(event, {});
+        happened(event, attributes = {}) {
+            report(event, attributes);
         },
 
         renderFailed(region, error) {
-            report('render_failed', {
-                'mailfathom.client.region': region,
-                'mailfathom.client.error': classOf(error),
-            });
+            report(
+                'render_failed',
+                { 'mailfathom.client.region': region, 'mailfathom.client.error': classOf(error) },
+                // The one occurrence whose severity the region decides. A reading pane that could not draw a document
+                // is a message somebody cannot open, and the containment boundary around everything failing is a
+                // client nobody can use at all — which is not the same call for whoever is woken by it.
+                region === 'application' ? SeverityNumber.FATAL : severityOf.render_failed,
+            );
         },
     };
 }
@@ -270,20 +322,6 @@ function classOf(error: unknown): string {
         return 'unknown';
     }
 }
-
-const severities: Readonly<Record<ClientEvent, SeverityNumber>> = {
-    session_started: SeverityNumber.INFO,
-    credential_no_longer_accepted: SeverityNumber.WARN,
-    render_failed: SeverityNumber.ERROR,
-};
-
-// Written for whoever reads a collector rather than for anybody on a screen, which is why these are not catalogue
-// entries: a log record is an operator's, and the deployment it reaches reads in one language.
-const bodies: Readonly<Record<ClientEvent, string>> = {
-    session_started: 'A client session began.',
-    credential_no_longer_accepted: 'The deployment stopped accepting the credential this session held.',
-    render_failed: 'A region of the client failed while it was being drawn, and the boundary around it contained it.',
-};
 
 /**
  * Reports how long this client took to arrive, where that is a question about the deployment rather than about a disk.

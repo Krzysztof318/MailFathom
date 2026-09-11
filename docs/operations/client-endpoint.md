@@ -131,20 +131,27 @@ specification, so a client points its exporter at the prefix above them and appe
 ### The session route
 
 It answers with four fields: `service`, which is always `MailFathom`; `version`, the running release; `permissions`, the
-published names the credential just presented carries, in the order this project publishes them; and `telemetry`,
-whether this deployment forwards a client's own telemetry.
+published names the credential just presented carries, in the order this project publishes them; and `telemetry`, how
+much of a client's own telemetry this deployment wants forwarded.
 
 That is what a client needs before it has drawn a single message: that this is MailFathom rather than something else
 answering the port, which contract it speaks, and what the rest of the surface will serve it. It is also what lets
 sign-in be built and proven end to end before a screen exists — a client that reached here with a token it had just been
 issued knows the token works.
 
-**`telemetry` is not part of the grant and never varies by credential.** What decides it is whether the deployment named
-a collector, which is the same condition that decides whether
-[the telemetry routes](#the-telemetry-routes) are served at all — so the two cannot disagree. A client reads it to
-decide whether to record anything and whether its own switch is worth offering; the only other way to find out is to
-export a batch and read the `404`, which is finding out by doing the thing. A client older than this field, or one
-reading an answer that omits it, treats it as `false` and sends nothing.
+**`telemetry` answers one of `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and `off`.** The first six are
+whatever [`ClientEndpoint:TelemetryLevel`](configuration-endpoints.md#clientendpoint) states, and `off` is what a
+deployment that named no collector answers whatever it configured that key to. Those two questions are one field
+deliberately: whether anything is forwarded is decided by whether there is anywhere to forward it to, which is the same
+condition that decides whether [the telemetry routes](#the-telemetry-routes) are served at all, and a second field
+could disagree with the first about it.
+
+**It is not part of the grant and never varies by credential.** A client reads it to decide what it records at all and
+whether its own switch is worth offering; the only other way to find out is to export a batch and read the `404`, which
+is finding out by doing the thing. A client reading an answer that omits the field, or one carrying a level this client
+does not know, treats it as `off` and sends nothing. `info` is the default, and
+[what each level costs a deployment](telemetry.md#what-the-client-publishes-about-itself) is on the telemetry page
+beside the records it decides.
 
 It has a second reader, holding nothing at all. A person naming their deployment in the client types a host, and the
 client asks here before it sends anything to that address, so a mistyped one is reported as an address that answers as
@@ -1874,7 +1881,7 @@ their preferences with everything else derived from them.
 
 **A deployment that proxies no telemetry still serves these routes** and stores the switch unchanged, so a person's
 answer survives a deployment that starts forwarding later. What such a deployment tells a client is
-[`"telemetry": false` on the session route](#the-session-route), and what MailFathom's own client draws for that is
+[`"telemetry": "off"` on the session route](#the-session-route), and what MailFathom's own client draws for that is
 a sentence saying so in place of the switch — a control over a client that is already sending nothing decides nothing.
 
 ### The portrait routes

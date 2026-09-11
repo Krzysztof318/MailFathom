@@ -4,7 +4,7 @@
 
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { headersFor, routeFor, type ClientSession } from './session';
-import { spanned } from './telemetry';
+import { isDeploymentTelemetryLevel, spanned, type DeploymentTelemetryLevel } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
 /** The route a deployment reports itself and the caller's grant at, relative to the client prefix. */
@@ -52,14 +52,16 @@ export interface DeploymentSession {
     readonly permissions: readonly MailFathomPermission[];
 
     /**
-     * Whether this deployment forwards a client's own telemetry to a collector of its own.
+     * How much this deployment asks a client to record, or `off` where it forwards none of it.
      *
-     * It is not part of the grant and never varies by credential: what decides it is whether the deployment named a
-     * collector at all. A client reads it so that it can say there is nothing behind its telemetry switch rather than
-     * offering a control that decides nothing — the only other way to find out being to export a batch and read the
-     * refusal, which is finding out by doing the thing.
+     * It is not part of the grant and never varies by credential: what decides `off` is whether the deployment named a
+     * collector at all, and what decides the rest is one configured level. A client reads the first so that it can say
+     * there is nothing behind its telemetry switch rather than offering a control that decides nothing — the only other
+     * way to find out being to export a batch and read the refusal, which is finding out by doing the thing — and reads
+     * the second as the floor below which it writes no record at all, so a vocabulary rich enough to diagnose one
+     * client costs a deployment serving many of them nothing.
      */
-    readonly telemetryForwarded: boolean;
+    readonly telemetryLevel: DeploymentTelemetryLevel;
 }
 
 // The most names one answer may carry. The published set is smaller than this by a wide margin and may grow; what the
@@ -157,11 +159,14 @@ export function parseDeploymentSession(body: string): DeploymentSession | null {
         }
     }
 
-    // Absent reads as not forwarded rather than refusing the whole answer, which is the same leniency the unknown
-    // permission name above gets and for the same reason: a deployment older than this client answers without it, and
-    // refusing there would stop somebody signing in over a field about a switch. Absent therefore fails towards
-    // sending nothing, which is the direction a privacy answer is allowed to be wrong in.
-    return { version, permissions, telemetryForwarded: answered['telemetry'] === true };
+    // Absent, or a level this client does not know, reads as `off` rather than refusing the whole answer — the same
+    // leniency the unknown permission name above gets and for the same reason: a deployment older or newer than this
+    // client answers with something else there, and refusing would stop somebody signing in over a field about a
+    // switch. It therefore fails towards sending nothing, which is the direction a privacy answer is allowed to be
+    // wrong in, and it is why the field is read rather than trusted: what arrives is a string from the wire.
+    const level = answered['telemetry'];
+
+    return { version, permissions, telemetryLevel: isDeploymentTelemetryLevel(level) ? level : 'off' };
 }
 
 function isMailPermission(value: string): value is MailFathomPermission {

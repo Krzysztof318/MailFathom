@@ -6,9 +6,11 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@opentelemetry/api": "1.9.1"
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/api-logs": "0.222.0"
   },
   "devDependencies": {
+    "@opentelemetry/sdk-logs": "0.222.0",
     "@opentelemetry/sdk-metrics": "2.11.0",
     "@opentelemetry/sdk-trace-base": "2.11.0"
   }
