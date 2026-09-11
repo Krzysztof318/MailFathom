@@ -1,0 +1,28 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
+{{- if and .Values.signalBackplane.enabled .Values.signalBackplane.garnet.deploy }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mailfathom.backplaneFullname" . }}
+  labels:
+    {{- include "mailfathom.backplaneLabels" . | nindent 4 }}
+spec:
+  {{- /*
+    ClusterIP, and there is no value to make it anything else. Anyone who can subscribe here reads every signal of every
+    user of this deployment — account and folder aliases, stored identities, flags, and a notification's two lines — so
+    the one shape this chart supports is one where nothing outside the cluster can reach it, which is also why no ingress
+    rule is rendered for it. The server's password is what limits who inside the cluster can ask.
+  */}}
+  type: ClusterIP
+  selector:
+    {{- include "mailfathom.backplaneSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: resp
+      port: {{ .Values.signalBackplane.garnet.service.port }}
+      targetPort: resp
+      protocol: TCP
+{{- end }}

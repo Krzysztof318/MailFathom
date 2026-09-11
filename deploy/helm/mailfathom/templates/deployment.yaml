@@ -176,6 +176,24 @@ spec:
               value: "true"
             {{- end }}
             {{- end }}
+            {{- if .Values.signalBackplane.enabled }}
+            {{- /*
+              Where a signal raised on this replica reaches the connections the others hold. The connection string is
+              never in this object: it names the endpoint and carries the password, so it is a reference into the Secret
+              the pod mounts, exactly as the database password and the object store's credential are. Unlike those two it
+              is read once, when a connection is first wanted, and the endpoint parsed from it is kept for the life of
+              the process — so a password rotated behind an unchanged reference takes effect at the next start.
+
+              Writing nothing when the block is off is what keeps a rendering that configured no backplane identical to
+              one from a chart that never carried it, and what makes a single-replica deployment open no connection.
+            */}}
+            - name: SignalBackplane__ConnectionString__Name
+              value: {{ .Values.signalBackplane.connectionStringSecretKey | quote }}
+            - name: SignalBackplane__ConnectionString__SecretReference
+              value: {{ printf "file:%s/%s" (trimSuffix "/" .Values.secrets.mountPath) .Values.signalBackplane.connectionStringSecretKey | quote }}
+            - name: SignalBackplane__ChannelPrefix
+              value: {{ .Values.signalBackplane.channelPrefix | quote }}
+            {{- end }}
             {{- if .Values.personalDataScanning.enabled }}
             {{- /*
               The switch and the analyzer's address are written together, from the one value that decided whether the

@@ -480,8 +480,9 @@ survey_action_references() {
 }
 
 # Every image reference this repository pins, read from the places that write one whole: the Dockerfile's `FROM` lines,
-# the Compose defaults, and the AppHost's container calls. The Helm values and the Quadlet unit sources carry the same
-# references split across keys; the count of files naming each one is what says how far a move reaches.
+# the Compose defaults, the AppHost's container calls, and the chart's own digest pins, which are the one family the
+# Helm values state completely enough to reassemble. Every other reference in those values and in the Quadlet unit
+# sources is split across keys; the count of files naming each one is what says how far a move reaches.
 collect_image_references() {
   # The Dockerfile names its two bases in build arguments and its `FROM` lines then expand them, which is what lets a
   # build override a base without editing the file. The argument default is the pin; the `FROM` line is not.
@@ -510,6 +511,27 @@ collect_image_references() {
           image != "" && length($0) == 64 && /^[a-f0-9]+$/ { print image "@sha256:" $0; image = ""; next }
           image != "" && /^([0-9]|RELEASE\.)[A-Za-z0-9._-]*$/ { print image ":" $0; image = ""; next }
         '
+  fi
+
+  # The chart splits a reference across `registry:`, `repository:`, and either `tag:` or `digest:`, so the combined form
+  # appears on no line of it and the loop above would never see one. Only its digest pins are read back, and that is a
+  # decision rather than an omission: a tag the chart writes is the same tag another asset writes as one string, so
+  # collecting both forms would report one image on two rows under two spellings — while a digest is a pin the chart can
+  # hold alone, which is what makes it the one that could otherwise age here unreported. A digest the chart shares with
+  # another asset composes to the identical string and is deduplicated with it.
+  #
+  # Both halves are cleared at whichever key ends an image block, digest or tag, rather than only where a reference was
+  # printed: a block pinned by tag would otherwise leave its registry standing, and the next digest pin that states a
+  # repository without one — a shape the templates support — would be surveyed at the wrong host.
+  if [[ -f 'deploy/helm/mailfathom/values.yaml' ]]; then
+    awk '
+      function reference() { return (registry == "" ? "" : registry "/") repository }
+      { key = $1; value = $2; gsub(/"/, "", value) }
+      key == "registry:" { registry = value; next }
+      key == "repository:" { repository = value; next }
+      key == "digest:" { if (repository != "" && value != "") print reference() "@" value; registry = ""; repository = ""; next }
+      key == "tag:" { registry = ""; repository = ""; next }
+    ' 'deploy/helm/mailfathom/values.yaml'
   fi
 }
 
@@ -626,7 +648,7 @@ survey_image_pins() {
       repository="${reference%@*}"
       tag="${reference#*@}"
       latest="$(resolve_image_digest "$repository")"
-      note='digest pin; the upstream publishes no version tag, so this compares against what its latest tag resolves to now'
+      note='digest pin, compared against what the repository latest tag resolves to now; where the upstream also publishes version tags, that is a different line rather than a newer build of this one'
     else
       repository="${reference%:*}"
       tag="${reference##*:}"

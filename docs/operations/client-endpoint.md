@@ -2488,10 +2488,12 @@ moment is simply not told — so there is nothing on that server to retain, expo
 a data-subject workflow.
 
 **Keep it inside the deployment's trust boundary, and secure the transport when it is not.** The intended shape is a
-RESP server on the same network as the replicas, reached over a private address and by nothing else. No deployment
-asset here renders one yet — the section takes an address an operator already has, and the
-[local orchestration](local-development.md#two-replicas-over-a-signal-backplane) is the only place in this repository
-that starts a server for it. Pointing the section at a managed endpoint outside that boundary makes the transport the
+RESP server on the same network as the replicas, reached over a private address and by nothing else. The
+[Helm chart](deployment-kubernetes.md#signals-between-replicas) renders one on request — a single-replica Garnet
+Deployment published as a ClusterIP Service, which is that shape — and takes an address an operator already has
+instead when they turn that off. The
+[local orchestration](local-development.md#two-replicas-over-a-signal-backplane) starts one for a development run.
+Pointing the section at a managed endpoint outside that boundary makes the transport the
 operator's obligation: reach it over TLS by writing `ssl=true` in the connection string, give it a password and let
 [secret provisioning](secret-provisioning.md) carry that, and restrict the endpoint to the addresses the replicas
 answer from. A clear-text RESP connection across a network somebody else runs publishes those aliases to whoever is on

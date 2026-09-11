@@ -1,0 +1,144 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
+{{- if and .Values.signalBackplane.enabled .Values.signalBackplane.garnet.deploy }}
+{{- include "mailfathom.validate" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mailfathom.backplaneFullname" . }}
+  labels:
+    {{- include "mailfathom.backplaneLabels" . | nindent 4 }}
+spec:
+  {{- /*
+    One replica, and no value to change it. A second one would be a second pub/sub endpoint rather than a larger one:
+    replicas of a RESP server do not share subscriptions, so a signal published to one would reach only the MailFathom
+    replicas the load balancer happened to subscribe there. Making this highly available means a Garnet cluster, which
+    is a component to operate rather than a replica count — turn `deploy` off and point the connection string at one.
+  */}}
+  replicas: 1
+  {{- /*
+    Recreate rather than the default RollingUpdate, which at one replica surges a second pod to ready before the first
+    terminates. Both would be endpoints of the one Service for that window, which is exactly the split the paragraph
+    above says must never exist; a moment of no endpoint costs signals that are already best-effort, and a moment of
+    two costs signals that were delivered to the wrong half of the replicas.
+  */}}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "mailfathom.backplaneSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mailfathom.backplaneSelectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.signalBackplane.garnet.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.signalBackplane.garnet.podSecurityContext | nindent 8 }}
+      {{- /*
+        The server carries signals between replicas and talks to nothing in the cluster, so it has no business holding a
+        token that can talk to the API server.
+      */}}
+      automountServiceAccountToken: false
+      {{- with .Values.signalBackplane.garnet.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.signalBackplane.garnet.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.signalBackplane.garnet.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: garnet
+          image: {{ include "mailfathom.backplaneImage" . | quote }}
+          imagePullPolicy: {{ .Values.signalBackplane.garnet.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.signalBackplane.garnet.containerSecurityContext | nindent 12 }}
+          {{- /*
+            The password is the one form this server reads it in: a value on its own command line, expanded by the
+            kubelet from the entry below rather than written into this object, so no rendered manifest and no committed
+            golden file carries a credential. Garnet takes no file for it — its file-backed alternative is an ACL
+            document with its own syntax and its own command categories, which would be a second thing for an operator
+            to author correctly — and what the expansion costs is that the password is readable inside this container,
+            by a process that is already the one holding it.
+          */}}
+          env:
+            - name: MAILFATHOM_SIGNAL_BACKPLANE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.signalBackplane.garnet.passwordSecretKey }}
+          args:
+            - --port
+            - "6379"
+            - --auth
+            - Password
+            - --password
+            - $(MAILFATHOM_SIGNAL_BACKPLANE_PASSWORD)
+          ports:
+            - name: resp
+              containerPort: 6379
+              protocol: TCP
+          {{- /*
+            The probes open a TCP connection rather than speaking the protocol, for the reason the spam daemon's do:
+            what answers here is RESP, which no probe type composes, and a listener that has bound the port is a server
+            that has finished starting. A probe that could speak RESP would have to authenticate, which would put the
+            password into a second place.
+          */}}
+          startupProbe:
+            tcpSocket:
+              port: resp
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 20
+          readinessProbe:
+            tcpSocket:
+              port: resp
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: resp
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            {{- /*
+              Nothing durable is held here, because this server keeps nothing: pub/sub delivers to whoever is subscribed
+              at that moment, so no claim is rendered and none is wanted. These are the two paths the image expects to
+              be writable — the runtime's scratch directory, and the data directory its own `VOLUME` declares and which
+              a checkpoint would go to if anything ever asked for one — and an in-memory emptyDir over both is what
+              makes a read-only root filesystem workable, as it does for MailFathom's own pod. In memory rather than on
+              a node's disk so that nothing derived from a signal can outlive the pod on a host.
+            */}}
+            - name: temporary
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+          resources:
+            {{- toYaml .Values.signalBackplane.garnet.resources | nindent 12 }}
+      volumes:
+        {{- /*
+          Two volumes rather than one mounted twice: a second mount of one emptyDir needs a `subPath`, and the kubelet
+          creates a subPath directory owned by root, which this unprivileged container could not write into.
+        */}}
+        - name: temporary
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+        - name: data
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+{{- end }}
