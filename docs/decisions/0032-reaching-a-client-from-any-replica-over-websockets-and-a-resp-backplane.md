@@ -81,7 +81,10 @@ The in-process dictionary becomes a table every replica shares, in the shape iss
 - **It pins more than the pair.** A cookie pins every request a client makes, and hashing the source address puts every client behind one NAT on one replica. Both distort the load the replicas were added to share.
 - **It fails in a rollout.** The replica that minted the ticket is the one being replaced.
 
-The table costs one insert and one delete per connection. That is once per connection rather than once per request, on a path that has just reached the database.
+**Redemption is bounded where it happens, not by the minting route.** Minting costs one insert, on a route that has just authenticated a credential against the same database. Redeeming costs one delete, and it runs on the hub, which is mapped outside the client route group and has authenticated nothing when a ticket arrives. So two things bound it, and issue 1878 owns both:
+
+- **A value without the shape of a minted ticket is refused before any statement runs**, as it is today: its length, its separator, and its encoding.
+- **The hub's handshake takes a rate limit of its own**, counted per caller address and per handshake rather than per standing connection. That is the one thing `ClientEndpoint:RateLimiting` cannot be made to do without also counting a connection that stands open for hours.
 
 ### Signals cross replicas through a RESP pub/sub backplane
 
@@ -122,7 +125,7 @@ It would buy no stronger delivery either: a notification reaches only sessions l
 
 - **Encryption in transit**, which StackExchange.Redis takes as `ssl=true` in the connection string.
 - **A credential of its own**, held as a secret reference like every other credential the deployment carries. Where the endpoint supports per-channel permissions, an ACL user limited to publishing and subscribing under the deployment's prefix.
-- **A channel prefix no other deployment on that endpoint uses.** The default is the same string in every deployment, so two deployments sharing one endpoint at the default would each receive the other's signals. A shared endpoint needs the prefix set explicitly.
+- **A channel prefix no other deployment on that endpoint uses.** A signal would not cross between two deployments at the same prefix, because a group is named from a user identifier each deployment generated for itself. What they would share are the backplane's fixed channels: the one every replica listens on for messages to every connection, the one carrying group management, and the one carrying returned results. Each deployment's replicas would receive the other's traffic on them, and that traffic names connections and the groups holding user identifiers. The default is the same string in every deployment, so a shared endpoint needs the prefix set explicitly.
 - **Network reach limited to the replicas**, in the same data centre, which is also what the ASP.NET Core guidance asks of a Redis backplane for latency's sake.
 - **A recipient entry in the operator's own processing record** where the endpoint is a managed service run by somebody else, since signals are then disclosed to that processor.
 
@@ -170,11 +173,11 @@ Above one replica, an operator configures four things:
 ## Validation
 
 - **The transport.** A unit test over the hub's mapping requires a server-sent-events connection and a long-polling connection to be refused. Issue 1878 owns it.
-- **The ticket.** Unit tests over the store require a ticket to be spent once, a second presentation to be refused, an expired ticket to be refused, and a ticket minted through one store instance to be redeemed through another. Issue 1878 owns them.
+- **The ticket's bounds.** A unit test over the hub requires a value without the shape of a minted ticket to be refused without the store being asked, and one over the hub's mapping requires the handshake to carry its own rate limit. Issue 1878 owns both.
 - **The backplane.** Startup validation refuses a backplane section that names no connection, and a unit test requires nothing to be registered when the section is absent or the client surface is not served. Issue 1879 owns both.
 - **The chart.** The golden manifests carry a values case for each mode — Garnet deployed, an external endpoint, and none. A case of `replicaCount: 2` with the client surface served and no backplane must fail to render, and `scripts/render-helm-manifests.sh` holds it. Issue 1880 owns this.
 - **The client.** Unit tests require a re-read after every reconnect, and every five minutes while the window is visible and never while it is hidden. Issue 1877 owns them.
-- **Across replicas.** The integration suite, which the owner runs, starts two hosts against one database and one Garnet. It proves that a ticket minted on one host opens a connection on the other, and that a signal raised on one host reaches a connection the other holds.
+- **The ticket, against a real database, and across replicas.** The integration suite, which the owner runs, starts two hosts against one database and one Garnet. It proves that a ticket is spent once, that a second presentation and an expired ticket are refused, that a ticket minted on one host opens a connection on the other, and that a signal raised on one host reaches a connection the other holds. The ticket's proofs belong there rather than in a unit suite, because the store is raw SQL in the shape of `ClientAssertionSpendStore`, which carries `[RequiresIntegrationCoverage]` for the same reason: only PostgreSQL settles what that statement does, and a fake would only prove itself.
 - **The boundary.** Every change that touches the backplane's registration is reviewed against *The backplane carries client signals and nothing else*.
 
 ## Pros and Cons of the Options
@@ -201,7 +204,7 @@ Above one replica, an operator configures four things:
 - Good, because the shape is issue 1835's, which is already in production and already understood.
 - Good, because authentication never depends on an optional component.
 - Neutral, because the table exists in every deployment's schema, including those that never mint a ticket.
-- Bad, because each connection costs an insert and a delete that the in-memory store did not.
+- Bad, because each connection costs an insert and a delete that the in-memory store did not, and a handshake nobody minted a ticket for can cost a statement, which is why the hub takes a rate limit of its own.
 
 ### A ticket store in the backplane's key space
 
