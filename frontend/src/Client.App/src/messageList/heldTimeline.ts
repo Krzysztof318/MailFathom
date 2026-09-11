@@ -93,10 +93,7 @@ export function rowAt(held: HeldTimeline, row: number): MailTimelineEntry | null
  * other — the same message drawn in the folder it was filed into is a message that has arrived.
  * @returns The list as it is drawn, and the same object where no row is leaving.
  */
-export function withoutLeaving(
-    held: HeldTimeline,
-    leaving: (email: MailTimelineEntry) => boolean,
-): HeldTimeline {
+export function withoutLeaving(held: HeldTimeline, leaving: (email: MailTimelineEntry) => boolean): HeldTimeline {
     const holdsLeaving = (slot: TimelineSlot): boolean => slot.emails?.some(leaving) === true;
 
     // Answered before anything is rebuilt, so an act against mail this list is not drawing leaves the list the object it
