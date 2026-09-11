@@ -45,7 +45,7 @@ function actsWhere(refusalOf: (act: MailboxAct) => ActRefusal | null, perform = 
     return { ...nothingActed, refusalOf, perform };
 }
 
-const writing: Composing = { offered: true, opening: null, compose: vi.fn(), close: vi.fn() };
+const writing: Composing = { offered: true, drafts: false, opening: null, compose: vi.fn(), close: vi.fn() };
 
 function menuUnder({
     acts = actsWhere(() => null),

@@ -73,8 +73,13 @@ describe('App session', () => {
         renderApp(servedFrom, heldSession, granting('mailfathom.mail.ask'));
         await screen.findByRole('heading', { name: 'Discover', level: 1 });
 
+        // The drafting capability is beside it and is not one of them: it is published under the grant this credential
+        // does hold, it reads no mail, and what it answers is whether the composer may offer a draft at all.
         await waitFor(() => {
-            expect(routesAsked()).toEqual(['https://mail.example.invalid/api/client/session']);
+            expect(routesAsked()).toEqual([
+                'https://mail.example.invalid/api/client/session',
+                'https://mail.example.invalid/api/client/replies/drafting',
+            ]);
         });
         expect(screen.queryByText(/The accounts could not be read/)).toBeNull();
     });

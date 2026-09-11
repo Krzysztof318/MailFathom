@@ -76,6 +76,7 @@ export function WrittenMessage({
     opened,
     onWritten,
     onSendAsked,
+    beforeTheWords,
 }: {
     /** What the region opens holding, read once: a message this tab was already writing, or nothing. */
     readonly opened: readonly WrittenNode[];
@@ -84,6 +85,15 @@ export function WrittenMessage({
 
     /** What the design's own shortcut asks for, which is the send question rather than the send. */
     readonly onSendAsked: () => void;
+
+    /**
+     * What stands between the formatting bar and the words, which is where the design draws what became of a drafting.
+     *
+     * A slot rather than a component of its own, because the bar and the region are one element's children here: the
+     * row the design puts between them has no other way in, and the alternative is the composer reaching into this
+     * component's markup.
+     */
+    readonly beforeTheWords?: ReactNode;
 }) {
     const { translate } = useLocalization();
     const coarse = useCoarsePointer();
@@ -258,6 +268,8 @@ export function WrittenMessage({
                     <Icon name={barShown ? 'expand_less' : 'expand_more'} className="size-5 text-muted" />
                 </button>
             ) : null}
+
+            {beforeTheWords}
 
             <div
                 ref={words}

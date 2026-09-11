@@ -9,7 +9,7 @@ import type { ShownAs } from '../deployment/attachmentExchange';
 // description the message published rather than from anything fetched, so a file too large or of a kind this client
 // does not draw says so before a single octet crosses the wire.
 //
-// **Two shapes are drawn and everything else is downloaded**, which is the whole of the decision:
+// **Three shapes are drawn and everything else is downloaded**, which is the whole of the decision:
 //
 // - **A picture, of a raster kind this client names.** An `img` element draws octets and does nothing else with them:
 //   it runs no script, resolves no reference, and fetches nothing, whatever the octets turn out to hold. That property
@@ -25,13 +25,19 @@ import type { ShownAs } from '../deployment/attachmentExchange';
 // reading is that a tracking pixel is defeated by absence rather than by a setting, and an SVG a sender wrote is markup
 // this client would be trusting an engine not to run. It downloads, like every other kind.
 //
-// **A PDF downloads as well, and that is the one refusal worth saying out loud**, because a mail client that previewed
-// PDFs is what a reader expects. Nothing in this tree can draw one for both heads: the web head and the Windows desktop
-// head embed a browser that renders PDFs, and the Linux desktop head runs WebKitGTK, which carries no PDF viewer at
-// all — so an embedded viewer would be a feature that exists on some of the platforms this client ships to, which is
-// exactly the divergence `frontend/src/AGENTS.md` § *The two heads* refuses. Rendering one in the client instead means
-// a PDF engine as a dependency, which is a permanent patch obligation taken on for the most hostile input this
-// application handles, and ADR 0024 admits such a package only where something it does is load-bearing.
+// - **A PDF, where the engine draws one itself.** This used to be the one refusal stated out loud here, on the reading
+//   that an embedded viewer would exist on some of the platforms this client ships to and not on others — the web head
+//   and the Windows desktop head embed engines carrying a viewer, and WebKitGTK on the Linux desktop head carries
+//   none — which is the divergence `frontend/src/AGENTS.md` § *The two heads* refuses. What that reading missed is
+//   that the same section grants the shape this now takes: an operation a head does not offer is a *question the
+//   application asks* rather than a failure it meets, and `documentViewer.ts` beside this asks it of the platform
+//   rather than of a target. So there is one behaviour with two honest answers, and a head answering `false` is given
+//   the download this decision has always offered.
+//
+//   What is still refused is what that refusal was really protecting: **no PDF engine joins this client's closure.**
+//   Shipping one would be a permanent patch obligation taken on for the most hostile input this application handles,
+//   and ADR 0024 admits such a package only where something it does is load-bearing. The frame below renders through
+//   the engine that is already there or renders nothing.
 
 /** Why a file is not drawn inside the client, in the two ways that can be true. */
 export type NotShown = 'kindNotShown' | 'largerThanShown';
@@ -61,7 +67,11 @@ const picturesDrawn: readonly string[] = [
  *
  * Neither is a limit on what a person may have: a file over its number is offered as the download it has always been.
  */
-const shownAtMost = { picture: 8 * 1024 * 1024, text: 1024 * 1024 };
+const shownAtMost = { picture: 8 * 1024 * 1024, text: 1024 * 1024, document: 16 * 1024 * 1024 };
+
+// The one media type drawn as a document, named rather than matched on a prefix for the reason the picture list is a
+// list: what admits a second one is somebody deciding it, and the engines this client runs in draw exactly this one.
+const documentDrawn = 'application/pdf';
 
 /** What a file declares itself to be, without the parameters the sender wrote after it. */
 export function mediaTypeOf(declared: string): string {
@@ -87,11 +97,22 @@ export function charsetOf(declared: string): string {
 /**
  * What the viewer does with one file a message carries.
  *
- * @param attachment What the message said about it, which is everything this decision reads.
+ * @param attachment What the message said about it, which is everything this decision reads about the file.
+ * @param drawsDocuments Whether the engine this client is running in renders a PDF itself, which `documentViewer.ts` answers.
  * @returns The form it is drawn in, or why it is downloaded instead.
  */
-export function shownAttachment(attachment: MailAttachment): ShownAttachment {
+export function shownAttachment(attachment: MailAttachment, drawsDocuments: boolean): ShownAttachment {
     const mediaType = mediaTypeOf(attachment.mediaType);
+
+    if (mediaType === documentDrawn) {
+        // An engine with no viewer is the same answer to a reader as a kind this client does not draw, and it is the
+        // same sentence beside the same download — so it is reported as one rather than as a fourth thing to word.
+        if (!drawsDocuments) {
+            return 'kindNotShown';
+        }
+
+        return attachment.sizeOctets > shownAtMost.document ? 'largerThanShown' : { as: 'document' };
+    }
 
     if (picturesDrawn.includes(mediaType)) {
         return attachment.sizeOctets > shownAtMost.picture ? 'largerThanShown' : { as: 'picture' };

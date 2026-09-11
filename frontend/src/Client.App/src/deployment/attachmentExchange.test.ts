@@ -74,6 +74,10 @@ describe('attachmentOctetsOf', () => {
 });
 
 describe('drawnFrom', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     it('answers text decoded under the character set the message declared', async () => {
         const octets = [new Uint8Array([0x7a, 0x61, 0xbf, 0xf3, 0xb3, 0xe6])];
 
@@ -99,6 +103,16 @@ describe('drawnFrom', () => {
         expect(await drawnFrom([new Uint8Array([1, 2, 3])], { as: 'picture' })).toBe(
             'data:application/octet-stream;base64,AQID',
         );
+    });
+
+    // The type is the whole of what makes a frame draw the document rather than offer to save it, which is why it is
+    // asserted rather than the address: an engine renders a resource by what it says it is, and the general binary
+    // type a picture is given here would turn the one shape drawn in a frame back into a download.
+    it('answers a document as an object address carrying the type an engine draws a document by', async () => {
+        const built = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mailfathom/one');
+
+        expect(await drawnFrom([new Uint8Array([1, 2, 3])], { as: 'document' })).toBe('blob:mailfathom/one');
+        expect(built.mock.calls[0]?.[0]).toHaveProperty('type', 'application/pdf');
     });
 });
 

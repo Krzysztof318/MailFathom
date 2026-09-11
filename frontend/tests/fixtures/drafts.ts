@@ -73,3 +73,26 @@ export const refusedSend = {
     errorCode: 59_001,
     detail: 'The content scanner refused this message.',
 };
+
+/** That this deployment writes a draft for somebody, which is what decides whether the composer offers the block. */
+export const draftsReplies = { draftsReplies: true };
+
+/**
+ * One drafted reply, as the composer puts it on the screen.
+ *
+ * It answers the racking quote the mail corpus states, so the claims below cite a message that exists there rather
+ * than an identity nothing else names — a citation nobody can follow is the shape this directory exists to end.
+ */
+export const draftedReply = {
+    drafted: true,
+    body: 'Yes — 4 200 net still stands, and Tuesday at ten works for us.\n\nBest regards',
+    claims: [
+        {
+            text: 'The agreed price is 4 200 net.',
+            supported: true,
+            sources: [{ kind: 'email', email: '00000000-0000-4000-8000-000000000001' }],
+        },
+        { text: 'Tuesday at ten is free.', supported: false, sources: [] },
+    ],
+    proposedRecipients: [{ address: 'sales@nordwind.example', displayName: 'Nordwind' }],
+};

@@ -27,7 +27,16 @@ public sealed record ReplyDraftSources(
     string? Subject,
     IReadOnlyList<ReplyDraftMessage> Messages,
     IReadOnlyList<ReplyDraftParticipant> Participants,
-    IReadOnlyList<string> StyleSamples);
+    IReadOnlyList<string> StyleSamples)
+{
+    /// <summary>What a message answering no correspondence is written from, which is nothing this deployment holds.</summary>
+    /// <remarks>
+    /// Not a degenerate reply but the honest description of that case: there is no exchange, so there is nobody to
+    /// propose, nothing to cite, and no manner to take from an account the request never named. What the draft has
+    /// instead is the instruction its author typed, which is why the use case requires one there.
+    /// </remarks>
+    public static ReplyDraftSources Nothing { get; } = new(Subject: null, [], [], []);
+}
 
 /// <summary>One message of the conversation as a drafting is shown it.</summary>
 /// <param name="StoredEmailId">The message, which is what a statement drawn from it cites.</param>

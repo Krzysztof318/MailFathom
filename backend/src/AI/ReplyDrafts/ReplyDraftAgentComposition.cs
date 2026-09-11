@@ -4,6 +4,7 @@
 
 using MailFathom.AI.Chat;
 using MailFathom.AI.Orchestration;
+using MailFathom.Domain.Access;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -26,16 +27,18 @@ internal static class ReplyDraftAgentComposition
     /// <summary>Composes the reply-drafting agent over a chat client.</summary>
     /// <param name="chatClient">The client the one call is made through.</param>
     /// <param name="plan">The generation parameters this deployment configured.</param>
+    /// <param name="language">The language this deployment writes for the person the draft is for, which the instruction states for a draft answering no correspondence.</param>
     /// <param name="instructionEnvelope">The preamble and postamble every agent here carries.</param>
     /// <param name="loggerFactory">The factory the agent logs through.</param>
     /// <returns>The composed agent.</returns>
     internal static ChatClientAgent Compose(
         IChatClient chatClient,
         ChatGenerationPlan plan,
+        MailUserLanguage language,
         IAgentInstructionEnvelope instructionEnvelope,
         ILoggerFactory loggerFactory)
     {
-        var operation = new AgentOperation(AgentName, ReplyDraftInstructions.Text, []);
+        var operation = new AgentOperation(AgentName, ReplyDraftInstructions.TextFor(language), []);
 
         return AgentComposition.Compose(chatClient, plan, operation, instructionEnvelope, loggerFactory);
     }

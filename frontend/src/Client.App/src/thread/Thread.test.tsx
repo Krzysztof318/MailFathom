@@ -39,6 +39,18 @@ beforeEach(() => {
 // test about the wide composition states it, and every other test inherits the single-pane reading.
 const declaredMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
 
+// jsdom implements no layout and therefore defines no `scrollIntoView`, which is why the component calls it optionally
+// and why a test about scrolling has to put one there to watch. Recorded so the element goes back as it was.
+const declaredScrollIntoView = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
+
+function watchingTheScroll(): ReturnType<typeof vi.fn> {
+    const scrolled = vi.fn();
+
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: scrolled });
+
+    return scrolled;
+}
+
 function theColumnStandsBesideTheList(): void {
     Object.defineProperty(window, 'matchMedia', {
         configurable: true,
@@ -58,6 +70,12 @@ afterEach(() => {
 
     if (declaredMatchMedia !== undefined) {
         Object.defineProperty(window, 'matchMedia', declaredMatchMedia);
+    }
+
+    if (declaredScrollIntoView === undefined) {
+        Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+    } else {
+        Object.defineProperty(Element.prototype, 'scrollIntoView', declaredScrollIntoView);
     }
 });
 
@@ -887,6 +905,45 @@ describe('Thread', () => {
 
         await waitFor(() => {
             expect(document.activeElement?.textContent).toContain('The whole of what one says.');
+        });
+    });
+});
+
+// What a reader sees first on arriving, which is the column from its own top: the derived state and the head stand
+// above the messages, and a browser scrolling focus into view pushed both off the screen and left somebody looking at
+// the control that reveals the history.
+describe('Thread arriving', () => {
+    it('opens at the top of the column rather than scrolling to the message it arrived at', async () => {
+        const scrolled = watchingTheScroll();
+
+        drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])), { threadId, openAt: 'two' });
+
+        expect(await screen.findByText('The whole of what two says.')).toBeDefined();
+
+        await waitFor(() => {
+            expect(document.activeElement?.textContent).toContain('The whole of what two says.');
+        });
+
+        expect(scrolled).not.toHaveBeenCalled();
+    });
+
+    // The other half of the same rule: where the history is open at once, messages stand before the one somebody was
+    // sent to, so the top of the column is not where they were going and it is brought into view as it always was.
+    it('brings the message into view where earlier ones stand above it', async () => {
+        const scrolled = watchingTheScroll();
+
+        drawing(
+            deploymentAnswering(pageOf(['one', 'two', 'three'])),
+            { threadId, openAt: 'three' },
+            true,
+            nothingMarkedRead,
+            true,
+        );
+
+        expect(await screen.findByText('The whole of what one says.')).toBeDefined();
+
+        await waitFor(() => {
+            expect(scrolled).toHaveBeenCalledWith({ block: 'start' });
         });
     });
 });

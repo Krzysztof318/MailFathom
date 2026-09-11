@@ -18,6 +18,7 @@ import {
 import type { OpenedAttachment } from '../workspace/openAttachment';
 import { useAttachmentDownloads } from './downloadingAttachment';
 import { sizeOf } from '../localization/octets';
+import { drawsDocumentsInline } from './documentViewer';
 import { kindOf } from './fileKind';
 import { shownAttachment, type NotShown } from './shownAttachment';
 
@@ -32,8 +33,10 @@ import { shownAttachment, type NotShown } from './shownAttachment';
 // answers rather than a control that does nothing.
 //
 // Nothing a file carries reaches a host other than the deployment. The octets arrive over the client surface under the
-// credential the reader signed in with, and what is drawn from them is a picture in an `img` or words React escaped:
-// neither resolves a reference, so a file whose content names an address cannot tell that address it was opened.
+// credential the reader signed in with, and what is drawn from them is a picture in an `img`, words React escaped, or a
+// document in a sandboxed frame over an object URL. None of the three resolves a reference the sender wrote out of the
+// page this client runs in: the first two cannot, and the third holds an opaque origin with no flag granted, so a file
+// whose content names an address reaches neither that address nor anything of the client.
 
 // What a refusal is worded as: one sentence each, saying what could not be done and what to do about it, exactly as the
 // download beside it does — a reader who pressed *open* is owed as much as one who pressed *download*.
@@ -167,7 +170,10 @@ function Inside({
     const { translate } = useLocalization();
     const exchange = useAttachmentExchange();
     const { attachment, storedEmailId } = opened;
-    const [reading, setReading] = useState<Reading>(() => ({ drawnAs: shownAttachment(attachment), attempt: 0 }));
+    const [reading, setReading] = useState<Reading>(() => ({
+        drawnAs: shownAttachment(attachment, drawsDocumentsInline()),
+        attempt: 0,
+    }));
     const [answer, setAnswer] = useState<AttachmentRead | null>(null);
 
     // An answer belongs to the read that produced it, and losing the network ends that read: coming back starts
@@ -211,6 +217,25 @@ function Inside({
             abandoning.abort();
         };
     }, [session, exchange, storedEmailId, attachment, reading, online]);
+
+    // An object URL keeps its octets alive for as long as the document holds the address, and a document is the one
+    // shape drawn over one — so the address is released when this surface goes away or starts another read, which is
+    // otherwise a file's worth of memory held until the page is navigated. The frame has already loaded from it by
+    // then: an engine resolves the resource when the element is attached, and revoking afterwards leaves what it drew
+    // standing. Every other shape holds a string and has nothing to release, which is what the guard is reading.
+    useEffect(() => {
+        const drawnAs = reading.drawnAs;
+
+        if (typeof drawnAs === 'string' || drawnAs.as !== 'document' || answer?.outcome !== 'shown') {
+            return;
+        }
+
+        const address = answer.content;
+
+        return () => {
+            URL.revokeObjectURL(address);
+        };
+    }, [reading, answer]);
 
     if (typeof reading.drawnAs === 'string') {
         return <Said message={notShownMessages[reading.drawnAs]} />;
@@ -277,6 +302,25 @@ function Inside({
         // Named by the file rather than described, because nothing here has read what the picture shows: the sender's
         // own name for it is the only thing anybody can say about it truthfully.
         return <img alt={named} src={answer.content} className="max-w-full rounded-md bg-panel object-contain" />;
+    }
+
+    if (reading.drawnAs.as === 'document') {
+        // `sandbox` with nothing granted, which is what the frame is for: the viewer that draws the document is the
+        // engine's own and needs none of the flags, so a file that turned out to carry script, a form, or a navigation
+        // gets no way to run one. It is not the anti-tracking mechanism — the octets are already in hand and came from
+        // the deployment — and ADR 0024's reading holds here too: a sandbox answers *executes* and never *fetches*.
+        //
+        // The height is the pane's rather than the document's, because a frame cannot be measured from outside it
+        // without granting a script, and a document is what somebody opened this surface to read: it scrolls inside
+        // its own viewer, which is the affordance the engine already draws around it.
+        return (
+            <iframe
+                src={answer.content}
+                title={named}
+                sandbox=""
+                className="h-full min-h-0 w-full flex-1 rounded-md border-none bg-panel"
+            />
+        );
     }
 
     // `pre` because the file's own line breaks and spacing are what it holds, and wrapping so a long line reflows in

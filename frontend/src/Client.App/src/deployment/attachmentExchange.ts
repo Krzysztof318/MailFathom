@@ -46,7 +46,8 @@ export type ShowingRefusal = Exclude<AttachmentDeliveryOutcome, 'delivered'> | '
  * the screen: mail carries plenty of encodings that are not UTF-8, and a file decoded as one it is not arrives as a
  * screenful of replacement characters rather than as anything a reader could act on.
  */
-export type ShownAs = { readonly as: 'picture' } | { readonly as: 'text'; readonly charset: string };
+export type ShownAs =
+    { readonly as: 'picture' } | { readonly as: 'document' } | { readonly as: 'text'; readonly charset: string };
 
 /** What a read of one file answered: something the screen may draw, or why there is nothing to draw. */
 export type AttachmentRead =
@@ -239,6 +240,18 @@ async function fetchedOctets(
 export async function drawnFrom(octets: readonly Uint8Array<ArrayBuffer>[], shown: ShownAs): Promise<string> {
     if (shown.as === 'picture') {
         return asDataUrl(new Blob([...octets], { type: 'application/octet-stream' }));
+    }
+
+    // A document is the one shape that keeps its declared type, and it is the only way the engine's own viewer is
+    // reached: a frame renders by what the resource says it is, so the general binary type a picture and a download
+    // are given would make this a file the browser offers to save rather than a page it draws. It is bounded by the
+    // one kind `shownAttachment.ts` admits here, so what the type may say is `application/pdf` and nothing else.
+    //
+    // An object URL rather than a data URL, because an engine refuses a `data:` document in a frame outright and
+    // because a base64 copy of a file this size is the octets again as text. The address it hands back has to be
+    // released, which is what separates this from the other two and why the surface drawing it revokes on the way out.
+    if (shown.as === 'document') {
+        return URL.createObjectURL(new Blob([...octets], { type: 'application/pdf' }));
     }
 
     // One decoder for the whole read, which is what `stream: true` is for: a character split across two chunks is held

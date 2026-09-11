@@ -151,7 +151,7 @@ function ListOpeningIntoTheWorkspace(drawn: {
 
 // Writing a message is offered from the row's own menu, so the list is drawn under something that answers for it. It
 // records rather than composes: what a menu item does is ask, and what the composer does with the ask is its own test.
-const composing: Composing = { offered: true, opening: null, compose: vi.fn(), close: vi.fn() };
+const composing: Composing = { offered: true, drafts: false, opening: null, compose: vi.fn(), close: vi.fn() };
 
 function listUnder(
     transport: MailFathomTransport,

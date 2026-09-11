@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.ReplyDrafts;
@@ -74,7 +75,7 @@ public sealed class ClientReplyDraftingEndpointTests
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
     }
 
-    /// <summary>A request naming no message names nothing to answer, which is a mistake rather than an empty mailbox.</summary>
+    /// <summary>An all-zero identifier with nothing typed beside it names no message and says nothing, which is the one shape refused.</summary>
     [Fact]
     public async Task DraftReplyAsync_ARequestNamingNoMessage_IsRefused()
     {
@@ -83,6 +84,64 @@ public sealed class ClientReplyDraftingEndpointTests
 
         // Assert
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
+    }
+
+    /// <summary>A composer with nothing behind it and nothing typed into it has nothing to draft from, and says which.</summary>
+    [Fact]
+    public async Task DraftReplyAsync_ARequestNamingNeitherAMessageNorAnInstruction_IsRefused()
+    {
+        // Act
+        var result = await this.DraftAsync(new ClientReplyDraftRequest(AnsweredEmailId: null, null, "  "));
+
+        // Assert
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
+    }
+
+    /// <summary>A message answering nothing is drafted from what its author asked for, which is the composer's own case.</summary>
+    [Fact]
+    public async Task DraftReplyAsync_ARequestNamingNoMessageButAnInstruction_IsDrafted()
+    {
+        // Arrange
+        var drafting = Drafting(
+            SourceReader(holdsTheMessage: false),
+            DraftingReturning(ReplyDraft.Written("We are asking for a 5% cap.", [], [])));
+
+        // Act
+        var result = await this.DraftAsync(
+            new ClientReplyDraftRequest(AnsweredEmailId: null, null, "Ask Contoso for a 5% CPI cap."),
+            drafting);
+
+        // Assert
+        var answer = Assert.IsType<Ok<ClientReplyDraftResponse>>(result.Result).Value;
+
+        Assert.NotNull(answer);
+        Assert.True(answer.Drafted);
+        Assert.Equal("We are asking for a 5% cap.", answer.Body);
+    }
+
+    /// <summary>
+    /// An all-zero identifier says what omitting the field says, so it is read as the same thing rather than refused
+    /// separately: a caller that sends one and states what the message should be about is drafting from nothing
+    /// behind, exactly as one that sent no identifier at all.
+    /// </summary>
+    [Fact]
+    public async Task DraftReplyAsync_AnEmptyIdentifierBesideAnInstruction_IsDraftedRatherThanRefused()
+    {
+        // Arrange
+        var drafting = Drafting(
+            SourceReader(holdsTheMessage: false),
+            DraftingReturning(ReplyDraft.Written("We are asking for a 5% cap.", [], [])));
+
+        // Act
+        var result = await this.DraftAsync(
+            new ClientReplyDraftRequest(Guid.Empty, null, "Ask Contoso for a 5% CPI cap."),
+            drafting);
+
+        // Assert
+        var answer = Assert.IsType<Ok<ClientReplyDraftResponse>>(result.Result).Value;
+
+        Assert.NotNull(answer);
+        Assert.True(answer.Drafted);
     }
 
     /// <summary>A text past its bound is refused in the words of the bound rather than shortened where nobody sees it.</summary>
@@ -281,7 +340,17 @@ public sealed class ClientReplyDraftingEndpointTests
             scopeResolver,
             SensitiveContentEgressGuards.Inactive(),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
+            LanguagesAnswering(MailUserLanguage.English),
             derivesStyleFromSentMail: true);
+    }
+
+    /// <summary>Answers one language for whoever is asked about, which the endpoint never states itself.</summary>
+    private static IMailUserLanguages LanguagesAnswering(MailUserLanguage language)
+    {
+        var languages = Substitute.For<IMailUserLanguages>();
+        languages.ForUser(Arg.Any<MailUserId>()).Returns(language);
+
+        return languages;
     }
 
     private Task<Results<Ok<ClientReplyDraftResponse>, NotFound, ProblemHttpResult>> DraftAsync(

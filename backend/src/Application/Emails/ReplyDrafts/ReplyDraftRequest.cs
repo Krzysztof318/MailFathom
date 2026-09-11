@@ -19,6 +19,12 @@ namespace MailFathom.Application.Emails.ReplyDrafts;
 /// correspondence somebody pointed at — the paragraph they are actually answering — and an instruction is what they
 /// want said. Both are optional, and a request carrying neither is the ordinary one: reply to this conversation.
 /// </para>
+/// <para>
+/// <b>A request naming no message is the composer with nothing behind it</b>, which the same drafting answers because
+/// it is the same act: somebody asking for text they will read, edit, and decide about. What changes is that there is
+/// no correspondence to ground it in, so nothing is read, nothing is cited, nobody is proposed, and the instruction is
+/// the whole of the request — which is why it is required there and optional beside a message.
+/// </para>
 /// </remarks>
 public sealed record ReplyDraftRequest
 {
@@ -30,8 +36,8 @@ public sealed record ReplyDraftRequest
     /// <remarks>The bound one message of the conversation already travels under, because a selection is part of one and a longer one would be the exchange sent twice.</remarks>
     public const int MaximumSelectionLength = 4_000;
 
-    /// <summary>Gets the stored message the reply answers.</summary>
-    public required StoredEmailId AnsweredEmailId { get; init; }
+    /// <summary>Gets the stored message the reply answers, or <see langword="null" /> where the message being written answers none.</summary>
+    public StoredEmailId? AnsweredEmailId { get; init; }
 
     /// <summary>Gets the part of the correspondence the draft is to answer, or <see langword="null" /> to answer the conversation as a whole.</summary>
     public string? Selection { get; init; }

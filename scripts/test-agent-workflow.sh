@@ -9815,6 +9815,8 @@ drafts.ts drafts - -
 drafts.ts savedDraft POST /api/client/drafts
 drafts.ts queuedSend POST /api/client/drafts/{draftId}/send
 drafts.ts refusedSend - -
+drafts.ts draftsReplies GET /api/client/replies/drafting
+drafts.ts draftedReply POST /api/client/replies/drafting
 mail.ts timelineRow GET /api/client/emails
 mail.ts timelinePage GET /api/client/emails
 mail.ts conversationTimelineRow GET /api/client/emails

@@ -26,6 +26,7 @@ function drawConfirmation(composition: Composition = addressed, disabled = false
             <SendConfirmation
                 asked={createRef<HTMLDialogElement>()}
                 composition={composition}
+                draftUnaccepted={false}
                 disabled={disabled}
                 onSend={sent}
             />

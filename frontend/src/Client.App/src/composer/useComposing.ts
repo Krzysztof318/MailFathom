@@ -23,6 +23,15 @@ export interface Composing {
      */
     readonly offered: boolean;
 
+    /**
+     * Whether the deployment writes a draft for whatever is being composed.
+     *
+     * Beside `offered` rather than folded into it, because the two are different refusals: a credential that may not
+     * write a draft meets controls that say so, and a deployment with no writer simply draws no drafting block and no
+     * offer of one under a correspondence. Both have to be answered before anything promises a draft.
+     */
+    readonly drafts: boolean;
+
     /** What is being written, or `null` where the composer is closed. */
     readonly opening: ComposerOpening | null;
 

@@ -17,6 +17,7 @@ import {
     type MessageOpened,
     type ReadMarking,
 } from '../readMarking/useReadMarking';
+import { ComposingContext, type Composing } from '../composer/useComposing';
 import { IntentField } from '../shell/IntentField';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
 import { emptyWorkspace, useWorkspace, type Workspace } from '../workspace/useWorkspace';
@@ -32,6 +33,16 @@ import { ReadingPane } from './ReadingPane';
 
 // The network boundary is the transport and it is the whole of what these tests fake, so the routes the pane asks for,
 // the parsing that reads the answers, and the failure mapping are all under test rather than replaced.
+
+// The field asks whether the deployment writes a draft, which decides whether its press drafts one or asks a question.
+// Nothing here is about drafting, so it answers the deployment that writes none and the press stays the question.
+const writesNoDraft: Composing = {
+    offered: false,
+    drafts: false,
+    opening: null,
+    compose: () => undefined,
+    close: () => undefined,
+};
 
 const session: ClientSession = {
     baseAddress: 'https://mail.example.invalid',
@@ -896,7 +907,9 @@ describe('ReadingPane selection', () => {
                         <LinkOpenerContext value={() => Promise.resolve()}>
                             <AttachmentExchangeContext value={deliversNothing}>
                                 <OpenAttachmentContext value={() => undefined}>
-                                    <IntentField accounts={[]} />
+                                    <ComposingContext value={writesNoDraft}>
+                                        <IntentField accounts={[]} />
+                                    </ComposingContext>
                                     <ReadingPane
                                         session={session}
                                         transport={deploymentDescribing()}

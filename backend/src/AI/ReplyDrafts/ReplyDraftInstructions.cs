@@ -2,9 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text;
 using MailFathom.Application.Emails.ReplyDrafts;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.AI.ReplyDrafts;
 
@@ -35,19 +37,41 @@ namespace MailFathom.AI.ReplyDrafts;
 /// </remarks>
 internal static class ReplyDraftInstructions
 {
-    /// <summary>The instruction the agent is composed with.</summary>
-    internal static string Text { get; } = string.Create(
+    /// <summary>The instruction for each language this deployment writes in, composed once per language.</summary>
+    /// <remarks>Composed from the members rather than written out twice, so the set is the enumeration's and a language added to it arrives here without this file being edited.</remarks>
+    private static readonly FrozenDictionary<MailUserLanguage, string> TextByLanguage = Enum
+        .GetValues<MailUserLanguage>()
+        .ToFrozenDictionary(static language => language, Compose);
+
+    /// <summary>Gets the instruction the agent is composed with for one person's language.</summary>
+    /// <param name="language">The language this deployment writes for the person the draft is for, which decides a draft answering no correspondence.</param>
+    /// <returns>The instruction text.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the value names no language this deployment writes in.</exception>
+    internal static string TextFor(MailUserLanguage language) => TextByLanguage.TryGetValue(language, out var text)
+        ? text
+        : throw new ArgumentOutOfRangeException(
+            nameof(language),
+            language,
+            "The reply-drafting agent is composed for a language MailFathom writes in.");
+
+    private static string Compose(MailUserLanguage language) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
         You draft a reply to one email conversation from somebody's own mailbox, in their own voice. What you write is
         a draft they will read, edit, and decide about: it is not sent, it is not filed anywhere, and nothing you write
         reaches anybody until that person acts on it.
 
+        The turn may carry no conversation at all. That is somebody starting a message rather than answering one, and
+        what they asked for is then the whole of the request: write that message, cite nothing, propose nobody, and
+        leave both arrays empty.
+
         Answer with one JSON object and nothing else — no prose around it, no code fence.
 
         "body" is the reply itself, as plain text, at most {ReplyDraft.MaximumBodyLength} characters. Write the message
         alone: no subject line, no "To:", no quoted history, and no note to the person about what you did. Write it in
-        the language the conversation is written in.
+        the language the conversation is written in, because that is what the person receiving it reads; where the turn
+        carries no conversation, write it in {language}. Either way, an instruction asking for a particular language
+        outranks both — it is the one thing the person said about the message themselves.
 
         "claims" is an array of at most {ReplyDraft.MaximumClaims} objects, one for each thing the reply asserts that
         somebody could be wrong about — a price, a quantity, a date, a deadline, a name, a commitment either side made.
@@ -93,27 +117,33 @@ internal static class ReplyDraftInstructions
 
         var text = new StringBuilder();
 
-        text.Append(CultureInfo.InvariantCulture, $"Subject: {turn.Subject ?? "(none)"}\n\n");
-
-        text.Append("People in this conversation\n");
-
-        foreach (var person in turn.People)
+        // Every heading below names something the turn carries, so a turn carrying no correspondence writes none of
+        // them. An empty "The conversation" section would be read as an exchange whose text could not be fetched,
+        // which is a different case with a different right answer, and this one is a message answering nothing.
+        if (turn.Messages.Count > 0)
         {
-            text.Append(
-                CultureInfo.InvariantCulture,
-                $"Person {person.Position}: {person.DisplayName ?? "(unnamed)"}\n");
-        }
+            text.Append(CultureInfo.InvariantCulture, $"Subject: {turn.Subject ?? "(none)"}\n\n");
 
-        text.Append("\nThe conversation\n\n");
+            text.Append("People in this conversation\n");
 
-        foreach (var message in turn.Messages)
-        {
-            text.Append(CultureInfo.InvariantCulture, $"Message {message.Position}\n");
-            text.Append(CultureInfo.InvariantCulture, $"From: {message.AuthorDisplayName ?? "(unnamed)"}\n");
-            text.Append(
-                CultureInfo.InvariantCulture,
-                $"Written: {message.SentAt?.ToString("O", CultureInfo.InvariantCulture) ?? "(unknown)"}\n");
-            text.Append(CultureInfo.InvariantCulture, $"{message.Text}\n\n");
+            foreach (var person in turn.People)
+            {
+                text.Append(
+                    CultureInfo.InvariantCulture,
+                    $"Person {person.Position}: {person.DisplayName ?? "(unnamed)"}\n");
+            }
+
+            text.Append("\nThe conversation\n\n");
+
+            foreach (var message in turn.Messages)
+            {
+                text.Append(CultureInfo.InvariantCulture, $"Message {message.Position}\n");
+                text.Append(CultureInfo.InvariantCulture, $"From: {message.AuthorDisplayName ?? "(unnamed)"}\n");
+                text.Append(
+                    CultureInfo.InvariantCulture,
+                    $"Written: {message.SentAt?.ToString("O", CultureInfo.InvariantCulture) ?? "(unknown)"}\n");
+                text.Append(CultureInfo.InvariantCulture, $"{message.Text}\n\n");
+            }
         }
 
         if (turn.Selection is { } selection)

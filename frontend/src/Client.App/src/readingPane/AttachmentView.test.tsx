@@ -2,8 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { act, fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailAttachment } from '@mailfathom/client-backend';
 import {
     AttachmentExchangeContext,
@@ -384,3 +384,68 @@ function sizeReadAs(octets: number): string {
         maximumFractionDigits: 1,
     }).format(octets / 1_000);
 }
+
+// A document is the one kind whose answer follows the engine rather than the file: an engine carrying a viewer of its
+// own draws the PDF, and one carrying none offers the download it always did. `navigator.pdfViewerEnabled` is what the
+// client asks, and jsdom declares it on neither side, so both cases state it.
+describe('AttachmentView documents', () => {
+    const declaredViewer = Object.getOwnPropertyDescriptor(Navigator.prototype, 'pdfViewerEnabled');
+
+    function theEngineDrawsDocuments(drawn: boolean): void {
+        Object.defineProperty(navigator, 'pdfViewerEnabled', { configurable: true, value: drawn });
+    }
+
+    afterEach(() => {
+        Reflect.deleteProperty(navigator, 'pdfViewerEnabled');
+
+        if (declaredViewer !== undefined) {
+            Object.defineProperty(Navigator.prototype, 'pdfViewerEnabled', declaredViewer);
+        }
+    });
+
+    it('draws the file where the engine has a viewer of its own', async () => {
+        theEngineDrawsDocuments(true);
+
+        const held = reading({ outcome: 'shown', content: 'blob:https://mail.example.invalid/one' });
+        drawing(contract, held.exchange);
+
+        const drawn = await screen.findByTitle('contract.pdf');
+
+        expect(drawn.getAttribute('src')).toBe('blob:https://mail.example.invalid/one');
+        expect(drawn.getAttribute('sandbox')).toBe('');
+        expect(held.asked[0]?.shown).toEqual({ as: 'document' });
+    });
+
+    // The octets behind an object address stay alive for as long as anything holds the address, so a surface that
+    // drew one and went away without releasing it is a file's worth of memory held until the page is navigated —
+    // which, for a reader opening one attachment after another, is every file they looked at.
+    it('releases the address it drew the document over when the surface goes away', async () => {
+        theEngineDrawsDocuments(true);
+
+        const released = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+
+        try {
+            drawing(contract, reading({ outcome: 'shown', content: 'blob:mailfathom/one' }).exchange);
+            await screen.findByTitle('contract.pdf');
+
+            expect(released).not.toHaveBeenCalled();
+
+            cleanup();
+
+            expect(released).toHaveBeenCalledWith('blob:mailfathom/one');
+        } finally {
+            released.mockRestore();
+        }
+    });
+
+    it('offers the download where the engine draws none, and fetches nothing to say so', () => {
+        theEngineDrawsDocuments(false);
+
+        const held = reading();
+        drawing(contract, held.exchange);
+
+        expect(screen.getByRole('button', { name: 'Download contract.pdf' })).toBeDefined();
+        expect(screen.queryByTitle('contract.pdf')).toBeNull();
+        expect(held.asked).toEqual([]);
+    });
+});

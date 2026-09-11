@@ -25,54 +25,84 @@ describe('shownAttachment', () => {
     it.each(['image/avif', 'image/bmp', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'])(
         'draws %s as a picture',
         (mediaType) => {
-            expect(shownAttachment(file({ mediaType }))).toEqual({ as: 'picture' });
+            expect(shownAttachment(file({ mediaType }), true)).toEqual({ as: 'picture' });
         },
     );
 
     it('reads the kind under whatever case and parameters the sender wrote it in', () => {
-        expect(shownAttachment(file({ mediaType: 'IMAGE/PNG; name=photo.png' }))).toEqual({ as: 'picture' });
+        expect(shownAttachment(file({ mediaType: 'IMAGE/PNG; name=photo.png' }), true)).toEqual({ as: 'picture' });
     });
 
     it('draws text under the character set the message declared', () => {
-        expect(shownAttachment(file({ mediaType: 'text/plain; charset=iso-8859-2' }))).toEqual({
+        expect(shownAttachment(file({ mediaType: 'text/plain; charset=iso-8859-2' }), true)).toEqual({
             as: 'text',
             charset: 'iso-8859-2',
         });
     });
 
     it('draws text the message declared no character set for as UTF-8', () => {
-        expect(shownAttachment(file())).toEqual({ as: 'text', charset: 'utf-8' });
+        expect(shownAttachment(file(), true)).toEqual({ as: 'text', charset: 'utf-8' });
     });
 
     it('draws a text kind that is not plain text as its own source rather than refusing it', () => {
-        expect(shownAttachment(file({ fileName: 'page.html', mediaType: 'text/html' }))).toEqual({
+        expect(shownAttachment(file({ fileName: 'page.html', mediaType: 'text/html' }), true)).toEqual({
             as: 'text',
             charset: 'utf-8',
         });
     });
 
-    it('refuses a PDF, which is the kind neither head can be given one answer for', () => {
-        expect(shownAttachment(file({ fileName: 'contract.pdf', mediaType: 'application/pdf' }))).toBe('kindNotShown');
+    it('draws a PDF where the engine has a viewer of its own', () => {
+        expect(shownAttachment(file({ fileName: 'contract.pdf', mediaType: 'application/pdf' }), true)).toEqual({
+            as: 'document',
+        });
+    });
+
+    it('offers a PDF as a download where the engine draws none, which is what a kind it cannot draw says', () => {
+        expect(shownAttachment(file({ fileName: 'contract.pdf', mediaType: 'application/pdf' }), false)).toBe(
+            'kindNotShown',
+        );
+    });
+
+    it('reads a PDF under whatever case and parameters the sender wrote its kind in', () => {
+        expect(shownAttachment(file({ mediaType: 'Application/PDF; name=contract.pdf' }), true)).toEqual({
+            as: 'document',
+        });
+    });
+
+    it('refuses a document larger than this surface draws, whatever the engine could render', () => {
+        expect(shownAttachment(file({ mediaType: 'application/pdf', sizeOctets: 16 * 1024 * 1024 + 1 }), true)).toBe(
+            'largerThanShown',
+        );
+    });
+
+    it('draws a document exactly as large as this surface draws', () => {
+        expect(shownAttachment(file({ mediaType: 'application/pdf', sizeOctets: 16 * 1024 * 1024 }), true)).toEqual({
+            as: 'document',
+        });
+    });
+
+    it('leaves a picture drawn on a head that renders no document, the two being separate decisions', () => {
+        expect(shownAttachment(file({ mediaType: 'image/png' }), false)).toEqual({ as: 'picture' });
     });
 
     it('refuses an SVG, which is markup a sender wrote however an element would draw it', () => {
-        expect(shownAttachment(file({ fileName: 'logo.svg', mediaType: 'image/svg+xml' }))).toBe('kindNotShown');
+        expect(shownAttachment(file({ fileName: 'logo.svg', mediaType: 'image/svg+xml' }), true)).toBe('kindNotShown');
     });
 
     it('refuses a picture larger than this surface draws', () => {
-        expect(shownAttachment(file({ mediaType: 'image/png', sizeOctets: 8 * 1024 * 1024 + 1 }))).toBe(
+        expect(shownAttachment(file({ mediaType: 'image/png', sizeOctets: 8 * 1024 * 1024 + 1 }), true)).toBe(
             'largerThanShown',
         );
     });
 
     it('draws a picture exactly as large as this surface draws', () => {
-        expect(shownAttachment(file({ mediaType: 'image/png', sizeOctets: 8 * 1024 * 1024 }))).toEqual({
+        expect(shownAttachment(file({ mediaType: 'image/png', sizeOctets: 8 * 1024 * 1024 }), true)).toEqual({
             as: 'picture',
         });
     });
 
     it('refuses text larger than this surface lays out, which is the smaller of the two ceilings', () => {
-        expect(shownAttachment(file({ sizeOctets: 1024 * 1024 + 1 }))).toBe('largerThanShown');
+        expect(shownAttachment(file({ sizeOctets: 1024 * 1024 + 1 }), true)).toBe('largerThanShown');
     });
 });
 

@@ -110,6 +110,17 @@ function messageBody(): string {
     });
 }
 
+// What the deployment answers a drafting with, which is the message it wrote and what it says it rests on.
+function draftedReply(overrides: Readonly<Record<string, unknown>> = {}): string {
+    return JSON.stringify({
+        drafted: true,
+        body: 'We accept the two-hour response time.\nWe ask for a 5% cap.',
+        claims: [],
+        proposedRecipients: [],
+        ...overrides,
+    });
+}
+
 /** What each route answers with, so one test states only the answer it is about. */
 interface Answers {
     readonly message?: { readonly status: number; readonly body: string };
@@ -118,6 +129,7 @@ interface Answers {
     readonly send?: { readonly status: number; readonly body: string };
     readonly withdrawal?: { readonly status: number; readonly body: string };
     readonly discard?: { readonly status: number; readonly body: string };
+    readonly drafting?: { readonly status: number; readonly body: string };
 }
 
 function deployment(answers: Answers = {}): { transport: MailFathomTransport; asked: ClientRequest[] } {
@@ -136,6 +148,10 @@ function deployment(answers: Answers = {}): { transport: MailFathomTransport; as
 }
 
 function answerFor(request: ClientRequest, answers: Answers): { status: number; body: string } {
+    if (request.path.endsWith('/replies/drafting')) {
+        return answers.drafting ?? { status: 200, body: draftedReply() };
+    }
+
     if (request.path.includes('/body')) {
         return answers.body ?? { status: 200, body: readBody() };
     }
@@ -185,6 +201,7 @@ function drawComposer(
     accounts: readonly MailAccount[] = [work],
     online = true,
     upload: AttachmentUpload = uploadsOneFile,
+    drafts = false,
 ): { closed: ReturnType<typeof vi.fn>; asked: ClientRequest[]; upload: AttachmentUpload } {
     const closed = vi.fn();
     const { transport, asked } = deployment(answers);
@@ -215,6 +232,7 @@ function drawComposer(
                                 accounts={accounts}
                                 opening={opening}
                                 online={online}
+                                drafts={drafts}
                                 onClosed={onClosed}
                             />
                         )}
@@ -797,6 +815,7 @@ describe('Composer, a message of its own', () => {
                             transport={transport}
                             accounts={[work]}
                             opening={{ kind: 'new' }}
+                            drafts={false}
                             online
                             onClosed={vi.fn()}
                         />
@@ -1216,5 +1235,175 @@ describe('Composer, an answer', () => {
         drawComposer(replying);
 
         expect(wordsWritten()).toBe('Half an answer');
+    });
+});
+
+// The block the design draws over the body, and the one thing it is for: a message written by the deployment and put
+// where its author can edit it, rather than an answer somewhere else. Everything here runs with drafting on, because
+// a deployment that writes none draws none of it.
+describe('Composer drafting', () => {
+    it('draws nothing of it where the deployment writes no draft', async () => {
+        drawComposer();
+
+        expect(await screen.findByRole('textbox', { name: 'Message' })).toBeDefined();
+        expect(screen.queryByRole('button', { name: 'Write a draft' })).toBeNull();
+    });
+
+    it('names the message it answers and what its author asked for', async () => {
+        const { asked } = drawComposer(
+            { kind: 'answer', answers: 'senderOnly', storedEmailId: messageId },
+            {},
+            [work],
+            true,
+            uploadsOneFile,
+            true,
+        );
+
+        fireEvent.change(await screen.findByRole('textbox', { name: 'What the draft should say' }), {
+            target: { value: 'ask for a 5% cap' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Write a draft' }));
+
+        await waitFor(() => {
+            expect(asked.some((request) => request.path.endsWith('/replies/drafting'))).toBe(true);
+        });
+
+        const drafting = asked.find((request) => request.path.endsWith('/replies/drafting'));
+        const sent = JSON.parse(drafting?.body ?? '') as { answeredEmailId: string | null; instruction: string };
+
+        expect(drafting?.method).toBe('POST');
+        expect(sent.answeredEmailId).toBe(messageId);
+        expect(sent.instruction).toContain('ask for a 5% cap');
+    });
+
+    it('names no message where the composer answers none, which is a message of its own being written', async () => {
+        const { asked } = drawComposer({ kind: 'new' }, {}, [work], true, uploadsOneFile, true);
+
+        fireEvent.change(await screen.findByRole('textbox', { name: 'What the draft should say' }), {
+            target: { value: 'tell Contoso we are ready' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Write a draft' }));
+
+        await waitFor(() => {
+            expect(asked.some((request) => request.path.endsWith('/replies/drafting'))).toBe(true);
+        });
+
+        const drafting = asked.find((request) => request.path.endsWith('/replies/drafting'));
+
+        expect((JSON.parse(drafting?.body ?? '') as { answeredEmailId: string | null }).answeredEmailId).toBeNull();
+    });
+
+    it('puts the draft in the message being written, and offers the way back to what was there', async () => {
+        drawComposer({ kind: 'new' }, {}, [work], true, uploadsOneFile, true);
+
+        const words = await screen.findByRole('textbox', { name: 'Message' });
+
+        fireEvent.input(words, { target: { innerHTML: '<p>What I had written</p>' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Write a draft' }));
+
+        expect(await screen.findByText('We accept the two-hour response time.')).toBeDefined();
+        expect(screen.getByText('AI draft — check the facts and tone before sending')).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Restore my version' }));
+
+        expect(await screen.findByText('What I had written')).toBeDefined();
+        expect(screen.queryByText('We accept the two-hour response time.')).toBeNull();
+    });
+
+    it('gives back what its author wrote rather than the draft before it, where a second one was asked for', async () => {
+        drawComposer({ kind: 'new' }, {}, [work], true, uploadsOneFile, true);
+
+        const words = await screen.findByRole('textbox', { name: 'Message' });
+
+        fireEvent.input(words, { target: { innerHTML: '<p>What I had written</p>' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Write a draft' }));
+
+        await screen.findByText('We accept the two-hour response time.');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Shorten' }));
+
+        await waitFor(() => {
+            expect(screen.getAllByText('We accept the two-hour response time.')).toHaveLength(1);
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Restore my version' }));
+
+        expect(await screen.findByText('What I had written')).toBeDefined();
+    });
+
+    it('cautions before a send that the words are a draft nobody has accepted, until somebody does', async () => {
+        drawComposer({ kind: 'new' }, {}, [work], true, uploadsOneFile, true);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Write a draft' }));
+
+        await screen.findByText('AI draft — check the facts and tone before sending');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+        expect(
+            screen.getByText('The words are a draft your deployment wrote and you have not accepted yet.'),
+        ).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to writing' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+        expect(
+            screen.queryByText('The words are a draft your deployment wrote and you have not accepted yet.'),
+        ).toBeNull();
+    });
+
+    it('says a deployment that wrote nothing wrote nothing, and leaves the message as it was', async () => {
+        drawComposer(
+            { kind: 'new' },
+            {
+                drafting: {
+                    status: 200,
+                    body: JSON.stringify({ drafted: false, body: '', claims: [], proposedRecipients: [] }),
+                },
+            },
+            [work],
+            true,
+            uploadsOneFile,
+            true,
+        );
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Write a draft' }));
+
+        expect(await screen.findByText('Nothing was drafted')).toBeDefined();
+        expect(screen.queryByText('AI draft — check the facts and tone before sending')).toBeNull();
+    });
+
+    it('tells a spent allowance apart from a deployment that wrote nothing', async () => {
+        drawComposer({ kind: 'new' }, { drafting: { status: 429, body: '' } }, [work], true, uploadsOneFile, true);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Write a draft' }));
+
+        expect(
+            await screen.findByText(
+                'Your deployment has spent what it allows its writer for now. Whoever runs it can raise that, and nothing you have written has been touched.',
+            ),
+        ).toBeDefined();
+    });
+
+    it('asks for the draft as it opens where the bar under a correspondence asked for one', async () => {
+        const { asked } = drawComposer(
+            { kind: 'answer', answers: 'senderOnly', storedEmailId: messageId, asked: 'accept the SLA' },
+            {},
+            [work],
+            true,
+            uploadsOneFile,
+            true,
+        );
+
+        expect(await screen.findByText('We accept the two-hour response time.')).toBeDefined();
+
+        const drafting = asked.filter((request) => request.path.endsWith('/replies/drafting'));
+
+        expect(drafting).toHaveLength(1);
+        expect(JSON.parse(drafting[0]?.body ?? '')).toMatchObject({
+            answeredEmailId: messageId,
+            instruction: 'Write this message. accept the SLA',
+        });
     });
 });

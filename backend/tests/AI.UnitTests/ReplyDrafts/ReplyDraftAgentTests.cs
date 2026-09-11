@@ -14,6 +14,7 @@ using MailFathom.Application.Emails.ReplyDrafts;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -194,7 +195,8 @@ public sealed class ReplyDraftAgentTests
 
     private static ReplyDraftBrief Brief(
         string text = "It is 4 200 zloty.",
-        IReadOnlyList<string>? styleSamples = null)
+        IReadOnlyList<string>? styleSamples = null,
+        MailUserLanguage language = MailUserLanguage.English)
     {
         EmailAddress.TryCreate("Karolina", "karolina@example.test", out var karolina);
 
@@ -212,7 +214,8 @@ public sealed class ReplyDraftAgentTests
                 [new ReplyDraftParticipant(0, karolina)],
                 styleSamples ?? []),
             Selection: null,
-            Instruction: null);
+            Instruction: null,
+            language);
     }
 
     /// <summary>Builds the chat-completion payload a provider answers with.</summary>

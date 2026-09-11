@@ -12,12 +12,19 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.ReplyDrafts;
 
-/// <summary>Drafts a reply to one of the acting user's messages, out of the conversation and the way they write.</summary>
+/// <summary>Drafts what somebody is about to write, out of the conversation they are answering and the way they write.</summary>
 /// <remarks>
 /// <para>
 /// <b>It produces a local artifact and takes no act.</b> Nothing here sends, queues, or writes to a mail server, and
 /// nothing is stored: the reply comes back as text the person owns, and saving it as a draft or sending it stays where
 /// those acts already are, behind somebody confirming them.
+/// </para>
+/// <para>
+/// <b>A request naming no message is the same act over an empty composer</b>, and it is answered here rather than by a
+/// second use case: the permission, the ledger, the egress guard, and the bounds are all the same decisions, and
+/// splitting it would leave two places for a deployment to be turned on. What differs is only that nothing is read —
+/// no conversation, no participants, no sent mail — so the instruction its author typed is the whole of the request
+/// and is required, and the language comes from that person's record rather than from an exchange there is none of.
 /// </para>
 /// <para>
 /// The correspondence is read under the same scope the conversation screen reads it under — every account this user
@@ -69,6 +76,7 @@ public sealed class MailReplyDrafting
     private readonly MailboxScopeResolver scopeResolver;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly AccessAuthorization authorization;
+    private readonly IMailUserLanguages languages;
     private readonly bool derivesStyleFromSentMail;
 
     /// <summary>Initializes the drafting.</summary>
@@ -77,6 +85,7 @@ public sealed class MailReplyDrafting
     /// <param name="scopeResolver">Decides which accounts and folders the conversation is read across.</param>
     /// <param name="egressGuard">Scans what the draft publishes to a client, where this deployment scans anything.</param>
     /// <param name="authorization">Enforces the permission this drafting is behind.</param>
+    /// <param name="languages">Answers which language this deployment writes for the acting user, which decides a draft answering no correspondence.</param>
     /// <param name="derivesStyleFromSentMail">Whether the deployment derives a manner from the account's own sent mail at all.</param>
     /// <exception cref="ArgumentNullException">Thrown when any dependency is <see langword="null" />.</exception>
     public MailReplyDrafting(
@@ -85,6 +94,7 @@ public sealed class MailReplyDrafting
         MailboxScopeResolver scopeResolver,
         SensitiveContentEgressGuard egressGuard,
         AccessAuthorization authorization,
+        IMailUserLanguages languages,
         bool derivesStyleFromSentMail)
     {
         ArgumentNullException.ThrowIfNull(sourceReader);
@@ -92,21 +102,23 @@ public sealed class MailReplyDrafting
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(authorization);
+        ArgumentNullException.ThrowIfNull(languages);
 
         this.sourceReader = sourceReader;
         this.writer = writer;
         this.scopeResolver = scopeResolver;
         this.egressGuard = egressGuard;
         this.authorization = authorization;
+        this.languages = languages;
         this.derivesStyleFromSentMail = derivesStyleFromSentMail;
     }
 
     /// <summary>Drafts a reply to one of the acting user's messages.</summary>
-    /// <param name="request">Which message is being answered, and what its author asked the reply to say.</param>
+    /// <param name="request">Which message is being answered, if any, and what its author asked the reply to say.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>
-    /// The draft, <see cref="ReplyDraft.Nothing" /> where none could be written, or <see langword="null" /> where this
-    /// user holds no such message.
+    /// The draft, <see cref="ReplyDraft.Nothing" /> where none could be written, or <see langword="null" /> where the
+    /// request named a message this user does not hold.
     /// </returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="MailAnsweringBudgetExhaustedException">Thrown when this deployment has spent what it allows a provider for the period.</exception>
@@ -121,41 +133,69 @@ public sealed class MailReplyDrafting
         // is charged to the same allowance a question is.
         this.authorization.RequirePermission(MailFathomPermission.MailAsk);
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
+        var user = this.scopeResolver.User;
 
-        var scope = this.scopeResolver.ReadableScope([], [], JunkMailInclusion.Included);
+        using var actingFor = this.egressGuard.ActingFor(user);
 
-        if (scope.AccountIds.Count is 0)
+        var instruction = Bounded(request.Instruction, ReplyDraftRequest.MaximumInstructionLength);
+
+        ReplyDraftSources sources;
+
+        if (request.AnsweredEmailId is { } answered)
         {
-            return null;
+            var read = await this.AnsweredSourcesAsync(answered, cancellationToken);
+
+            if (read is null)
+            {
+                return null;
+            }
+
+            if (read.Messages.Count is 0)
+            {
+                // A conversation this deployment has stored no readable text for. There is nothing to ground a reply
+                // in, and asking a provider to write one anyway would produce a fluent message resting on nothing.
+                return ReplyDraft.Nothing;
+            }
+
+            sources = read;
         }
-
-        var sources = await this.sourceReader.ReadSourcesAsync(
-            request.AnsweredEmailId,
-            scope,
-            this.Bounds(),
-            cancellationToken);
-
-        if (sources is null)
+        else if (instruction is null)
         {
-            return null;
-        }
-
-        if (sources.Messages.Count is 0)
-        {
-            // A conversation this deployment has stored no readable text for. There is nothing to ground a reply in,
-            // and asking a provider to write one anyway would produce a fluent message resting on nothing at all.
+            // Nothing answers nothing. A drafting with no correspondence behind it and no ask in front of it is a
+            // provider call made to invent a message, which is the one thing this use case is not for; the composer's
+            // own empty body is the better answer and costs nothing.
             return ReplyDraft.Nothing;
+        }
+        else
+        {
+            sources = ReplyDraftSources.Nothing;
         }
 
         var brief = new ReplyDraftBrief(
             sources,
             Bounded(request.Selection, ReplyDraftRequest.MaximumSelectionLength),
-            Bounded(request.Instruction, ReplyDraftRequest.MaximumInstructionLength));
+            instruction,
+            this.languages.ForUser(user));
 
         var draft = await this.writer.WriteAsync(brief, cancellationToken);
 
         return draft.WasWritten ? await this.GuardedAsync(draft, cancellationToken) : draft;
+    }
+
+    /// <summary>Reads the conversation one drafting answers, or nothing where this user holds no such message.</summary>
+    /// <remarks>
+    /// A scope holding no account and a message the scope does not admit are the same answer on purpose, which is what
+    /// keeps this from reporting that somebody else's correspondence exists.
+    /// </remarks>
+    private async Task<ReplyDraftSources?> AnsweredSourcesAsync(
+        StoredEmailId answeredEmailId,
+        CancellationToken cancellationToken)
+    {
+        var scope = this.scopeResolver.ReadableScope([], [], JunkMailInclusion.Included);
+
+        return scope.AccountIds.Count is 0
+            ? null
+            : await this.sourceReader.ReadSourcesAsync(answeredEmailId, scope, this.Bounds(), cancellationToken);
     }
 
     /// <summary>Cuts what somebody typed down to what one drafting may carry of it.</summary>

@@ -124,3 +124,16 @@ if (typeof window.matchMedia !== 'function') {
         }),
     });
 }
+
+// jsdom computes no layout, so it implements none of the methods that move one: `scrollIntoView` is absent from every
+// element. A component that places focus itself and then brings what it focused into view therefore calls a method
+// that is not there, and the whole file fails on that rather than on what it was asserting. What is put back is a
+// no-op, because nothing here can observe a scroll — what a test may assert is that the call was made, which it does
+// by putting a spy of its own over this.
+if (typeof Element.prototype.scrollIntoView !== 'function') {
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+        configurable: true,
+        writable: true,
+        value: () => undefined,
+    });
+}
