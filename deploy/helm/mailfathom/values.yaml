@@ -409,7 +409,8 @@ client:
 # rather than an omission: MailFathom reads one connection string, it carries the password, and this chart templates no
 # credential. For a Garnet the chart runs, what to write is the Service it renders and the password you gave it —
 # the release's full name with `-garnet` appended, which is `<release>-mailfathom-garnet` unless the release name
-# already contains `mailfathom`, and then `:6379,password=…`. The install notes print the whole string for you.
+# already contains `mailfathom`, then a colon and `garnet.service.port` below, then `,password=…`. The install notes
+# print the whole string for you, resolved.
 #
 # **Anyone who can subscribe on that endpoint reads every signal of every user of this deployment**, so it belongs
 # inside the same confidentiality boundary as the database. An endpoint somebody else operates owes `ssl=true` in the

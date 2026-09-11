@@ -7,8 +7,10 @@
 # The same refusal reached the other way, and the reason it is a second document rather than a second assertion on the
 # first: `client.enabled` is the page, and a deployment can serve the client surface without it — a downloaded head, or
 # a page hosted elsewhere, calling the routes this deployment publishes. So the chart reads the configuration files it
-# renders as well, and this proves it does. A deployment that serves no client surface at all is never refused over the
-# backplane, whatever its replica count, which is what `defaults-values.yaml` and `release-values.yaml` render.
+# renders as well, and this proves it does. It is also the shape that would run: the endpoint is on, so the page the
+# document beside this one serves has something to call. A deployment that serves no client surface at all is never
+# refused over the backplane, whatever its replica count, which is what `defaults-values.yaml` renders; the other
+# documents here render because they run one replica rather than because they serve nothing.
 image:
   repository: example/mailfathom
   tag: 0.1.0-verification

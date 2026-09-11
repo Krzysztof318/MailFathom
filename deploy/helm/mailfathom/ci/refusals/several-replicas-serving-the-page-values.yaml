@@ -4,11 +4,12 @@
 
 # refuses: signalBackplane.enabled is false while replicaCount is 2
 
-# More than one replica serving MailFathom's own page, with no backplane configured. Everything here is valid on its
-# own and the deployment would install, start, and answer every request — and its clients would be told nothing,
-# because a signal raised by the replica holding an account reaches only the connections that replica holds. That is
-# the one configuration in this chart that looks healthy and silently cannot do what it was configured for, so it is
-# refused at `helm install` rather than found from a mailbox that stopped updating.
+# More than one replica with `client.enabled`, which is the first of the three ways a deployment turns the client
+# surface on, and what this document proves is that the chart reads it. The page alone is not a shape that would run —
+# the application refuses to start with the page served and `ClientEndpoint` off, which `values.yaml` states where the
+# switch is described — so the deployment that installs, serves, and silently tells its clients nothing is the one the
+# document beside this one renders. Each of the three is refused at `helm install` rather than found from a mailbox
+# that stopped updating.
 image:
   repository: example/mailfathom
   tag: 0.1.0-verification

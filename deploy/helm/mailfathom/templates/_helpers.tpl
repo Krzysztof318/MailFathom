@@ -287,17 +287,26 @@ Whether the client surface is served is read from three places rather than one, 
 and the surface is a configuration key the chart does not otherwise look inside. A file that switches `ClientEndpoint`
 on counts, and so does the environment block, which outranks every file. Both are compared as the configuration binder
 compares them rather than for emptiness, because `"Enabled": "false"` is a spelling .NET binds to false while a Go
-template reads any non-empty string as true. The environment block is ranged over rather than looked up by name for the
-same reason on the other side: the provider keys its data case-insensitively, so `CLIENTENDPOINT__ENABLED` — the
-conventional shape of an environment variable — serves the surface exactly as the mixed-case spelling does, and an
-exact-case lookup would see nothing. A file that is not a JSON object is skipped rather than failing the render:
-`config.files` is the operator's text, and a refusal about the backplane is the wrong place to report a malformed one.
+template reads any non-empty string as true. Both are ranged over rather than looked up by name for the same reason:
+the JSON provider and the environment provider both key their data with an ordinal-ignore-case comparer, so
+`"clientEndpoint": { "enabled": true }` and `CLIENTENDPOINT__ENABLED` each serve the surface exactly as the spelling
+written here does, while an exact-case lookup into a Go map would see neither. A file that is not a JSON object is
+skipped rather than failing the render: `config.files` is the operator's text, and a refusal about the backplane is the
+wrong place to report a malformed one.
 */}}
 {{- $clientSurfaceServed := .Values.client.enabled -}}
 {{- range $name, $contents := .Values.config.files -}}
   {{- $document := fromJson $contents -}}
-  {{- if and (kindIs "map" $document) (eq (lower (toString (dig "ClientEndpoint" "Enabled" false $document))) "true") -}}
-    {{- $clientSurfaceServed = true -}}
+  {{- if kindIs "map" $document -}}
+    {{- range $section, $body := $document -}}
+      {{- if and (eq (lower $section) "clientendpoint") (kindIs "map" $body) -}}
+        {{- range $setting, $value := $body -}}
+          {{- if and (eq (lower $setting) "enabled") (eq (lower (toString $value)) "true") -}}
+            {{- $clientSurfaceServed = true -}}
+          {{- end -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
   {{- end -}}
 {{- end -}}
 {{- range $key, $value := (default dict .Values.config.extraEnvironment) -}}
