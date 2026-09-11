@@ -212,7 +212,7 @@
       <div style="{{ headerStyle }}">
         <div style="font-size:16px;font-weight:600">Discover</div>
         <sc-if value="{{ notMobile }}" hint-placeholder-val="{{ true }}">
-          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:7px;height:7px;border-radius:50%;background:var(--ok)"></span>Synced 2 min ago · 3 accounts</div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:7px;height:7px;border-radius:50%;background:var(--ok)"></span>Synced 2 min ago · {{ acctCount }}</div>
         </sc-if>
         <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
           <sc-if value="{{ hasRun }}" hint-placeholder-val="{{ false }}">
@@ -2409,7 +2409,7 @@
           <div style="{{ settingsTitleStyle }}">Settings</div>
           <div onClick="{{ closeSettings }}" style="{{ closeBtnAutoStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="{{ closeIconStyle }}">close</span></div>
         </div>
-        <div style="display:flex;align-items:stretch;gap:14px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--sub)">
+        <div style="display:flex;align-items:stretch;gap:18px;padding:0 22px;border-bottom:1px solid var(--line);background:var(--sub)">
           <sc-for list="{{ settingsTabs }}" as="tab" hint-placeholder-count="2">
             <div onClick="{{ tab.pick }}" style="{{ tab.style }}" style-hover="cursor:pointer;color:var(--text)">{{ tab.label }}</div>
           </sc-for>
@@ -2419,73 +2419,351 @@
           <div style="display:flex;align-items:center;gap:11px">
             <div style="{{ mePreviewStyle }}">{{ meInitials }}</div>
             <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
-              <input value="{{ meName }}" onChange="{{ onMeName }}" placeholder="Full name" style="width:100%;box-sizing:border-box;font-family:inherit;font-size:13px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:7px 10px;outline:none" style-focus="border-color:var(--accent)" />
+              <input value="{{ meName }}" onChange="{{ onMeName }}" placeholder="Full name" style="width:100%;max-width:440px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:7px 10px;outline:none" style-focus="border-color:var(--accent)" />
               <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
-                <div onClick="{{ pickPhoto }}" style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text2);border:1px solid var(--border2);border-radius:7px;padding:4px 9px" style-hover="cursor:pointer;background:var(--hover)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:14px;line-height:1">add_a_photo</span>Photo</div>
+                <div onClick="{{ pickPhoto }}" style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--text2);border:1px solid var(--border2);border-radius:7px;padding:4px 9px" style-hover="cursor:pointer;background:var(--hover)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1">add_a_photo</span>Photo</div>
                 <sc-if value="{{ meHasPhoto }}" hint-placeholder-val="{{ false }}">
-                  <div onClick="{{ removePhoto }}" title="Remove photo" style="display:flex;align-items:center;gap:4px;font-size:11.5px;color:var(--muted);border-radius:7px;padding:4px 8px" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:14px;line-height:1">delete</span>Remove</div>
+                  <div onClick="{{ removePhoto }}" title="Remove photo" style="display:flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);border-radius:7px;padding:4px 8px" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1">delete</span>Remove</div>
                 </sc-if>
-                <span style="font-size:10.5px;color:var(--faint)">JPG/PNG, max 1 MB</span>
+                <span style="font-size:11.5px;color:var(--faint)">JPG/PNG, max 1 MB</span>
               </div>
               <sc-if value="{{ photoError }}" hint-placeholder-val="{{ false }}">
-                <div style="font-size:10.5px;color:var(--warn)">{{ photoError }}</div>
+                <div style="font-size:11.5px;color:var(--warn)">{{ photoError }}</div>
               </sc-if>
             </div>
           </div>
           <input ref="{{ photoInputRef }}" type="file" accept="image/*" onChange="{{ onPhotoFile }}" style="display:none" />
-          <div style="font-size:11px;line-height:1.5;color:var(--muted);text-wrap:pretty">Your name and photo are stored on your MailFathom server and visible in every client you sign in to — we never send them to the mail server.</div>
+          <div style="font-size:13px;line-height:1.5;max-width:620px;color:var(--muted);text-wrap:pretty">Your name and photo are stored on your MailFathom server and visible in every client you sign in to — we never send them to the mail server.</div>
+</sc-if>
+          <sc-if value="{{ acctListShown }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:baseline;gap:8px;max-width:620px">
+              <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint);flex:1;min-width:0">MAIL ACCOUNTS</div>
+              <div style="font-size:12px;color:var(--faint)">{{ acctCount }}</div>
+            </div>
+            <sc-for list="{{ acctItems }}" as="ac" hint-placeholder-count="3">
+              <div onClick="{{ ac.edit }}" style="display:flex;align-items:flex-start;gap:10px;padding:10px 11px;max-width:620px;border:1px solid var(--line);border-radius:10px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover);border-color:var(--border2)">
+                <span style="{{ ac.dotStyle }}"></span>
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                  <div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ac.name }}</div>
+                  <div style="font-size:13px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ac.mail }}</div>
+                  <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ac.servers }}</div>
+                </div>
+                <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:20px;line-height:1;color:var(--faint);margin-top:2px">chevron_right</span>
+              </div>
+            </sc-for>
+            <div onClick="{{ acctAdd }}" style="display:flex;align-items:center;justify-content:center;gap:7px;padding:10px;max-width:620px;border:1px dashed var(--border2);border-radius:10px;font-size:14px;color:var(--accent-d)" style-hover="cursor:pointer;background:var(--accent-soft);border-color:var(--accent)">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1">add</span>Add account
+            </div>
+            <div style="font-size:13px;line-height:1.5;max-width:620px;color:var(--muted);text-wrap:pretty">Passwords stay in this device's keychain. MailFathom only keeps the server addresses so it can reconnect after a restart.</div>
+          </sc-if>
+          <sc-if value="{{ acctEditShown }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:9px">
+              <div onClick="{{ acctBack }}" title="Back to the list" style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;color:var(--muted)" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:21px;line-height:1">arrow_back</span></div>
+              <div style="flex:1;min-width:0;font-size:15px;font-weight:600">{{ acctTitle }}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.08em;color:var(--faint)">DISPLAY NAME</div>
+              <input value="{{ acctName }}" onChange="{{ onAcctName }}" placeholder="Karolina Kowalska" style="width:100%;max-width:440px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.08em;color:var(--faint)">E-MAIL ADDRESS</div>
+              <input value="{{ acctMail }}" onChange="{{ onAcctMail }}" placeholder="name@company.com" style="width:100%;max-width:440px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.08em;color:var(--faint)">LOGIN</div>
+              <input value="{{ acctLogin }}" onChange="{{ onAcctLogin }}" placeholder="same as the e-mail address" style="width:100%;max-width:440px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)" />
+              <sc-if value="{{ acctLoginHint }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:12.5px;color:var(--faint)">{{ acctLoginHint }}</div>
+              </sc-if>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.08em;color:var(--faint)">PASSWORD</div>
+              <div style="display:flex;align-items:center;gap:6px;max-width:440px">
+                <input type="{{ acctPassType }}" value="{{ acctPass }}" onChange="{{ onAcctPass }}" placeholder="••••••••" style="flex:1;min-width:0;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)" />
+                <div onClick="{{ toggleAcctPass }}" title="Show password" style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--border2);border-radius:8px;color:var(--muted)" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:20px;line-height:1">{{ acctPassIcon }}</span></div>
+              </div>
+            </div>
+            <div style="height:1px;background:var(--line2);margin:4px 0"></div>
+            <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">INCOMING MAIL — IMAP</div>
+            <div style="display:flex;gap:7px;max-width:540px">
+              <div style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:4px">
+                <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.08em;color:var(--faint)">HOST</div>
+                <input value="{{ acctImapHost }}" onChange="{{ onAcctImapHost }}" placeholder="imap.company.com" style="width:100%;max-width:440px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)" />
+              </div>
+              <div style="flex:0 0 80px;display:flex;flex-direction:column;gap:4px">
+                <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.08em;color:var(--faint)">PORT</div>
+                <input value="{{ acctImapPort }}" onChange="{{ onAcctImapPort }}" placeholder="993" style="width:100%;max-width:440px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)" />
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.08em;color:var(--faint)">ENCRYPTION</div>
+              <select value="{{ acctImapEnc }}" onChange="{{ onAcctImapEnc }}" style="width:100%;max-width:260px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)">
+                <sc-for list="{{ encOptions }}" as="e" hint-placeholder-count="3">
+                  <option value="{{ e.v }}">{{ e.label }}</option>
+                </sc-for>
+              </select>
+            </div>
+            <div style="height:1px;background:var(--line2);margin:4px 0"></div>
+            <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">OUTGOING MAIL — SMTP</div>
+            <div style="display:flex;gap:7px;max-width:540px">
+              <div style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:4px">
+                <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.08em;color:var(--faint)">HOST</div>
+                <input value="{{ acctSmtpHost }}" onChange="{{ onAcctSmtpHost }}" placeholder="smtp.company.com" style="width:100%;max-width:440px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)" />
+              </div>
+              <div style="flex:0 0 80px;display:flex;flex-direction:column;gap:4px">
+                <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.08em;color:var(--faint)">PORT</div>
+                <input value="{{ acctSmtpPort }}" onChange="{{ onAcctSmtpPort }}" placeholder="465" style="width:100%;max-width:440px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)" />
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.08em;color:var(--faint)">ENCRYPTION</div>
+              <select value="{{ acctSmtpEnc }}" onChange="{{ onAcctSmtpEnc }}" style="width:100%;max-width:260px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)">
+                <sc-for list="{{ encOptions }}" as="e2" hint-placeholder-count="3">
+                  <option value="{{ e2.v }}">{{ e2.label }}</option>
+                </sc-for>
+              </select>
+            </div>
+            <div onClick="{{ acctTestRun }}" style="{{ acctTestStyle }}" style-hover="cursor:pointer;background:var(--hover)">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1">lan</span>Test connection
+            </div>
+            <sc-if value="{{ acctTestShown }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:flex-start;gap:9px;padding:10px 11px;max-width:620px;border-radius:9px;border:1px solid var(--line);background:var(--sub)">
+                <sc-if value="{{ acctTestBad }}" hint-placeholder-val="{{ true }}">
+                  <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1.3;color:var(--err-text)">error</span>
+                </sc-if>
+                <sc-if value="{{ acctTestOk }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1.3;color:var(--ok-text)">check_circle</span>
+                </sc-if>
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                  <div style="font-size:14px;font-weight:600">{{ acctTestTitle }}</div>
+                  <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ acctTestText }}</div>
+                </div>
+              </div>
+            </sc-if>
+            <div style="height:1px;background:var(--line2);margin:4px 0"></div>
+            <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">HOW FAR BACK TO FETCH</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="date" value="{{ acctEarliest }}" onChange="{{ onAcctEarliest }}" style="flex:0 0 auto;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)" />
+              <sc-if value="{{ acctEarliestClearShown }}" hint-placeholder-val="{{ false }}">
+                <div onClick="{{ acctEarliestClear }}" style="font-size:13px;color:var(--muted);padding:6px 10px;border-radius:8px" style-hover="cursor:pointer;background:var(--hover);color:var(--text)">No limit</div>
+              </sc-if>
+            </div>
+            <div style="font-size:13px;line-height:1.5;max-width:620px;color:var(--muted);text-wrap:pretty">{{ acctEarliestHint }}</div>
+            <div style="height:1px;background:var(--line2);margin:4px 0"></div>
+            <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">FOLDER MAPPING</div>
+            <div style="font-size:13px;line-height:1.5;max-width:620px;color:var(--muted);text-wrap:pretty">MailFathom always keeps these six folders. Point each one at the matching folder on the mail server — the server's own naming often differs.</div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <sc-for list="{{ acctFolders }}" as="fd" hint-placeholder-count="6">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <div style="flex:0 0 124px;display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--text2)">
+                    <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1;color:var(--faint)">{{ fd.icon }}</span>{{ fd.label }}
+                  </div>
+                  <input value="{{ fd.value }}" onChange="{{ fd.set }}" placeholder="{{ fd.ph }}" style="flex:1;min-width:0;max-width:340px;box-sizing:border-box;font-family:'Instrument Sans',system-ui,sans-serif;font-size:13.5px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:7px 10px;outline:none" style-focus="border-color:var(--accent)" />
+                </div>
+              </sc-for>
+            </div>
+            <div style="height:1px;background:var(--line2);margin:4px 0"></div>
+            <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">DELETING AND SENDING — THIS ACCOUNT ONLY</div>
+            <div onClick="{{ toggleAcctHardDelete }}" style="display:flex;align-items:flex-start;gap:11px;padding:9px 10px;max-width:620px;border:1px solid var(--line);border-radius:9px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover)">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                <div style="font-size:14px">Delete mail permanently — here and on the mail server</div>
+                <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ acctHardDeleteHint }}</div>
+              </div>
+              <span style="{{ acctHardDeleteSwitchStyle }}"><span style="{{ denseKnobStyle }}"></span></span>
+            </div>
+            <div onClick="{{ toggleAcctPurgeGone }}" style="display:flex;align-items:flex-start;gap:11px;padding:9px 10px;max-width:620px;border:1px solid var(--line);border-radius:9px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover)">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                <div style="font-size:14px">Follow deletions made in the IMAP source</div>
+                <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ acctPurgeGoneHint }}</div>
+              </div>
+              <span style="{{ acctPurgeGoneSwitchStyle }}"><span style="{{ denseKnobStyle }}"></span></span>
+            </div>
+            <div onClick="{{ toggleAcctSaveSent }}" style="display:flex;align-items:flex-start;gap:11px;padding:9px 10px;max-width:620px;border:1px solid var(--line);border-radius:9px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover)">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                <div style="font-size:14px">Save sent mail in the Sent folder</div>
+                <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">Some mail servers file sent mail into Sent on their own — then this can stay off. Left on, MailFathom still de-duplicates by Message-ID, so you will not end up with two copies.</div>
+              </div>
+              <span style="{{ acctSaveSentSwitchStyle }}"><span style="{{ denseKnobStyle }}"></span></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding-top:6px">
+              <div onClick="{{ acctSave }}" style="{{ acctSaveStyle }}" style-hover="cursor:pointer;filter:brightness(1.06)">Save account</div>
+              <div onClick="{{ acctBack }}" style="{{ acctCancelStyle }}" style-hover="cursor:pointer;background:var(--hover)">Cancel</div>
+            </div>
+            <sc-if value="{{ acctIsExisting }}" hint-placeholder-val="{{ false }}">
+              <div style="height:1px;background:var(--line2);margin:4px 0"></div>
+              <div onClick="{{ acctAskDelete }}" style="{{ acctDeleteStyle }}" style-hover="cursor:pointer;background:var(--err-soft)">
+                <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1">delete</span>Remove this account
+              </div>
+            </sc-if>
+          </sc-if>
+          <sc-if value="{{ tabAi }}" hint-placeholder-val="{{ false }}">
+            <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">BEFORE SENDING TO THE MODEL</div>
+            <div onClick="{{ toggleSecretScan }}" style="display:flex;align-items:flex-start;gap:11px;padding:11px 12px;max-width:620px;border:1px solid var(--line);border-radius:9px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover)">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                <div style="font-size:14.5px">Check the text for secrets</div>
+                <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">Before a message, an event or an attachment goes to the AI model, MailFathom looks for passwords, access keys, tokens and card numbers. Anything it finds is shown to you first — you decide whether to hide it or send it anyway.</div>
+              </div>
+              <span style="{{ secretScanSwitchStyle }}"><span style="{{ denseKnobStyle }}"></span></span>
+            </div>
+            <sc-if value="{{ secretScanWarn }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:flex-start;gap:8px;padding:9px 10px;max-width:620px;border:1px solid var(--warn);border-radius:9px;background:var(--warn-soft);font-size:12.5px;line-height:1.5;color:var(--warn-text);text-wrap:pretty">
+                <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1.3">gpp_maybe</span>
+                <span>The check works on a best-effort basis: it recognises common patterns, so it can miss a secret written in an unusual way, and it can hide ordinary text that merely looks like a key. Always read what is about to be sent.</span>
+              </div>
+            </sc-if>
+            <div style="height:1px;background:var(--line2);margin:4px 0"></div>
+            <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">LANGUAGE OF AI-WRITTEN CONTENT</div>
+            <div style="display:flex;flex-wrap:wrap;gap:5px">
+              <sc-for list="{{ aiLangOptions }}" as="al" hint-placeholder-count="2">
+                <div onClick="{{ al.pick }}" style="{{ al.style }}" style-hover="cursor:pointer">{{ al.label }}</div>
+              </sc-for>
+            </div>
+            <div style="font-size:13px;line-height:1.5;max-width:620px;color:var(--muted);text-wrap:pretty">Summaries, thread digests, suggested replies and case notes are written in this language. It is separate from the interface language, which you set in <b style="font-weight:600">Application</b>.</div>
+            <div style="display:flex;align-items:flex-start;gap:8px;max-width:620px;font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1.3;color:var(--faint)">info</span>
+              <span>A change applies only to content written from now on. Summaries, notes and drafts that already exist keep the language they were created in.</span>
+            </div>
+            <div onClick="{{ toggleAiMatch }}" style="display:flex;align-items:flex-start;gap:11px;padding:9px 10px;max-width:620px;border:1px solid var(--line);border-radius:9px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover)">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                <div style="font-size:14px">Match the language of the message</div>
+                <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">Draft replies follow the language the sender wrote in; everything else keeps the setting above.</div>
+              </div>
+              <span style="{{ aiMatchSwitchStyle }}"><span style="{{ denseKnobStyle }}"></span></span>
+            </div>
+          </sc-if>
+          <sc-if value="{{ tabNotif }}" hint-placeholder-val="{{ false }}">
+            <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">NOTIFICATION CENTRE</div>
+            <div onClick="{{ toggleNotifAutoClear }}" style="display:flex;align-items:flex-start;gap:11px;padding:10px 12px;max-width:620px;border:1px solid var(--line);border-radius:9px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover)">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                <div style="font-size:14px">Remove notifications once they are read</div>
+                <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">A notification you have opened or marked as read disappears from the list on its own, so only what still needs you stays there.</div>
+              </div>
+              <span style="{{ notifAutoClearSwitchStyle }}"><span style="{{ denseKnobStyle }}"></span></span>
+            </div>
+            <sc-if value="{{ notifAutoClear }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.08em;color:var(--faint)">REMOVE</div>
+                <select value="{{ notifAutoClearAfter }}" onChange="{{ onNotifAutoClearAfter }}" style="width:100%;max-width:260px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:9px 11px;outline:none" style-focus="border-color:var(--accent)">
+                  <sc-for list="{{ notifAfterOptions }}" as="na" hint-placeholder-count="4">
+                    <option value="{{ na.v }}">{{ na.label }}</option>
+                  </sc-for>
+                </select>
+                <div style="font-size:13px;line-height:1.5;max-width:620px;color:var(--muted);text-wrap:pretty">The mail, task or event behind a notification is never touched — only the entry in the notification list goes.</div>
+              </div>
+            </sc-if>
           </sc-if>
           <sc-if value="{{ tabApp }}" hint-placeholder-val="{{ false }}">
-          <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:9.5px;letter-spacing:0.1em;color:var(--faint)">LANGUAGE</div>
+          <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">LANGUAGE</div>
           <div style="display:flex;flex-wrap:wrap;gap:5px">
             <sc-for list="{{ langOptions }}" as="lg" hint-placeholder-count="4">
               <div onClick="{{ lg.pick }}" style="{{ lg.style }}" style-hover="cursor:pointer">{{ lg.label }}</div>
             </sc-for>
           </div>
           <div style="height:1px;background:var(--line2);margin:4px 0"></div>
-          <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:9.5px;letter-spacing:0.1em;color:var(--faint)">MESSAGE VIEW</div>
-          <div style="display:flex;gap:4px;padding:3px;border:1px solid var(--border2);border-radius:9px;background:var(--sub)">
+          <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">MESSAGE VIEW</div>
+          <div style="display:flex;gap:4px;padding:3px;max-width:620px;border:1px solid var(--border2);border-radius:9px;background:var(--sub)">
             <div onClick="{{ setViewSimple }}" style="{{ viewSimpleStyle }}" style-hover="cursor:pointer">Simplified</div>
-            <div onClick="{{ setViewHtml }}" style="{{ viewHtmlStyle }}" style-hover="cursor:pointer">HTML</div>
+            <div onClick="{{ setViewHtml }}" style="{{ viewHtmlStyle }}" style-hover="cursor:pointer">Original</div>
           </div>
-          <div style="font-size:11px;line-height:1.45;color:var(--muted);text-wrap:pretty">{{ viewHint }}</div>
-          <div onClick="{{ toggleAutoExpand }}" style="display:flex;align-items:flex-start;gap:11px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover)">
+          <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ viewHint }}</div>
+          <div onClick="{{ toggleAutoExpand }}" style="display:flex;align-items:flex-start;gap:11px;padding:9px 10px;max-width:620px;border:1px solid var(--line);border-radius:9px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover)">
             <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
-              <div style="font-size:13px">Expand the whole thread automatically</div>
-              <div style="font-size:11px;line-height:1.45;color:var(--muted);text-wrap:pretty">Without this, a thread opens on the selected message and the rest sit behind a button.</div>
+              <div style="font-size:14px">Expand the whole thread automatically</div>
+              <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">Without this, a thread opens on the selected message and the rest sit behind a button.</div>
             </div>
             <span style="{{ autoExpandSwitchStyle }}"><span style="{{ denseKnobStyle }}"></span></span>
           </div>
+          <div onClick="{{ toggleAutoImages }}" style="display:flex;align-items:flex-start;gap:11px;padding:9px 10px;max-width:620px;border:1px solid var(--line);border-radius:9px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover)">
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+              <div style="font-size:14px">Load images automatically</div>
+              <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">With this off, a message shows a button to load its images once you decide the sender is trustworthy.</div>
+            </div>
+            <span style="{{ autoImagesSwitchStyle }}"><span style="{{ denseKnobStyle }}"></span></span>
+          </div>
+          <sc-if value="{{ autoImages }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:flex-start;gap:8px;padding:9px 10px;max-width:620px;border:1px solid var(--warn);border-radius:9px;background:var(--warn-soft);font-size:12.5px;line-height:1.5;color:var(--warn-text);text-wrap:pretty">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1.3">gpp_maybe</span>
+              <span>Security risk: an image is fetched from the sender's server, so opening the message tells them it was read, when, and roughly where from — this is how tracking pixels work.</span>
+            </div>
+          </sc-if>
           <sc-if value="{{ htmlModeWarn }}" hint-placeholder-val="{{ false }}">
-            <div style="display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid var(--warn);border-radius:9px;background:var(--warn-soft);font-size:11.5px;line-height:1.5;color:var(--warn-text);text-wrap:pretty">
-              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1.3">gpp_maybe</span>
+            <div style="display:flex;align-items:flex-start;gap:8px;padding:9px 10px;max-width:620px;border:1px solid var(--warn);border-radius:9px;background:var(--warn-soft);font-size:12.5px;line-height:1.5;color:var(--warn-text);text-wrap:pretty">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1.3">gpp_maybe</span>
               <span>Security risk: message HTML can contain hidden tracking pixels, impersonating layouts and phishing links. We render it in isolation, but the preview alone can tell the sender the message was opened.</span>
             </div>
           </sc-if>
           <div style="height:1px;background:var(--line2);margin:4px 0"></div>
-          <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:9.5px;letter-spacing:0.1em;color:var(--faint)">PRIVACY</div>
-          <div onClick="{{ toggleTelemetry }}" style="display:flex;align-items:flex-start;gap:11px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover)">
+          <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">PRIVACY</div>
+          <div onClick="{{ toggleTelemetry }}" style="display:flex;align-items:flex-start;gap:11px;padding:9px 10px;max-width:620px;border:1px solid var(--line);border-radius:9px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover)">
             <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
-              <div style="font-size:13px">Don't send telemetry data</div>
-              <div style="font-size:11px;line-height:1.45;color:var(--muted);text-wrap:pretty">Crash diagnostics and usage statistics stay on this device.</div>
+              <div style="font-size:14px">Don't send telemetry data</div>
+              <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">Crash diagnostics and usage statistics stay on this device.</div>
             </div>
             <span style="{{ telemetrySwitchStyle }}"><span style="{{ denseKnobStyle }}"></span></span>
           </div>
           <sc-if value="{{ telemetryOptOut }}" hint-placeholder-val="{{ false }}">
-            <div style="display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid var(--warn);border-radius:9px;background:var(--warn-soft);font-size:11.5px;line-height:1.5;color:var(--warn-text);text-wrap:pretty">
-              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1.3">info</span>
+            <div style="display:flex;align-items:flex-start;gap:8px;padding:9px 10px;max-width:620px;border:1px solid var(--warn);border-radius:9px;background:var(--warn-soft);font-size:12.5px;line-height:1.5;color:var(--warn-text);text-wrap:pretty">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1.3">info</span>
               <span>Without telemetry, support gets harder — reports have to be written out by hand and some bugs can't be reproduced on the support side.</span>
+            </div>
+          </sc-if>
+          <div style="height:1px;background:var(--line2);margin:4px 0"></div>
+          <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">LAYOUT ON THIS DEVICE</div>
+          <div style="font-size:13px;line-height:1.5;max-width:620px;color:var(--muted);text-wrap:pretty">Column widths, panel sizes and the size of this window are remembered on this device only — they never go to the server, so every computer and phone keeps its own arrangement.</div>
+          <div onClick="{{ resetLayout }}" style="{{ resetLayoutStyle }}" style-hover="cursor:pointer;background:var(--hover)">
+            <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1">restart_alt</span>Reset layout
+          </div>
+          <sc-if value="{{ resetLayoutDone }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:8px;max-width:620px;font-size:13px;color:var(--ok-text)">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1">check_circle</span>Layout restored to the defaults.
             </div>
           </sc-if>
           </sc-if>
         </div>
-        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:7px;padding:10px 16px;border-top:1px solid var(--line);background:var(--sub);font-size:11px;color:var(--faint);white-space:nowrap">
+        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:7px;padding:10px 16px;border-top:1px solid var(--line);background:var(--sub);font-size:12px;color:var(--faint);white-space:nowrap">
           <span>MailFathom</span>
           <span style="font-family:'Instrument Sans',system-ui,sans-serif">{{ appVersion }}</span>
           <span style="opacity:0.5">·</span>
           <span>{{ appBuild }}</span>
         </div>
+        <sc-if value="{{ settingsResizable }}" hint-placeholder-val="{{ true }}">
+          <div onPointerDown="{{ settingsResizeDown }}" title="Resize" style="position:absolute;right:0;bottom:0;width:22px;height:22px;display:flex;align-items:flex-end;justify-content:flex-end;padding:3px;cursor:nwse-resize;color:var(--faint);z-index:2" style-hover="color:var(--text2)">
+            <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1">south_east</span>
+          </div>
+        </sc-if>
       </div>
+      <sc-if value="{{ acctDelOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--scrim)">
+          <div style="width:400px;max-width:100%;display:flex;flex-direction:column;gap:12px;padding:18px;background:var(--panel);border:1px solid var(--line);border-radius:13px;box-shadow:0 22px 52px var(--sh-3)">
+            <sc-if value="{{ acctDelStep1 }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:flex-start;gap:11px">
+                <span style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:var(--err-soft);color:var(--err-text);font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:21px">warning</span>
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+                  <div style="font-size:16px;font-weight:600">Remove this account?</div>
+                  <div style="font-size:13.5px;line-height:1.5;color:var(--text2);text-wrap:pretty">{{ acctDelName }} — {{ acctDelMail }}</div>
+                  <div style="font-size:12.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">Locally cached mail, drafts and the saved password for this account are deleted. Mail on the server is untouched.</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">
+                <div onClick="{{ acctDelCancel }}" style="{{ acctCancelStyle }}" style-hover="cursor:pointer;background:var(--hover)">Cancel</div>
+                <div onClick="{{ acctDelNext }}" style="{{ acctDeleteStyle }}" style-hover="cursor:pointer;background:var(--err-soft)">Continue</div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ acctDelStep2 }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <div style="font-size:16px;font-weight:600">Confirm by typing the account name</div>
+                <div style="font-size:12.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">Type the name exactly as shown below, then press Delete.</div>
+              </div>
+              <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:14px;font-weight:600;padding:8px 11px;border-radius:8px;background:var(--sub);border:1px dashed var(--border2);user-select:all;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ acctDelName }}</div>
+              <input value="{{ acctDelText }}" onChange="{{ onAcctDelText }}" placeholder="Account name" style="{{ acctDelInputStyle }}" />
+              <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">
+                <div onClick="{{ acctDelCancel }}" style="{{ acctCancelStyle }}" style-hover="cursor:pointer;background:var(--hover)">Cancel</div>
+                <div onClick="{{ acctDelConfirm }}" style="{{ acctDelConfirmStyle }}" style-hover="cursor:pointer;filter:brightness(1.06)">Delete</div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
     </div>
   </sc-if>
   <sc-if value="{{ notifCenterOpen }}" hint-placeholder-val="{{ false }}">
@@ -6014,14 +6292,17 @@ class Component extends DCLogic {
     const filterCount = [!!st.fUnread, !!st.fFlagged, !!st.fAttach, !!st.fRange || !!st.fFrom || !!st.fTo, (st.fSort || "Newest") !== "Newest"].filter(Boolean).length;
     const sideCollapsed = drawer ? false : (st.sideCollapsed !== undefined ? !!st.sideCollapsed : narrow);
     const noop = () => {};
-    /* Every mailbox carries the same five standard folders in the same order. */
-    const STD_FOLDERS = (counts) => [
+    /* A real account carries all six standard folders. The unified view drops the three that only
+       make sense per account — Archive, Spam and Trash are always opened in the account they live in. */
+    const STD_FOLDERS = (counts, unified) => [
       { icon: "inbox", label: "Inbox" },
       { icon: "send", label: "Sent" },
       { icon: "draft", label: "Drafts" },
-      { icon: "archive", label: "Archive" },
-      { icon: "delete", label: "Trash" },
-    ].map(mb => ({ icon: mb.icon, label: mb.label, count: (counts || {})[mb.label] || "" }));
+      { icon: "archive", label: "Archive", perAccount: true },
+      { icon: "report", label: "Spam", perAccount: true },
+      { icon: "delete", label: "Trash", perAccount: true },
+    ].filter(mb => !(unified && mb.perAccount))
+      .map(mb => ({ icon: mb.icon, label: mb.label, count: (counts || {})[mb.label] || "" }));
     const sideW = drawer ? 0 : sideCollapsed ? 58 : Math.max(210, Math.min(420, st.sideW || 210));
     const listW = Math.max(232, Math.min(st.listW, w - railW - sideW - (narrow ? 300 : 420)));
     const composeTabActive = tabsMode && st.activeTab === "compose" && !!st.compose;
@@ -6763,8 +7044,8 @@ class Component extends DCLogic {
         ? "margin-top:12px;display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--line);padding-top:12px"
         : "margin-top:16px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:14px",
       sideGroups: [
-        { key: "all", label: "All accounts", title: "Unified folders — two accounts", dot: "linear-gradient(135deg,var(--accent) 50%,#4d9aa8 50%)", folders: STD_FOLDERS({ Inbox: "12", Drafts: "2" }) },
-        { key: "acc1", label: "Nordwind · work", title: "k.kowalska@nordwind.example", dot: "var(--accent)", folders: STD_FOLDERS({ Inbox: "8", Drafts: "2" }) },
+        { key: "all", label: "All accounts", title: "Unified folders — two accounts", dot: "linear-gradient(135deg,var(--accent) 50%,#4d9aa8 50%)", folders: STD_FOLDERS({ Inbox: "12", Drafts: "2" }, true) },
+        { key: "acc1", label: "Nordwind · work", title: "k.kowalska@nordwind.example", dot: "var(--accent)", folders: STD_FOLDERS({ Inbox: "8", Drafts: "2", Spam: "3" }) },
         { key: "acc2", label: "Personal mail", title: "kowalska.k@mail.example", dot: "#4d9aa8", folders: STD_FOLDERS({ Inbox: "4" }) },
       ].map(g => {
         const open = (st.accOpen || {})[g.key] !== false;
@@ -8053,25 +8334,42 @@ class Component extends DCLogic {
       appBuild: APP_BUILD,
       settingsCardStyle: singlePane
         ? "flex:1;min-width:0;display:flex;flex-direction:column;background:var(--panel)"
-        : "width:460px;max-width:100%;height:min(78vh,600px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:13px;box-shadow:0 22px 52px var(--sh-3);overflow:hidden",
+        : "position:relative;width:" + Math.min(st.settingsW || 700, w - 40) + "px;height:" + Math.min(st.settingsH || 720, Math.round((st.vh || (typeof window !== "undefined" ? window.innerHeight : 900)) * 0.92)) + "px;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:13px;box-shadow:0 22px 52px var(--sh-3);overflow:hidden",
+      settingsResizable: !singlePane,
+      settingsResizeDown: (e) => {
+        const card = e.currentTarget.parentElement;
+        if (!card) return;
+        e.preventDefault();
+        const r = card.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY;
+        const move = (ev) => this.setState({
+          settingsW: Math.max(560, Math.min(window.innerWidth - 40, Math.round(r.width + (ev.clientX - x0) * 2))),
+          settingsH: Math.max(420, Math.min(window.innerHeight - 40, Math.round(r.height + (ev.clientY - y0) * 2))),
+        });
+        const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+      },
       settingsBodyStyle: singlePane
         ? "flex:1;min-height:0;display:flex;flex-direction:column;gap:11px;padding:14px 16px 28px;overflow:auto"
-        : "flex:1;min-height:0;display:flex;flex-direction:column;gap:9px;padding:14px 16px 20px;overflow:auto",
+        : "flex:1;min-height:0;display:flex;flex-direction:column;gap:11px;padding:18px 22px 24px;overflow:auto",
       settingsHeadStyle: singlePane
         ? "display:flex;align-items:center;gap:12px;padding:14px 14px 12px;border-bottom:1px solid var(--line);background:var(--sub)"
         : "display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--sub)",
-      settingsTitleStyle: singlePane ? "font-size:17px;font-weight:600" : "font-size:13.5px;font-weight:600",
+      settingsTitleStyle: singlePane ? "font-size:18px;font-weight:600" : "font-size:15px;font-weight:600",
       tabProfil: (st.settingsTab || "profil") === "profil",
       tabApp: st.settingsTab === "app",
-      settingsTabs: [["profil", "Profile"], ["app", "Application"]].map(([v, label]) => ({
+      settingsTabs: [["profil", "Profile"], ["accounts", "Accounts"], ["ai", "AI"], ["notif", "Notifications"], ["app", "Application"]].map(([v, label]) => ({
         label,
         pick: () => this.setState({ settingsTab: v }),
         style: "white-space:nowrap;border-bottom:2px solid " +
           ((st.settingsTab || "profil") === v
             ? "var(--accent);color:var(--text);font-weight:600"
             : "transparent;color:var(--muted)") +
-          (touch ? ";padding:14px 4px 12px;font-size:15px" : ";padding:10px 1px 8px;font-size:12.5px"),
+          (touch ? ";padding:14px 4px 12px;font-size:16px" : ";padding:10px 1px 8px;font-size:13.5px"),
       })),
+      autoImages: !!st.autoImages,
+      autoImagesSwitchStyle: "flex:0 0 auto;margin-top:2px;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (st.autoImages ? "--accent" : "--border2") + ");justify-content:" + (st.autoImages ? "flex-end" : "flex-start"),
+      toggleAutoImages: () => this.setState(s => ({ autoImages: !s.autoImages })),
       autoExpand: !!st.autoExpand,
       autoExpandSwitchStyle: "flex:0 0 auto;margin-top:2px;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (st.autoExpand ? "--accent" : "--border2") + ");justify-content:" + (st.autoExpand ? "flex-end" : "flex-start"),
       toggleAutoExpand: () => this.setState(s2 => ({ autoExpand: !s2.autoExpand, histOpen: {} })),
@@ -8096,9 +8394,201 @@ class Component extends DCLogic {
       telemetryOptOut: !!st.telemetryOptOut,
       telemetrySwitchStyle: "flex:0 0 auto;margin-top:2px;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (st.telemetryOptOut ? "--accent" : "--border2") + ");justify-content:" + (st.telemetryOptOut ? "flex-end" : "flex-start"),
       toggleTelemetry: () => this.setState(s => ({ telemetryOptOut: !s.telemetryOptOut })),
+      ...(() => {
+        const ENC = [["auto", "Auto"], ["none", "None"], ["starttls", "STARTTLS"], ["ssl", "SSL/TLS"]];
+        const DEF = [
+          { id: "a1", name: "Karolina Kowalska", mail: "k.kowalska@nordwind.pl", login: "k.kowalska@nordwind.pl", pass: "hunter-nordwind-24", dot: "var(--accent)", imapHost: "imap.nordwind.pl", imapPort: "993", imapEnc: "ssl", smtpHost: "smtp.nordwind.pl", smtpPort: "587", smtpEnc: "starttls", earliest: "", folders: { inbox: "INBOX", sent: "INBOX.Sent", drafts: "INBOX.Drafts", archive: "INBOX.Archive", junk: "INBOX.Spam", trash: "INBOX.Trash" } },
+          { id: "a2", name: "Karolina — private", mail: "kowalska.k@mail.example", login: "kowalska.k", pass: "mailexample2026", dot: "#4d9aa8", imapHost: "imap.mail.example", imapPort: "993", imapEnc: "ssl", smtpHost: "smtp.mail.example", smtpPort: "465", smtpEnc: "ssl" },
+          { id: "a3", name: "Nordwind board", mail: "board@nordwind.example", login: "board", pass: "board-shared-key", dot: "#b0873a", imapHost: "imap.nordwind.example", imapPort: "143", imapEnc: "starttls", smtpHost: "smtp.nordwind.example", smtpPort: "587", smtpEnc: "starttls" },
+        ];
+        const accounts = st.accounts || DEF;
+        const d = st.acctDraft || null;
+        const del = st.acctDel || null;
+        const delAcct = del ? accounts.find(a => a.id === del.id) : null;
+        const delReady = !!delAcct && (st.acctDelText || "").trim() === delAcct.name;
+        const upd = (k, v) => this.setState(s => ({ acctDraft: Object.assign({}, s.acctDraft, { [k]: v }), acctTest: null }));
+        const test = st.acctTest || null;
+        const missing = !d ? [] : [
+          [(d.imapHost || "").trim(), "IMAP host"],
+          [(d.imapPort || "").trim(), "IMAP port"],
+          [(d.smtpHost || "").trim(), "SMTP host"],
+          [(d.smtpPort || "").trim(), "SMTP port"],
+          [((d.login || "").trim() || (d.mail || "").trim()), "login or e-mail address"],
+          [(d.pass || "").trim(), "password"],
+        ].filter(p => !p[0]).map(p => p[1]);
+        const ev = k => e => upd(k, e.target.value);
+        const canSave = !!d && !!(d.name || "").trim() && !!(d.mail || "").trim();
+        const hardDel = d ? d.hardDelete !== false : true;
+        const purgeGone = d ? d.purgeGone !== false : true;
+        const saveSent = d ? d.saveSent !== false : true;
+        const sw = on => "flex:0 0 auto;margin-top:2px;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (on ? "--accent" : "--border2") + ");justify-content:" + (on ? "flex-end" : "flex-start");
+        const FOLD = [["inbox", "Inbox", "inbox", "INBOX"], ["sent", "Sent", "send", "Sent"], ["drafts", "Drafts", "draft", "Drafts"], ["archive", "Archive", "archive", "Archive"], ["junk", "Spam", "report", "Junk"], ["trash", "Trash", "delete", "Trash"]];
+        const DEFFOLD = { inbox: "INBOX", sent: "Sent", drafts: "Drafts", archive: "Archive", junk: "Junk", trash: "Trash" };
+        const folders = (d && d.folders) || DEFFOLD;
+        const updFolder = (k, v) => this.setState(s => ({
+          acctDraft: Object.assign({}, s.acctDraft, { folders: Object.assign({}, (s.acctDraft || {}).folders || DEFFOLD, { [k]: v }) }),
+        }));
+        const btn = (kind) => "display:flex;align-items:center;justify-content:center;align-self:flex-start;gap:6px;padding:9px 16px;border-radius:9px;font-size:14px;font-weight:600;white-space:nowrap;" + kind;
+        const onAiLang = v => this.setState({ aiLang: v });
+        const aiLang = st.aiLang || "pl";
+        return {
+          userMailboxes: accounts.map(a => ({
+            mail: a.mail, dot: a.dot, current: false, pick: null,
+            style: "display:flex;align-items:center;gap:8px;padding:3px 0;color:var(--muted)",
+          })),
+          tabAi: st.settingsTab === "ai",
+          tabNotif: st.settingsTab === "notif",
+          resetLayoutStyle: btn("background:var(--sub);border:1px solid var(--border2);color:var(--text2);"),
+          resetLayoutDone: !!st.layoutReset,
+          resetLayout: () => {
+            this.setState({
+              listW: null, historyPanelW: null, settingsW: null, settingsH: null,
+              notifH: null, notifDrag: null, docZoom: null, layoutReset: true,
+            });
+            setTimeout(() => this.setState({ layoutReset: false }), 3200);
+          },
+          notifAutoClear: !!st.notifAutoClear,
+          notifAutoClearSwitchStyle: sw(!!st.notifAutoClear),
+          toggleNotifAutoClear: () => this.setState(s => ({ notifAutoClear: !s.notifAutoClear })),
+          notifAutoClearAfter: st.notifAutoClearAfter || "24h",
+          onNotifAutoClearAfter: e => this.setState({ notifAutoClearAfter: e.target.value }),
+          notifAfterOptions: [["now", "Right away"], ["1h", "After 1 hour"], ["24h", "After 24 hours"], ["7d", "After 7 days"]].map(([v, label]) => ({ v, label })),
+          secretScan: !!st.secretScan,
+          secretScanSwitchStyle: sw(!!st.secretScan),
+          toggleSecretScan: () => this.setState(s => ({ secretScan: !s.secretScan })),
+          secretScanWarn: !!st.secretScan,
+          aiLangOptions: [["pl", "Polski"], ["en", "English"]].map(([v, label]) => ({
+            label,
+            pick: () => onAiLang(v),
+            style: "padding:7px 13px;border-radius:8px;font-size:13.5px;" + (aiLang === v
+              ? "background:var(--accent);color:var(--onaccent);font-weight:600;"
+              : "color:var(--text2);border:1px solid var(--line);background:var(--sub);"),
+          })),
+          aiMatchReply: !!st.aiMatchReply,
+          aiMatchSwitchStyle: "flex:0 0 auto;margin-top:2px;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (st.aiMatchReply ? "--accent" : "--border2") + ");justify-content:" + (st.aiMatchReply ? "flex-end" : "flex-start"),
+          toggleAiMatch: () => this.setState(s => ({ aiMatchReply: !s.aiMatchReply })),
+          tabAccounts: st.settingsTab === "accounts",
+          acctListShown: st.settingsTab === "accounts" && !d,
+          acctEditShown: st.settingsTab === "accounts" && !!d,
+          acctCount: accounts.length === 1 ? "1 account" : accounts.length + " accounts",
+          acctItems: accounts.map(a => ({
+            name: a.name,
+            mail: a.mail,
+            servers: "IMAP " + a.imapHost + ":" + a.imapPort + "  ·  SMTP " + a.smtpHost + ":" + a.smtpPort,
+            dotStyle: "flex:0 0 8px;width:8px;height:8px;border-radius:50%;margin-top:6px;background:" + a.dot,
+            edit: () => this.setState({ acctDraft: Object.assign({}, a), acctPassShown: false }),
+          })),
+          acctAdd: () => this.setState({ acctPassShown: false, acctDraft: { id: "", name: "", mail: "", login: "", pass: "", dot: "#7a8aa0", imapHost: "", imapPort: "993", imapEnc: "auto", smtpHost: "", smtpPort: "465", smtpEnc: "auto", earliest: "", folders: Object.assign({}, DEFFOLD) } }),
+          acctBack: () => this.setState({ acctDraft: null }),
+          acctTitle: d && d.id ? "Edit account" : "New account",
+          acctIsExisting: !!d && !!d.id,
+          acctName: d ? d.name : "",
+          acctMail: d ? d.mail : "",
+          acctLogin: d ? d.login : "",
+          acctPass: d ? d.pass : "",
+          acctImapHost: d ? d.imapHost : "",
+          acctImapPort: d ? d.imapPort : "",
+          acctImapEnc: d ? (d.imapEnc || "auto") : "auto",
+          acctSmtpHost: d ? d.smtpHost : "",
+          acctSmtpPort: d ? d.smtpPort : "",
+          acctSmtpEnc: d ? (d.smtpEnc || "auto") : "auto",
+          onAcctName: ev("name"),
+          onAcctMail: ev("mail"),
+          onAcctLogin: ev("login"),
+          onAcctPass: ev("pass"),
+          onAcctImapHost: ev("imapHost"),
+          onAcctImapPort: ev("imapPort"),
+          onAcctImapEnc: ev("imapEnc"),
+          onAcctSmtpHost: ev("smtpHost"),
+          onAcctSmtpPort: ev("smtpPort"),
+          onAcctSmtpEnc: ev("smtpEnc"),
+          encOptions: ENC.map(([v, label]) => ({ v, label })),
+          acctTestStyle: btn("background:var(--sub);border:1px solid var(--border2);color:var(--text2);"),
+          acctTestRun: () => this.setState({
+            acctTest: missing.length
+              ? { ok: false, title: "Cannot test the connection", text: "Fill in first: " + missing.join(", ") + "." }
+              : { ok: true, title: "Connection works", text: "Signed in to " + (d.imapHost || "") + " and sent a test handshake to " + (d.smtpHost || "") + "." },
+          }),
+          acctTestShown: !!test,
+          acctTestOk: !!test && test.ok,
+          acctTestBad: !!test && !test.ok,
+          acctTestTitle: test ? test.title : "",
+          acctTestText: test ? test.text : "",
+          acctEarliest: d ? (d.earliest || "") : "",
+          onAcctEarliest: ev("earliest"),
+          acctEarliestHint: d && d.earliest
+            ? "Mail that arrived before this date stays on the mail server and is never downloaded — it will not show up in the list or in search."
+            : "No limit: everything the mail server still holds gets downloaded.",
+          acctEarliestClearShown: !!(d && d.earliest),
+          acctEarliestClear: () => upd("earliest", ""),
+          acctFolders: FOLD.map(([k, label, icon, ph]) => ({
+            label, icon, ph,
+            value: folders[k] || "",
+            set: e => updFolder(k, e.target.value),
+          })),
+          acctHardDelete: hardDel,
+          acctHardDeleteSwitchStyle: sw(hardDel),
+          toggleAcctHardDelete: () => upd("hardDelete", !hardDel),
+          acctHardDeleteHint: hardDel
+            ? "Deleting removes the message from both the MailFathom server and the mail server it came from (IMAP). It is gone from every device and there is nothing left to restore."
+            : "The message stays on both servers, only marked as deleted, and you can bring it back at any time.",
+          acctPurgeGone: purgeGone,
+          acctPurgeGoneSwitchStyle: sw(purgeGone),
+          toggleAcctPurgeGone: () => upd("purgeGone", !purgeGone),
+          acctPurgeGoneHint: purgeGone
+            ? "A message removed in the IMAP source disappears from MailFathom on the next sync."
+            : "A message removed in the IMAP source is only flagged as deleted in MailFathom and stays searchable.",
+          acctSaveSent: saveSent,
+          acctSaveSentSwitchStyle: sw(saveSent),
+          toggleAcctSaveSent: () => upd("saveSent", !saveSent),
+          acctPassType: st.acctPassShown ? "text" : "password",
+          acctPassIcon: st.acctPassShown ? "visibility_off" : "visibility",
+          toggleAcctPass: () => this.setState(s => ({ acctPassShown: !s.acctPassShown })),
+          acctLoginHint: d && !(d.login || "").trim() ? "Empty = the e-mail address is used as the login." : "",
+          acctSaveStyle: btn(canSave
+            ? "background:var(--accent);color:var(--onaccent);"
+            : "background:var(--border2);color:var(--panel);opacity:0.6;pointer-events:none;"),
+          acctSave: () => {
+            if (!canSave) return;
+            this.setState(s => {
+              const list = (s.accounts || DEF).slice();
+              const dr = s.acctDraft;
+              if (!dr) return { acctDraft: null };
+              if (dr.id) {
+                const i = list.findIndex(a => a.id === dr.id);
+                if (i >= 0) list[i] = dr; else list.push(dr);
+              } else list.push(Object.assign({}, dr, { id: "a" + Date.now() }));
+              return { accounts: list, acctDraft: null };
+            });
+          },
+          acctCancelStyle: btn("background:var(--sub);border:1px solid var(--border2);color:var(--text2);"),
+          acctDeleteStyle: btn("background:transparent;border:1px solid var(--err);color:var(--err-text);"),
+          acctAskDelete: () => this.setState(s => ({ acctDel: { id: s.acctDraft.id, step: 1 }, acctDelText: "" })),
+          acctDelOpen: !!del,
+          acctDelStep1: !!del && del.step === 1,
+          acctDelStep2: !!del && del.step === 2,
+          acctDelName: delAcct ? delAcct.name : "",
+          acctDelMail: delAcct ? delAcct.mail : "",
+          acctDelCancel: () => this.setState({ acctDel: null, acctDelText: "" }),
+          acctDelNext: () => this.setState(s => ({ acctDel: { id: s.acctDel.id, step: 2 }, acctDelText: "" })),
+          acctDelText: st.acctDelText || "",
+          onAcctDelText: e => this.setState({ acctDelText: e.target.value }),
+          acctDelInputStyle: "width:100%;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--panel);border:1px solid var(" + (delReady ? "--err" : "--border2") + ");border-radius:8px;padding:9px 11px;outline:none",
+          acctDelConfirmStyle: btn(delReady
+            ? "background:var(--err);color:#fff;"
+            : "background:var(--border2);color:var(--panel);opacity:0.6;pointer-events:none;"),
+          acctDelConfirm: () => {
+            if (!delReady) return;
+            this.setState(s => ({
+              accounts: (s.accounts || DEF).filter(a => a.id !== s.acctDel.id),
+              acctDel: null, acctDelText: "", acctDraft: null,
+            }));
+          },
+        };
+      })(),
       settingsOpen: !!st.settings,
       openSettings: () => this.setState({ settings: true, userMenu: false }),
-      closeSettings: () => this.setState({ settings: false }),
+      closeSettings: () => this.setState({ settings: false, acctDraft: null, acctDel: null }),
       langOptions: [["pl", "Polski"], ["en", "English"]].map(([v, label]) => ({
         label,
         pick: () => this.setState({ lang: v }),
