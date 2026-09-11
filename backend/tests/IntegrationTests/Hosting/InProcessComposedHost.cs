@@ -43,8 +43,14 @@ namespace MailFathom.IntegrationTests.Hosting;
 /// request feature cannot carry asks for the real server instead, and states its own ports — so no socket is bound and
 /// no port is contended for with the orchestrated hosts this suite already runs. Every hosted service the composition added is removed, because those
 /// are the workers that reach a database, a mail server, and a model endpoint the moment they start — this host is
-/// composed for its request pipeline and shares neither the orchestrated database nor the orchestrated mailbox. And the
+/// composed for its request pipeline rather than for the work behind it. And the
 /// data protection key ring is held in memory rather than under whoever ran the suite.
+/// </para>
+/// <para>
+/// What a shape may still ask for is stated by the shape rather than taken from here. A claim about something a
+/// request feature cannot carry asks for the real server and states its own ports, and a claim whose subject is
+/// shared between two shapes points at the orchestrated database by overriding the connection string below — which is
+/// what a ticket minted on one replica and redeemed on another needs. The orchestrated mailbox is reached by no shape.
 /// </para>
 /// </remarks>
 internal sealed class InProcessComposedHost : IAsyncDisposable
@@ -112,7 +118,12 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
         // run would otherwise decide what a shape composes. What the shape states is then the whole of what the
         // composition reads.
         builder.Configuration.Sources.Clear();
-        builder.Configuration.AddInMemoryCollection([.. Database, .. configuration]);
+
+        // Two sources rather than one collection, so a shape needing a different value for a key the default already
+        // holds overrides it. One memory source fills a dictionary as it is constructed and refuses the second write
+        // outright, which would have stopped the shape before anything was composed.
+        builder.Configuration.AddInMemoryCollection(Database);
+        builder.Configuration.AddInMemoryCollection(configuration);
         builder.Logging.ClearProviders();
         builder.Services.Configure<KeyManagementOptions>(
             keyManagement => keyManagement.XmlRepository = new KeysHeldInMemory());

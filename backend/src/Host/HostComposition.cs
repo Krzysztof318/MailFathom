@@ -1541,8 +1541,9 @@ internal static class HostComposition
 
         // The endpoint is configured through the container rather than through the overload that takes a connection
         // string, because the string is behind a secret reference and resolving one is asynchronous: the factory
-        // SignalBackplaneConnection installs runs when a connection is wanted, which is where an await belongs and
-        // where a rotated credential is picked up.
+        // SignalBackplaneConnection installs runs when a connection is first wanted, which is where an await belongs,
+        // and again only after an attempt that threw — so a credential rotated behind an unchanged reference is picked
+        // up at the next start rather than at the next attempt.
         builder.Services.AddSingleton<IConfigureOptions<RedisOptions>, SignalBackplaneConnection>();
         signals.AddStackExchangeRedis();
     }

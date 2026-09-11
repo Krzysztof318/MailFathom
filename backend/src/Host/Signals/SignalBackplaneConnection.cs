@@ -123,12 +123,17 @@ internal sealed class SignalBackplaneConnection : IConfigureOptions<RedisOptions
             }
         };
 
-        // The other transition no handler can see. With AbortOnConnectFail off the connect completes against an
-        // endpoint that answered nothing, and whatever the library raised during that first attempt was raised before
-        // anything above was subscribed — so a replica whose backplane was never reachable would otherwise report
-        // nothing at all, which is exactly the case an operator has to be told about. The library's own reconnection
-        // then raises the restoration, so the pair still reads as a transition rather than as a state.
-        if (!connection.IsConnected)
+        // The transitions no handler can see, both of them. With AbortOnConnectFail off the connect completes against
+        // an endpoint that answered nothing, and whatever the library raised during that first attempt was raised
+        // before anything above was subscribed — so a replica whose backplane was never reachable would otherwise
+        // report nothing at all. The other direction is this attempt succeeding after one that threw: the lifetime
+        // manager asks the factory again on the next publish, and a replica fanning signals again while its last
+        // transition reads lost is the state an operator is told to alert on.
+        if (connection.IsConnected)
+        {
+            this.telemetry.RecordRestored();
+        }
+        else
         {
             this.telemetry.RecordLost();
         }
@@ -149,13 +154,28 @@ internal sealed class SignalBackplaneConnection : IConfigureOptions<RedisOptions
         using var material = resolution.Secret ?? throw new InvalidOperationException(
             $"{SignalBackplaneOptions.SectionName}:{nameof(SignalBackplaneOptions.ConnectionString)} could not be resolved [{resolution.Failure}].");
 
-        var endpoint = ConfigurationOptions.Parse(material.RevealAsString());
+        return ComposeEndpoint(material.RevealAsString(), this.settings);
+    }
 
-        // Both are this deployment's decision rather than the operator's, and both are set after the parse so a
-        // connection string carrying either is corrected rather than obeyed. The prefix is what keeps two applications
-        // sharing one endpoint from receiving each other's statements; the retry posture is what keeps an unreachable
-        // endpoint from being a failed start.
-        endpoint.ChannelPrefix = RedisChannel.Literal(this.settings.ChannelPrefix);
+    /// <summary>Reads the operator's connection string and applies the two decisions this deployment takes over it.</summary>
+    /// <param name="connectionString">What the declared reference resolved to.</param>
+    /// <param name="settings">The section the channel prefix is read from.</param>
+    /// <returns>The endpoint a connection is opened against.</returns>
+    /// <remarks>
+    /// Separate from the resolution around it so both overrides are reachable without dialling anything. Each of them
+    /// is a decision a connection string may contradict and neither is the operator's to take: the prefix is what
+    /// keeps two deployments sharing one endpoint from receiving each other's statements, and the retry posture is
+    /// what keeps an unreachable endpoint from being a failed start.
+    /// </remarks>
+    internal static ConfigurationOptions ComposeEndpoint(string connectionString, SignalBackplaneOptions settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var endpoint = ConfigurationOptions.Parse(connectionString);
+
+        // Set after the parse rather than before it, so a connection string carrying either is corrected rather than
+        // obeyed.
+        endpoint.ChannelPrefix = RedisChannel.Literal(settings.ChannelPrefix);
         endpoint.AbortOnConnectFail = false;
 
         return endpoint;

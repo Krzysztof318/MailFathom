@@ -38,8 +38,9 @@ namespace MailFathom.IntegrationTests.Signals;
 /// </para>
 /// <para>
 /// It joins the composed-host collection for that collection's ordering rather than for its fixture — the two hosts
-/// bind ports of their own and reach neither the orchestrated database nor the orchestrated mailbox — and takes the
-/// fixture for one value, which is the address the orchestration published the RESP server at.
+/// bind ports of their own and reach the orchestrated mailbox not at all — and takes two values from it: the
+/// orchestrated database, because a signal ticket is minted on one replica and redeemed on the other and the store
+/// behind it is PostgreSQL, and the address the orchestration published the RESP server at.
 /// </para>
 /// </remarks>
 [Collection(ComposedHostCollectionDefinition.Name)]
