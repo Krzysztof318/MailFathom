@@ -34,9 +34,10 @@ import { shownAttachment, type NotShown } from './shownAttachment';
 //
 // Nothing a file carries reaches a host other than the deployment. The octets arrive over the client surface under the
 // credential the reader signed in with, and what is drawn from them is a picture in an `img`, words React escaped, or a
-// document in a sandboxed frame over an object URL. None of the three resolves a reference the sender wrote out of the
-// page this client runs in: the first two cannot, and the third holds an opaque origin with no flag granted, so a file
-// whose content names an address reaches neither that address nor anything of the client.
+// document in a frame over an object URL the client minted as a PDF. None of the three resolves a reference the sender
+// wrote out of the page this client runs in: the first two cannot, and the third is drawn by the engine's own viewer,
+// which resolves nothing of this document's and reaches no part of it. The frame that draws it carries no `sandbox`,
+// and the note beside that element says why the attribute both bought nothing here and stopped the file loading.
 
 // What a refusal is worded as: one sentence each, saying what could not be done and what to do about it, exactly as the
 // download beside it does — a reader who pressed *open* is owed as much as one who pressed *download*.
@@ -305,10 +306,19 @@ function Inside({
     }
 
     if (reading.drawnAs.as === 'document') {
-        // `sandbox` with nothing granted, which is what the frame is for: the viewer that draws the document is the
-        // engine's own and needs none of the flags, so a file that turned out to carry script, a form, or a navigation
-        // gets no way to run one. It is not the anti-tracking mechanism — the octets are already in hand and came from
-        // the deployment — and ADR 0024's reading holds here too: a sandbox answers *executes* and never *fetches*.
+        // **No `sandbox`, and the absence is what makes the frame draw anything at all.** A sandbox with nothing
+        // granted puts the frame in an origin that fails every same-origin check, and the address here is an object
+        // URL this document minted — so the engine refuses to resolve it and the reader is shown a blocked frame
+        // rather than their file. Granting the origin back to repair that would leave the attribute stating a
+        // restriction it no longer applies.
+        //
+        // What the attribute was guarding against cannot arise here, which is why dropping it costs nothing. A frame
+        // renders by what the resource says it is, and what this resource says is the client's own constant:
+        // `deployment/attachmentExchange.ts` mints the blob as `application/pdf` rather than as whatever the sender
+        // declared, and `shownAttachment.ts` reaches that branch for that one media type. So the engine draws it with
+        // the viewer it carries and can never read it as a document of markup — the same property ADR 0024 rests the
+        // picture on, where an `img` draws octets and does nothing else with them. A PDF's own script runs inside that
+        // viewer, which resolves no reference of this document's and reaches no part of it.
         //
         // The height is the pane's rather than the document's, because a frame cannot be measured from outside it
         // without granting a script, and a document is what somebody opened this surface to read: it scrolls inside
@@ -317,7 +327,6 @@ function Inside({
             <iframe
                 src={answer.content}
                 title={named}
-                sandbox=""
                 className="h-full min-h-0 w-full flex-1 rounded-md border-none bg-panel"
             />
         );

@@ -60,6 +60,16 @@ export interface ActedMessage {
      * since, which is the one place that correction belongs.
      */
     readonly unread: boolean;
+
+    /**
+     * Whether the deployment last reported the message flagged.
+     *
+     * Carried beside the reading above and for the same reason: the flag control's direction is the message's own
+     * state rather than a control's, so a strip standing over a selection can answer it over any number of messages
+     * from what is written down here. `drawnActs.ts` reads it against what this client has asked since, which is the
+     * one place that correction belongs.
+     */
+    readonly flagged: boolean;
 }
 
 /**
@@ -81,6 +91,16 @@ export interface AskedAct {
 
     /** Whether the act takes the message out of that folder rather than leaving it there. */
     readonly leaves: boolean;
+
+    /**
+     * Whether this delete destroys the message rather than filing it in the trash, and `false` for every other act.
+     *
+     * Carried rather than read back off `leaves`, because the two stop agreeing at the moment the way back closes: a
+     * permanent delete is asked for with nothing leaving — the row stays and says what is about to happen to it — and
+     * the released delete then takes the row out of the list, which flips `leaves` and would leave the sentence the
+     * row wears reading *moving to the trash* about a message being destroyed.
+     */
+    readonly destroys: boolean;
 }
 
 export interface MailboxActs {
@@ -181,6 +201,7 @@ export function opensAsDraft(acts: MailboxActs, email: MailTimelineEntry): boole
             account: email.account,
             folder: email.folder,
             unread: email.unread,
+            flagged: email.flagged,
         }) === 'Drafts'
     );
 }

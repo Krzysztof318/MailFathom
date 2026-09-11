@@ -19,7 +19,7 @@ import {
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
-import type { HeadMessage } from '../mailSpace/HeadActs';
+import type { ActedMessage } from '../mailboxActs/useMailboxActs';
 import { MessageWaiting } from '../messageBody/Message';
 import { MessageHeaders } from '../readingPane/MessageHeaders';
 import { useTwoPanes } from '../shell/useWideWorkspace';
@@ -613,7 +613,7 @@ function headersOf(message: MailThreadMessage): MailMessageHeaders {
 }
 
 /** The message the head's acts are about, which is the one the conversation is standing on. */
-function actedOn(message: MailThreadMessage): HeadMessage {
+function actedOn(message: MailThreadMessage): ActedMessage {
     const email = message.email;
 
     return {

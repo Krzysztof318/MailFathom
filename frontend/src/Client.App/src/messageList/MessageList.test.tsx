@@ -278,7 +278,7 @@ describe('MessageList', () => {
         const transport = answering(wholeFolder);
         const leaving: MailboxActs = {
             ...nothingActed,
-            asked: new Map([['message-2', { act: 'archive', from: 'INBOX', leaves: true }]]),
+            asked: new Map([['message-2', { act: 'archive', from: 'INBOX', leaves: true, destroys: false }]]),
         };
         const drawn = renderList(transport, { acts: leaving });
 
@@ -287,7 +287,7 @@ describe('MessageList', () => {
         const going = going2();
 
         expect(going).not.toBeNull();
-        expect([...(going?.classList ?? [])]).toContain('animate-row-filed');
+        expect([...(going?.classList ?? [])]).toContain('animate-row-going');
 
         act(() => {
             animationEnded(going as Element);
@@ -309,7 +309,7 @@ describe('MessageList', () => {
     it('takes a whole selection out at the press rather than holding rows no reader could watch go', async () => {
         const filed = Array.from({ length: 30 }, (_, at): [string, AskedAct] => [
             `message-${String(at)}`,
-            { act: 'archive', from: 'INBOX', leaves: true },
+            { act: 'archive', from: 'INBOX', leaves: true, destroys: false },
         ]);
 
         renderList(answering(wholeFolder), { acts: { ...nothingActed, asked: new Map(filed) } });
@@ -476,8 +476,8 @@ describe('MessageList', () => {
             acts: {
                 ...nothingActed,
                 asked: new Map([
-                    ['message-0', { act: 'archive', from: 'INBOX', leaves: true }],
-                    ['message-1', { act: 'archive', from: 'INBOX', leaves: true }],
+                    ['message-0', { act: 'archive', from: 'INBOX', leaves: true, destroys: false }],
+                    ['message-1', { act: 'archive', from: 'INBOX', leaves: true, destroys: false }],
                 ]),
             },
         });
@@ -1304,7 +1304,13 @@ describe('MessageList, under a finger carried across a row', () => {
     // The places the list has drawn, which is what every act names and which a list under no provider holds none of.
     const listed = {
         ...nothingListed,
-        placeOf: (id: string) => ({ storedEmailId: id, account: 'work', folder: 'INBOX', unread: false }),
+        placeOf: (id: string) => ({
+            storedEmailId: id,
+            account: 'work',
+            folder: 'INBOX',
+            unread: false,
+            flagged: false,
+        }),
     };
 
     function listWithPlaces(drawn: Partial<Drawn> = {}): RenderResult {
@@ -1330,7 +1336,7 @@ describe('MessageList, under a finger carried across a row', () => {
         carry(row(0), swipeDistance);
 
         expect(performed).toHaveBeenCalledWith('archive', [
-            { storedEmailId: 'message-0', account: 'work', folder: 'INBOX', unread: false },
+            { storedEmailId: 'message-0', account: 'work', folder: 'INBOX', unread: false, flagged: false },
         ]);
     });
 

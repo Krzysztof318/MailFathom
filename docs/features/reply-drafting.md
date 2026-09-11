@@ -115,11 +115,12 @@ Asking a provider to write a reply to a conversation this deployment stored no t
 on its own: a model given nothing writes a fluent message resting on nothing at all, so the drafting answers with
 nothing instead.
 
-## Turning it on
+## Turning it off
 
-Off by default, and off is a supported deployment: the composer offers no drafting and every reply is written by hand
-exactly as before. Turning it on needs a declared chat endpoint and is a spend decision — one provider call per reply
-somebody deliberately asked for.
+On wherever a chat endpoint is declared, and read nowhere else: a deployment with no endpoint drafts nothing whatever
+the key says. Turning it off is a supported deployment and a spend decision — the composer then offers no drafting and
+every reply is written by hand exactly as before. What it costs where it is on is one provider call per reply somebody
+deliberately asked for.
 
 [AI configuration § `Chat:ReplyDrafting`](../operations/configuration-ai.md#drafting-a-reply--chatreplydrafting) holds
 the two keys, and [the client endpoint](../operations/client-endpoint.md#the-reply-drafting-routes) the two routes it is

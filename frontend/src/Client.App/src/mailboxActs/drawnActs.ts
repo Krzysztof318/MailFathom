@@ -42,15 +42,11 @@ export const actsSaidInAMenu: Readonly<Record<MailboxAct, MessageKey>> = {
     move: 'menu.move',
 };
 
-// Taking a flag off is in neither order below, and that is the difference between a strip and a head rather than an
-// omission. A strip and a row's menu stand over whatever is picked out — one message or two hundred, flagged and
-// unflagged among them — so which direction a single control would go in is a question they cannot answer; the head of
-// the message being read is about exactly one message whose flag the screen is already holding, which is why the design
-// draws the toggle there and *Flaga* here.
-//
-// **Marking read is the one slot in an order below that goes both ways**, which is not the same case: a rule decides it
-// rather than a single message, so a strip can answer it over any number of them. `readActFor` is that rule, and the
-// two orders name the slot by the act it reads as most of the time.
+// **Two slots in the orders below go both ways, and a rule decides each of them rather than a single message.** The
+// design draws both as toggles — a row's context menu says *Remove flag* over a flagged message and the toolbar says
+// the same — so a strip standing over two hundred messages answers the direction the way it answers the read one: from
+// what the messages under it are drawn as, which it holds for every one of them. `readActFor` and `flagActFor` are
+// those two rules, and the orders name each slot by the act it reads as most of the time.
 
 /** The order a strip of controls draws them in: the toolbar, and the bar that stands over a selection. */
 export const actsOnAStrip: readonly MailboxAct[] = ['archive', 'delete', 'flag', 'markUnread', 'move'];
@@ -90,6 +86,39 @@ export function readActFor(acts: MailboxActs, marking: ReadMarking, messages: re
     }
 
     return messages.every((message) => !unreadNow(message)) ? 'markUnread' : 'markRead';
+}
+
+/**
+ * Which way the flag control goes for these messages, which is the act the `flag` slot above actually offers.
+ *
+ * **Putting a flag on is the default, and one shared state turns it round**, exactly as the read control's rule
+ * reads: every message drawn flagged is offered the act that takes the flag off, and anything else — none of them
+ * flagged, or a mixture — is offered the act that puts one on. Read against what the reader is looking at rather than
+ * against what the deployment last answered, because a mailbox mutation converges minutes after it is written down
+ * and a control offering to flag a row already drawn flagged would be offering to do what has been done.
+ *
+ * A pending act of its own wins over the observation, which is what makes pressing the control twice give a reader
+ * the two directions rather than the same one.
+ *
+ * An empty list is offered the act that puts a flag on, for the reason an empty list is offered `markUnread`: it is
+ * refused before it can be pressed, so what this decides there is only the name the control wears while it says so.
+ */
+export function flagActFor(acts: MailboxActs, messages: readonly ActedMessage[]): FlagAct {
+    function flaggedNow(message: ActedMessage): boolean {
+        const asked = acts.asked.get(message.storedEmailId);
+
+        if (asked?.act === 'flag') {
+            return true;
+        }
+
+        if (asked?.act === 'unflag') {
+            return false;
+        }
+
+        return message.flagged;
+    }
+
+    return messages.length > 0 && messages.every(flaggedNow) ? 'unflag' : 'flag';
 }
 
 /** Why a control cannot act, exhaustive by its own type so a reason added later has to be given words. */

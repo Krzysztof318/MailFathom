@@ -187,11 +187,11 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
     public ThreadStateOptions ThreadState { get; set; } = new();
 
     /// <summary>Gets or sets whether a reply is drafted from the conversation it answers, and where its manner comes from.</summary>
-    /// <remarks>Present rather than nullable for the reason the blocks above are: its own <c>Enabled</c> is what says whether a drafting runs, and off is the default and a supported deployment.</remarks>
+    /// <remarks>Present rather than nullable for the reason the blocks above are: its own <c>Enabled</c> is what says whether a drafting runs, and on is the default for the reason the block beneath it is on — the block itself says why, and what turning it off leaves is the composer somebody writes in themselves.</remarks>
     public ReplyDraftingOptions ReplyDrafting { get; set; } = new();
 
     /// <summary>Gets or sets whether a sentence typed into the search field is read into the filters it describes.</summary>
-    /// <remarks>Present rather than nullable for the reason the three blocks above are, and on by default unlike any of them — the block itself says why, and what turning it off leaves is the word search every deployment serves.</remarks>
+    /// <remarks>Present rather than nullable for the reason the three blocks above are, and on by default as the block above it is — the block itself says why, and what turning it off leaves is the word search every deployment serves.</remarks>
     public MailSearchPhrasingOptions SearchPhrasing { get; set; } = new();
 
     /// <summary>Gets whether the deployment declared a chat provider at all.</summary>
@@ -208,7 +208,9 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
             // it. What each member contributes here is whether writing it was unambiguous intent. Most have no useful
             // default, so any value at all is; the API has one, so what counts is a value other than it, which nobody
             // writes by accident. The bounds and the timeout contribute nothing either way, because a deployment that
-            // accepted their defaults is indistinguishable from one that wrote them out.
+            // accepted their defaults is indistinguishable from one that wrote them out. The two blocks that are on by
+            // default are absent for that same reason: their `Enabled` reads true on a section nobody wrote, so reading
+            // one as intent would refuse every deployment that left the section alone.
             if (this.Model.Trim().Length > 0
                 || this.PublishedModel.Trim().Length > 0
                 || this.Address.Trim().Length > 0
@@ -219,8 +221,7 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
                 || this.Unauthenticated
                 || this.RelevanceFilter.Enabled
                 || this.Enrichment.Enabled
-                || this.ThreadState.Enabled
-                || this.ReplyDrafting.Enabled)
+                || this.ThreadState.Enabled)
             {
                 yield return new ValidationResult(
                     "The Chat section declares settings but no Alias, so no chat provider is configured and nothing in it is read. Give the endpoint an alias, or remove the section.",

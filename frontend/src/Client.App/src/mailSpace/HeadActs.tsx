@@ -9,7 +9,7 @@ import { Control } from '../controls/Control';
 import type { ControlShape } from '../controls/controlShapes';
 import { PlannedControl } from '../controls/PlannedControl';
 import { useLocalization } from '../localization/useLocalization';
-import { refusalSaid, standsInTheWay } from '../mailboxActs/drawnActs';
+import { flagActFor, refusalSaid, standsInTheWay } from '../mailboxActs/drawnActs';
 import { useMailboxActs, type ActedMessage } from '../mailboxActs/useMailboxActs';
 
 // What stands at the end of the head of a message or a conversation, beside its subject: handing the thread to the
@@ -28,17 +28,13 @@ import { useMailboxActs, type ActedMessage } from '../mailboxActs/useMailboxActs
 // mailbox act, exactly as the toolbar's five are. Neither is a second implementation — a head that composed its own
 // reply or wrote its own flag is how two surfaces come to answer a message differently.
 //
-// **The flag is the one control in this client that goes both ways**, because this is the one surface that can: a head
-// is about exactly one message and already holds whether it is flagged, while a strip stands over whatever is picked
-// out and cannot say which direction a single control would take. `mailboxActs/drawnActs.ts` carries that difference.
+// **The flag goes both ways here and on every other surface**, under the one rule `mailboxActs/drawnActs.ts` states:
+// a message drawn flagged is offered the act that takes the flag off. A head is about exactly one message, which is
+// the simplest case of that rule rather than a case of its own — reading it here would be a second answer to which
+// direction one message's flag goes.
 //
 // The head's own words for forwarding and flagging differ from the toolbar's — *Przekaż* and *Oflaguj* against
 // *Prześlij dalej* and *Flaga* — which is why they are keys of their own rather than the toolbar's reused.
-
-/** The message a head's acts are about: where it is, so a mailbox act can name it, and which way its flag goes. */
-export interface HeadMessage extends ActedMessage {
-    readonly flagged: boolean;
-}
 
 export function HeadActs({
     compact,
@@ -53,7 +49,7 @@ export function HeadActs({
      * around it: the head says who wrote *that* message and when, so the three acts under it answer, forward, and flag
      * the same one. An act over a whole conversation is a screen of its own and is not what this draws.
      */
-    readonly message: HeadMessage | null;
+    readonly message: ActedMessage | null;
 }) {
     const { translate } = useLocalization();
     const acts = useMailboxActs();
@@ -74,9 +70,9 @@ export function HeadActs({
               }
             : null;
 
-    // Which way the flag goes, which is the message's own state rather than a control's: a flagged message is offered
-    // the act that takes the flag off, and every other message the act that puts one on.
-    const flagging = message?.flagged === true ? 'unflag' : 'flag';
+    // Which way the flag goes, read through the one rule every surface reads it through, so the head and the toolbar
+    // over the same message never offer opposite directions.
+    const flagging = flagActFor(acts, message === null ? [] : [message]);
     const flagLabel = translate(flagging === 'unflag' ? 'message.unflag' : 'message.flag');
 
     // Either the act or the sentence saying why it cannot be taken, decided here rather than inside the markup: a

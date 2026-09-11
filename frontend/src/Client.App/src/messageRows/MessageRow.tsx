@@ -66,12 +66,17 @@ const actPendingSaid: Readonly<Record<FilingAct, MessageKey>> = {
 // already in the trash it destroys the mail, so the row stays where it is for the seconds in which the deployment is
 // still holding the change back — and it says *that*, because a row reading `Moving to the trash…` in the trash would
 // be describing an act that is not the one about to happen.
+//
+// It reads what the act destroys rather than whether the row is leaving, because the two stop agreeing at the exact
+// moment somebody is watching: the way back closes, the released delete takes the row out of the list, and a sentence
+// read off the leaving would turn into `Moving to the trash…` over a message being destroyed — on the last frames
+// anybody sees of it.
 function actPendingWording(asked: AskedAct): MessageKey | null {
     if (changesAFlag(asked.act)) {
         return null;
     }
 
-    return asked.act === 'delete' && !asked.leaves ? 'act.deletingPermanently' : actPendingSaid[asked.act];
+    return asked.destroys ? 'act.deletingPermanently' : actPendingSaid[asked.act];
 }
 
 // What each direction of a swipe shows behind the row it is carrying, which is the design project's own: the act the
@@ -226,13 +231,18 @@ export function MessageRow({
     // takes the message out of the folder it is drawn in goes out at all, and the act is what names the colour: the
     // design draws red for a deletion and orange for filing a message somewhere else, archive and move alike. A row
     // that goes because the folder was read again is not held while it goes and plays neither.
-    // Nothing lands on it while it goes, which is the design project's own: a row already out of the folder is not a
-    // row to open, and the half-second it is still drawn for is exactly long enough to be clicked on by accident.
-    const going = !acting?.leaves
-        ? null
-        : acting.act === 'delete'
-          ? 'pointer-events-none animate-row-deleted'
-          : 'pointer-events-none animate-row-filed';
+    //
+    // **The colour is drawn on what the row carries and the leaving on the row**, which is two animations on two
+    // elements and is forced rather than chosen: the wash is an inset shadow, and one inset into the row is painted
+    // underneath the opaque element the row carries, so it is invisible for the whole animation and what a reader
+    // sees is a row travelling and fading without ever changing colour. The leaving stays on the row because that is
+    // where it is reported from — `onAnimationEnd` below reads the row's own animation and nothing inside it.
+    //
+    // Nothing lands on the row while it goes, which is the design project's own: a row already out of the folder is
+    // not a row to open, and the half-second it is still drawn for is exactly long enough to be clicked on by
+    // accident.
+    const wash = !acting?.leaves ? null : acting.act === 'delete' ? 'animate-row-deleted' : 'animate-row-filed';
+    const going = wash === null ? null : 'pointer-events-none animate-row-going';
 
     // What the reserved line holds: what the act says about itself where it says anything, else whatever the screen
     // would otherwise put there. Worked out here rather than in the markup, because the line is also hidden from the
@@ -353,8 +363,8 @@ export function MessageRow({
                 // a ring around them, which is the design project's mark and keeps the row's own lines where they
                 // were.
                 className={`flex h-full cursor-pointer flex-col justify-center gap-0.75 overflow-hidden border-s-4 ps-2.5 pe-3.5 ${
-                    swipe.carried === 0 ? 'transition' : ''
-                } ${
+                    wash ?? ''
+                } ${swipe.carried === 0 ? 'transition' : ''} ${
                     selected
                         ? 'border-s-accent bg-accent-soft'
                         : open

@@ -9,7 +9,7 @@ import { PlannedControl } from '../controls/PlannedControl';
 import { useLocalization } from '../localization/useLocalization';
 import { useReadMarking } from '../readMarking/useReadMarking';
 import { ActQuestions } from './ActQuestions';
-import { actsDrawn, actsOnAStrip, readActFor, refusalSaid, standsInTheWay } from './drawnActs';
+import { actsDrawn, actsOnAStrip, flagActFor, readActFor, refusalSaid, standsInTheWay } from './drawnActs';
 import { useMailboxActs, type ActedMessage, type MailboxAct } from './useMailboxActs';
 
 // The five things a person does to a mailbox, drawn once for the two strips that offer them: the toolbar, over the
@@ -51,10 +51,16 @@ export function MailboxActControls({
     return (
         <>
             {actsOnAStrip.map((slot) => {
-                // The read control is the one slot that goes both ways, and which way is the messages' own state
-                // rather than the strip's: everything under it drawn read is offered the act that marks them unread,
-                // and anything else the act that marks them read. Every other slot is the act it names.
-                const asked = slot === 'markUnread' ? readActFor(acts, marking, messages) : slot;
+                // Two slots go both ways, and which way is the messages' own state rather than the strip's:
+                // everything under the read control drawn read is offered the act that marks them unread, everything
+                // under the flag control drawn flagged is offered the act that takes the flag off, and anything else
+                // is offered the act each slot is named for. Every other slot is the act it names.
+                const asked =
+                    slot === 'markUnread'
+                        ? readActFor(acts, marking, messages)
+                        : slot === 'flag'
+                          ? flagActFor(acts, messages)
+                          : slot;
                 const { icon, label } = actsDrawn[asked];
 
                 // Either the deployment's refusal or the fact that this act is already on its way for every message

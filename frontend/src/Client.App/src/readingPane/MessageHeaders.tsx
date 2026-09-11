@@ -9,7 +9,8 @@ import type { MessageKey } from '../localization/en';
 import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
 import { BackToList } from '../mailSpace/BackToList';
-import { HeadActs, type HeadMessage } from '../mailSpace/HeadActs';
+import { HeadActs } from '../mailSpace/HeadActs';
+import type { ActedMessage } from '../mailboxActs/useMailboxActs';
 import { useTwoPanes } from '../shell/useWideWorkspace';
 import { useWorkspace } from '../workspace/useWorkspace';
 
@@ -71,7 +72,7 @@ export function MessageHeaders({
     readonly headers: MailMessageHeaders;
 
     /** The message the head's acts are about, which is the one being read. */
-    readonly message: HeadMessage;
+    readonly message: ActedMessage;
 
     /**
      * What the head is called where that is not this message's own subject — a conversation says its own subject once,

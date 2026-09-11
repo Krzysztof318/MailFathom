@@ -412,8 +412,22 @@ describe('AttachmentView documents', () => {
         const drawn = await screen.findByTitle('contract.pdf');
 
         expect(drawn.getAttribute('src')).toBe('blob:https://mail.example.invalid/one');
-        expect(drawn.getAttribute('sandbox')).toBe('');
         expect(held.asked[0]?.shown).toEqual({ as: 'document' });
+    });
+
+    // A sandbox with nothing granted puts the frame in an origin that fails every same-origin check, and the address
+    // it is given is an object URL this document minted — so the engine refuses to resolve it and a reader is shown a
+    // blocked frame instead of their file. The attribute bought nothing here either: the blob is minted as a PDF by
+    // the client rather than by the sender, so the engine can only ever draw it with the viewer it carries.
+    it('grants the document frame an origin, so the address the client minted resolves', async () => {
+        theEngineDrawsDocuments(true);
+
+        const held = reading({ outcome: 'shown', content: 'blob:https://mail.example.invalid/one' });
+        drawing(contract, held.exchange);
+
+        const drawn = await screen.findByTitle('contract.pdf');
+
+        expect(drawn.hasAttribute('sandbox')).toBe(false);
     });
 
     // The octets behind an object address stay alive for as long as anything holds the address, so a surface that

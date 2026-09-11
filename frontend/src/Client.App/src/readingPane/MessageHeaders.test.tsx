@@ -7,10 +7,11 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { MailMessageHeaders } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
-import type { HeadMessage } from '../mailSpace/HeadActs';
+
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { MessageHeaders } from './MessageHeaders';
+import type { ActedMessage } from '../mailboxActs/useMailboxActs';
 
 const headers: MailMessageHeaders = {
     subject: 'Quarterly invoice',
@@ -28,7 +29,7 @@ const headers: MailMessageHeaders = {
 
 // The message the head's acts are about, which this file states only so the head can be drawn: what those acts do is
 // `mailSpace/HeadActs.test.tsx`'s.
-const message: HeadMessage = {
+const message: ActedMessage = {
     storedEmailId: 'a1',
     account: 'reader@example.invalid',
     folder: 'INBOX',
