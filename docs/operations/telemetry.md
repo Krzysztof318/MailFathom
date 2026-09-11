@@ -226,8 +226,8 @@ without their content, and `user_storage_ceiling` for one whose user was at thei
 still had room. The last two are separate values rather than one because they ask an operator for different things —
 more disk or a higher instance ceiling against the first, a larger share for one person or a wait against the second —
 and a run that left messages for both reasons reports both, one measurement each. One message is deferred by one of
-them rather than by both, because the instance's room is claimed first and a user is never charged for a payload the
-instance had no room for. All are counted rather than only logged
+them rather than by both, because a single claim decides against both ceilings at once and names the instance's where
+both are reached, so a user is never charged for a payload the instance had no room for. All are counted rather than only logged
 because each is a condition that persists — a run that stopped for its budget will stop again next interval, and a
 deployment or a user at a ceiling stays there until somebody acts — so a rising count says it has been running that
 way rather than that it did once.

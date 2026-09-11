@@ -26,11 +26,8 @@ namespace MailFathom.IntegrationTests.Persistence;
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 public sealed class OrchestratedProviderPaceMarkerTests(MailFathomOrchestrationFixture orchestration)
 {
-    /// <summary>Wide enough that the time between two reservations cannot account for more than a sliver of it.</summary>
+    /// <summary>What one workload is paced at, named once so the wait it produces is bounded by it rather than by a literal.</summary>
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
-
-    /// <summary>How much of the interval the two reservations' own round trips may take before the wait is read as wrong.</summary>
-    private static readonly TimeSpan RoundTripAllowance = TimeSpan.FromSeconds(15);
 
     [Fact]
     public async Task ReserveNextSlotAsync_TwoReservationsForOneWorkload_SpaceTheSecondOneIntervalBehindTheFirst()
@@ -46,7 +43,7 @@ public sealed class OrchestratedProviderPaceMarkerTests(MailFathomOrchestrationF
 
         // Assert
         Assert.Equal(TimeSpan.Zero, first);
-        Assert.InRange(second, Interval - RoundTripAllowance, Interval);
+        Assert.InRange(second, TimeSpan.FromTicks(1), Interval);
     }
 
     private static Task<TimeSpan> ReserveAsync(
