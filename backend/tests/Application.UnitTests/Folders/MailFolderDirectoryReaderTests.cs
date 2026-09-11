@@ -197,15 +197,58 @@ public sealed class MailFolderDirectoryReaderTests
     }
 
     /// <summary>
-    /// A mirrored folder the composed reading left out was left out by the scope that withholds it, so it is not added
-    /// back here: the withholding is about a folder holding mail, and undoing it is exactly what this must not do.
+    /// A folder somebody has just declared is mirrored and takes part in everything, so no run has discovered it and
+    /// local state names it nowhere. It is published all the same: a client that could not see it would report the
+    /// folder as created and then draw a tree without it until the account's next pass, which is minutes.
     /// </summary>
     [Fact]
-    public async Task ReadAsync_AMirroredMappingTheReadingLeftOut_StaysOutOfTheTree()
+    public async Task ReadAsync_AMirroredMappingNoRunHasReached_IsPublishedRatherThanWaitedFor()
     {
         // Arrange
         var mappings = new StubMailFolderMappings()
-            .With(Work.Id, MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("trash"), MailFolderSpecialUse.Trash));
+            .With(Work.Id, MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("inbox"), MailFolderSpecialUse.Inbox))
+            .With(
+                Work.Id,
+                MailFolderMapping.ToRemotePath(
+                    MailFolderAlias.Create("invoices"),
+                    RemoteFolderPath.Create("Faktury")));
+        var reader = ReaderOver(
+            Freshness((Work.Id, "inbox", Now)),
+            OwningAccounts(Work),
+            StoredFolders(Stored(Work.Id, "inbox", "INBOX", storedEmailCount: 1, unreadEmailCount: 0)),
+            mappings);
+
+        // Act
+        var directory = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var declared = Assert.Single(
+            Assert.Single(directory.Accounts).Folders,
+            folder => folder.Alias.Value == "INVOICES");
+        Assert.Equal(MailSynchronizationState.NeverSynchronized, declared.Freshness.State);
+        Assert.Equal(0, declared.StoredEmailCount);
+    }
+
+    /// <summary>
+    /// The one mapping this may not add back: a folder withheld from tools is mirrored and holds mail, and the scope
+    /// that withholds it left it out of the composed reading on purpose — so publishing it here would name a folder
+    /// every other read refuses.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AMirroredMappingWithheldFromTools_StaysOutOfTheTree()
+    {
+        // Arrange
+        var withheld = MailFolderParticipation.Create(
+            isSynchronized: true,
+            generatesEmbeddings: true,
+            isVisibleToTools: false);
+        var mappings = new StubMailFolderMappings()
+            .With(
+                Work.Id,
+                MailFolderMapping.ToSpecialUse(
+                    MailFolderAlias.Create("trash"),
+                    MailFolderSpecialUse.Trash,
+                    withheld));
         var reader = ReaderOver(
             Freshness((Work.Id, "inbox", Now)),
             OwningAccounts(Work),

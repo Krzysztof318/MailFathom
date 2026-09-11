@@ -15,7 +15,22 @@ import { useLocalization } from '../localization/useLocalization';
 // the other says it carries none.
 
 /** The marks a message carries, pushed to the end of the line it is drawn on. */
-export function MessageMarkers({ email }: { readonly email: MailTimelineEntry }) {
+export function MessageMarkers({
+    email,
+    flagged,
+}: {
+    readonly email: MailTimelineEntry;
+
+    /**
+     * Whether the flag is drawn, which is a value rather than `email.flagged` because the two differ for minutes.
+     *
+     * Flagging is a durable mutation the account's own pass carries to the mail server, and the stored flag is an
+     * observation of what that server was seen to hold — so what the reader is shown is what was asked for, and only
+     * the surface that holds the pending acts can say what that is. `mailboxActs/useMailboxActs.ts` answers it once,
+     * in `drawnFlagged`, so two screens drawing these marks cannot come to disagree about one message.
+     */
+    readonly flagged: boolean;
+}) {
     const { translate } = useLocalization();
 
     return (
@@ -29,7 +44,7 @@ export function MessageMarkers({ email }: { readonly email: MailTimelineEntry })
                 />
             ) : null}
 
-            {email.flagged ? <Marker name="flag" label={translate('list.flagged')} /> : null}
+            {flagged ? <Marker name="flag" label={translate('list.flagged')} /> : null}
         </span>
     );
 }

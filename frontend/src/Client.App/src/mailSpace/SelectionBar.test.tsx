@@ -14,8 +14,8 @@ import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
 import { SelectionBar } from './SelectionBar';
 
 const drawnRows: readonly ActedMessage[] = [
-    { storedEmailId: 'message-1', account: 'work', folder: 'work-inbox' },
-    { storedEmailId: 'message-2', account: 'work', folder: 'work-inbox' },
+    { storedEmailId: 'message-1', account: 'work', folder: 'work-inbox', unread: false },
+    { storedEmailId: 'message-2', account: 'work', folder: 'work-inbox', unread: false },
 ];
 
 const clients: MoveDestination = { alias: 'work-clients', name: 'Projects / Clients', role: null };

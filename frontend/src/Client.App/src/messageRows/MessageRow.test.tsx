@@ -38,26 +38,31 @@ const email: MailTimelineEntry = {
 function drawMoved(moved: {
     readonly arrived?: boolean;
     readonly changed?: boolean;
+    readonly acts?: MailboxActs;
     readonly onSettled?: () => void;
+    readonly onGone?: () => void;
 }): HTMLElement {
     render(
         <LocalizationProvider>
-            <ul>
-                <MessageRow
-                    email={email}
-                    position={1}
-                    open={false}
-                    selected={false}
-                    focusable
-                    arrived={moved.arrived ?? false}
-                    changed={moved.changed ?? false}
-                    onSettled={moved.onSettled}
-                    onOpen={() => undefined}
-                    onPoint={() => undefined}
-                    onPointerEnter={() => undefined}
-                    onElement={() => undefined}
-                />
-            </ul>
+            <MailboxActsContext value={moved.acts ?? nothingActed}>
+                <ul>
+                    <MessageRow
+                        email={email}
+                        position={1}
+                        open={false}
+                        selected={false}
+                        focusable
+                        arrived={moved.arrived ?? false}
+                        changed={moved.changed ?? false}
+                        onSettled={moved.onSettled}
+                        onGone={moved.onGone}
+                        onOpen={() => undefined}
+                        onPoint={() => undefined}
+                        onPointerEnter={() => undefined}
+                        onElement={() => undefined}
+                    />
+                </ul>
+            </MailboxActsContext>
         </LocalizationProvider>,
     );
 
@@ -248,8 +253,6 @@ describe('MessageRow', () => {
     it.each([
         ['archive', 'Archiving…'],
         ['delete', 'Moving to the trash…'],
-        ['flag', 'Flagging…'],
-        ['markUnread', 'Marking unread…'],
         ['move', 'Filing…'],
     ] as const)('says a message asked to be %sd is being acted on, in the reserved line', (act, said) => {
         const reserved = reservedLine(drawRow(undefined, false, nothingMarkedRead, asking(act)));
@@ -268,12 +271,42 @@ describe('MessageRow', () => {
         expect(reserved?.textContent).toBe('Deleting permanently…');
     });
 
-    // Taking a flag off is asked for from the head of the open message rather than from a row, and the row it is about
-    // still says so: what a surface reports is the act, not the surface it was pressed on.
-    it('says a flagged message asked to lose its flag is being acted on, in the same reserved line', () => {
-        const reserved = reservedLine(drawRow(undefined, false, nothingMarkedRead, asking('unflag'), true));
+    // What a flag act does is a mark this row draws from the press, so the outcome is already on the screen and the
+    // line says nothing: a sentence beside the mark would be the row narrating a mechanism instead of showing a state,
+    // and the design draws neither it nor a card in the corner.
+    // Each is drawn in the state that leaves its act pending, so what is asserted is a pending act saying nothing
+    // rather than an act that has already retired.
+    it.each([
+        { named: 'flagged', act: 'flag', unread: false, flagged: false },
+        { named: 'unflagged', act: 'unflag', unread: false, flagged: true },
+        { named: 'marked read', act: 'markRead', unread: true, flagged: false },
+        { named: 'marked unread', act: 'markUnread', unread: false, flagged: false },
+    ] as const)(
+        'says nothing in the reserved line about a message asked to be $named, the mark being what says it',
+        ({ act, unread, flagged }) => {
+            const reserved = reservedLine(drawRow(undefined, unread, nothingMarkedRead, asking(act), flagged));
 
-        expect(reserved?.textContent).toBe('Removing the flag…');
+            expect(reserved?.textContent).toBe('');
+            expect(reserved?.getAttribute('aria-hidden')).toBe('true');
+        },
+    );
+
+    it('draws the flag on a message asked to be flagged, rather than waiting for the server to report it', () => {
+        drawRow(undefined, false, nothingMarkedRead, asking('flag'));
+
+        expect(screen.getByText('Flagged')).toBeDefined();
+    });
+
+    it('takes the flag off a flagged message asked to lose it, which is the same rule in the other direction', () => {
+        drawRow(undefined, false, nothingMarkedRead, asking('unflag'), true);
+
+        expect(screen.queryByText('Flagged')).toBeNull();
+    });
+
+    it('keeps drawing the flag once the deployment reports it, which is what retires the act', () => {
+        drawRow(undefined, false, nothingMarkedRead, asking('flag'), true);
+
+        expect(screen.getByText('Flagged')).toBeDefined();
     });
 
     it('draws a message asked to be marked unread as unread, rather than waiting for the server to report it', () => {
@@ -282,10 +315,10 @@ describe('MessageRow', () => {
         expect(screen.getByText('Unread')).toBeDefined();
     });
 
-    it('stops saying so once the deployment reports the flag the act asked for, which is what retires it', () => {
-        const reserved = reservedLine(drawRow(undefined, false, nothingMarkedRead, asking('flag'), true));
+    it('draws a message asked to be marked read as read, which is the same rule in the other direction', () => {
+        drawRow(undefined, true, nothingMarkedRead, asking('markRead'));
 
-        expect(reserved?.textContent).toBe('');
+        expect(screen.queryByText('Unread')).toBeNull();
     });
 
     it('says nothing of another message’s act, the pending line belonging to the row it is about', () => {
@@ -566,6 +599,52 @@ describe('MessageRow, a row that moved', () => {
 
         expect(row.className).not.toContain('animate-row-landing');
         expect(row.className).not.toContain('animate-row-changed');
+    });
+
+    // The act names the colour, which is the whole of what the design draws here: red where the mail is being deleted
+    // and orange where it is being filed somewhere else. Archive and move are one animation because they are one fact
+    // about the row — the message is going somewhere a reader can go and fetch it.
+    it.each<{ named: string; asked: MailboxAct; drawn: string }>([
+        { named: 'archived', asked: 'archive', drawn: 'animate-row-filed' },
+        { named: 'filed', asked: 'move', drawn: 'animate-row-filed' },
+        { named: 'deleted', asked: 'delete', drawn: 'animate-row-deleted' },
+    ])('goes out in the colour of the act where the message is being $named', ({ asked, drawn }) => {
+        expect(drawMoved({ acts: asking(asked) }).className).toContain(drawn);
+    });
+
+    it('goes out rather than landing where a row that had just arrived was acted on, having left either way', () => {
+        const row = drawMoved({ arrived: true, acts: asking('archive') });
+
+        expect(row.className).toContain('animate-row-filed');
+        expect(row.className).not.toContain('animate-row-landing');
+    });
+
+    // A permanent delete is the one act the row waits out where it stands: the deployment holds the change back for
+    // the seconds somebody may take it back in, and a row that had gone would be offering to undo something invisible.
+    it('stays where it is for a delete that destroys the mail rather than filing it in the trash', () => {
+        const row = drawMoved({ acts: asking('delete', email.id, email.folder, false) });
+
+        expect(row.className).not.toContain('animate-row-deleted');
+        expect(row.className).not.toContain('animate-row-filed');
+    });
+
+    it('draws neither for a flag act, which takes the row nowhere', () => {
+        expect(drawMoved({ acts: asking('flag') }).className).not.toContain('animate-row-filed');
+    });
+
+    it('accepts nothing while it goes, so the half-second it is still drawn cannot be clicked into', () => {
+        expect(drawMoved({ acts: asking('archive') }).className).toContain('pointer-events-none');
+    });
+
+    it('says it has gone rather than settled once the animation it went out on has run', () => {
+        const settled = vi.fn();
+        const gone = vi.fn();
+        const row = drawMoved({ acts: asking('archive'), onSettled: settled, onGone: gone });
+
+        animationEnded(row);
+
+        expect(gone).toHaveBeenCalledOnce();
+        expect(settled).not.toHaveBeenCalled();
     });
 });
 

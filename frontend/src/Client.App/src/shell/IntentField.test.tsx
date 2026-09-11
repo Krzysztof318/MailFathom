@@ -62,12 +62,12 @@ describe('IntentField', () => {
         );
     });
 
-    it('says every mailbox is in scope until one is chosen', () => {
+    it('says what the mail space is showing until a scope is chosen, which is the inbox a client opens on', () => {
         renderField();
 
         expect(screen.getByRole('combobox', { name: 'What the question is asked about' })).toHaveProperty(
             'value',
-            'everything',
+            'role:Inbox',
         );
         expect(screen.getByRole('option', { name: 'All mailboxes' })).toBeDefined();
     });
@@ -302,7 +302,7 @@ describe('IntentField scope', () => {
             target: { value: 'account:home' },
         });
         fireEvent.change(screen.getByRole('combobox', { name: 'What the question is asked about' }), {
-            target: { value: 'everything' },
+            target: { value: 'role:Inbox' },
         });
 
         expect(reported().askScopeKey).toBeNull();

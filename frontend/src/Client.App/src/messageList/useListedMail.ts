@@ -39,9 +39,14 @@ export interface ListedMail {
     /** Where a message the list has drawn belongs, or `null` for one it never drew. */
     readonly placeOf: (storedEmailId: string) => ActedMessage | null;
 
-    /** Writes down where the mail of a page that has just arrived belongs. */
+    /** Writes down where the mail of a page that has just arrived belongs, and how it stood when it did. */
     readonly drew: (
-        emails: readonly { readonly id: string; readonly account: string; readonly folder: string }[],
+        emails: readonly {
+            readonly id: string;
+            readonly account: string;
+            readonly folder: string;
+            readonly unread: boolean;
+        }[],
     ) => void;
 
     /** Selects every message the list is showing, and does nothing where no list is on the screen. */

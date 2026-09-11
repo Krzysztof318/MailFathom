@@ -8,8 +8,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { ListedMailProvider } from './ListedMail';
 import { mostPlacesRemembered, useListedMail, type ListedMail } from './useListedMail';
 
-function drawn(at: number): { readonly id: string; readonly account: string; readonly folder: string } {
-    return { id: `message-${String(at)}`, account: 'work', folder: 'work-inbox' };
+function drawn(at: number): {
+    readonly id: string;
+    readonly account: string;
+    readonly folder: string;
+    readonly unread: boolean;
+} {
+    return { id: `message-${String(at)}`, account: 'work', folder: 'work-inbox', unread: at % 2 === 0 };
 }
 
 function held(): ListedMail {
@@ -30,6 +35,7 @@ describe('ListedMailProvider', () => {
             storedEmailId: 'message-1',
             account: 'work',
             folder: 'work-inbox',
+            unread: false,
         });
     });
 

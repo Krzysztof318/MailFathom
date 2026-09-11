@@ -4,7 +4,7 @@
 
 import { createContext, useContext } from 'react';
 import type { AskedQuestion, SelectedFragment } from './askScope';
-import { everything, type MailScope } from './mailScope';
+import type { MailScope } from './mailScope';
 import type { CitedAttachment, OpenedAttachment } from './openAttachment';
 import type { OpenConversation } from './openConversation';
 
@@ -163,8 +163,15 @@ export interface WorkspaceRevision {
     readonly revise: (change: Partial<Workspace>) => void;
 }
 
+// Where a workspace nobody has chosen a mailbox in stands, which is the inbox rather than the widest scope. It is
+// stated as the role scope rather than resolved from a directory nothing has read yet, and that is what makes the two
+// cases the design asks for fall out of one value: with several accounts the tree draws the row that is every inbox at
+// once and this names it, and with one it draws no such row — so `folders/FolderTree.tsx` finds a scope naming nothing
+// drawn and lands on `openingScope`, which is that account's own inbox. `everything` here was the defect behind both:
+// it is a row the tree draws whenever there is more than one account, so the fallback never fired and the client opened
+// on every folder of every account, sent and deleted mail among them.
 export const emptyWorkspace: Workspace = {
-    scope: everything,
+    scope: { kind: 'role', role: 'Inbox' },
     foldsToggled: [],
     mailboxesFolded: false,
     panelsHidden: false,

@@ -162,6 +162,25 @@ describe('scopeStillOffered', () => {
         expect(scopeStillOffered(scope, offered)).toBe(still);
     });
 
+    // The one case the two halves of this answer differ on: the deployment does hold the folder, and the tree draws no
+    // row spanning every account's, so a scope remembered across a reload has to fall back rather than read a column
+    // nothing offers. What is archived, what a provider called junk, and what was thrown away are each read in the
+    // account they happened in — `rolesAcrossAccounts` is where that is decided.
+    it.each<MailFolderRole>(['Archive', 'Junk', 'Trash'])(
+        'refuses a %s scope across accounts although the deployment offers the folder',
+        (role) => {
+            const holding: MailFolderDirectory = {
+                synchronizationEnabled: true,
+                accounts: offered.accounts.map((entry) => ({
+                    account: entry.account,
+                    folders: entry.folders.map((folder) => ({ ...folder, role })),
+                })),
+            };
+
+            expect(scopeStillOffered({ kind: 'role', role }, holding)).toBe(false);
+        },
+    );
+
     // Somebody holding no mailbox at all is told so by the tree drawing the sentence for it, and taking the widest
     // scope away from them would answer that with something nobody can act on instead.
     it('offers everything even where the deployment answered with no account at all', () => {

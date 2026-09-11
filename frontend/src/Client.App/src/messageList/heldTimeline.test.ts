@@ -307,16 +307,23 @@ describe('cursorBefore', () => {
 });
 
 describe('arrivalNoticed', () => {
-    it('drops the leading page so the rows a reader is at the top of are read again', () => {
+    it('marks the leading page to be read again, and no other, keeping every row of it drawn', () => {
         const held = arrivalNoticed(readForward(3));
 
-        expect(held.slots[0]?.emails).toBeNull();
-        expect(held.slots[1]?.emails).not.toBeNull();
-        expect(held.slots[2]?.emails).not.toBeNull();
+        expect(held.slots[0]?.stale).toBe(true);
+        expect(held.slots[1]?.stale).toBe(false);
+        expect(held.slots[2]?.stale).toBe(false);
+        expect(heldRows(held)).toStrictEqual(heldRows(readForward(3)));
     });
 
     it('keeps the list the length it was, so nothing under the reader moves', () => {
         expect(rowCountOf(arrivalNoticed(readForward(3)))).toBe(rowCountOf(readForward(3)));
+    });
+
+    it('leaves a leading page it has already marked as it was, so a second arrival asks once', () => {
+        const once = arrivalNoticed(readForward(3));
+
+        expect(arrivalNoticed(once)).toBe(once);
     });
 
     it('asks for the leading page again only while it is on the screen', () => {
@@ -398,20 +405,27 @@ describe('refillsHeldRows', () => {
 });
 
 describe('changeNoticed', () => {
-    it('drops the pages holding the mail the deployment named and no others', () => {
+    it('marks the pages holding the mail the deployment named and no others, keeping their rows drawn', () => {
         const held = changeNoticed(readForward(3), ['message-5']);
 
-        expect(held.slots[0]?.emails).not.toBeNull();
-        expect(held.slots[1]?.emails).toBeNull();
-        expect(held.slots[2]?.emails).not.toBeNull();
+        expect(held.slots[0]?.stale).toBe(false);
+        expect(held.slots[1]?.stale).toBe(true);
+        expect(held.slots[2]?.stale).toBe(false);
+        expect(heldRows(held)).toStrictEqual(heldRows(readForward(3)));
     });
 
-    it('drops every page holding one of them', () => {
+    it('marks every page holding one of them', () => {
         const held = changeNoticed(readForward(3), ['message-1', 'message-9']);
 
-        expect(held.slots[0]?.emails).toBeNull();
-        expect(held.slots[1]?.emails).not.toBeNull();
-        expect(held.slots[2]?.emails).toBeNull();
+        expect(held.slots[0]?.stale).toBe(true);
+        expect(held.slots[1]?.stale).toBe(false);
+        expect(held.slots[2]?.stale).toBe(true);
+    });
+
+    it('leaves a page it has already marked as it was, so a second statement about it asks once', () => {
+        const once = changeNoticed(readForward(3), ['message-5']);
+
+        expect(changeNoticed(once, ['message-5'])).toBe(once);
     });
 
     it('leaves the list the object it was where it holds none of them', () => {

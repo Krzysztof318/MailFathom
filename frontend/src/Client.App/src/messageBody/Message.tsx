@@ -5,7 +5,7 @@
 import { useEffect, useRef } from 'react';
 import type { ClientFailureReason } from '@mailfathom/client-backend';
 import { SecondaryButton } from '../controls/SecondaryButton';
-import { SkeletonLines, type SkeletonLine } from '../controls/Skeleton';
+import { Skeleton, SkeletonLines, type SkeletonLine } from '../controls/Skeleton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { MessageBody } from './MessageBody';
@@ -35,6 +35,39 @@ const waitingLines: readonly SkeletonLine[] = [
 /** A message's words before they have arrived, which two surfaces draw: the whole pane's wait, and the body's own. */
 export function WordsWaiting() {
     return <SkeletonLines lines={waitingLines} className="gap-2.75 pt-1" />;
+}
+
+/**
+ * A whole message before the deployment has answered, in the arrangement the design project draws: the subject and
+ * the line under it, then the head that carries who wrote it, then the words.
+ *
+ * It stands where the message will rather than beside a sentence, so the answer lands into the space it was already
+ * occupying. Three surfaces draw it and it sits here for the reason {@link WordsWaiting} does: the reading pane's
+ * wait, the conversation's, and the state block the conversation carries are one shape stated once, and a second
+ * arrangement of the same four blocks is how two screens come to wait differently for the same thing.
+ *
+ * The two lengths widen where the column is the whole window, which is the design project's own pair: a column beside
+ * a list and a column that is the screen are two measures, and a skeleton drawn at the narrower one in the wider case
+ * reads as a message that arrived half empty.
+ */
+export function MessageWaiting({ oneColumn }: { readonly oneColumn: boolean }) {
+    return (
+        <div className={`flex flex-col gap-3.5 ${oneColumn ? 'p-4' : 'px-6 py-5'}`}>
+            <Skeleton className="h-3.75" fills={oneColumn ? 74 : 52} />
+            <Skeleton className="h-2.5" fills={oneColumn ? 56 : 34} />
+
+            <div className="flex items-center gap-2.75 border-t border-line-soft pt-4">
+                <Skeleton className="size-7.5 shrink-0 rounded-full" />
+
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    <Skeleton className="h-3.75" fills={oneColumn ? 74 : 52} />
+                    <Skeleton className="h-2.5" fills={oneColumn ? 56 : 34} />
+                </div>
+            </div>
+
+            <WordsWaiting />
+        </div>
+    );
 }
 
 const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {

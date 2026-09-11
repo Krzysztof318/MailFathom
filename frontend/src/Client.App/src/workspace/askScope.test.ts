@@ -162,14 +162,18 @@ describe('askScopeInForce', () => {
     // A scope outlives the answer it was chosen from, so a mailbox whose declaration has gone since would otherwise be
     // a question asked about nothing at all, named on the line whose whole job is to say what is in scope.
     it('falls back to the screen where the mailbox named is no longer declared', () => {
-        expect(askScopeInForce(looking({ askScopeKey: 'account:gone' }), [workAccount])).toEqual({
+        const workspace = looking({ scope: { kind: 'account', accountId: 'work' }, askScopeKey: 'account:gone' });
+
+        expect(askScopeInForce(workspace, [workAccount])).toEqual({
             kind: 'mail',
-            scope: { kind: 'everything' },
+            scope: { kind: 'account', accountId: 'work' },
         });
     });
 
     it('falls back to the screen where the correspondence named has been closed', () => {
-        expect(askScopeInForce(looking({ askScopeKey: 'thread:thread-1' }), [workAccount])).toEqual({
+        const workspace = looking({ scope: { kind: 'everything' }, askScopeKey: 'thread:thread-1' });
+
+        expect(askScopeInForce(workspace, [workAccount])).toEqual({
             kind: 'mail',
             scope: { kind: 'everything' },
         });

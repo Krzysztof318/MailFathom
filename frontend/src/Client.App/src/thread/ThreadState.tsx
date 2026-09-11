@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MailThreadMessage, MailThreadState, MailThreadStateAspect } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
+import { Skeleton } from '../controls/Skeleton';
 import type { MessageKey } from '../localization/en';
 import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
@@ -82,18 +83,29 @@ export function ThreadState({
 
     const entries = state?.current === true ? state.entries : [];
 
-    // Nothing to draw is four different sentences and one shape: a block still being read, a state the conversation
-    // has moved past, a conversation too long for a state to be derived from in one go, and a conversation nothing has
-    // been derived about at all.
+    // Nothing to draw is four different states in one band, and one of them is not a sentence. A block still being
+    // read waits as the shape its statements will take, exactly as the conversation above it and the reading pane
+    // beside it do — the space is reserved, so nothing moves when the derivation lands. The other three are facts
+    // about the conversation rather than waits, and each is its own sentence: a state it has moved past, one too long
+    // to derive in one go, and one nothing has been derived about at all.
     if (entries.length === 0) {
+        // A read in flight is the one of the four that waits. A machine with no network is not waiting on anything, so
+        // it keeps its sentence: `nothingDrawn` already tells the two apart and this reads the same question.
+        const waiting = reading && online;
+
         return (
             <section
                 aria-label={translate('threadState.label')}
                 className="border-b border-line bg-sunken px-5.5 py-2.25"
             >
-                <p role="status" className="text-sm text-muted">
+                {/* Said out of sight while it waits and on the screen otherwise, which is the same statement either
+                    way: a block that replaced its wait announcement with a shape would wait in silence for anybody
+                    not looking at it. */}
+                <p role="status" className={waiting ? 'sr-only' : 'text-sm text-muted'}>
                     {translate(nothingDrawn(reading, online, state))}
                 </p>
+
+                {waiting ? <Skeleton className="h-2.5" fills={58} /> : null}
             </section>
         );
     }

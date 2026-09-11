@@ -154,12 +154,12 @@ describe('folderTreeOf', () => {
             ],
         };
 
+        // Three across every account and five under the one that has them, which is the same order read twice: what a
+        // role is worth reading unified is `rolesAcrossAccounts`, and the rest are opened in the account they live in.
         expect(keysOf(find(folderTreeOf(special), 'everything')?.children ?? [])).toEqual([
             'role:Inbox',
             'role:Sent',
             'role:Drafts',
-            'role:Archive',
-            'role:Trash',
         ]);
 
         expect(keysOf(find(folderTreeOf(special), 'account:work')?.children ?? [])).toEqual([

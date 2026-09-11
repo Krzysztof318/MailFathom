@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { StrictMode, type ReactNode } from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ComposingContext } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
@@ -133,12 +133,52 @@ describe('Space', () => {
         expect(screen.queryByText(/This space is not built yet\./)).toBeNull();
     });
 
-    it('shows the pending note rather than the mail in a space nothing has been built for yet', () => {
+    it('shows the pending note in a space nothing has been built for yet, with Mail standing behind it', () => {
         render(inStrictMode('cases'));
 
-        expect(screen.queryByText(handedToMail)).toBeNull();
-        expect(screen.queryByText(handedTheFolders)).toBeNull();
-        expect(screen.queryByText(handedTheList)).toBeNull();
         expect(screen.getByText(/This space is not built yet\./)).toBeDefined();
+        expect(screen.queryByRole('main', { name: 'Mail' })).toBeNull();
+        expect(screen.getByRole('main', { name: 'Cases' })).toBeDefined();
+    });
+
+    // What Mail holds is the folder it was reading, the pages of it that answered, and the place in them the reader had
+    // scrolled to, and all three are state of the components it renders — so it is stood aside rather than taken down,
+    // and coming back is a return rather than a rebuild. What says it is aside is what a reader would find: no second
+    // landmark naming Mail, and nothing in it to tab into.
+    it('keeps Mail on the screen while another space is in front of it, out of reach and out of the reading order', () => {
+        render(inStrictMode('cases'));
+
+        const mail = screen.getByLabelText('Mail');
+
+        expect(mail.getAttribute('aria-hidden')).toBe('true');
+        expect(mail.hasAttribute('inert')).toBe(true);
+        expect(within(mail).getByText(handedTheList)).toBeDefined();
+        expect(within(mail).getByText(handedTheFolders)).toBeDefined();
+        expect(within(mail).getByText(handedToMail)).toBeDefined();
+    });
+
+    // The assertion that says *not rebuilt from zero*: the same element, not an element drawing the same thing. A Mail
+    // space taken down and put back reads the folder again from its leading end and puts the reader at the top of it,
+    // and every node in it is a new node — so node identity is what tells the two apart, and it holds under the extra
+    // mount `StrictMode` performs, which a count of mounts would not.
+    it('gives back the Mail space that was left rather than a rebuilt one', () => {
+        const { rerender } = render(inStrictMode('mail'));
+        const before = screen.getByText(handedTheList);
+
+        rerender(inStrictMode('cases'));
+        rerender(inStrictMode('mail'));
+
+        expect(screen.getByText(handedTheList)).toBe(before);
+        expect(screen.getByRole('main', { name: 'Mail' })).toBeDefined();
+    });
+
+    // The two the frame composes for whichever space is in front. Handed to one of them and to nothing else: a second
+    // live copy of the field would be a second place somebody's question could be typed into.
+    it('hands the question and the connection to the space in front and to nothing behind it', () => {
+        render(inStrictMode('cases'));
+
+        expect(screen.getAllByText(handedTheIntent)).toHaveLength(1);
+        expect(screen.getAllByText(handedTheStatus)).toHaveLength(1);
+        expect(within(screen.getByRole('main', { name: 'Cases' })).getByText(handedTheIntent)).toBeDefined();
     });
 });

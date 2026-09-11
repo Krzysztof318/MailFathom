@@ -20,6 +20,7 @@ import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import type { HeadMessage } from '../mailSpace/HeadActs';
+import { MessageWaiting } from '../messageBody/Message';
 import { MessageHeaders } from '../readingPane/MessageHeaders';
 import { useTwoPanes } from '../shell/useWideWorkspace';
 import type { OpenConversation } from '../workspace/openConversation';
@@ -350,9 +351,14 @@ export function Thread({
     if (latest === null) {
         return (
             <Conversation>
-                <p className="text-sm text-muted" role="status">
+                {/* Said out of sight rather than not said: the shapes below are what a reader looking at the column
+                    sees, and this is the same statement for somebody who is not. The reading pane beside this waits
+                    the same way, which is what makes the two one surface rather than two ways of waiting. */}
+                <p className="sr-only" role="status">
                     {translate('thread.reading')}
                 </p>
+
+                <MessageWaiting oneColumn={!twoPanes} />
             </Conversation>
         );
     }
@@ -425,9 +431,19 @@ export function Thread({
                 says the same thing for a conversation that has something to show, which is why it does not say it
                 here. */}
             {held.length === 0 ? (
-                <p className="text-sm text-muted" role="status">
-                    {translate(reading ? 'thread.reading' : 'thread.empty')}
-                </p>
+                reading ? (
+                    <>
+                        <p className="sr-only" role="status">
+                            {translate('thread.reading')}
+                        </p>
+
+                        <MessageWaiting oneColumn={!twoPanes} />
+                    </>
+                ) : (
+                    <p className="text-sm text-muted" role="status">
+                        {translate('thread.empty')}
+                    </p>
+                )
             ) : (
                 <>
                     {/* The whole history behind one control, which is what a conversation of eight messages is
@@ -590,6 +606,7 @@ function actedOn(message: MailThreadMessage): HeadMessage {
         storedEmailId: email.id,
         account: email.account,
         folder: email.folder,
+        unread: email.unread,
         flagged: email.flagged,
     };
 }

@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { ReactNode } from 'react';
-import { act, fireEvent, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
     ClientRequest,
@@ -33,9 +33,9 @@ import { useMailboxActs, type ActedMessage, type MailboxAct, type MailboxActs } 
 
 const session: ClientSession = { baseAddress: 'https://mail.example.invalid', authorization: 'Basic dGVzdA==' };
 
-const invoice: ActedMessage = { storedEmailId: 'message-1', account: 'work', folder: 'work-inbox' };
-const receipt: ActedMessage = { storedEmailId: 'message-2', account: 'work', folder: 'work-inbox' };
-const discarded: ActedMessage = { storedEmailId: 'message-3', account: 'work', folder: 'work-trash' };
+const invoice: ActedMessage = { storedEmailId: 'message-1', account: 'work', folder: 'work-inbox', unread: false };
+const receipt: ActedMessage = { storedEmailId: 'message-2', account: 'work', folder: 'work-inbox', unread: false };
+const discarded: ActedMessage = { storedEmailId: 'message-3', account: 'work', folder: 'work-trash', unread: false };
 
 const folders = JSON.stringify({
     synchronizationEnabled: true,
@@ -286,6 +286,7 @@ const heapedInTrash: ActedMessage[] = Array.from({ length: mostMessagesPerMutati
     storedEmailId: `message-${String(at)}`,
     account: 'work',
     folder: 'work-trash',
+    unread: false,
 }));
 
 /** The records each call to a delete's withdrawal or release route named, one list per call. */
@@ -295,6 +296,16 @@ function recordIdsPosted(deployment: Deployment, route: 'withdrawals' | 'release
         .map(({ body }) => (body as { recordIds: string[] }).recordIds);
 }
 
+/**
+ * What the toast surface is holding, which is how a case asserts that an act said nothing.
+ *
+ * The surface is in the document from the first paint and empty, so what says nothing was reported is that it holds no
+ * card — never that the region is absent.
+ */
+function said(): readonly HTMLElement[] {
+    return within(screen.getByRole('list', { name: 'Notices' })).queryAllByRole('listitem');
+}
+
 describe('MailboxActsProvider', () => {
     it('asks a deployment to leave a flag where the act puts it, and offers no way back from a flag', async () => {
         const deployment = deploymentAnswering();
@@ -302,14 +313,15 @@ describe('MailboxActsProvider', () => {
 
         perform(held, 'flag', [invoice]);
 
-        await screen.findByText('Flagged');
+        await waitFor(() => {
+            expect(submitted(deployment)).toStrictEqual([
+                {
+                    path: 'https://mail.example.invalid/api/client/mutations/flags',
+                    body: { changes: [{ storedEmailId: 'message-1', flags: { flagged: true } }] },
+                },
+            ]);
+        });
 
-        expect(submitted(deployment)).toStrictEqual([
-            {
-                path: 'https://mail.example.invalid/api/client/mutations/flags',
-                body: { changes: [{ storedEmailId: 'message-1', flags: { flagged: true } }] },
-            },
-        ]);
         expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
     });
 
@@ -319,14 +331,15 @@ describe('MailboxActsProvider', () => {
 
         perform(held, 'unflag', [invoice]);
 
-        await screen.findByText('Flag removed');
+        await waitFor(() => {
+            expect(submitted(deployment)).toStrictEqual([
+                {
+                    path: 'https://mail.example.invalid/api/client/mutations/flags',
+                    body: { changes: [{ storedEmailId: 'message-1', flags: { flagged: false } }] },
+                },
+            ]);
+        });
 
-        expect(submitted(deployment)).toStrictEqual([
-            {
-                path: 'https://mail.example.invalid/api/client/mutations/flags',
-                body: { changes: [{ storedEmailId: 'message-1', flags: { flagged: false } }] },
-            },
-        ]);
         expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
     });
 
@@ -336,11 +349,48 @@ describe('MailboxActsProvider', () => {
 
         perform(held, 'markUnread', [invoice]);
 
-        await screen.findByText('Marked unread');
-
-        expect(submitted(deployment)[0]?.body).toStrictEqual({
-            changes: [{ storedEmailId: 'message-1', flags: { seen: false } }],
+        await waitFor(() => {
+            expect(submitted(deployment)[0]?.body).toStrictEqual({
+                changes: [{ storedEmailId: 'message-1', flags: { seen: false } }],
+            });
         });
+    });
+
+    it('marks read by writing that flag alone, which is the other direction of the same change', async () => {
+        const deployment = deploymentAnswering();
+        const { held } = acting(deployment);
+
+        perform(held, 'markRead', [invoice]);
+
+        await waitFor(() => {
+            expect(submitted(deployment)[0]?.body).toStrictEqual({
+                changes: [{ storedEmailId: 'message-1', flags: { seen: true } }],
+            });
+        });
+    });
+
+    // What an act that writes a flag does is the mark the row draws from the press, so there is nothing left for a card
+    // in the corner to tell anybody. The three that file a message elsewhere report, because the message has left the
+    // screen it was on and the toast is the only place the way back is offered.
+    it.each<{ named: string; asked: MailboxAct }>([
+        { named: 'flagging', asked: 'flag' },
+        { named: 'taking a flag off', asked: 'unflag' },
+        { named: 'marking unread', asked: 'markUnread' },
+        { named: 'marking read', asked: 'markRead' },
+    ])('says nothing in the corner about $named, the row having drawn the mark already', async ({ asked }) => {
+        const deployment = deploymentAnswering();
+        const { held } = acting(deployment);
+
+        perform(held, asked, [invoice]);
+
+        await waitFor(() => {
+            expect(submitted(deployment).length).toBe(1);
+        });
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(said()).toStrictEqual([]);
     });
 
     it('archives into the folder the account labels as its archive, and says how many went', async () => {
@@ -473,6 +523,31 @@ describe('MailboxActsProvider', () => {
                 path: 'https://mail.example.invalid/api/client/mutations/deletes/releases',
                 body: { recordIds: ['record-message-3'] },
             });
+        });
+    });
+
+    // And the row goes with it, which is the other half of the same moment. Until the way back closes the message is
+    // still where it was — somebody may take the delete back, and the row has to be there to come back to — so what
+    // takes it out of the folder is the offer closing rather than the press. It is the one act in this client where
+    // those are two different moments, and a row left saying it was being deleted forever was the defect.
+    it('takes the row out of the folder once the way back has closed', async () => {
+        const deployment = deploymentAnswering();
+        const { held } = acting(deployment);
+
+        await waitFor(() => {
+            expect(held().deletesPermanently([discarded])).toBe(true);
+        });
+
+        perform(held, 'delete', [discarded]);
+
+        await screen.findByText('Deleting permanently…');
+
+        expect(held().asked.get('message-3')?.leaves).toBe(false);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+        await waitFor(() => {
+            expect(held().asked.get('message-3')?.leaves).toBe(true);
         });
     });
 
@@ -632,7 +707,9 @@ describe('MailboxActsProvider', () => {
 
         expect(held().asked.get('message-1')?.act).toBe('flag');
 
-        await screen.findByText('Flagged');
+        await waitFor(() => {
+            expect(submitted(deployment).length).toBe(1);
+        });
 
         expect(held().asked.get('message-1')?.act).toBe('flag');
     });
@@ -653,7 +730,6 @@ describe('MailboxActsProvider', () => {
         });
 
         expect(held().asked.get('message-1')?.act).toBe('flag');
-        expect(screen.getByText('1 message')).toBeDefined();
     });
 
     it('says an act that never reached the deployment changed nothing, and claims nothing about the message', async () => {
@@ -678,6 +754,7 @@ describe('MailboxActsProvider', () => {
             storedEmailId: `message-${String(at)}`,
             account: 'work',
             folder: 'work-inbox',
+            unread: false,
         }));
 
         const deployment: Deployment = {
@@ -712,9 +789,6 @@ describe('MailboxActsProvider', () => {
         perform(held, 'flag', spread);
 
         await screen.findByText('This change did not reach your deployment.');
-
-        expect(screen.getByText('Flagged')).toBeDefined();
-        expect(screen.getByText('200 messages')).toBeDefined();
 
         await waitFor(() => {
             expect(held().asked.has(`message-${String(mostMessagesPerMutation)}`)).toBe(false);

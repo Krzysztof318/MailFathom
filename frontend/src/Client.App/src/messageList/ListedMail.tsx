@@ -24,6 +24,7 @@ export function ListedMailProvider({ children }: { readonly children: ReactNode 
                     storedEmailId: email.id,
                     account: email.account,
                     folder: email.folder,
+                    unread: email.unread,
                 });
             }
 

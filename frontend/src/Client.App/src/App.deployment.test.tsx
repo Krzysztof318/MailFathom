@@ -35,6 +35,10 @@ import { writeKeptSession } from './signIn/keptSession';
 resetsBetweenTests();
 
 describe('App deployment', () => {
+    // The folder tree, the inbox's first page and the phrasing the search row offers are in every one of these lists
+    // although the client opens on Discover: the Mail space is drawn behind whichever space is in front, so it reads on
+    // landing rather than on the first visit to it. `shell/Space.tsx` holds why it is kept there, and these three reads
+    // are what that costs — made once, against a return to Mail that reads nothing and draws no skeleton.
     it('reads from the deployment it was pointed at, rather than from one written into the client', async () => {
         renderApp(chose('https://elsewhere.example.invalid'));
         await framed();
@@ -43,6 +47,9 @@ describe('App deployment', () => {
             expect(routesAsked()).toEqual([
                 'https://elsewhere.example.invalid/api/client/session',
                 'https://elsewhere.example.invalid/api/client/accounts',
+                'https://elsewhere.example.invalid/api/client/folders',
+                'https://elsewhere.example.invalid/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
+                'https://elsewhere.example.invalid/api/client/emails/search/phrasing',
                 'https://elsewhere.example.invalid/api/client/preferences',
                 'https://elsewhere.example.invalid/api/client/display-name',
                 'https://elsewhere.example.invalid/api/client/signals/ticket',
@@ -123,6 +130,9 @@ describe('App deployment', () => {
                 'https://mail.example.test/api/client/session',
                 'https://mail.example.test/api/client/session/token',
                 'https://mail.example.test/api/client/accounts',
+                'https://mail.example.test/api/client/folders',
+                'https://mail.example.test/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
+                'https://mail.example.test/api/client/emails/search/phrasing',
                 'https://mail.example.test/api/client/preferences',
                 'https://mail.example.test/api/client/display-name',
                 'https://mail.example.test/api/client/signals/ticket',
@@ -288,7 +298,7 @@ describe('App deployment', () => {
         expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toHaveProperty('value', '');
         expect(screen.getByRole('combobox', { name: 'What the question is asked about' })).toHaveProperty(
             'value',
-            'everything',
+            'role:Inbox',
         );
     });
 
@@ -306,6 +316,9 @@ describe('App deployment', () => {
             expect(routesAsked()).toEqual([
                 'https://first.example.invalid/api/client/session',
                 'https://first.example.invalid/api/client/accounts',
+                'https://first.example.invalid/api/client/folders',
+                'https://first.example.invalid/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
+                'https://first.example.invalid/api/client/emails/search/phrasing',
                 'https://first.example.invalid/api/client/preferences',
                 'https://first.example.invalid/api/client/display-name',
                 'https://first.example.invalid/api/client/signals/ticket',
@@ -314,6 +327,9 @@ describe('App deployment', () => {
                 'https://second.example.invalid/api/client/session',
                 'https://second.example.invalid/api/client/session/token',
                 'https://second.example.invalid/api/client/accounts',
+                'https://second.example.invalid/api/client/folders',
+                'https://second.example.invalid/api/client/emails?sort=receivedAt&order=newestFirst&direction=forward&pageSize=100&folder=role%3AInbox',
+                'https://second.example.invalid/api/client/emails/search/phrasing',
                 'https://second.example.invalid/api/client/preferences',
                 'https://second.example.invalid/api/client/display-name',
                 'https://second.example.invalid/api/client/signals/ticket',

@@ -3,43 +3,89 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
+import type { RowContents } from '../messageRows/rowContents';
 import { mostRowsRemembered, noRows, rowSettled, rowsAlsoMoved, rowsNoticed, rowsStillDrawn } from './movedRows';
+
+/** One row's drawing, with whatever the case under test cares about written over it. */
+function drawn(over: Partial<RowContents> = {}): RowContents {
+    return {
+        senderDisplayName: 'Ada Lovelace',
+        senderAddress: 'ada@example.test',
+        subject: 'The analytical engine',
+        receivedAt: '2026-09-11T08:00:00.000Z',
+        unread: false,
+        flagged: false,
+        answered: false,
+        hasAttachments: false,
+        attachmentCount: 0,
+        threadMessageCount: null,
+        reading: null,
+        ...over,
+    };
+}
+
+/** The rows a page carries, each drawing what every other page of the same test draws for it. */
+function page(...ids: readonly string[]): readonly (readonly [string, RowContents])[] {
+    return ids.map((id) => [id, drawn({ subject: id })] as const);
+}
 
 describe('rowsNoticed', () => {
     it('reports nothing as having arrived in a list that had drawn nothing, because that list appeared', () => {
-        const noticed = rowsNoticed(null, ['one', 'two', 'three']);
+        const noticed = rowsNoticed(null, page('one', 'two', 'three'));
 
         expect([...noticed.arrived]).toEqual([]);
-        expect([...noticed.shown]).toEqual(['one', 'two', 'three']);
+        expect([...noticed.changed]).toEqual([]);
+        expect([...noticed.shown.keys()]).toEqual(['one', 'two', 'three']);
     });
 
     it('reports the rows the reader had not been shown, and only those', () => {
-        const first = rowsNoticed(null, ['one', 'two']);
-        const second = rowsNoticed(first.shown, ['three', 'one', 'two']);
+        const first = rowsNoticed(null, page('one', 'two'));
+        const second = rowsNoticed(first.shown, page('three', 'one', 'two'));
 
         expect([...second.arrived]).toEqual(['three']);
     });
 
     it('reports nothing where a page answered with exactly what was on the screen', () => {
-        const first = rowsNoticed(null, ['one', 'two']);
-        const second = rowsNoticed(first.shown, ['one', 'two']);
+        const first = rowsNoticed(null, page('one', 'two'));
+        const second = rowsNoticed(first.shown, page('one', 'two'));
 
+        expect([...second.arrived]).toEqual([]);
+        expect(second.changed).toBe(noRows);
+    });
+
+    it('reports a row the page draws differently as changed rather than as having arrived', () => {
+        const first = rowsNoticed(null, page('one', 'two'));
+        const second = rowsNoticed(first.shown, [
+            ['one', drawn({ subject: 'one', unread: true })],
+            ['two', drawn({ subject: 'two' })],
+        ]);
+
+        expect([...second.changed]).toEqual(['one']);
         expect([...second.arrived]).toEqual([]);
     });
 
+    it('reports a row the reader is shown changing once, the page after it drawing the same row again', () => {
+        const first = rowsNoticed(null, page('one'));
+        const second = rowsNoticed(first.shown, [['one', drawn({ subject: 'one', flagged: true })]]);
+        const third = rowsNoticed(second.shown, [['one', drawn({ subject: 'one', flagged: true })]]);
+
+        expect([...second.changed]).toEqual(['one']);
+        expect(third.changed).toBe(noRows);
+    });
+
     it('reports a row the reader has already been shown as arriving no second time', () => {
-        const first = rowsNoticed(null, ['one']);
-        const second = rowsNoticed(first.shown, ['two', 'one']);
-        const third = rowsNoticed(second.shown, ['two', 'one']);
+        const first = rowsNoticed(null, page('one'));
+        const second = rowsNoticed(first.shown, page('two', 'one'));
+        const third = rowsNoticed(second.shown, page('two', 'one'));
 
         expect([...second.arrived]).toEqual(['two']);
         expect([...third.arrived]).toEqual([]);
     });
 
     it('keeps what it remembers bounded, dropping what was drawn longest ago first', () => {
-        const many = Array.from({ length: mostRowsRemembered }, (_, at) => `row-${String(at)}`);
+        const many = page(...Array.from({ length: mostRowsRemembered }, (_, at) => `row-${String(at)}`));
         const first = rowsNoticed(null, many);
-        const second = rowsNoticed(first.shown, ['one more']);
+        const second = rowsNoticed(first.shown, page('one more'));
 
         expect(second.shown.size).toBe(mostRowsRemembered);
         expect(second.shown.has('one more')).toBe(true);
@@ -47,9 +93,9 @@ describe('rowsNoticed', () => {
     });
 
     it('keeps a row the newest page named, however long ago it was first drawn', () => {
-        const many = Array.from({ length: mostRowsRemembered }, (_, at) => `row-${String(at)}`);
+        const many = page(...Array.from({ length: mostRowsRemembered }, (_, at) => `row-${String(at)}`));
         const first = rowsNoticed(null, many);
-        const second = rowsNoticed(first.shown, ['row-0', 'one more']);
+        const second = rowsNoticed(first.shown, page('row-0', 'one more'));
 
         expect(second.shown.has('row-0')).toBe(true);
         expect(second.shown.has('row-1')).toBe(false);

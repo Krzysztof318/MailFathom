@@ -21,11 +21,20 @@ import { MailSpace } from './MailSpace';
 const handedTheFolders = 'The folder tree this space was handed.';
 const handedTheTabs = 'The tab strip this space was handed.';
 const handedTheList = 'The message list this space was handed.';
+
+// Whether the list column stands behind what is in front of it. It is stood aside rather than taken down — that is what
+// keeps its pages and the place the reader had scrolled to — so the question is not whether what it was handed is in
+// the document, which it still is, but whether the column carries it: out of the accessibility tree and inert.
+function listStandsAside(): boolean {
+    const column = screen.getByLabelText('Message list');
+
+    return column.getAttribute('aria-hidden') === 'true' && column.hasAttribute('inert');
+}
 const handedTheDrawer = 'Folders and filters';
 const handedToMail = 'The mail this space was handed.';
 const handedTheIntent = 'The question this space was handed.';
 const handedTheStatus = 'The connection this space was handed.';
-const chooseTheInbox = 'Choose the inbox, as the folder tree would.';
+const chooseAFolder = 'Choose a folder, as the folder tree would.';
 
 // The width is what the composition is decided by, and jsdom has no width — so the media query is answered here, the
 // way the theme's own test answers the colour-scheme query.
@@ -110,19 +119,19 @@ function withModalDialogs(): void {
     });
 }
 
-// Stands in for the folder tree: one control that scopes the workspace to the inbox, which is what choosing a folder
-// in the tree does.
-function ChooseInbox() {
+// Stands in for the folder tree: one control that scopes the workspace to a folder, which is what choosing one in the
+// tree does. A folder rather than the inbox a client opens on, so choosing it is a scope that genuinely moved.
+function ChooseFolder() {
     const { revise } = useWorkspace();
 
     return (
         <button
             type="button"
             onClick={() => {
-                revise({ scope: { kind: 'role', role: 'Inbox' } });
+                revise({ scope: { kind: 'folder', accountId: 'work', alias: 'Invoices' } });
             }}
         >
-            {chooseTheInbox}
+            {chooseAFolder}
         </button>
     );
 }
@@ -146,10 +155,15 @@ const nothingBeingWritten = {
     close: () => undefined,
 };
 
+// Stands in for a row being opened, which is what the real list does to the workspace when one is pressed. A control
+// rather than an opening workspace, so that a case can watch the list go behind the message and come back.
+const opensTheMessage = 'Open a message, as pressing a row would.';
+
 // What the list column hands the space: a list whose head draws the way into the mailboxes drawer wherever the space
 // publishes one, which is what the real list's search row does.
 function HandedList() {
     const openMailboxes = useMailboxesDrawer();
+    const { revise } = useWorkspace();
 
     return (
         <>
@@ -158,6 +172,14 @@ function HandedList() {
                     {handedTheDrawer}
                 </button>
             )}
+            <button
+                type="button"
+                onClick={() => {
+                    revise({ selection: 'stored-1' });
+                }}
+            >
+                {opensTheMessage}
+            </button>
             <p>{handedTheList}</p>
         </>
     );
@@ -200,7 +222,7 @@ function renderSpace(
                             folders={
                                 <>
                                     <p>{handedTheFolders}</p>
-                                    <ChooseInbox />
+                                    <ChooseFolder />
                                 </>
                             }
                             list={<HandedList />}
@@ -461,10 +483,28 @@ describe('MailSpace, narrow', () => {
         renderSpace(phone, {}, 'reader', somethingBeingWritten);
 
         expect(screen.getByText(handedToMail)).toBeDefined();
-        expect(screen.queryByText(handedTheList)).toBeNull();
+        expect(listStandsAside()).toBe(true);
 
         // The corner control belongs to the list, so it goes with it rather than standing over what is being written.
         expect(screen.queryByRole('button', { name: 'New message' })).toBeNull();
+    });
+
+    // The narrow shape's half of the same rule, and the one a reader meets oftenest: opening a message and going back is
+    // the commonest thing anybody does on a phone, and a list rebuilt on the way back reads the folder again and lands
+    // them at the top of it. Node identity is what says it is the list they left rather than one drawing the same rows.
+    it('gives back the list that was left rather than a rebuilt one, when a message is opened and closed again', () => {
+        renderSpace(phone);
+
+        const before = screen.getByText(handedTheList);
+
+        fireEvent.click(screen.getByRole('button', { name: opensTheMessage }));
+
+        expect(listStandsAside()).toBe(true);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to the list' }));
+
+        expect(listStandsAside()).toBe(false);
+        expect(screen.getByText(handedTheList)).toBe(before);
     });
 
     it('opens the mailboxes in a drawer that closes from its own control', () => {
@@ -507,7 +547,7 @@ describe('MailSpace, narrow', () => {
         expect(drawer.hasAttribute('open')).toBe(true);
         expect(shell.current.depth).toBe(1);
 
-        fireEvent.click(screen.getByRole('button', { name: chooseTheInbox }));
+        fireEvent.click(screen.getByRole('button', { name: chooseAFolder }));
 
         expect(drawer.hasAttribute('open')).toBe(false);
         expect(shell.current.depth).toBe(0);
@@ -534,12 +574,12 @@ describe('MailSpace, narrow', () => {
         renderSpace(phone, { selection: 'stored-1' });
 
         expect(screen.getByText(handedToMail)).toBeDefined();
-        expect(screen.queryByText(handedTheList)).toBeNull();
+        expect(listStandsAside()).toBe(true);
         expect(screen.getByText(handedTheIntent)).toBeDefined();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to the list' }));
 
-        expect(screen.getByText(handedTheList)).toBeDefined();
+        expect(listStandsAside()).toBe(false);
         expect(screen.queryByText(handedToMail)).toBeNull();
     });
 
@@ -560,7 +600,7 @@ describe('MailSpace, in the four compositions', () => {
         renderSpace(phone, { selection: 'stored-1' });
 
         expect(screen.getByText(handedToMail)).toBeDefined();
-        expect(screen.queryByText(handedTheList)).toBeNull();
+        expect(listStandsAside()).toBe(true);
     });
 
     it('shows the list and the message together at the fold, which is above the width one pane stops at', () => {
@@ -607,7 +647,7 @@ describe('MailSpace, in the four compositions', () => {
     ])('gives the list up to the correspondence at %s while the panels are hidden', (_name, pixels) => {
         renderSpace(pixels, { selection: 'stored-1', panelsHidden: true });
 
-        expect(screen.queryByText(handedTheList)).toBeNull();
+        expect(listStandsAside()).toBe(true);
         expect(screen.getByText(handedToMail)).toBeDefined();
     });
 
@@ -644,7 +684,7 @@ describe('MailSpace, in the four compositions', () => {
 
         theWindowBecomes(tablet);
 
-        expect(screen.queryByText(handedTheList)).toBeNull();
+        expect(listStandsAside()).toBe(true);
         expect(document.activeElement).toBe(elsewhere);
     });
 
@@ -653,7 +693,7 @@ describe('MailSpace, in the four compositions', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Hide the panels — the correspondence alone' }));
 
-        expect(screen.queryByText(handedTheList)).toBeNull();
+        expect(listStandsAside()).toBe(true);
         expect(document.activeElement).toBe(screen.getByRole('region', { name: 'What is open' }));
     });
 });

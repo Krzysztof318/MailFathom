@@ -587,10 +587,12 @@ describe('FolderTree', () => {
 
         // The control that opens a row is hidden from the accessibility tree deliberately — a tree says whether a row
         // is open and opens one from the keyboard — so this is the one thing here that cannot be found by its role.
+        const standing = carried().scope;
+
         fireEvent.click(row(/^Work/).lastElementChild as HTMLElement);
 
         expect(row(/^Work/).getAttribute('aria-expanded')).toBe('false');
-        expect(carried().scope).toEqual({ kind: 'everything' });
+        expect(carried().scope).toEqual(standing);
     });
 
     it('leaves the tab stop on the row the pointer opened, so tabbing out leaves the tree from it', async () => {

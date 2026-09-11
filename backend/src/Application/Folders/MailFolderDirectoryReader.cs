@@ -110,10 +110,16 @@ public sealed class MailFolderDirectoryReader
     /// therefore published beside the mirrored ones, as what it is: never synchronized, no place in the hierarchy, and
     /// no mail here.
     /// <para>
-    /// Only the unmirrored mappings are added, which is what keeps this from undoing a withholding. A folder an
-    /// operator withheld from tools is a mirrored folder the resolved scope left out of the composed reading, and
-    /// adding it back here would publish a folder holding mail that every other read refuses; an unmirrored folder
-    /// holds no mail to refuse and could never have been in that reading at all.
+    /// A mirrored mapping no run has reached yet is added for the same reason and is the commoner case: a folder
+    /// somebody has just declared takes part in everything by default, so no run has discovered it and local state
+    /// names it nowhere — and a client that could not see it would report the folder as created and then draw a tree
+    /// without it until the account's next pass, which is minutes.
+    /// </para>
+    /// <para>
+    /// What is still left out is the one mapping this could otherwise undo a withholding for: a folder withheld from
+    /// tools is mirrored and holds mail, and the resolved scope left it out of the composed reading deliberately, so
+    /// publishing it here would name a folder every other read refuses. A mapping absent from that reading is
+    /// therefore added unless it is both mirrored and withheld, which is exactly that case and no other.
     /// </para>
     /// </remarks>
     private MailAccountFolders Describe(
@@ -133,7 +139,7 @@ public sealed class MailFolderDirectoryReader
 
         return this.folderMappings
             .FoldersOf(account.Account.Id)
-            .Where(mapping => !mapping.Participation.IsSynchronized && !reached.Contains(mapping.Alias))
+            .Where(mapping => !reached.Contains(mapping.Alias) && !IsWithheldFromTools(mapping))
             .OrderBy(static mapping => mapping.Alias.Value, StringComparer.Ordinal)
             .Select(static mapping => new DescribedMailFolder(
                 new MailFolderFreshness(mapping.Alias, MailSynchronizationState.NeverSynchronized, null, false),
@@ -142,6 +148,11 @@ public sealed class MailFolderDirectoryReader
                 0,
                 0));
     }
+
+    /// <summary>Reports whether the mapping names a folder the resolved scope left out on purpose rather than one no run has reached.</summary>
+    /// <remarks>Only a mirrored folder can hold mail to withhold, which is why both halves are asked: an unmirrored folder is invisible to tools by construction and has nothing to refuse.</remarks>
+    private static bool IsWithheldFromTools(MailFolderMapping mapping) =>
+        mapping.Participation.IsSynchronized && !mapping.Participation.IsVisibleToTools;
 
     /// <summary>Describes one folder, with what local state holds about it where local state holds anything.</summary>
     /// <remarks>

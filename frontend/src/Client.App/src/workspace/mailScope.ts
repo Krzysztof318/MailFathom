@@ -95,6 +95,20 @@ export function isMailFolderRole(value: unknown): value is MailFolderRole {
 /** The roles this surface publishes, in the order they are offered in. */
 export const folderRoles: readonly MailFolderRole[] = Object.keys(roleOrder).filter(isMailFolderRole);
 
+/**
+ * The roles offered across every account at once, which is three of the ten.
+ *
+ * **A role is offered unified only where reading every account's folder as one column is what somebody wants.** Mail
+ * arrives, is answered, and is written in the same way whichever account it belongs to, so an inbox, a sent folder and
+ * a drafts folder are one place each. Everything else is a folder one account keeps: what was archived, what a
+ * provider called junk, and what was thrown away are each read in the account they happened in — and a list mixing
+ * two accounts' trash is a list nobody asked for. That is the design project's own reading and its own three.
+ *
+ * It bounds what the tree draws under every account and what a remembered scope may still be, so a role no longer
+ * offered falls back to the scope the client opens on rather than drawing a column the tree has no row for.
+ */
+export const rolesAcrossAccounts: readonly MailFolderRole[] = ['Inbox', 'Sent', 'Drafts'];
+
 /** Where a role falls in the order they are offered in; a folder carrying none falls after every one that does. */
 export function roleRank(role: MailFolderRole | null): number {
     return role === null ? Object.keys(roleOrder).length : roleOrder[role];
@@ -209,7 +223,10 @@ export function scopeStillOffered(scope: MailScope, directory: MailFolderDirecto
         case 'everything':
             return true;
         case 'role':
-            return directory.accounts.some((entry) => entry.folders.some((folder) => folder.role === scope.role));
+            return (
+                rolesAcrossAccounts.includes(scope.role) &&
+                directory.accounts.some((entry) => entry.folders.some((folder) => folder.role === scope.role))
+            );
         case 'account':
             return directory.accounts.some((entry) => entry.account.id === scope.accountId);
         case 'folder':

@@ -394,6 +394,7 @@ describe('App', () => {
         const scope = await screen.findByRole('combobox', { name: 'What the question is asked about' });
         await waitFor(() => {
             expect([...scope.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+                'Inbox, every mailbox',
                 'All mailboxes',
                 'Work',
                 'Archive',

@@ -227,6 +227,24 @@ describe('ToastsProvider', () => {
         expect(closed).toHaveBeenCalledTimes(1);
     });
 
+    // The defect this is against, and the one that made a permanent delete hang: a card pushed off the end of the stack
+    // by four later ones had no code path of its own to report from, so the offer it carried stayed open forever — the
+    // deployment went on holding the deletion back, and the rows went on saying they were being deleted.
+    it('tells the one who raised it that it has gone where the bound pushed the card off the end', () => {
+        drawSurface();
+
+        const pushedOff = vi.fn();
+
+        raise({ kind: 'neutral', title: 'Deleting permanently…', whenGone: pushedOff });
+
+        for (let raised = 1; raised <= mostToastsShown; raised += 1) {
+            raise({ kind: 'neutral', title: `Toast ${String(raised)}` });
+        }
+
+        expect(standing().join(' ')).not.toContain('Deleting permanently…');
+        expect(pushedOff).toHaveBeenCalledTimes(1);
+    });
+
     it('draws that lifetime as a bar running for exactly as long as the toast is held', () => {
         drawSurface();
 

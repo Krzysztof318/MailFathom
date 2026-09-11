@@ -218,7 +218,7 @@ describe('App session', () => {
         await waitFor(() => {
             const kept = JSON.parse(window.sessionStorage.getItem('mailfathom.workspace') ?? 'null') as Workspace;
 
-            expect(kept.scope).toEqual({ kind: 'everything' });
+            expect(kept.scope).toEqual(emptyWorkspace.scope);
             expect(kept.selection).toBeNull();
         });
     });
@@ -259,9 +259,13 @@ describe('App session', () => {
     it('tells a user holding no account what would fill it, rather than showing a failure', async () => {
         renderApp(servedFrom, heldSession, deploymentAnswering(directory(true, [])));
 
-        expect(await screen.findByText(/No mail account is configured for this user yet\./)).toBeDefined();
+        // Read inside the space the client opens on, because the Mail space standing behind it says the same thing in
+        // its folder tree — one sentence about the deployment, drawn wherever a reader would look for the mailboxes.
+        const opened = await screen.findByRole('main', { name: 'Discover' });
+
+        expect(await within(opened).findByText(/No mail account is configured for this user yet\./)).toBeDefined();
         expect(
-            screen.getByText(/Whoever runs this deployment declares which mailboxes it reads for you/),
+            within(opened).getByText(/Whoever runs this deployment declares which mailboxes it reads for you/),
         ).toBeDefined();
     });
 });
