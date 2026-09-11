@@ -245,6 +245,74 @@ public sealed class MailReplyDraftingTests
         Assert.Equal("karolina@example.test", Assert.Single(draft.ProposedRecipients).Address);
     }
 
+    /// <summary>A composer with nothing behind it drafts from what its author typed, reading no correspondence at all.</summary>
+    [Fact]
+    public async Task DraftAsync_NoAnsweredMessage_DraftsFromTheInstructionWithoutReadingAnyCorrespondence()
+    {
+        // Arrange
+        var sourceReader = SourceReaderReturning(Sources());
+        var writer = WriterReturning(Written("We are raising the cap to 5%."));
+        var drafting = CreateDrafting(sourceReader, writer);
+
+        // Act
+        var draft = await drafting.DraftAsync(
+            new ReplyDraftRequest { Instruction = "Ask Contoso for a 5% CPI cap." },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(draft);
+        Assert.True(draft.WasWritten);
+        await sourceReader.DidNotReceiveWithAnyArgs().ReadSourcesAsync(
+            Arg.Any<StoredEmailId>(),
+            Arg.Any<MailboxScope>(),
+            Arg.Any<ReplyDraftBounds>(),
+            Arg.Any<CancellationToken>());
+
+        var brief = (ReplyDraftBrief)writer.ReceivedCalls().Single().GetArguments()[0]!;
+
+        Assert.Empty(brief.Sources.Messages);
+        Assert.Empty(brief.Sources.Participants);
+        Assert.Equal("Ask Contoso for a 5% CPI cap.", brief.Instruction);
+    }
+
+    /// <summary>Nothing behind it and nothing asked of it is a provider call made to invent a message, so none is made.</summary>
+    [Fact]
+    public async Task DraftAsync_NeitherAnsweredMessageNorInstruction_DraftsNothingWithoutReachingTheWriter()
+    {
+        // Arrange
+        var writer = WriterReturning(Written("We accept."));
+        var drafting = CreateDrafting(SourceReaderReturning(Sources()), writer);
+
+        // Act
+        var draft = await drafting.DraftAsync(
+            new ReplyDraftRequest { Instruction = "   " },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(draft);
+        Assert.False(draft.WasWritten);
+        await writer.DidNotReceiveWithAnyArgs().WriteAsync(Arg.Any<ReplyDraftBrief>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>The language is the acting user's own, which is the one thing a drafting answering nothing has to go on.</summary>
+    [Theory]
+    [InlineData(MailUserLanguage.English)]
+    [InlineData(MailUserLanguage.Polish)]
+    public async Task DraftAsync_AnyDrafting_CarriesTheLanguageTheUserRecordNames(MailUserLanguage language)
+    {
+        // Arrange
+        var writer = WriterReturning(Written("We accept."));
+        var drafting = CreateDrafting(SourceReaderReturning(Sources()), writer, language: language);
+
+        // Act
+        await drafting.DraftAsync(Request(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var brief = (ReplyDraftBrief)writer.ReceivedCalls().Single().GetArguments()[0]!;
+
+        Assert.Equal(language, brief.Language);
+    }
+
     private static ReplyDraftRequest Request() => new() { AnsweredEmailId = Answered };
 
     private static ReplyDraft Written(string body) => ReplyDraft.Written(body, [], []);
@@ -299,6 +367,7 @@ public sealed class MailReplyDraftingTests
         IReadOnlyList<MailAccountId>? servedAccounts = null,
         AccessAuthorization? authorization = null,
         SensitiveContentEgressGuard? egressGuard = null,
+        MailUserLanguage language = MailUserLanguage.English,
         bool derivesStyleFromSentMail = true)
     {
         var accounts = servedAccounts ?? [Account];
@@ -319,6 +388,16 @@ public sealed class MailReplyDraftingTests
             scopeResolver,
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
+            LanguagesAnswering(language),
             derivesStyleFromSentMail);
+    }
+
+    /// <summary>Answers one language for whoever is asked about, which is what a drafting for one user needs.</summary>
+    private static IMailUserLanguages LanguagesAnswering(MailUserLanguage language)
+    {
+        var languages = Substitute.For<IMailUserLanguages>();
+        languages.ForUser(Arg.Any<MailUserId>()).Returns(language);
+
+        return languages;
     }
 }

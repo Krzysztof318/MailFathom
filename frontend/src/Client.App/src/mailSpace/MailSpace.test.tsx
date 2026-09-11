@@ -150,6 +150,7 @@ function Opening({ change }: { readonly change: Partial<Workspace> }) {
 // so nothing offers it and both stand as the planned controls they were.
 const nothingBeingWritten = {
     offered: false,
+    drafts: false,
     opening: null,
     compose: () => undefined,
     close: () => undefined,

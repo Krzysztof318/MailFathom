@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+    draftsMailReplies,
     endSession,
     type ClientSession,
     type DeploymentAddress,
@@ -261,12 +262,43 @@ export function App({
     const deletesMail = deploymentSession !== null && offers(deploymentSession, 'deleteMail');
     const managesFolders = deploymentSession !== null && offers(deploymentSession, 'manageFolders');
 
+    // Whether this deployment writes a draft for somebody, which is two facts rather than one: the grant asking is
+    // reached under, and what the deployment answers about having a writer at all. It is read here rather than in the
+    // composer because the bar under a correspondence offers the same thing, and two reads made separately would
+    // disagree about whether the offer is honest — which is the one thing an offer of this kind may not be.
+    const asksMail = deploymentSession !== null && offers(deploymentSession, 'askMail');
+    const [draftsReplies, setDraftsReplies] = useState(false);
+
+    useEffect(() => {
+        if (session === null || !asksMail) {
+            return;
+        }
+
+        let listening = true;
+
+        void draftsMailReplies(session, readMail).then((answer) => {
+            if (listening && answer.outcome === 'read') {
+                setDraftsReplies(answer.value);
+            }
+        });
+
+        return () => {
+            listening = false;
+        };
+    }, [session, readMail, asksMail]);
+
     // What is being written, held here for the reason the workspace is: the three controls that ask for it are each
     // several components below this, and what it replaces is a region this frame composes. It is the opening alone —
     // the message itself is the composer's, so nothing here can read half a message off the frame.
     const composing = useMemo(
         () => ({
             offered: writesMail,
+            // `asksMail` is read again rather than left to the answer below it. This frame is mounted once for the
+            // life of the tab, so what a previous credential's deployment answered outlives that credential: signing
+            // out of one that drafts and into one holding no asking grant at all would otherwise leave the block
+            // drawn over a permission nobody has. Every other capability here is derived from the session each
+            // render, and this is what puts the one that is read over the wire on the same footing.
+            drafts: asksMail && writesMail && draftsReplies,
             opening: written,
             compose: (asked: ComposerOpening) => {
                 // What asked for it, so that closing hands the keyboard back to it. The three controls that ask are in
@@ -282,7 +314,7 @@ export function App({
                 askedFrom.current = null;
             },
         }),
-        [writesMail, written],
+        [asksMail, writesMail, draftsReplies, written],
     );
 
     // What the whole client is blocked on, held here for the reason above and one more: the surface covers everything
@@ -863,6 +895,7 @@ export function App({
                                                                                         accounts={mailAccounts}
                                                                                         opening={written}
                                                                                         online={connection.online}
+                                                                                        drafts={composing.drafts}
                                                                                         onClosed={composing.close}
                                                                                     />
                                                                                 )

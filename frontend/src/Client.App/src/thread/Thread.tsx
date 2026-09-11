@@ -174,6 +174,9 @@ export function Thread({
     // conversation opened at a message in the middle of its history was opened at that one.
     const opened = held.find((message) => message.email.id === arrival?.storedEmailId) ?? held.at(-1) ?? null;
     const drawn = historyShown || opened === null ? held : [opened];
+
+    // What stands first in the column under the head, which is what decides whether arriving has anywhere to scroll to.
+    const firstDrawnId = drawn[0]?.email.id ?? null;
     const openedIsLatest = opened !== null && opened.email.id === held.at(-1)?.email.id;
 
     // A conversation opened at a message is read forward until that message is in hand, because the route pages from
@@ -268,8 +271,15 @@ export function Thread({
     }, [followed]);
 
     // Arriving in a conversation is a view change, so focus goes to the message it opened at rather than staying on
-    // whatever opened the conversation. Focus rather than a scroll of our own: placing it is the obligation, a browser
-    // scrolls what it focuses into view, and one call cannot leave the two disagreeing about where the reader is.
+    // whatever opened the conversation.
+    //
+    // **The scroll the browser would do for that focus is refused, and taken here instead**, because the two questions
+    // stopped having one answer. A conversation draws its derived state and its head above the messages, and the
+    // message somebody arrived at is in the ordinary case the only one drawn — so letting the browser scroll to it
+    // pushed both of those off the top and left the reader looking at the control that reveals the history, which is
+    // the last thing they came for. Where the arrival is the first thing drawn, the top of the column already shows
+    // it and the right scroll is none at all; where the history is open and messages stand before it, it is brought
+    // into view exactly as the browser would have. `preventScroll` is what separates the two.
     //
     // It is placed once, on arriving, and never again. Showing and hiding the history is what a reader does for the
     // rest of the visit, and re-placing focus on that would take it off the control they just operated and put it
@@ -287,9 +297,13 @@ export function Thread({
 
         if (region !== undefined) {
             arrivedAt.current = arrival.storedEmailId;
-            region.focus();
+            region.focus({ preventScroll: true });
+
+            if (firstDrawnId !== arrival.storedEmailId) {
+                region.scrollIntoView({ block: 'start' });
+            }
         }
-    }, [arrival]);
+    }, [arrival, firstDrawnId]);
 
     // A landing says the client took somebody where they asked to go, so it is timed from the message being on the
     // screen rather than from the conversation being opened: a mark that ran out while the conversation was still

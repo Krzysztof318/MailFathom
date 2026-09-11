@@ -38,7 +38,7 @@ function drawToolbar(
     fit: StripFit = 'labelled',
 ): { composed: ReturnType<typeof vi.fn> } {
     const composed = vi.fn();
-    const composing: Composing = { offered, opening: null, compose: composed, close: () => undefined };
+    const composing: Composing = { offered, drafts: false, opening: null, compose: composed, close: () => undefined };
 
     render(
         <LocalizationProvider>

@@ -396,6 +396,7 @@ public static class AiServiceCollectionExtensions
             provider.GetRequiredService<MailboxScopeResolver>(),
             provider.GetRequiredService<SensitiveContentEgressGuard>(),
             provider.GetRequiredService<AccessAuthorization>(),
+            provider.GetRequiredService<IMailUserLanguages>(),
             derivesStyleFromSentMail));
 
         return services;

@@ -194,6 +194,20 @@ export {
     type MailSearchPhraseReading,
 } from './mailSearchPhrase';
 export {
+    draftMailReply,
+    draftsMailReplies,
+    longestDraftInstruction,
+    longestDraftSelection,
+    mailReplyDraftingRoute,
+    nothingDrafted,
+    type MailReplyDraft,
+    type MailReplyDraftClaim,
+    type MailReplyDraftRecipient,
+    type MailReplyDraftRequest,
+    type MailReplyDraftSource,
+    type MailReplyDrafting,
+} from './mailReplyDrafting';
+export {
     longestDrawnThreadPage,
     longestThreadPage,
     mailThreadRoute,

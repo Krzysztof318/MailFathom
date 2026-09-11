@@ -2969,7 +2969,10 @@
         "properties": {
           "answeredEmailId": {
             "format": "uuid",
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "instruction": {
             "type": [

@@ -31,6 +31,7 @@ const cautionSaid: Readonly<Record<SendCaution, MessageKey>> = {
 export function SendConfirmation({
     asked,
     composition,
+    draftUnaccepted,
     disabled,
     onSend,
 }: {
@@ -44,6 +45,15 @@ export function SendConfirmation({
 
     readonly composition: Composition;
 
+    /**
+     * Whether the words are a draft the deployment wrote that nobody has accepted yet.
+     *
+     * A caution beside the three the composition itself produces, and the one that is not about something missing:
+     * what would go out is a message somebody else composed, and the moment before it leaves is the moment to notice.
+     * Accepting the draft in the composer is what clears it.
+     */
+    readonly draftUnaccepted: boolean;
+
     /** Whether the message is already on its way, which is what keeps one press from queueing two. */
     readonly disabled: boolean;
 
@@ -51,6 +61,11 @@ export function SendConfirmation({
 }) {
     const { locale, translate } = useLocalization();
     const missing = whatWouldBeMissing(composition);
+
+    const cautions = [
+        ...missing.map((caution) => translate(cautionSaid[caution])),
+        ...(draftUnaccepted ? [translate('compose.cautionUnreadDraft')] : []),
+    ];
     const addresses = new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' });
 
     // Each header is said only where somebody is written in it, because a confirmation that lists two empty headers is
@@ -81,12 +96,12 @@ export function SendConfirmation({
                 asked={asked}
                 mark="send"
                 question={translate('compose.confirmQuestion')}
-                cautions={missing.map((caution) => translate(cautionSaid[caution]))}
+                cautions={cautions}
                 reversal={{ kind: 'recallable', said: translate('compose.confirmRecallable') }}
                 ways={[
                     { said: translate('compose.backToEditing'), manner: 'back' },
                     {
-                        said: translate(missing.length === 0 ? 'compose.send' : 'compose.sendAnyway'),
+                        said: translate(cautions.length === 0 ? 'compose.send' : 'compose.sendAnyway'),
                         manner: 'act',
                         run: onSend,
                     },

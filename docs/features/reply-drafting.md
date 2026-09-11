@@ -60,6 +60,17 @@ the scope the conversation screen itself reads under: a reply is answered across
 folder. A message that scope does not admit is a message this deployment has none of, and the request is answered as
 one naming a message nobody holds.
 
+**A request naming no message is the composer with nothing behind it**, which is somebody starting a message rather
+than answering one. There is then no conversation to read and no manner to derive, so nothing above is read at all: the
+instruction is the whole of what the message is written from, which is why it is required there and optional beside a
+message. The draft cites nothing and proposes nobody, because the exchange those would come out of does not exist.
+
+**The language is the correspondence's, and the person's where there is none.** A reply is written in the language the
+exchange it answers is written in, because that is what the person receiving it reads — nothing here asks which
+language the *author* prefers for a message going to somebody else. A message answering none has no exchange to read
+that from, so it is written in the language this deployment recorded for the user. An instruction asking for a
+particular language outranks both, being the one thing the person said about the message themselves.
+
 ## What reaches the provider, and what does not
 
 The drafting is composed like every other AI operation here — one agent, its own instruction, **no tools, and no
@@ -92,6 +103,7 @@ looking at:
 | The provider was unreachable, refused, or answered something unreadable | `drafted: false` |
 | The conversation has no readable text stored | `drafted: false` |
 | This user holds no such message, or holds no mail account at all | `404` |
+| A request naming neither a message nor an instruction, which asks for a message out of nothing | `400` |
 | The deployment has spent what its operator allows a provider for the period | `429` |
 
 The spend ceiling is the one failure that travels, because falling back there would leave somebody pressing a button

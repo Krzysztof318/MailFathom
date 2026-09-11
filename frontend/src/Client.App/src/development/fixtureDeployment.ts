@@ -319,6 +319,12 @@ function answerFor(
         return answering(state.displayName);
     }
 
+    // The capability and the drafting itself, on one address the way the surface publishes them: the read is what the
+    // composer asks before it draws the block, and the write is what the block presses for.
+    if (route === '/replies/drafting') {
+        return answering(request.method === 'POST' ? drafts.draftedReply : drafts.draftsReplies);
+    }
+
     return (
         notificationAnswer(route, options) ??
         changeAnswer(route, options) ??

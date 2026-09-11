@@ -12,6 +12,7 @@ using MailFathom.Application.Emails.ReplyDrafts;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using Microsoft.Extensions.Logging;
 
@@ -147,7 +148,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
             this.plan.MaximumRequestImageOctets);
 
         var draft = ReplyDraftReading.Read(
-            await this.AskAsync(turn, cancellationToken),
+            await this.AskAsync(turn, brief.Language, cancellationToken),
             sources.Messages,
             sources.Participants);
 
@@ -248,7 +249,10 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
     /// the person withdrawing the request rather than a provider failing to answer it.
     /// </para>
     /// </remarks>
-    private async Task<string?> AskAsync(string turn, CancellationToken cancellationToken)
+    private async Task<string?> AskAsync(
+        string turn,
+        MailUserLanguage language,
+        CancellationToken cancellationToken)
     {
         var endpoint = this.plan.Endpoint;
 
@@ -275,6 +279,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
             var agent = ReplyDraftAgentComposition.Compose(
                 chatClient,
                 this.plan,
+                language,
                 this.instructionEnvelope,
                 this.loggerFactory);
 

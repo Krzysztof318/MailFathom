@@ -27,7 +27,21 @@ import { htmlOf, plainTextOf, type WrittenNode } from './writtenText';
  */
 export type ComposerOpening =
     | { readonly kind: 'new' }
-    | { readonly kind: 'answer'; readonly answers: MailDraftAnswer; readonly storedEmailId: string }
+    | {
+          readonly kind: 'answer';
+          readonly answers: MailDraftAnswer;
+          readonly storedEmailId: string;
+
+          /**
+           * What the person asked the answer to say, where they asked for one before the composer existed.
+           *
+           * The bar under a correspondence offers drafting a reply, and what that offer means is a draft *in the
+           * composer* rather than a screen somewhere else — so the words travel with the opening and the composer asks
+           * the deployment for the draft as it opens. Absent for every other way of answering, which opens on an empty
+           * message as it always has.
+           */
+          readonly asked?: string;
+      }
     | { readonly kind: 'draft'; readonly storedEmailId: string };
 
 /** What the author has written, and what it is being written against. */

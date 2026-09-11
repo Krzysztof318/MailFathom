@@ -27,7 +27,7 @@ import { followable, type WrittenElement, type WrittenNode } from './writtenText
 export function draftWords(body: MailBody): readonly WrittenNode[] {
     const written = (body.document?.blocks ?? []).flatMap(writtenBlock);
 
-    return written.length === 0 ? paragraphsOf(body.plainText.text) : written;
+    return written.length === 0 ? writtenParagraphs(body.plainText.text) : written;
 }
 
 // One block as the elements the composer has for it. An empty array is a block it has none for, which is dropped
@@ -54,7 +54,7 @@ function writtenBlock(block: MailDocumentBlock): readonly WrittenNode[] {
             return [wrapping('blockquote', block.blocks.flatMap(writtenBlock))];
 
         case 'preformatted':
-            return paragraphsOf(block.text);
+            return writtenParagraphs(block.text);
 
         // The grid is not something the composer draws, so what is kept is what the cells say, in the order they say
         // it. A table dropped whole would take the message's words with it.
@@ -98,10 +98,18 @@ function emphasised(emphasis: MailTextEmphasis): readonly WrittenElement[] {
     ];
 }
 
-// Text with its line breaks kept, as one paragraph per line. A line is a paragraph rather than a `br` because that is
-// what the composer's own editable region produces from typing, and a draft that goes back through it should come out
-// the shape it went in.
-function paragraphsOf(text: string): readonly WrittenNode[] {
+/**
+ * Plain text as the closed tree, one paragraph per line.
+ *
+ * A line is a paragraph rather than a `br` because that is what the composer's own editable region produces from
+ * typing, and text that goes back through it should come out the shape it went in. Exported because a drafted message
+ * arrives as plain text too — the drafting route answers no document — and reading it any other way here would be a
+ * second answer to the same question.
+ *
+ * @param text The text, with its line breaks.
+ * @returns One paragraph per line, an empty line included.
+ */
+export function writtenParagraphs(text: string): readonly WrittenNode[] {
     return text.split('\n').map((line) => wrapping('p', line === '' ? [] : [{ text: line }]));
 }
 

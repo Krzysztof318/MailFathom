@@ -144,6 +144,11 @@ conversation](../features/thread-state.md) — whatever language the message its
 about their mail, which is mixed by nature, and it changes nothing about an answer to a question somebody asked: that
 is still written in the language the question was.
 
+It settles one thing that is not a derivation: a [reply draft](../features/reply-drafting.md) written for a message
+that answers none. A draft answering a message takes the language of the correspondence it answers, because what
+decides that is who will read it — but a composer opened with nothing in front of it has no correspondence to read,
+and the person writing is the only one anything is known about. An instruction naming a language outranks either.
+
 ```json
 {
   "Language": "Polish",

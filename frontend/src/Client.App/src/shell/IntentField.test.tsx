@@ -4,8 +4,10 @@
 
 import { useEffect } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MailAccount } from '@mailfathom/client-backend';
+import type { ComposerOpening } from '../composer/composition';
+import { ComposingContext, type Composing } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
@@ -21,11 +23,19 @@ const workAccount: MailAccount = {
 
 const homeAccount: MailAccount = { ...workAccount, id: 'home', displayName: 'Home' };
 
+// What a deployment that writes no draft looks like to this field, which is the default every case below runs under:
+// the bar is the Discover question there, and the drafting cases say so by turning it on.
+function composingWith(compose: (opening: ComposerOpening) => void, drafts: boolean): Composing {
+    return { offered: true, drafts, opening: null, compose, close: () => undefined };
+}
+
 function renderField(accounts: readonly MailAccount[] = [workAccount]): void {
     render(
         <LocalizationProvider>
             <WorkspaceProvider>
-                <IntentField accounts={accounts} />
+                <ComposingContext value={composingWith(() => undefined, false)}>
+                    <IntentField accounts={accounts} />
+                </ComposingContext>
             </WorkspaceProvider>
         </LocalizationProvider>,
     );
@@ -111,29 +121,39 @@ function Reporting({ onWorkspace }: { readonly onWorkspace: (workspace: Workspac
     return null;
 }
 
-function fieldStanding(as: Partial<Workspace>, accounts: readonly MailAccount[] = [workAccount]): () => Workspace {
+function fieldStanding(
+    as: Partial<Workspace>,
+    accounts: readonly MailAccount[] = [workAccount],
+    drafts = false,
+): { workspace: () => Workspace; composed: ReturnType<typeof vi.fn> } {
     let last: Workspace | null = null;
+    const composed = vi.fn();
 
     render(
         <LocalizationProvider>
             <WorkspaceProvider>
-                <Standing as={as} />
-                <IntentField accounts={accounts} />
-                <Reporting
-                    onWorkspace={(workspace) => {
-                        last = workspace;
-                    }}
-                />
+                <ComposingContext value={composingWith(composed, drafts)}>
+                    <Standing as={as} />
+                    <IntentField accounts={accounts} />
+                    <Reporting
+                        onWorkspace={(workspace) => {
+                            last = workspace;
+                        }}
+                    />
+                </ComposingContext>
             </WorkspaceProvider>
         </LocalizationProvider>,
     );
 
-    return () => {
-        if (last === null) {
-            throw new Error('The workspace was never reported.');
-        }
+    return {
+        composed,
+        workspace: () => {
+            if (last === null) {
+                throw new Error('The workspace was never reported.');
+            }
 
-        return last;
+            return last;
+        },
     };
 }
 
@@ -163,7 +183,7 @@ describe('IntentField scope', () => {
     // Widening away from a passage is the same control every other scope is chosen with, and it must not take the
     // highlight off the message: the reader is still looking at the words they selected.
     it('gives the whole message back as the scope without unselecting the words', () => {
-        const reported = fieldStanding({
+        const { workspace: reported } = fieldStanding({
             selection: 'AAMkAD-42',
             fragment: { messageId: 'AAMkAD-42', text: 'the part of the message somebody pointed at' },
         });
@@ -229,7 +249,7 @@ describe('IntentField scope', () => {
     // The whole point of the field owning a scope of its own: widening a question must not move the list out from
     // under somebody who was reading a folder, nor drop the rows they had picked out.
     it('changes nothing the mail space displays when the scope is chosen in the field', () => {
-        const reported = fieldStanding({
+        const { workspace: reported } = fieldStanding({
             scope: { kind: 'folder', accountId: 'work', alias: 'Invoices' },
             selected: ['one'],
         });
@@ -246,7 +266,7 @@ describe('IntentField scope', () => {
     // Narrowing is the other half of the same promise, and it is the half a field offering only mailboxes could not
     // keep: the list still shows the folder and the rows stay ticked while the question is about one message.
     it('narrows to one message without changing what the mail space is showing', () => {
-        const reported = fieldStanding({
+        const { workspace: reported } = fieldStanding({
             scope: { kind: 'folder', accountId: 'work', alias: 'Invoices' },
             selection: 'AAMkAD-42',
             selected: ['AAMkAD-42', 'AAMkAD-43'],
@@ -264,7 +284,7 @@ describe('IntentField scope', () => {
     // What is in scope is what is read and sent, so the words beside the question and the scope the run is started
     // with are asserted as one value rather than trusted to have stayed in step.
     it('records the scope it was showing when the question is asked', () => {
-        const reported = fieldStanding({
+        const { workspace: reported } = fieldStanding({
             selection: 'AAMkAD-42',
             fragment: { messageId: 'AAMkAD-42', text: 'by the end of the month' },
         });
@@ -296,7 +316,7 @@ describe('IntentField scope', () => {
     });
 
     it('follows the mail space again when what it is showing is chosen back', () => {
-        const reported = fieldStanding({}, [workAccount, homeAccount]);
+        const { workspace: reported } = fieldStanding({}, [workAccount, homeAccount]);
 
         fireEvent.change(screen.getByRole('combobox', { name: 'What the question is asked about' }), {
             target: { value: 'account:home' },
@@ -464,7 +484,7 @@ describe('IntentField wording', () => {
     // thing the control is called — and the whole sentence rather than the shortened label, because what was asked
     // cannot depend on how wide the window was.
     it('asks for the reply the control names when nothing has been typed', () => {
-        const reported = fieldStanding({ conversation: { threadId: 'thread-1', openAt: null } });
+        const { workspace: reported } = fieldStanding({ conversation: { threadId: 'thread-1', openAt: null } });
 
         fireEvent.submit(screen.getByRole('search'));
 
@@ -475,10 +495,113 @@ describe('IntentField wording', () => {
     });
 
     it('records nothing for an empty press where no correspondence is in scope', () => {
-        const reported = fieldStanding({});
+        const { workspace: reported } = fieldStanding({});
 
         fireEvent.submit(screen.getByRole('search'));
 
         expect(reported().askedBefore).toEqual([]);
+    });
+});
+
+// Asking for a reply means a reply, in the composer, rather than a trip to the space that answers questions. Every
+// case here turns drafting on, because that is the one thing that decides which of the two a press does.
+describe('IntentField drafting', () => {
+    it('opens the composer on the message being read rather than going anywhere', () => {
+        const { composed } = fieldStanding(
+            { conversation: { threadId: 'thread-1', openAt: null }, selection: 'AAMkAD-42' },
+            [workAccount],
+            true,
+        );
+
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Ask your mail' }), {
+            target: { value: 'accept the SLA and ask for a cap' },
+        });
+        fireEvent.submit(screen.getByRole('search'));
+
+        expect(composed).toHaveBeenCalledWith({
+            kind: 'answer',
+            answers: 'senderOnly',
+            storedEmailId: 'AAMkAD-42',
+            asked: 'accept the SLA and ask for a cap',
+        });
+        expect(window.location.hash).not.toBe('#/discover');
+    });
+
+    it('quotes the passage in scope where nothing was typed, which is the whole of what was asked', () => {
+        const { composed } = fieldStanding(
+            {
+                selection: 'AAMkAD-42',
+                fragment: { messageId: 'AAMkAD-42', text: 'the response time is two hours' },
+            },
+            [workAccount],
+            true,
+        );
+
+        fireEvent.submit(screen.getByRole('search'));
+
+        expect(composed).toHaveBeenCalledWith({
+            kind: 'answer',
+            answers: 'senderOnly',
+            storedEmailId: 'AAMkAD-42',
+            asked: 'the response time is two hours',
+        });
+    });
+
+    // The other half of the case above: a conversation with no passage in scope has nothing to quote, so what the
+    // composer is opened asking for is nothing at all and the block it draws sits waiting rather than firing on its
+    // own. What this guards is the composer being opened with a sentence nobody typed about a message nobody picked.
+    it('opens the composer asking for nothing where nothing was typed and no passage is in scope', () => {
+        const { composed } = fieldStanding(
+            { conversation: { threadId: 'thread-1', openAt: null }, selection: 'AAMkAD-42' },
+            [workAccount],
+            true,
+        );
+
+        fireEvent.submit(screen.getByRole('search'));
+
+        expect(composed).toHaveBeenCalledWith({
+            kind: 'answer',
+            answers: 'senderOnly',
+            storedEmailId: 'AAMkAD-42',
+            asked: '',
+        });
+    });
+
+    it('asks the space that answers questions where the deployment writes no draft', () => {
+        const { composed } = fieldStanding({ conversation: { threadId: 'thread-1', openAt: null } });
+
+        fireEvent.submit(screen.getByRole('search'));
+
+        expect(composed).not.toHaveBeenCalled();
+        expect(window.location.hash).toBe('#/discover');
+    });
+
+    it('asks the space that answers questions where the rows picked out are the scope', () => {
+        const { composed } = fieldStanding({ selected: ['one', 'two'] }, [workAccount], true);
+
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Ask your mail' }), {
+            target: { value: 'what do these two have in common' },
+        });
+        fireEvent.submit(screen.getByRole('search'));
+
+        expect(composed).not.toHaveBeenCalled();
+        expect(window.location.hash).toBe('#/discover');
+    });
+
+    it('keeps what was asked beside the scope it was asked under, drafting or not', () => {
+        const { workspace: reported } = fieldStanding(
+            { conversation: { threadId: 'thread-1', openAt: null }, selection: 'AAMkAD-42' },
+            [workAccount],
+            true,
+        );
+
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Ask your mail' }), {
+            target: { value: 'accept the SLA' },
+        });
+        fireEvent.submit(screen.getByRole('search'));
+
+        expect(reported().askedBefore).toEqual([
+            { question: 'accept the SLA', scope: { kind: 'thread', threadId: 'thread-1' } },
+        ]);
     });
 });

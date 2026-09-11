@@ -4,6 +4,7 @@
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import {
+    draftMailReply,
     readMailBody,
     readMailMessage,
     type ClientFailureReason,
@@ -28,11 +29,14 @@ import {
     type Composition,
 } from './composition';
 import { DiscardConfirmation } from './DiscardConfirmation';
+import { DraftingBlock, DraftingStanding } from './DraftingBlock';
+import { writtenParagraphs } from './draftWords';
 import { forgetComposition, rememberComposition, rememberedComposition } from './keptComposition';
 import { RecipientField } from './RecipientField';
 import { SendConfirmation } from './SendConfirmation';
 import { useDraftAtDeployment, type AttachedFile, type DraftStanding } from './useDraftAtDeployment';
 import { WrittenMessage } from './WrittenMessage';
+import type { WrittenNode } from './writtenText';
 
 // Writing a message, as the design project composes it: one model in two shapes, decided by the width the client has
 // rather than by which head it runs on. Wide, it is the reading column — what is being written stands where what is
@@ -132,6 +136,7 @@ export function Composer({
     accounts,
     opening,
     online,
+    drafts,
     onClosed,
 }: {
     readonly session: ClientSession;
@@ -142,6 +147,16 @@ export function Composer({
 
     readonly opening: ComposerOpening;
     readonly online: boolean;
+
+    /**
+     * Whether this deployment writes a draft at all, which is what decides whether the block is drawn.
+     *
+     * Read once by the frame above rather than here: a control promising a draft over a deployment that writes none
+     * fails a person at the one moment they trusted it, and a block drawn and then withdrawn as an answer arrives
+     * would move the fields under whoever was already writing in them.
+     */
+    readonly drafts: boolean;
+
     readonly onClosed: () => void;
 }) {
     const { locale, translate } = useLocalization();
@@ -161,6 +176,18 @@ export function Composer({
     const [reading, setReading] = useState<Reading>({ kind: 'reading' });
     const [known, setKnown] = useState<readonly string[]>([]);
     const [copiesShown, setCopiesShown] = useState(false);
+
+    // What the deployment is doing about a draft, and what the words were before one replaced them. The second is
+    // both the way back and the fact the send confirmation cautions about: a draft nobody has read is words somebody
+    // else wrote, and accepting it is what makes them the author's own.
+    const [drafting, setDrafting] = useState(false);
+    const [beforeDrafting, setBeforeDrafting] = useState<readonly WrittenNode[] | null>(null);
+
+    // How many times the words have been replaced wholesale, which is what the editable region is keyed by: it renders
+    // the tree it opens with once and never again, so a draft arriving has to be a new region rather than a new prop.
+    // Ordinary typing changes nothing here, which is what keeps the caret where it was.
+    const [draftGeneration, setDraftGeneration] = useState(0);
+
     const files = useRef<HTMLInputElement>(null);
     const asked = useRef<HTMLDialogElement>(null);
     const frame = useRef<HTMLElement>(null);
@@ -259,6 +286,70 @@ export function Composer({
     function revise(change: Partial<Composition>): void {
         setAuthored(true);
         setComposition((held) => (held === null ? null : { ...held, ...change }));
+    }
+
+    // Asking the deployment to write the message, which is a request going out rather than anything that navigates:
+    // what comes back replaces the words in front of the person, with the way back beside it. The press is where the
+    // guard lives — a second drafting while the first is in flight would spend the allowance twice and put whichever
+    // answered last on the screen.
+    function askForADraft(instruction: string): void {
+        if (composition === null || drafting) {
+            return;
+        }
+
+        // What the person themselves wrote, which a second drafting must not overwrite with the first draft: asking
+        // twice and then restoring is asking for their own words back, not for the draft before this one.
+        const before = beforeDrafting ?? composition.words;
+
+        setDrafting(true);
+
+        void draftMailReply(session, transport, {
+            answeredEmailId: composition.answering?.storedEmailId ?? null,
+            selection: null,
+            instruction,
+        }).then((answer) => {
+            setDrafting(false);
+
+            if (answer.outcome === 'failed') {
+                toasts.raise({
+                    kind: 'error',
+                    title: translate('compose.notDraftedTitle'),
+                    body: translate(failureSaid[answer.failure.reason]),
+                });
+
+                return;
+            }
+
+            if (answer.value.outcome !== 'drafted') {
+                toasts.raise({
+                    kind: 'warning',
+                    title: translate('compose.notDraftedTitle'),
+                    body: translate(
+                        answer.value.outcome === 'allowanceSpent'
+                            ? 'compose.draftAllowanceSpent'
+                            : 'compose.notDrafted',
+                    ),
+                });
+
+                return;
+            }
+
+            setBeforeDrafting(before);
+            setDraftGeneration((written) => written + 1);
+            revise({ words: writtenParagraphs(answer.value.body) });
+        });
+    }
+
+    // Putting back what the draft replaced, which is the one act that has to work whatever the draft turned out to be:
+    // somebody who asked for one and did not want it is owed their own words rather than an undo they have to find.
+    function restoreWhatWasWritten(): void {
+        if (beforeDrafting === null) {
+            return;
+        }
+
+        setDraftGeneration((written) => written + 1);
+        revise({ words: beforeDrafting });
+        setBeforeDrafting(null);
     }
 
     // Tab kept inside the composer while it stands over the whole screen. The two confirmations are `<dialog>`
@@ -534,7 +625,21 @@ export function Composer({
                         )}
                     </div>
 
+                    {drafts ? (
+                        <DraftingBlock
+                            context={
+                                composition.subject.trim() === ''
+                                    ? translate('compose.aiContextNothing')
+                                    : composition.subject
+                            }
+                            busy={drafting}
+                            asked={opening.kind === 'answer' ? (opening.asked ?? '') : ''}
+                            onDraft={askForADraft}
+                        />
+                    ) : null}
+
                     <WrittenMessage
+                        key={draftGeneration}
                         opened={composition.words}
                         onWritten={(words) => {
                             revise({ words });
@@ -544,6 +649,18 @@ export function Composer({
                                 asked.current?.showModal();
                             }
                         }}
+                        beforeTheWords={
+                            drafts ? (
+                                <DraftingStanding
+                                    busy={drafting}
+                                    drafted={beforeDrafting !== null}
+                                    onRestore={restoreWhatWasWritten}
+                                    onAccept={() => {
+                                        setBeforeDrafting(null);
+                                    }}
+                                />
+                            ) : null
+                        }
                     />
 
                     <AttachedFiles
@@ -560,6 +677,7 @@ export function Composer({
                         <SendConfirmation
                             asked={asked}
                             composition={composition}
+                            draftUnaccepted={beforeDrafting !== null}
                             disabled={!sendable}
                             onSend={() => {
                                 sendAndReport(composition);

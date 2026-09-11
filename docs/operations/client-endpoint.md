@@ -2044,8 +2044,23 @@ deployment's configuration to every signed-in browser.
 **The request names one message and states nothing else about it.** The conversation the draft is grounded in, the
 account whose manner it is written in, the subject, and the people it may propose are all read out of the stored copy
 that identifier resolves to, so a client can state none of them and can state none of them wrongly. `selection` is the
-part of the correspondence being answered and `instruction` is what the reply should say; both are optional, and a
-request carrying neither is the ordinary one.
+part of the correspondence being answered and `instruction` is what the reply should say; both are optional beside a
+message, and a request carrying neither is the ordinary one.
+
+**`answeredEmailId` is `null` for a message that answers nothing**, which is the composer somebody opened with nothing
+in front of it. There is then no conversation to read, so `instruction` is what the message is written from and is
+required there — a request naming neither is refused with `400`, because it would be a provider call made to invent a
+message out of nothing at all. The language follows the same split: a reply is written in the language the conversation
+it answers is written in, and a message answering none is written in the language this deployment recorded for that
+user, which [the user record](configuration-sources.md) holds. An `instruction` asking for a particular language
+outranks both, being the one thing the person said about the message themselves.
+
+**The client asks for a draft from the composer and nowhere else.** The block the design draws over the body is what
+sends this request — the field says what the message should be about, the act beside it says what shape it should take,
+and the two travel as one `instruction`. What comes back replaces the words in the composer with the way back beside
+them, and a draft nobody has accepted is named in the send confirmation before the message goes out. The bar under a
+correspondence offers the same thing by opening the composer on the message being read, so asking for a reply reaches
+no other screen.
 
 **`supported` is published beside the sources rather than left to a client to derive.** A claim carrying none is one
 the correspondence does not back, and it is kept and marked rather than dropped, because the sentence is already in the

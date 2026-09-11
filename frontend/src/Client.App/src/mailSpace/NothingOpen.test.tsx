@@ -42,7 +42,9 @@ describe('NothingOpen', () => {
 
         render(
             <LocalizationProvider>
-                <ComposingContext value={{ offered: true, opening: null, compose: composed, close: () => undefined }}>
+                <ComposingContext
+                    value={{ offered: true, drafts: false, opening: null, compose: composed, close: () => undefined }}
+                >
                     <NothingOpen arriving={false} onReopenLastRead={null} />
                 </ComposingContext>
             </LocalizationProvider>,

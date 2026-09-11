@@ -66,6 +66,7 @@ const readRoutes: readonly (readonly [string, unknown])[] = [
     ['/notifications?pageSize=20', notifications.notificationPage],
     ['/notifications/unread-count', notifications.unreadNotificationCount],
     ['/mutations', changes.mutationRecords],
+    ['/replies/drafting', drafts.draftsReplies],
 ];
 
 const writtenRoutes: readonly (readonly [string, unknown])[] = [
@@ -79,6 +80,7 @@ const writtenRoutes: readonly (readonly [string, unknown])[] = [
     [`/notifications/${notifications.notificationId}/read-state`, notifications.notificationMarkedRead],
     ['/drafts', drafts.savedDraft],
     [`/drafts/${drafts.draftId}/send`, drafts.queuedSend],
+    ['/replies/drafting', drafts.draftedReply],
 ];
 
 afterEach(() => {

@@ -110,9 +110,22 @@ internal static class ClientReplyDraftingEndpoint
         [FromServices] MailReplyDrafting? drafting,
         CancellationToken cancellationToken)
     {
-        if (request is null || request.AnsweredEmailId == Guid.Empty)
+        if (request is null)
         {
-            return Refuse("The request names no message to answer.");
+            return Refuse("The request names no message to answer and no message to write.");
+        }
+
+        // An all-zero identifier names no message, which is the same thing omitting the field says, so it is read as
+        // the same thing rather than refused separately. Two guards disagreeing about one condition is how a caller
+        // that sent the empty identifier *and* an instruction came to be turned away for saying nothing.
+        var answeredEmailId = request.AnsweredEmailId == Guid.Empty ? null : request.AnsweredEmailId;
+
+        // A composer with nothing behind it is a drafting like any other, and the instruction is what it is grounded
+        // in instead of a conversation — so the one shape refused here is the request carrying neither, which would
+        // be a provider call made to invent a message out of nothing at all.
+        if (answeredEmailId is null && string.IsNullOrWhiteSpace(request.Instruction))
+        {
+            return Refuse("A drafting that answers no message says what the message should be about.");
         }
 
         if (request.Instruction is { Length: > ReplyDraftRequest.MaximumInstructionLength })
@@ -139,7 +152,7 @@ internal static class ClientReplyDraftingEndpoint
             var draft = await drafting.DraftAsync(
                 new ReplyDraftRequest
                 {
-                    AnsweredEmailId = StoredEmailId.Create(request.AnsweredEmailId),
+                    AnsweredEmailId = answeredEmailId is { } named ? StoredEmailId.Create(named) : null,
                     Selection = request.Selection,
                     Instruction = request.Instruction,
                 },
@@ -171,15 +184,22 @@ internal static class ClientReplyDraftingEndpoint
 internal sealed record ClientReplyDraftingResponse(bool DraftsReplies);
 
 /// <summary>One reply to draft: the message being answered, and what its author asked for.</summary>
-/// <param name="AnsweredEmailId">The stored message the reply answers, as a message row published it.</param>
+/// <param name="AnsweredEmailId">The stored message the reply answers, as a message row published it, or <see langword="null" /> where the message being written answers none.</param>
 /// <param name="Selection">The part of the correspondence being answered, or <see langword="null" /> to answer the conversation as a whole.</param>
 /// <param name="Instruction">What the reply should say, or <see langword="null" /> where the person asked for nothing in particular.</param>
 /// <remarks>
+/// <para>
 /// The message is named and nothing about it is stated. The conversation, the people, the subject, and the account
 /// whose manner the reply is written in are all read out of the stored copy that identifier resolves to, so a client
 /// can state none of them and can state none of them wrongly.
+/// </para>
+/// <para>
+/// Naming none of them is the composer somebody opened with nothing in front of it. There is then no conversation to
+/// read, so the instruction is what the message is written from and is required; the language comes from that person's
+/// own record rather than from an exchange there is none of.
+/// </para>
 /// </remarks>
-internal sealed record ClientReplyDraftRequest(Guid AnsweredEmailId, string? Selection, string? Instruction);
+internal sealed record ClientReplyDraftRequest(Guid? AnsweredEmailId, string? Selection, string? Instruction);
 
 /// <summary>The drafted reply, as the client endpoint serves it.</summary>
 /// <param name="Drafted">Whether a reply was drafted at all, which is <see langword="false" /> where this deployment drafts none or the provider could not be reached.</param>
