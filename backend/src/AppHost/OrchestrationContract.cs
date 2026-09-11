@@ -430,6 +430,60 @@ public static class OrchestrationContract
     /// <summary>The endpoint the analyzer answers analysis and supported-entity requests on.</summary>
     public const string PersonalDataAnalyzerEndpointName = "http";
 
+    /// <summary>The RESP server a deployment's replicas carry client signals to each other over.</summary>
+    /// <remarks>
+    /// <para>
+    /// Garnet rather than Redis: both answer the protocol the backplane speaks, and this is the one a developer's
+    /// machine is asked to pull. What a deployment runs is the operator's — the section takes any RESP endpoint, and
+    /// nothing in this repository deploys a server.
+    /// </para>
+    /// <para>
+    /// The integration-test topology always starts it, because the claim the suite exists to prove about the backplane
+    /// is that a statement raised on one process reaches a connection held by another — which no substitute settles. A
+    /// developer's orchestration starts it only where <see cref="SignalBackplaneEnabledKey" /> asks for it, for the
+    /// reason the analyzer and the spam daemon are absent from it: one replica needs no backplane, so starting a
+    /// container for one would cost every local run something only a scaled-out deployment uses.
+    /// </para>
+    /// </remarks>
+    public const string SignalBackplaneResourceName = "signal-backplane";
+
+    /// <summary>The declared name the backplane's connection string is carried under in the host's own configuration.</summary>
+    /// <remarks>The stable handle a diagnostic names the secret by, which is what the section requires of every secret block rather than anything this app model chose for itself.</remarks>
+    public const string SignalBackplaneSecretName = "signal-backplane";
+
+    /// <summary>The configuration key a developer states <see langword="true" /> under to run the orchestration over a backplane.</summary>
+    /// <remarks>
+    /// <para>
+    /// Off unless asked for, and the opposite default from <see cref="ClientEnabledKey" />: what it adds is a container
+    /// and a second MailFathom process, which is the shape of a scaled-out deployment rather than of the one a
+    /// developer works in. Stated where the pinned ports are — the app host's own user secrets, out of every checkout —
+    /// and its environment form is <c>Backplane__Enabled</c>.
+    /// </para>
+    /// <para>
+    /// <b>Under a root the host binds nothing at all</b>, like every other switch here and unlike the section it turns
+    /// on. A child process inherits this one's environment, so <c>SignalBackplane__Enabled</c> would reach every host
+    /// this app model starts, land inside the section <c>SignalBackplaneOptions</c> binds with
+    /// <c>ErrorOnUnknownConfiguration</c>, and stop the process on a key it has no property for.
+    /// </para>
+    /// <para>
+    /// Read from configuration rather than from the argument list, for the reason the client switch is: it adds
+    /// resources to a topology already selected rather than selecting one, so an ambient value cannot divert a run onto
+    /// the ephemeral database.
+    /// </para>
+    /// </remarks>
+    public const string SignalBackplaneEnabledKey = "Backplane:Enabled";
+
+    /// <summary>The second MailFathom host project resource a developer's backplane run starts, which holds its own client connections.</summary>
+    /// <remarks>
+    /// A second resource rather than a second replica of <see cref="HostResourceName" />, because every socket in that
+    /// topology is stated rather than allocated by the orchestrator: the endpoints are declared unproxied on a port
+    /// this run found, and a replica of a resource declaring one would be a second process asked to bind a port the
+    /// first already holds. What this one serves is the client surface and the probes alone — the MCP and
+    /// administrative surfaces are the first host's, and a developer reaches this one to watch a signal raised over
+    /// there arrive over here.
+    /// </remarks>
+    public const string HostReplicaResourceName = "mailfathom-host-replica";
+
     /// <summary>The spam daemon the integration-test topology scores against.</summary>
     /// <remarks>
     /// <para>
@@ -938,6 +992,29 @@ public static class OrchestrationContract
         }
 
         return clientEnabled;
+    }
+
+    /// <summary>Reads whether this run carries signals over a backplane, from the value configuration holds under <see cref="SignalBackplaneEnabledKey" />.</summary>
+    /// <param name="statedValue">The value configuration holds under that key, or <see langword="null" /> when it holds none.</param>
+    /// <returns><see langword="false" /> unless the developer asked for one, because one replica needs none.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when a stated value is not a boolean.</exception>
+    /// <remarks>Refused rather than ignored, for the reason an unusable pinned port is: a developer who wrote <c>1</c> or <c>yes</c> asked for a second process and a container, and running without them while nothing said why is the confusing answer.</remarks>
+    public static bool ResolveSignalBackplaneEnabled(string? statedValue)
+    {
+        if (string.IsNullOrWhiteSpace(statedValue))
+        {
+            return false;
+        }
+
+        var statedBoolean = statedValue.Trim();
+
+        if (!bool.TryParse(statedBoolean, out var backplaneEnabled))
+        {
+            throw new InvalidOperationException(
+                $"{SignalBackplaneEnabledKey} is '{statedBoolean}', which is not true or false. State one of those, or leave it unset to run one replica and no backplane.");
+        }
+
+        return backplaneEnabled;
     }
 
     /// <summary>Composes the address the running client reaches the service's client surface at.</summary>

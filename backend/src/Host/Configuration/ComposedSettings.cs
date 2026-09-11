@@ -8,6 +8,7 @@ using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Rules;
+using MailFathom.Host.Configuration.Signals;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Rules;
 using Microsoft.Extensions.Options;
@@ -219,6 +220,7 @@ internal static class ComposedSettings
         var admin = AdminEndpointOptions.ReadFrom(configuration);
         var client = ClientEndpointOptions.ReadFrom(configuration);
         var health = HealthEndpointOptions.ReadFrom(configuration);
+        var signalBackplane = SignalBackplaneOptions.ReadFrom(configuration);
 
         List<SettingsRefusal> refusals =
         [
@@ -241,6 +243,13 @@ internal static class ComposedSettings
             .. Refusal<AdminEndpointOptions>(AdminEndpointOptions.SectionName, admin.FindConfigurationErrors()),
             .. Refusal<ClientEndpointOptions>(ClientEndpointOptions.SectionName, client.FindConfigurationErrors()),
             .. Refusal<HealthEndpointOptions>(HealthEndpointOptions.SectionName, health.FindConfigurationErrors()),
+
+            // Read with the surfaces rather than beside the bound sections, because it is the client surface's own
+            // second server and is read while the host is composed for the same reason those are: whether anything is
+            // registered for it is settled before a container exists. Last of the group, so a mistake in the section
+            // that decides whether the client is served at all is reported before one in the section that only decides
+            // how its signals travel.
+            .. Refusal<SignalBackplaneOptions>(SignalBackplaneOptions.SectionName, signalBackplane.FindConfigurationErrors()),
         ];
 
         // Composing the listeners is what a section's own validator has already earned the right to: declaring one reads

@@ -1,9 +1,10 @@
 # Endpoint configuration
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/**, backend/src/Host/Configuration/Access/** -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/**, backend/src/Host/Configuration/Access/**, backend/src/Host/Configuration/Signals/** -->
 
 Every key deciding where each of the four surfaces is served, what a caller has to present to reach one, and how much
-traffic and how long a request each will take. What an admitted caller may then do is a grant rather than a listener
+traffic and how long a request each will take, plus the one endpoint on this page MailFathom dials rather than binds:
+the [signal backplane](#signalbackplane) the client surface fans its signals across replicas over. What an admitted caller may then do is a grant rather than a listener
 setting, and [what a credential may do](permissions.md) is the whole of it. The tables read as
 [the configuration reference](configuration-reference.md#how-to-read-the-tables) says they do, and that page is the map
 to the rest of the sections.
@@ -405,6 +406,49 @@ than assumed to still be true.
 
 The routes are served beneath `/api/client`, which is a constant rather than a setting, for the reason `/api/admin` is
 one — a client is configured with a host and a port and appends the rest. There is no version segment in it.
+
+## `SignalBackplane`
+
+The RESP endpoint a signal raised on one replica reaches the other replicas' client connections over. It is the one
+section here that names somewhere MailFathom **connects to** rather than a socket it opens, and it exists for one
+deployment shape: more than one replica serving the client surface, where the replica that synchronized an account is
+routinely not the one holding the connection that has to hear about it. A deployment running a single replica needs
+none of this and should write none of it.
+
+**Writing no section registers nothing.** No connection is opened, no library is asked for, and the host behaves
+exactly as one built before this section existed. Writing the section registers it inside the client surface's own
+composition, so a deployment serving no client surface still connects to nothing. What losing the backplane costs, and
+what a client does about it, is [the signal channel](client-endpoint.md#the-signal-channel).
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `SignalBackplane:ConnectionString` | secret block | none | Required once the section is written. A StackExchange.Redis configuration string — `host:port` at its smallest, with the options that library reads beside it. Resolved through [secret provisioning](secret-provisioning.md#the-secret-block) like every other credential, because it usually carries one | restart |
+| `SignalBackplane:ChannelPrefix` | string | `mailfathom` | Non-empty. Prefixes every channel this deployment publishes and subscribes to, so two deployments sharing one RESP server do not hear each other | restart |
+
+**The connection string is a secret block rather than a string**, for the reason every other credential here is one: a
+RESP endpoint is usually reached with a password, and a password written into a configuration value is a password in
+whatever the operator's configuration is backed by. A section naming no connection string is refused at startup, as is
+one whose channel prefix was written empty.
+
+**The material is read once and then kept for the life of the process**, which is the one place this section departs
+from every other credential here. It is resolved when a connection is first wanted rather than while the host is
+composed — that is what lets a replica whose endpoint is down finish starting — and the endpoint parsed from it,
+password included, is what every later reconnection uses. So a credential rotated behind an unchanged reference takes
+effect at the next start rather than on the next attempt, and
+[rotating it](secret-rotation.md#rotating-the-signal-backplanes-connection-string) is a restart to schedule.
+
+**The default prefix separates one MailFathom from something else, never one MailFathom from another.** `mailfathom`
+is the same literal in every deployment that writes no prefix, so two of them pointed at one RESP server publish and
+subscribe under the same channels: each one's statements reach the other's client connections, carrying an account
+alias, a folder alias, and the two lines of a raised notification. A deployment sharing a RESP server with another
+MailFathom therefore writes a prefix of its own, and a deployment sharing one with anything else is already separated
+by this default.
+
+**An unreachable endpoint does not stop the host.** The connection is opened with `AbortOnConnectFail` off, so a
+deployment whose backplane is down starts and serves; the signals raised while it is down are the ones a client catches
+up on. Losing and regaining it is logged at `Warning` and counted, which
+[the signal backplane](telemetry.md#the-signal-backplane) records, and it is deliberately not a readiness failure — a
+deployment that stops answering probes because a fan-out is down has turned an optimization into an outage.
 
 ## `HealthEndpoints`
 

@@ -10,6 +10,10 @@
          package ships no stable build. It is referenced by AppHost alone, so nothing it carries reaches a deployed
          assembly. -->
     <PackageVersion Include="Aspire.Hosting.EntityFrameworkCore" Version="13.4.6-preview.1.26319.6" />
+    <!-- The Garnet hosting integration, which is what lets a developer's orchestration and the integration suite start
+         the RESP server the client signal backplane crosses. Referenced by AppHost alone, so nothing it carries reaches
+         a deployed assembly; what a deployment runs beside MailFathom is the server rather than this package. -->
+    <PackageVersion Include="Aspire.Hosting.Garnet" Version="13.4.6" />
     <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.4.6" />
     <PackageVersion Include="Aspire.Hosting.Testing" Version="13.4.6" />
     <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.4.6" />
@@ -90,6 +94,16 @@
          parsing circular schema references — and NU1903 fails the restore over it. 10.0.11 is the release that widens
          the dependency to the patched 2.7.5. -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <!-- The SignalR backplane, which ships outside the shared framework the hub itself is part of. It is what carries a
+         client signal from the replica that raised it to the replica holding that client's connection, and it is
+         registered only where a deployment declared a RESP endpoint to carry it over — so a single-replica deployment
+         restores it and connects to nothing. Referenced by Host alone. -->
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.0.12" />
+    <!-- The .NET SignalR client, referenced by the integration suite alone: the claim that a signal crosses replicas is
+         only observable from a connection somebody is holding, and holding one means speaking the hub protocol over a
+         real WebSocket. Nothing under backend/src references it — the client a deployment serves is the browser's
+         @microsoft/signalr, pinned in the client workspace. -->
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.12" />
     <!-- The OpenAPI object model, brought in transitively by the generator above and pinned directly for the reason
          BouncyCastle.Cryptography is: the document and operation transformers name its types, so the version this
          repository compiles against is decided here rather than inherited from another package's dependency range. -->

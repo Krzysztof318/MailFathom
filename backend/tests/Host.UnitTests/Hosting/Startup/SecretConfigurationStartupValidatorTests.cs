@@ -12,6 +12,7 @@ using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.DataEncryption;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Persistence;
+using MailFathom.Host.Configuration.Signals;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure;
@@ -334,6 +335,63 @@ public sealed class SecretConfigurationStartupValidatorTests
         // Assert
         var failure = Assert.Single(exception.Failures);
         Assert.StartsWith("ContentStorage:ObjectStorage:SecretAccessKey:Name", failure, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A declared backplane whose reference resolves to nothing is a deployment that will never fan a signal out, so it
+    /// is reported the way every other unusable credential is. The endpoint being unreachable is a different matter and
+    /// deliberately not one of these: a signal is an optimization over a client that re-reads on its own, so the channel
+    /// reports losing one as a transition rather than refusing to start over it.
+    /// </summary>
+    [Fact]
+    public async Task StartingAsync_ADeclaredBackplaneReferencingNothing_FailsStartup()
+    {
+        // Arrange
+        var harness = CreateHarness(
+            new PersistenceOptions(),
+            signalBackplaneOptions: new SignalBackplaneOptions
+            {
+                ConnectionString = new ConfiguredSecret { Name = "signal-backplane", SecretReference = "file:/does/not/exist" },
+            });
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("SignalBackplane:ConnectionString", failure, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The case every deployment that scaled out actually runs, which the two refusals beside it would both pass while
+    /// the gate refused all of them: the section is handed to the same secret walk every other credential is, so a rule
+    /// applied where none belongs would stop every host that configured a backplane.
+    /// </summary>
+    [Fact]
+    public async Task StartingAsync_ADeclaredBackplaneWhoseReferenceResolves_CompletesSoHostedServicesMayStart()
+    {
+        // Arrange
+        var harness = CreateHarness(
+            new PersistenceOptions(),
+            signalBackplaneOptions: new SignalBackplaneOptions
+            {
+                ConnectionString = new ConfiguredSecret { Name = "signal-backplane", SecretReference = "plaintext:signal-backplane" },
+            });
+
+        // Act, Assert
+        await harness.Validator.StartingAsync(CancellationToken.None);
+    }
+
+    /// <summary>A deployment that declared no backplane is asked nothing about one, which is what makes the section optional rather than defaulted.</summary>
+    [Fact]
+    public async Task StartingAsync_NoBackplaneDeclared_IsAskedNothingAboutOne()
+    {
+        // Arrange
+        var harness = CreateHarness(new PersistenceOptions());
+
+        // Act, Assert
+        await harness.Validator.StartingAsync(CancellationToken.None);
     }
 
     /// <summary>Names identify secrets to an operator reading one section, so adding a section must not collide with one already working.</summary>
@@ -894,6 +952,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         ClientEndpointOptions? clientEndpointOptions = null,
         DataEncryptionOptions? dataEncryptionOptions = null,
         ContentStorageOptions? contentStorageOptions = null,
+        SignalBackplaneOptions? signalBackplaneOptions = null,
         ISecretReferenceResolver? secretReferenceResolver = null)
     {
         var resolver = secretReferenceResolver ?? new PlaintextOnlySecretReferenceResolver { Source = source };
@@ -909,6 +968,7 @@ public sealed class SecretConfigurationStartupValidatorTests
             Options.Create(adminEndpointOptions ?? new AdminEndpointOptions()),
             Options.Create(clientEndpointOptions ?? new ClientEndpointOptions()),
             Options.Create(contentStorageOptions ?? new ContentStorageOptions()),
+            Options.Create(signalBackplaneOptions ?? new SignalBackplaneOptions()),
             new SecretConfigurationValidator(
                 resolver,
                 new TrustAnchorLoader(resolver),

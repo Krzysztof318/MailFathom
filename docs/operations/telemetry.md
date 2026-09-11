@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs, frontend/src/Client.App/src/containment/**, frontend/src/Client.App/src/telemetry/**, frontend/src/Client.App/src/App.tsx, frontend/src/Client.App/src/main.tsx, frontend/src/Client.Backend/src/telemetry.ts, frontend/src/Client.Backend/src/mailAttachment.ts, frontend/src/Client.Backend/src/ownDisplayName.ts, frontend/src/Client.Backend/src/ownPortrait.ts -->
+<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/Signals/SignalBackplaneTelemetry.cs, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs, frontend/src/Client.App/src/containment/**, frontend/src/Client.App/src/telemetry/**, frontend/src/Client.App/src/App.tsx, frontend/src/Client.App/src/main.tsx, frontend/src/Client.Backend/src/telemetry.ts, frontend/src/Client.Backend/src/mailAttachment.ts, frontend/src/Client.Backend/src/ownDisplayName.ts, frontend/src/Client.Backend/src/ownPortrait.ts -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -1444,6 +1444,31 @@ cross-origin page's preflight admits it and admits nothing beside it.
 somebody signs in and ends when they sign out, and a request made outside it starts an ordinary root trace at the
 deployment exactly as an MCP caller sending nothing does. **An export sends none either**, which is what keeps the
 export path from feeding itself.
+
+### The signal backplane
+
+A deployment that configured [a signal backplane](client-endpoint.md#fanning-signals-across-replicas) publishes one
+counter about it, **`mailfathom.client_signals.backplane.transitions`**, in units of `{transition}`. It counts the
+times this replica lost the connection to the RESP endpoint and the times it had it back, broken down by
+`mailfathom.client_signals.backplane.state`, whose values are `lost` and `restored` and nothing else. **It is written
+only on a transition**, so an absent series is either a deployment that configured no backplane or one whose backplane
+has never dropped, and this instrument alone cannot tell the two apart. Whether a replica is fanning signals at all is
+read from the section it was configured with rather than from here. A fault that lasts is one measurement and not a
+series: an endpoint this replica cannot dial is dialled again for every signal raised, and each of those attempts
+reports nothing further until a `restored` has been counted — so the value to alert on is a `lost` without its pair
+rather than a rate.
+
+**Every transition is also a log record at `Warning`**, on both sides. The backplane is silent while it works, which is
+what makes losing it worth a level an operator watching a deployment actually sees: nothing else in the process says
+so — the publisher on the raising replica swallows a signal it could not deliver, the client on the other side holds a
+connection that is still open and simply hears less, and the whole symptom is mail appearing on a screen several
+minutes late. Neither record carries the endpoint, the connection string, or any part of a signal.
+
+**It never fails readiness**, which is a decision rather than an omission. A signal is an optimization over a client
+that re-reads on its own interval, so a replica that cannot reach the backplane is still serving every screen
+correctly, and taking it out of rotation would turn a late list into an outage. What is reported is the transition
+rather than the state, because StackExchange.Redis reconnects on its own: a state would be either a line per attempt or
+one line and then silence.
 
 ## What the administration command emits
 

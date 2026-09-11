@@ -12,6 +12,7 @@ using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Host.Signals;
 using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Mcp.Tools.Categories;
@@ -20,6 +21,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.DataProtection.Repositories;
+using Microsoft.AspNetCore.SignalR.StackExchangeRedis;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -127,6 +129,20 @@ public sealed class HostCompositionTests
         new($"{sectionName}:Https:Endpoints:0:Port", port.ToString(CultureInfo.InvariantCulture)),
         new($"{sectionName}:Https:Endpoints:0:ServerCertificate:Bundle:Name", $"{profileName}-certificate"),
         new($"{sectionName}:Https:Endpoints:0:ServerCertificate:Bundle:SecretReference", "plaintext:not-a-real-certificate-bundle"),
+    ];
+
+    /// <summary>The declared RESP endpoint, which is what makes a deployment one whose replicas carry signals to each other.</summary>
+    /// <remarks>
+    /// Layered over a shape rather than written as one of them, because the three shapes it is held against are a
+    /// difference of one section and the pass that resolves every registration must never reach it: resolving the
+    /// signal channel builds the hub context, which builds the backplane's own lifetime manager, and that opens a
+    /// connection. These assertions read the service collection and never build a provider, which is what keeps a unit
+    /// test off a socket.
+    /// </remarks>
+    private static readonly KeyValuePair<string, string?>[] BackplaneDeclared =
+    [
+        new("SignalBackplane:ConnectionString:Name", "signal-backplane"),
+        new("SignalBackplane:ConnectionString:SecretReference", "plaintext:backplane.example.test:6379"),
     ];
 
     /// <summary>Each deployment shape, as the configuration an operator would have written to reach it.</summary>
@@ -464,6 +480,63 @@ public sealed class HostCompositionTests
         Assert.False(surfaces.Admin.Enabled);
         Assert.NotNull(surfaces.ClientRateLimits);
         Assert.NotNull(surfaces.ClientRequestTimeout);
+    }
+
+    /// <summary>
+    /// A deployment that declared no RESP endpoint keeps the channel it had before the section existed: one process,
+    /// one set of connections, and every signal delivered in memory. Asserted because the failure worth catching is a
+    /// backplane that registers itself on a default — which would make every single-replica deployment dial a server
+    /// its operator never named.
+    /// </summary>
+    [Fact]
+    public void Compose_ClientServedWithNoBackplaneDeclared_RegistersNothingForOne()
+    {
+        // Arrange
+        var builder = ConfiguredBuilder("client served");
+
+        // Act
+        HostComposition.Compose(builder);
+
+        // Assert
+        Assert.DoesNotContain(builder.Services, static registration => registration.ImplementationType == typeof(RedisHubLifetimeManager<>));
+        Assert.DoesNotContain(builder.Services, static registration => registration.ImplementationType == typeof(SignalBackplaneConnection));
+    }
+
+    /// <summary>
+    /// The registration that makes a signal cross replicas at all: the hub's lifetime manager is the backplane's rather
+    /// than the in-memory one, and the connection it opens is the one this deployment's own section describes.
+    /// </summary>
+    [Fact]
+    public void Compose_ClientServedOverADeclaredBackplane_RegistersTheBackplaneLifetimeManager()
+    {
+        // Arrange
+        var builder = ConfiguredBuilder("client served", BackplaneDeclared);
+
+        // Act
+        HostComposition.Compose(builder);
+
+        // Assert
+        Assert.Contains(builder.Services, static registration => registration.ImplementationType == typeof(RedisHubLifetimeManager<>));
+        Assert.Contains(builder.Services, static registration => registration.ImplementationType == typeof(SignalBackplaneConnection));
+    }
+
+    /// <summary>
+    /// A deployment answering an agent alone holds no client connection, so there is nothing to fan out and it connects
+    /// to no endpoint however much its configuration declares. The section is still read and still refused when it is
+    /// unusable, which is why this is asserted about the registration rather than about the reading.
+    /// </summary>
+    [Fact]
+    public void Compose_BackplaneDeclaredWithNoClientSurface_RegistersNothingForOne()
+    {
+        // Arrange
+        var builder = ConfiguredBuilder("mcp and admin served", BackplaneDeclared);
+
+        // Act
+        HostComposition.Compose(builder);
+
+        // Assert
+        Assert.DoesNotContain(builder.Services, static registration => registration.ImplementationType == typeof(RedisHubLifetimeManager<>));
+        Assert.DoesNotContain(builder.Services, static registration => registration.ImplementationType == typeof(SignalBackplaneConnection));
     }
 
     /// <summary>

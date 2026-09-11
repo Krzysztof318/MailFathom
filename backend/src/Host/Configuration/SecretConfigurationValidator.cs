@@ -9,6 +9,7 @@ using MailFathom.Host.Configuration.DataEncryption;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Persistence;
+using MailFathom.Host.Configuration.Signals;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.DataEncryption;
@@ -399,6 +400,33 @@ internal sealed partial class SecretConfigurationValidator
         // No key and no public key is asked about, for the reason the MCP endpoint's read gives: this section holds
         // neither.
         return errors;
+    }
+
+    /// <summary>Finds everything an operator must fix before the signal backplane's endpoint can be reached.</summary>
+    /// <param name="candidate">The bound section, which describes no backplane on a deployment that declared none.</param>
+    /// <param name="cancellationToken">Cancels the resolution.</param>
+    /// <returns>One message per unusable setting, empty when the section is usable or absent.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidate" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Judged whether or not the client surface is served, unlike the registration itself: a deployment that declared a
+    /// backplane it does not connect to yet is told its reference is broken now rather than on the day it enables the
+    /// client. What is proven is the reference, not the endpoint — whether the server answers is a runtime condition
+    /// the channel reports as a transition, because a signal is an optimization and refusing to start over one would
+    /// be worse than the gap it closes.
+    /// </remarks>
+    internal async Task<IReadOnlyList<string>> FindSignalBackplaneConfigurationErrorsAsync(
+        SignalBackplaneOptions candidate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        return candidate.IsConfigured
+            ? await this.FindSecretReferenceErrorsAsync(
+                SignalBackplaneOptions.SectionName,
+                candidate,
+                null,
+                cancellationToken)
+            : [];
     }
 
     /// <summary>Finds everything an operator must fix before the object-storage endpoint's credentials can be used.</summary>

@@ -63,6 +63,7 @@ internal static class MailFathomConfigurationSections
         "ReverseProxy",
         "Secrets",
         "SensitiveContent",
+        "SignalBackplane",
         "SpamClassification",
     ];
 

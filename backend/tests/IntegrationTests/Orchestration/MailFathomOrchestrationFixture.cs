@@ -76,6 +76,9 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
     /// <summary>Gets or sets the object endpoint's address once the orchestration published it.</summary>
     private Uri? PublishedObjectStorageAddress { get; set; }
 
+    /// <summary>Gets or sets the backplane's connection string once the orchestration issued it.</summary>
+    private string? IssuedSignalBackplaneConnectionString { get; set; }
+
     /// <summary>Gets the connection string the orchestration issued for the migrated MailFathom database.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started yet.</exception>
     public string DatabaseConnectionString => this.IssuedDatabaseConnectionString
@@ -99,6 +102,12 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
     public Uri SpamScanner => this.PublishedSpamScannerAddress
         ?? throw new InvalidOperationException(
             "The orchestrated spam daemon address is requested before the suite started the application.");
+
+    /// <summary>Gets the connection string the orchestrated RESP server answers the signal backplane on.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started yet.</exception>
+    public string SignalBackplaneConnectionString => this.IssuedSignalBackplaneConnectionString
+        ?? throw new InvalidOperationException(
+            "The orchestrated signal backplane connection string is requested before the suite started the application.");
 
     /// <summary>Gets the address the orchestrated S3-compatible endpoint answers on, with its bucket already created.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started yet.</exception>
@@ -204,6 +213,19 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
             OrchestrationContract.ObjectStorageEndpointName);
 
         await CreateObjectStorageBucketAsync(this.PublishedObjectStorageAddress, cancellationToken);
+
+        // Healthy rather than running, like the servers above: the container answers PING before it answers anything
+        // else, and a host composed against a server that is still binding would report the first connection as a
+        // backplane it could not reach — which the channel is built to survive and a test asserting on it is not.
+        await this.application.ResourceNotifications.WaitForResourceHealthyAsync(
+            OrchestrationContract.SignalBackplaneResourceName,
+            cancellationToken);
+
+        this.IssuedSignalBackplaneConnectionString = await this.application.GetConnectionStringAsync(
+            OrchestrationContract.SignalBackplaneResourceName,
+            cancellationToken)
+            ?? throw new InvalidOperationException(
+                "The orchestration started without issuing a connection string for the signal backplane.");
     }
 
     /// <summary>Creates the bucket the suite writes message content into, because the image ships none.</summary>
