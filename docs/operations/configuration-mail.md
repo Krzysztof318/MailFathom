@@ -26,6 +26,8 @@ budget or the coordinator loop itself are marked *restart* below.
 | `MailSynchronization:MaxMutationsPerConvergencePass` | int | `50` | 1 – 1000; how many unfinished changes one account run takes in hand before the rest wait for the next run | reload |
 | `MailSynchronization:UnknownMutationOutcomeGrace` | TimeSpan | `06:00:00` | 1 min – 7 days; how long a change whose placement was never acknowledged waits to be settled by observation before it is given up on | reload |
 | `MailSynchronization:ShutdownDrainTimeout` | TimeSpan | `00:00:10` | 0 – 2 min | restart |
+| `MailSynchronization:LeaseDuration` | TimeSpan | `00:02:00` | 10 s – 1 h; how long a replica holds an account it supervises from each claim or renewal, and so the longest an account waits for another replica after its holder crashed. Must be longer than `LeaseRenewalInterval` | restart |
+| `MailSynchronization:LeaseRenewalInterval` | TimeSpan | `00:00:30` | 1 s – 30 min; how long after the last confirmed claim or renewal a held account's lease is renewed. Must be shorter than `LeaseDuration` | restart |
 | `MailSynchronization:MaxMetadataBatchSize` | int | `100` | 1 – 1000 | reload |
 | `MailSynchronization:MaxRawMimeBytes` | long | `26214400` (25 MiB) | 1024 – 104857600; larger messages are stored without content | reload |
 | `MailSynchronization:MaxMetadataBatchesPerRun` | int | `10` | 1 – 1000 | reload |

@@ -222,6 +222,31 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     [Range(typeof(TimeSpan), "00:00:00", "00:02:00")]
     public TimeSpan ShutdownDrainTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
+    /// <summary>Gets or sets how long a replica holds an account it supervises from each claim or renewal of its lease.</summary>
+    /// <remarks>
+    /// <para>
+    /// A replica supervises an account only while it holds the account's lease, so a second replica configured with the
+    /// same account supervises nothing for it until the holder stops. This is how long that can take after a holder is
+    /// lost rather than stopped, because nothing but the expiry frees a crashed replica's lease; a replica that stops
+    /// gracefully gives its accounts back at once.
+    /// </para>
+    /// <para>
+    /// Must be longer than <see cref="LeaseRenewalInterval" />. Half the difference between the two is how long a renewal
+    /// may take to be answered, and the other half is how long a run stopped by a renewal that was not has to close its
+    /// connections before another replica may open its own.
+    /// </para>
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:10", "01:00:00")]
+    public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>Gets or sets how long after the last confirmed claim or renewal a held account's lease is renewed.</summary>
+    /// <remarks>
+    /// Every held account writes to the database this often whether or not it synchronized anything, so this trades that
+    /// traffic against how early a replica cut off from the database notices it and stops.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:01", "00:30:00")]
+    public TimeSpan LeaseRenewalInterval { get; set; } = TimeSpan.FromSeconds(30);
+
     /// <summary>Gets or sets how long a push-mode folder waits on one IDLE command before re-issuing it.</summary>
     /// <remarks>
     /// <para>
@@ -618,6 +643,13 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
             yield return new ValidationResult(
                 $"The maximum failure backoff {this.MaxFailureBackoff} is shorter than the synchronization interval {this.Interval}, so a failing account would run more often than a healthy one.",
                 [nameof(this.MaxFailureBackoff)]);
+        }
+
+        if (this.LeaseRenewalInterval >= this.LeaseDuration)
+        {
+            yield return new ValidationResult(
+                $"MailSynchronization:LeaseRenewalInterval must be shorter than MailSynchronization:LeaseDuration, which is {this.LeaseDuration}. A lease renewed no sooner than it expires lets a second replica take an account while the first is still synchronizing it.",
+                [nameof(this.LeaseRenewalInterval)]);
         }
 
         // Each of the three states the same thing about a different limit: a bound below the size of one message would

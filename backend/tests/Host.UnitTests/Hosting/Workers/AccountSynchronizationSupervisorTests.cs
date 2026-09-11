@@ -1518,7 +1518,7 @@ public sealed class AccountSynchronizationSupervisorTests
             classificationRunStore,
             chunkingStore,
             attachmentTextStore,
-            unadvertisedAliases);
+            unadvertisedAliases: unadvertisedAliases);
 
         return new SupervisorHarness(
             services,

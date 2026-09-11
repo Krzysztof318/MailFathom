@@ -77,6 +77,25 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Contains("per-run content budget", result.ErrorMessage, StringComparison.Ordinal);
     }
 
+    /// <summary>A lease renewed no sooner than it runs out is one a second replica can take while the first still works under it.</summary>
+    [Fact]
+    public void ValidateForSynchronization_LeaseRenewedNoSoonerThanItExpires_IsRejected()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions
+        {
+            LeaseDuration = TimeSpan.FromMinutes(1),
+            LeaseRenewalInterval = TimeSpan.FromMinutes(1),
+        };
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Equal([nameof(MailSynchronizationOptions.LeaseRenewalInterval)], result.MemberNames);
+    }
+
     /// <summary>A storage ceiling that cannot hold one message would leave nothing storable at all.</summary>
     [Fact]
     public void ValidateForSynchronization_StoredContentCeilingBelowTheMessageSizeLimit_IsRejected()

@@ -1,6 +1,6 @@
 # IMAP synchronization
 
-<!-- describes: backend/src/Application/Synchronization/**, backend/src/Domain/Synchronization/**, backend/src/Domain/Folders/**, backend/src/Application/Folders/**, backend/src/Infrastructure/Mail/**, backend/src/Application/Mail/Mutations/**, backend/src/Application/Mail/Maintenance/**, backend/src/Domain/Mutations/**, backend/src/Host/Hosting/Workers/MailSynchronizationCoordinator.cs, backend/src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, backend/src/Host/Hosting/Workers/AccountPushNotificationWatch.cs -->
+<!-- describes: backend/src/Application/Synchronization/**, backend/src/Domain/Synchronization/**, backend/src/Domain/Folders/**, backend/src/Application/Folders/**, backend/src/Infrastructure/Mail/**, backend/src/Application/Mail/Mutations/**, backend/src/Application/Mail/Maintenance/**, backend/src/Domain/Mutations/**, backend/src/Host/Hosting/Workers/MailSynchronizationCoordinator.cs, backend/src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, backend/src/Host/Hosting/Workers/AccountPushNotificationWatch.cs, backend/src/Host/Hosting/Workers/WorkLeaseHold.cs -->
 
 MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for an account that asks for it — the moment the mail server says something changed. Both mechanisms run the same synchronization pass over the same read-only session; what differs is only what starts one.
 
@@ -66,6 +66,34 @@ failure state, waits out its backoff, or has its own interval pushed back by the
 The one thing supervisors do share is the slot count below, so an account can wait for a *slot* a slow run is holding
 — bounded by that run rather than by the failing account's backoff, which is the isolation this design provides and
 the limit of it.
+
+### A second replica supervises nothing for an account the first one holds
+
+Every replica of a deployment reads the same configuration and the same users, so every one of them would otherwise
+start a supervisor — and its read sessions and its push watch — for every account, against a provider's per-account
+connection limit. So a coordinator starts a supervisor only for an account whose lease it took, under the scope
+`mail-synchronization/<user>/<account>` in the lease table
+[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
+decides; an account identifier too long for a scope, or holding a control character, is named there by its SHA-256
+digest instead. A replica configured with an account another one holds starts nothing for it: no run, no mailbox session, no
+push watch. It asks for the account again on each supervision pass — every `Interval`, and whenever a reload or a
+supervisor ending wakes the pass early — and neither fails nor reports anything, because the account is being
+synchronized, just not here. The folders of one account are never divided between replicas; the account is the unit.
+
+The holder renews the lease every `LeaseRenewalInterval` for as long as it supervises the account, and gives it back
+once the supervisor and the push watch it owns have ended. So a replica that stops gracefully hands its accounts on at
+once, and the first other replica whose pass comes round takes each of them; one that crashed frees them only when
+`LeaseDuration` has passed since its last renewal. A renewal that is refused, that fails, or that is not answered within
+half the margin between the two settings ends the hold on the spot: the supervisor stops scheduling, the run in flight
+is cancelled rather than drained, and the push watch closes — all within the other half of that margin, before another
+replica could take the account and open its own sessions. What the lease promises is one writer rather than one
+runner: a replica cut off from the database can go on running until it notices, but nothing it commits after the lease
+moved is kept, and a mail server may briefly see two connections for one account while the handover happens.
+
+Nothing about what a run does changes with it. A run still opens no transaction across an IMAP exchange and still
+never sets `\Seen`; the lease is claimed, renewed, and released in statements of its own, each committed before any
+mail server is reached. Which replica holds which account is on the `mailfathom.work_leases.held` gauge, as
+[Holding work that must not run twice](../operations/telemetry.md#holding-work-that-must-not-run-twice) describes.
 
 ### Two bounds, and what each one is for
 
@@ -230,7 +258,9 @@ drain exists to finish work already in flight and not to open a new mailbox sess
 under way are then given `ShutdownDrainTimeout` to finish, and only what outlasts the drain is cancelled. That is what
 keeps a run from being torn down between persisting an email's content and advancing the folder checkpoint — and when
 the drain does expire, the progress already committed is durable and idempotent, so the next start resumes from the
-committed checkpoint rather than losing or duplicating anything.
+committed checkpoint rather than losing or duplicating anything. The lease on each account stays renewed through the
+drain and is given back as that account's supervision ends, so another replica can take the account as soon as the
+work this one still had is finished rather than a lease duration later.
 
 The drain is only real while the host is still waiting for it, so the host's own shutdown budget is derived from it
 rather than left on the framework's 30-second default: `HostOptions.ShutdownTimeout` is set to the configured drain
@@ -1827,6 +1857,8 @@ Synchronization is disabled by default:
     "MaxConcurrentAccounts": 4,
     "MaxConcurrentFoldersPerAccount": 1,
     "ShutdownDrainTimeout": "00:00:10",
+    "LeaseDuration": "00:02:00",
+    "LeaseRenewalInterval": "00:00:30",
     "MaxMetadataBatchSize": 100,
     "MaxRawMimeBytes": 26214400,
     "MaxMetadataBatchesPerRun": 10,
@@ -2016,6 +2048,14 @@ new ones. It accepts anything from zero to two minutes and defaults to ten secon
 derived from whatever is configured, so every accepted value is honored rather than being cut short by the framework
 default; changing it is restart-required, which a shutdown budget is by nature. Zero cancels in-flight work
 immediately, and what a run had already committed stays durable either way.
+
+`LeaseDuration` and `LeaseRenewalInterval` decide how an account moves between replicas, as [A second replica
+supervises nothing for an account the first one holds](#a-second-replica-supervises-nothing-for-an-account-the-first-one-holds)
+describes. The duration, two minutes by default, is the longest an account waits for another replica after its holder
+crashed; the interval, thirty seconds by default, is how often every held account writes its renewal. Startup refuses
+an interval that is not shorter than the duration, because a lease renewed no sooner than it expires lets a second
+replica take an account while the first is still synchronizing it. Both are restart-required, and a deployment running
+one replica can leave them alone: the only cost it pays is the renewal traffic.
 
 ### Transport security
 

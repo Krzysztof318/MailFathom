@@ -777,6 +777,13 @@ every measurement it publishes — that is the whole answer to who holds what. A
 releases it and when a renewal reports the hold gone, so the two replicas involved in a takeover never both publish it;
 a replica holding nothing publishes no series at all rather than a row of zeroes.
 
+A mailbox supervisor holds the scope `mail-synchronization/<user>/<account>` — the user's identifier and the account
+identifier the configuration names it by, or `sha256-` and that identifier's digest where it is too long for a scope or
+holds a control character — so on the gauge each supervised account is one series, published by the replica
+synchronizing it. A replica configured with an account another one holds counts a refused claim for it on every
+supervision pass and publishes no series for it, which is how a second replica reads on a dashboard: waiting, not
+broken.
+
 ### What a synchronization cycle emits
 
 No instrumentation package exists for the mail library, so without what follows the part of MailFathom that spends the
