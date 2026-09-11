@@ -207,7 +207,7 @@ public sealed class DevelopmentCredentialProvisionerTests
     /// <summary>Answers a record reading, whose document travels as a JSON string rather than as an object.</summary>
     private static HttpResponseMessage RecordResponse(long version, string document) => JsonResponse(
         $$"""
-        {"user":"{{UserId}}","displayName":"Local","version":{{version}},"readFromConfiguration":false,"document":{{JsonSerializer.Serialize(document)}}}
+        {"user":"{{UserId}}","displayName":"Local","version":{{version}},"document":{{JsonSerializer.Serialize(document)}}}
         """);
 
     private sealed class RecordingHandler(params HttpResponseMessage[] responses) : HttpMessageHandler

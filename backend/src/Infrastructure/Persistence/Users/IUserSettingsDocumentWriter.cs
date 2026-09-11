@@ -8,21 +8,11 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 
 /// <summary>Commits one user's record over the version it was authored against.</summary>
 /// <remarks>
-/// <para>
 /// The writing half of <see cref="IUserSettingsDocumentReader" />, and like it a key lookup rather than a query: one
 /// write is one user's row, so there is no shape here that touches two people's records. It holds nothing about what
 /// a record may contain — whether the document binds, whether an account collides with another of the same user's,
 /// and whether a value is secret material are decisions taken before a candidate reaches here. What this decides is
 /// the one thing only the database can decide: whether the record it is replacing is still the record the caller read.
-/// </para>
-/// <para>
-/// A commit sets the runtime-written marker, and that is the contract rather than a side effect. What the marker
-/// records is that the record is the user's own rather than the empty column a start provisioned, which is exactly
-/// what a committed document makes true — so a marker left behind by a write would leave the next start reading that
-/// user's mail accounts out of a configuration section they have stopped being supplied by. Whether the *first* such
-/// write is one an operator meant is not this port's question: a user a configuration source still supplies is
-/// refused before the candidate is composed, and that declaration is where their mailboxes are changed.
-/// </para>
 /// </remarks>
 public interface IUserSettingsDocumentWriter
 {

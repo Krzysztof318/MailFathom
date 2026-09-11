@@ -56,7 +56,7 @@ internal static class EditUserRecordCommand
     }
 
     /// <summary>Reads the record, offers it to the editor, and commits what came back.</summary>
-    /// <exception cref="CliFailure">Thrown when no editor is named, the session did not finish, or a configuration source still supplies this user's mail accounts.</exception>
+    /// <exception cref="CliFailure">Thrown when no editor is named, or the session did not finish.</exception>
     /// <remarks>
     /// The editor is looked for before the deployment is reached, as <c>config edit</c> does it, so an operator whose
     /// shell names none is told so without a request going out.
@@ -80,14 +80,6 @@ internal static class EditUserRecordCommand
             cancellationToken);
 
         var opened = await deployment.ReadUserRecordAsync(profile.Token, user, cancellationToken);
-
-        // Refused before the editor opens rather than after the commit, although the deployment refuses it either way:
-        // the record already says a configuration source supplies this user, and opening an empty buffer over that
-        // would spend the operator's editing session on a write that was never going to be accepted.
-        if (opened.ReadFromConfiguration)
-        {
-            throw new CliFailure(UserOutput.RecordSuppliedByAConfigurationSource);
-        }
 
         var saved = await EditorDrivenDocument.OpenAsync(
             context,

@@ -10,23 +10,11 @@ namespace MailFathom.Cli.Commands.Users;
 /// <summary>How the user commands print a roster and report what a write to a record did.</summary>
 /// <remarks>
 /// One reading of a write outcome for every command that performs one, so a refusal reads the same whichever act
-/// produced it and the one refusal a command can repair names the repair in one place. Nothing here prints a mail
-/// server, a user name, or anything a credential is resolved from: what a record publishes is what the deployment
-/// already redacted, and what a refusal publishes is a sentence about a setting.
+/// produced it. Nothing here prints a mail server, a user name, or anything a credential is resolved from: what a
+/// record publishes is what the deployment already redacted, and what a refusal publishes is a sentence about a setting.
 /// </remarks>
 internal static class UserOutput
 {
-    /// <summary>What a command says about a record a configuration source still supplies, before it does anything with it.</summary>
-    /// <remarks>
-    /// One sentence for the two commands that read a record and find that state: <c>user show</c> reports it beside the
-    /// empty document it just printed, and <c>user edit</c> refuses with it rather than opening a buffer over a write
-    /// that cannot be accepted. It is not what <see cref="ReportWrite" /> says about the same state, which is about a
-    /// write the deployment has already refused.
-    /// </remarks>
-    internal const string RecordSuppliedByAConfigurationSource =
-        "A configuration source supplies this user's mail accounts, so their record is empty and every change to it is "
-        + "refused. Change them where they are declared.";
-
     /// <summary>Writes the users a deployment holds, one to a line.</summary>
     /// <param name="console">Where the listing is written.</param>
     /// <param name="users">The users, in the deployment's own order.</param>
@@ -39,7 +27,6 @@ internal static class UserOutput
         foreach (var user in users)
         {
             console.WriteLine(user.Describe());
-            console.WriteLine($"    mail accounts: {DescribeSource(user)}");
 
             if (!user.Served)
             {
@@ -85,17 +72,6 @@ internal static class UserOutput
             }
         }
 
-        if (answer.Code == UserRecordWriteAnswer.RecordReadFromConfiguration)
-        {
-            context.Console.WriteNotice(
-                "A configuration source supplies this user's mail accounts. Nothing moves them into their record for you: stop declaring them there, restart, and state their mailboxes again with 'mfctl user account add'.");
-        }
-
         return refused ? CliExitCode.Failure : CliExitCode.Success;
     }
-
-    /// <summary>Says where one user's mail accounts are read from, in the words an operator edits.</summary>
-    private static string DescribeSource(MailUserRosterEntry user) => user.RecordIsTheirOwn
-        ? "their own record, maintained with 'mfctl user account'"
-        : "a configuration source, which is where they are changed";
 }

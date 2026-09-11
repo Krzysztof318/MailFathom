@@ -14,20 +14,15 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// <remarks>
 /// <para>
 /// One statement is the whole of the write, which is what makes it atomic without a transaction block around it:
-/// PostgreSQL runs a bare statement in a transaction of its own, so the document, the version, the update instant, and
-/// the marker move together or not at all. The user and the version in the <c>WHERE</c> clause are what make two
-/// writers safe — the loser matches no row, commits nothing, and is told so by an absent result rather than by an
-/// exception.
+/// PostgreSQL runs a bare statement in a transaction of its own, so the document, the version, and the update instant
+/// move together or not at all. The user and the version in the <c>WHERE</c> clause are what make two writers safe —
+/// the loser matches no row, commits nothing, and is told so by an absent result rather than by an exception.
 /// </para>
 /// <para>
 /// It is a bare command over the data source rather than an EF Core write, beside the reader and for the reason the
 /// reader gives: the row is a document rather than a graph, nothing about it is tracked, and one statement decides the
 /// outcome whichever side of the process asked. The user is a parameter and no identifier is composed from anything
 /// a caller supplied.
-/// </para>
-/// <para>
-/// The marker is set unconditionally rather than only where it was false, because the statement has to leave the same
-/// row whichever it met and a conditional would make the write's meaning depend on how many times it had already run.
 /// </para>
 /// <para>
 /// What is under the integration marker is the statement and nothing else. The rules a candidate is refused by need no
@@ -55,8 +50,7 @@ internal sealed class PersistedUserSettingsDocumentWriter(
         UPDATE settings_accounts
         SET "Document" = @document::jsonb,
             "Version" = "Version" + 1,
-            "UpdatedAt" = @updatedAt,
-            "DocumentWrittenAtRuntime" = TRUE
+            "UpdatedAt" = @updatedAt
         WHERE "Id" = @user AND "Version" = @expectedVersion
         RETURNING "Version";
         """;

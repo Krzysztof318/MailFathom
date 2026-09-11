@@ -507,7 +507,7 @@ public sealed class ServedMailUsersStartupGateTests
     }
 
     private static MailUserRecord Held(MailUserId user, string displayName) =>
-        new(user, displayName, DocumentWrittenAtRuntime: true);
+        new(user, displayName);
 
     /// <summary>A record declaring one mailbox, which is the shape every one of these tests states a mailbox in.</summary>
     private static string RecordDeclaring(
@@ -540,8 +540,7 @@ public sealed class ServedMailUsersStartupGateTests
                     record.User,
                     $"user-{record.User.Value:D}",
                     record.Json,
-                    Version: 2,
-                    WrittenAtRuntime: true)));
+                    Version: 2)));
         }
 
         return documents;

@@ -868,8 +868,7 @@ public sealed class UserRecordAdministrationTests
                     new FakeTimeProvider(Today),
                     Options.Create(scanning ?? new SensitiveContentOptions())),
                 SecretValidation.OverRegisteredSchemes(),
-                this.ServedUsers,
-                new ConfiguredUserSettings());
+                this.ServedUsers);
         }
 
         internal UserRecordAdministration Records { get; }
@@ -882,7 +881,7 @@ public sealed class UserRecordAdministrationTests
 
         internal void Holding(MailUserId user, string json, long version) =>
             this.Documents.ReadAsync(user, Arg.Any<CancellationToken>())
-                .Returns(new UserSettingsDocument(user, $"user-{user.Value:D}", json, version, WrittenAtRuntime: true));
+                .Returns(new UserSettingsDocument(user, $"user-{user.Value:D}", json, version));
 
         internal void Roster(params ServedMailUser[] served) => this.ServedUsers.Resolved(served);
     }

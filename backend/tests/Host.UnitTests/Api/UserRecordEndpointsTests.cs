@@ -44,7 +44,7 @@ public sealed class UserRecordEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
-        deployment.Held(new MailUserRecord(SyntheticMailUser.Deployment, "alex", DocumentWrittenAtRuntime: true));
+        deployment.Held(new MailUserRecord(SyntheticMailUser.Deployment, "alex"));
 
         // Act
         var result = await UserRecordEndpoints.ReadRosterAsync(
@@ -56,7 +56,6 @@ public sealed class UserRecordEndpointsTests
 
         Assert.Equal(SyntheticMailUser.Deployment.Value, entry.Id);
         Assert.Equal("alex", entry.DisplayName);
-        Assert.True(entry.RecordIsTheirOwn);
     }
 
     [Fact]
@@ -192,7 +191,7 @@ public sealed class UserRecordEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Held(new MailUserRecord(SyntheticMailUser.Deployment, "alexandra", DocumentWrittenAtRuntime: true));
+        deployment.Held(new MailUserRecord(SyntheticMailUser.Deployment, "alexandra"));
 
         // Act
         var result = await UserRecordEndpoints.RelabelAsync(
@@ -284,7 +283,6 @@ public sealed class UserRecordEndpointsTests
 
         Assert.Equal(SyntheticMailUser.Deployment.Value, record.User);
         Assert.Equal(3, record.Version);
-        Assert.False(record.ReadFromConfiguration);
     }
 
     /// <summary>The same answer a user this deployment genuinely does not hold receives, which is what keeps a caller from learning which identifiers exist by asking about them.</summary>

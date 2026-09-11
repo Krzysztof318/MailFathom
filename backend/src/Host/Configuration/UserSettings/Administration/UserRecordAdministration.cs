@@ -29,12 +29,6 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// differently.
 /// </para>
 /// <para>
-/// One refusal is the reason this service exists rather than a writer being called directly. A user a configuration
-/// source still supplies holds an empty record, so a change accepted into it would leave them served from a record
-/// holding less than the file was supplying — a mailbox that stops being synchronized because somebody edited a
-/// setting beside it. Every write is refused for that user, and the file is where their mail accounts are changed.
-/// </para>
-/// <para>
 /// The one rule that reads which of the two is acting is the secret-bearing settings. A secret reference is a path into
 /// whatever this deployment can read — a mounted file, a credential, an environment variable — and the server a mail
 /// account names is the user's own, so a reference a user wrote would hand them whatever stands behind it. What a
@@ -58,8 +52,7 @@ internal sealed class UserRecordAdministration(
     IUserSettingsDocumentWriter store,
     UserAccountDocumentBinder binder,
     SecretConfigurationValidator secrets,
-    ServedMailUsers servedUsers,
-    ConfiguredUserSettings configured)
+    ServedMailUsers servedUsers)
 {
     /// <summary>What a refused save is sent to, which is the act that states a mailbox and its credential afresh.</summary>
     /// <remarks>
@@ -345,7 +338,7 @@ internal sealed class UserRecordAdministration(
     /// <remarks>
     /// One private for the three acts, because they differ in exactly the composition they hand over and in the
     /// sentence an unmatched change is reported with. What is the same is everything that decides whether the change
-    /// may be made at all — the version, the configuration refusal, the binder, and the commit — and a copy of that
+    /// may be made at all — the version, the binder, and the commit — and a copy of that
     /// per act is three places for one of them to drift.
     /// </remarks>
     private async Task<UserRecordWriteOutcome?> ChangeFolderAsync(
@@ -553,11 +546,10 @@ internal sealed class UserRecordAdministration(
             : await this.JudgeAndCommitAsync(user, opened.Record, candidate, authority, cancellationToken);
     }
 
-    /// <summary>Reads the record a change is composed over, and refuses the two cases nothing further should be done for.</summary>
+    /// <summary>Reads the record a change is composed over, and refuses a change authored over a version no longer in force.</summary>
     /// <remarks>
     /// The version is checked here as well as in the statement, so an edit authored against a record somebody else has
-    /// replaced is refused before a candidate is composed and bound rather than after. The configuration refusal is
-    /// checked first, because a user a file still supplies is refused whatever version they stated.
+    /// replaced is refused before a candidate is composed and bound rather than after.
     /// </remarks>
     private async Task<OpenedRecord?> OpenAsync(
         MailUserId user,
@@ -567,16 +559,6 @@ internal sealed class UserRecordAdministration(
         if (await documents.ReadAsync(user, cancellationToken) is not { } inForce)
         {
             return null;
-        }
-
-        if (configured.DeclaredByAConfigurationSource(user))
-        {
-            return new OpenedRecord(inForce, UserRecordWriteOutcome.Refused(
-                MailFathomErrorCode.UserRecordReadFromConfiguration,
-                inForce.Version,
-                [
-                    "A configuration source supplies this user's mail accounts, so their record is empty and a change written into it would leave them served from less than that source supplies.",
-                ]));
         }
 
         return inForce.Version == expectedVersion

@@ -34,13 +34,11 @@ internal sealed record UserErasure(
 /// <param name="User">The user the record belongs to.</param>
 /// <param name="DisplayName">The label the user is recorded under.</param>
 /// <param name="Version">The version the record was read at, which the next write is composed over.</param>
-/// <param name="ReadFromConfiguration">Whether a configuration source still supplies this user's mail accounts, which is what would make every write into their record refused.</param>
 /// <param name="Document">The record, with every secret-bearing value replaced by the deployment's redaction marker.</param>
 internal sealed record UserRecord(
     [property: JsonPropertyName("user")] Guid User,
     [property: JsonPropertyName("displayName")] string? DisplayName,
     [property: JsonPropertyName("version")] long Version,
-    [property: JsonPropertyName("readFromConfiguration")] bool ReadFromConfiguration,
     [property: JsonPropertyName("document")] string? Document);
 
 /// <summary>One user's record as an editing session saved it.</summary>
@@ -82,10 +80,6 @@ internal sealed record UserRecordWriteAnswer(
     [property: JsonPropertyName("code")] int? Code,
     [property: JsonPropertyName("messages")] IReadOnlyList<string>? Messages)
 {
-    /// <summary>The deployment's code for a write to a user a configuration source still supplies.</summary>
-    /// <remarks>Named here because a command acts on it rather than only reporting it: it is the one refusal whose repair is another command of this tool.</remarks>
-    internal const int RecordReadFromConfiguration = 12015;
-
     /// <summary>States what the deployment said about a write that did not commit.</summary>
     /// <returns>One sentence per reason, or a single sentence where the deployment gave none.</returns>
     internal IReadOnlyList<string> DescribeRefusal() => this.Messages is { Count: > 0 } stated

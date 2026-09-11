@@ -63,7 +63,6 @@ public sealed class OrchestratedUserSettingsDocumentTests(MailFathomOrchestratio
         Assert.Equal(ProvisionedUserLabel, record.DisplayName);
         Assert.Equal("{}", record.Json);
         Assert.Equal(1, record.Version);
-        Assert.False(record.WrittenAtRuntime);
     }
 
     /// <summary>A user this deployment holds no record of is an absence rather than an empty record.</summary>
@@ -133,51 +132,6 @@ public sealed class OrchestratedUserSettingsDocumentTests(MailFathomOrchestratio
         {
             await OrchestratedForeignUser.EraseAsync(services, holder);
             await OrchestratedForeignUser.EraseAsync(services, contender);
-        }
-    }
-
-    /// <summary>The marker is read as the row holds it, so a written record is told from one nobody has written.</summary>
-    /// <remarks>
-    /// The column exists to separate an unfilled row from one a user emptied — the same empty document, different
-    /// facts — and a class that only ever observed it clear would stay green with the marker dropped from the
-    /// projection or read out of the wrong ordinal. So it is set on a foreign user and read back through the port,
-    /// beside the assertion that the provisioned user's is clear.
-    /// </remarks>
-    [Fact]
-    public async Task ReadAsync_AUserWhoseDocumentWasWrittenAtRuntime_CarriesTheMarkerSet()
-    {
-        // Arrange
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var written = Guid.NewGuid();
-
-        try
-        {
-            await OrchestratedForeignUser.ProvisionAsync(services, written, cancellationToken);
-
-            await services.CommitAsync(
-                async (_, session, token) =>
-                {
-                    var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
-                    var record = await context.UserAccounts.SingleAsync(user => user.Id == written, token);
-
-                    record.DocumentWrittenAtRuntime = true;
-                },
-                cancellationToken);
-
-            // Act
-            var record = await services.InScopeAsync(
-                (scope, token) => scope.GetRequiredService<IUserSettingsDocumentReader>()
-                    .ReadAsync(MailUserId.Create(written), token),
-                cancellationToken);
-
-            // Assert
-            Assert.NotNull(record);
-            Assert.True(record.WrittenAtRuntime);
-        }
-        finally
-        {
-            await OrchestratedForeignUser.EraseAsync(services, written);
         }
     }
 

@@ -34,8 +34,8 @@ public sealed class UserRosterAdministrationTests
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminRead);
         harness.Holding(
-            new MailUserRecord(SyntheticMailUser.Deployment, "alex", DocumentWrittenAtRuntime: true),
-            new MailUserRecord(SyntheticMailUser.Another, "morgan", DocumentWrittenAtRuntime: false));
+            new MailUserRecord(SyntheticMailUser.Deployment, "alex"),
+            new MailUserRecord(SyntheticMailUser.Another, "morgan"));
         harness.Serving(SyntheticMailUser.Deployment);
 
         // Act
@@ -43,40 +43,8 @@ public sealed class UserRosterAdministrationTests
 
         // Assert
         Assert.Equal(
-            ["alex recordIsTheirOwn served", "morgan"],
-            roster.Select(entry => string.Join(
-                ' ',
-                new[]
-                {
-                    entry.DisplayName,
-                    entry.RecordIsTheirOwn ? "recordIsTheirOwn" : null,
-                    entry.Served ? "served" : null,
-                }.OfType<string>())));
-    }
-
-    /// <summary>
-    /// No configuration source declares a user any more, so the flag an administrator reads before erasing anybody is
-    /// false for everybody the roster names — including a user whose record this deployment has never been written to.
-    /// </summary>
-    [Fact]
-    public async Task ReadRosterAsync_EveryUserTheRosterNames_ReportsNoneOfThemAsDeclaredInConfiguration()
-    {
-        // Arrange
-        var harness = new RosterHarness(MailFathomPermission.AdminRead);
-        harness.Serving(
-            new ServedMailUser(SyntheticMailUser.Deployment, "alex", []),
-            new ServedMailUser(SyntheticMailUser.Another, "morgan", []));
-        harness.Holding(
-            new MailUserRecord(SyntheticMailUser.Deployment, "alex", DocumentWrittenAtRuntime: false),
-            new MailUserRecord(SyntheticMailUser.Another, "morgan", DocumentWrittenAtRuntime: true));
-
-        // Act
-        var roster = await harness.Roster.ReadRosterAsync(TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(
-            [("alex", false), ("morgan", false)],
-            roster.Select(entry => (entry.DisplayName, entry.DeclaredInConfiguration)));
+            [("alex", true), ("morgan", false)],
+            roster.Select(entry => (entry.DisplayName, entry.Served)));
     }
 
     /// <summary>
@@ -156,7 +124,7 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex", DocumentWrittenAtRuntime: true));
+        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex"));
 
         // Act
         var outcome = await harness.Roster.ProvisionAsync("  alex  ", TestContext.Current.CancellationToken);
@@ -258,7 +226,7 @@ public sealed class UserRosterAdministrationTests
         var harness = new RosterHarness(
             MailFathomPermission.AdminConfigurationWrite,
             clientEndpoint: new ClientEndpointOptions { Enabled = true });
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex", DocumentWrittenAtRuntime: true));
+        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex"));
 
         // Act
         var outcome = await harness.Roster.ProvisionAsync("morgan", TestContext.Current.CancellationToken);
@@ -293,7 +261,7 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex", DocumentWrittenAtRuntime: true));
+        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex"));
 
         // Act
         var outcome = await harness.Roster.ProvisionAsync("morgan", TestContext.Current.CancellationToken);
@@ -312,8 +280,7 @@ public sealed class UserRosterAdministrationTests
             .. Enumerable.Range(0, ServedMailUsers.MaximumUsers)
                 .Select(position => new MailUserRecord(
                     MailUserId.Create(Guid.NewGuid()),
-                    $"user-{position}",
-                    DocumentWrittenAtRuntime: true)),
+                    $"user-{position}")),
         ]);
 
         // Act
@@ -433,7 +400,7 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alexandra", DocumentWrittenAtRuntime: true));
+        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alexandra"));
 
         // Act
         var outcome = await harness.Roster.RelabelAsync(
@@ -453,7 +420,7 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alexandra", DocumentWrittenAtRuntime: true));
+        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alexandra"));
 
         // Act
         await harness.Roster.RelabelAsync(
@@ -473,8 +440,8 @@ public sealed class UserRosterAdministrationTests
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
         harness.Holding(
-            new MailUserRecord(SyntheticMailUser.Deployment, "alexandra", DocumentWrittenAtRuntime: true),
-            new MailUserRecord(SyntheticMailUser.Another, "alex", DocumentWrittenAtRuntime: true));
+            new MailUserRecord(SyntheticMailUser.Deployment, "alexandra"),
+            new MailUserRecord(SyntheticMailUser.Another, "alex"));
 
         // Act
         var outcome = await harness.Roster.RelabelAsync(
@@ -499,7 +466,7 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alexandra", DocumentWrittenAtRuntime: true));
+        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alexandra"));
         harness.Provisioning
             .RelabelAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(false);
@@ -526,7 +493,7 @@ public sealed class UserRosterAdministrationTests
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex", DocumentWrittenAtRuntime: true));
+        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex"));
 
         // Act
         var outcome = await harness.Roster.RelabelAsync(
@@ -643,7 +610,6 @@ public sealed class UserRosterAdministrationTests
                 new SeveralUserAdmission(
                     Options.Create(new McpEndpointOptions()),
                     Options.Create(clientEndpoint ?? new ClientEndpointOptions())),
-                new ConfiguredUserSettings(),
                 NullLogger<UserRosterAdministration>.Instance);
         }
 

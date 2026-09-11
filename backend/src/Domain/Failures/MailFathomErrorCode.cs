@@ -164,15 +164,6 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode UserSettingsUnwritable { get; } = new(12014);
 
-    /// <summary>Gets subcategory 2, configuration sources: a user's record was written while a configuration source still supplies their mail accounts.</summary>
-    /// <remarks>
-    /// The sole user the deployment's own mail section supplies is served from it and holds an empty document, so a
-    /// change accepted into that document would leave them served from a record holding less than the section was
-    /// supplying — a mailbox that stops being synchronized because somebody edited a setting beside it. What the message
-    /// names is the section those mailboxes are actually changed in; nothing copies it into a record.
-    /// </remarks>
-    public static MailFathomErrorCode UserRecordReadFromConfiguration { get; } = new(12015);
-
     /// <summary>Gets subcategory 3, mailbox access tokens: an account's authorization server did not issue an access token its OAuth mechanisms require.</summary>
     public static MailFathomErrorCode MailAccessTokenUnavailable { get; } = new(13001);
 
@@ -1053,7 +1044,6 @@ public readonly record struct MailFathomErrorCode
         UserSettingsUnreadable,
         ConfigurationWriteShadowed,
         UserSettingsUnwritable,
-        UserRecordReadFromConfiguration,
         MailAccessTokenUnavailable,
         MailboxAuthorizationFailed,
         PrincipalNotAuthorized,

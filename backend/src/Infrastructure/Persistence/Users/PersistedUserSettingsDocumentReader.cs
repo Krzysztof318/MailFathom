@@ -64,8 +64,7 @@ internal sealed class PersistedUserSettingsDocumentReader(
             "DisplayName",
             octet_length("Document"::text) AS "Length",
             CASE WHEN octet_length("Document"::text) <= @maximumOctets THEN "Document"::text END AS "Document",
-            "Version",
-            "DocumentWrittenAtRuntime"
+            "Version"
         FROM settings_accounts
         WHERE "Id" = @user;
         """;
@@ -132,8 +131,7 @@ internal sealed class PersistedUserSettingsDocumentReader(
                     user,
                     reader.GetString(0),
                     reader.GetString(2),
-                    reader.GetInt64(3),
-                    reader.GetBoolean(4));
+                    reader.GetInt64(3));
             }
             catch (NpgsqlException exception)
             {
