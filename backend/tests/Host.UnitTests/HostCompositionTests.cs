@@ -316,6 +316,46 @@ public sealed class HostCompositionTests
         var services = ComposeServices(shape);
 
         // Act
+        var unbuildable = await ReportUnbuildableAsync(services);
+
+        // Assert
+        // Reported together rather than through Assert.Empty, which abbreviates a collection: one missing registration
+        // usually leaves several services unbuildable, and the reader needs the one that is actually absent.
+        if (unbuildable.Length > 0)
+        {
+            Assert.Fail(
+                $"The '{shape}' deployment registered services it cannot build:{Environment.NewLine}  "
+                + string.Join($"{Environment.NewLine}  ", unbuildable));
+        }
+    }
+
+    /// <summary>
+    /// The host's own <c>appsettings.json</c> travels in every image beneath whatever an operator states, so a key in it
+    /// that a strict binding has no property for stops every deployment before the operator's configuration is read.
+    /// Every other composition here clears that layer away, which is why this one puts it back.
+    /// </summary>
+    [Fact]
+    public async Task Compose_OverTheShippedDefaults_ResolvesEveryServiceItRegistered()
+    {
+        // Arrange
+        var builder = ConfiguredBuilder("probes only", overTheShippedDefaults: true);
+        HostComposition.Compose(builder);
+
+        // Act
+        var unbuildable = await ReportUnbuildableAsync(builder.Services);
+
+        // Assert
+        if (unbuildable.Length > 0)
+        {
+            Assert.Fail(
+                $"The shipped defaults compose services that cannot be built:{Environment.NewLine}  "
+                + string.Join($"{Environment.NewLine}  ", unbuildable));
+        }
+    }
+
+    /// <summary>Resolves every service a composition registered, returning what could not be built.</summary>
+    private static async Task<string[]> ReportUnbuildableAsync(IServiceCollection services)
+    {
         // Released asynchronously, because the graph holds connection pools that implement only IAsyncDisposable and
         // the container refuses to release one synchronously.
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions
@@ -336,7 +376,7 @@ public sealed class HostCompositionTests
             await starting.StartingAsync(TestContext.Current.CancellationToken);
         }
 
-        string[] unbuildable =
+        return
         [
             .. services
                 .Where(IsWorthResolving)
@@ -360,16 +400,6 @@ public sealed class HostCompositionTests
                 .Select(registration => ReportBuilding(scope.ServiceProvider, registration))
                 .OfType<string>(),
         ];
-
-        // Assert
-        // Reported together rather than through Assert.Empty, which abbreviates a collection: one missing registration
-        // usually leaves several services unbuildable, and the reader needs the one that is actually absent.
-        if (unbuildable.Length > 0)
-        {
-            Assert.Fail(
-                $"The '{shape}' deployment registered services it cannot build:{Environment.NewLine}  "
-                + string.Join($"{Environment.NewLine}  ", unbuildable));
-        }
     }
 
     [Fact]
@@ -840,11 +870,12 @@ public sealed class HostCompositionTests
     /// The configuration sources the framework supplies are cleared rather than layered under, because they are this
     /// machine's: the host's own <c>appsettings.json</c> travels into the test output through the project reference, and
     /// an environment variable set for a developer's run would otherwise decide what a shape composes. What each shape
-    /// states is then the whole of what the composition reads.
+    /// states is then the whole of what the composition reads, beside the shipped defaults where a test asks for them.
     /// </remarks>
     private static WebApplicationBuilder ConfiguredBuilder(
         string shape,
-        IReadOnlyList<KeyValuePair<string, string?>>? beyondTheShape = null)
+        IReadOnlyList<KeyValuePair<string, string?>>? beyondTheShape = null,
+        bool overTheShippedDefaults = false)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
@@ -853,6 +884,14 @@ public sealed class HostCompositionTests
         });
 
         builder.Configuration.Sources.Clear();
+
+        if (overTheShippedDefaults)
+        {
+            builder.Configuration.AddJsonStream(
+                typeof(HostCompositionTests).Assembly.GetManifestResourceStream("MailFathom.Host.appsettings.json")
+                    ?? throw new InvalidOperationException("The shipped appsettings.json is not embedded in this assembly."));
+        }
+
         builder.Configuration.AddInMemoryCollection([.. Database, .. Shapes[shape], .. beyondTheShape ?? []]);
 
         // The one service this test decides for itself, and it is the framework's rather than MailFathom's: data

@@ -64,4 +64,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Host\Host.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- The defaults every image ships, carried as a resource so the composition test layers the real file without
+         reaching the file system. -->
+    <EmbeddedResource Include="..\..\src\Host\appsettings.json" LogicalName="MailFathom.Host.appsettings.json" />
+  </ItemGroup>
 </Project>
