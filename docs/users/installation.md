@@ -97,6 +97,11 @@ The chart refuses to render the combination that would otherwise install, start,
 its clients nothing.
 [Signals between replicas](../operations/deployment-kubernetes.md#signals-between-replicas) is the page.
 
+Compose and the Quadlet units offer the same server as an opt-in of their own, where it does nothing until a second
+instance exists — a profile in one, a unit you either copy or do not in the other — so a deployment that expects to grow
+can provision it before it needs one. [The signal backplane](../operations/deployment-compose.md#the-signal-backplane)
+and [its Quadlet unit](../operations/deployment-quadlet.md#the-signal-backplane) are those two pages.
+
 ## What every shape needs
 
 - **Linux.** It is the only platform this project officially supports, and everything below assumes it: the image is

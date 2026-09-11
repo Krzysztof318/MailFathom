@@ -177,6 +177,31 @@ services:
       SpamClassification__Scanner__ScanTimeoutSeconds: ${MAILFATHOM_SPAM_SCAN_TIMEOUT_SECONDS:-30}
       SpamClassification__Scanner__MaximumMessageBytes: ${MAILFATHOM_SPAM_SCAN_MAXIMUM_MESSAGE_BYTES:-512000}
       SpamClassification__Scanner__MaximumConcurrentScans: ${MAILFATHOM_SPAM_SCAN_MAXIMUM_CONCURRENT:-5}
+      # The RESP endpoint this deployment's replicas carry client signals to each other over. Commented out rather than
+      # defaulted to an empty reference, for the reason the trust anchor above is: writing the section at all is what
+      # says a backplane exists, so a block present with nothing in it is refused at startup rather than read as a
+      # deployment that runs without one. Uncommenting the two lines is the whole of enabling it — the `signal-backplane`
+      # profile then decides whether the server they name is one this file starts.
+      #
+      # **On one host it changes nothing an operator can observe**, and that is the expected state rather than a
+      # misconfiguration: a signal raised here already reaches every client connection this deployment holds, because
+      # there is only one process holding them. What it is for is a second instance, and #1295 is where running one is
+      # decided. Until then this is the same component the chart offers, provisioned ahead of needing it.
+      #
+      # The reference is a file under ./secrets/mailfathom/ like every other credential MailFathom reads, and what it
+      # holds is a whole StackExchange.Redis connection string rather than a bare password: `garnet:6379,password=...`
+      # for the server below, or the address of a Redis-compatible endpoint you already operate — in which case enable
+      # no profile and start nothing. Both halves of the password are one decision: the string here presents it and
+      # ./secrets/garnet-acl is what accepts it.
+      #
+      # The material is read once, when a connection is first wanted, and kept for the life of the process — so rotating
+      # it is a restart to schedule. docs/operations/secret-rotation.md states the order.
+      #SignalBackplane__ConnectionString__Name: signal-backplane-connection-string
+      #SignalBackplane__ConnectionString__SecretReference: file:/etc/mailfathom/secrets/signal-backplane-connection-string
+      # Optional, and only where two applications share one RESP endpoint: it prefixes every channel this deployment
+      # publishes and subscribes to, and it defaults to `mailfathom`. Two MailFathom deployments on one endpoint collide
+      # under that default and have to be told apart here.
+      #SignalBackplane__ChannelPrefix: mailfathom
     secrets:
       - mailfathom-database-password
     volumes:
@@ -445,6 +470,79 @@ services:
           # Modest: the server holds no index in memory and streams what it serves. What it wants is disk.
           memory: ${MAILFATHOM_SILO_MEMORY_LIMIT:-1g}
 
+  garnet:
+    # Started only under its profile, for the reason the three services above are: an opt-in nobody took pulls no image,
+    # runs no container, and holds none of the memory below.
+    #
+    # **On one host it does nothing, and that is the expected state.** A backplane carries a client signal from the
+    # replica that raised it to the replicas holding the connections that have to hear about it, and this file runs one
+    # MailFathom — so every signal already reaches every connection this deployment holds, and the server relays each
+    # one back to the single subscriber that published it. It is here so that this shape offers the same component the
+    # chart does, and so that a deployment which grows a second instance has the piece already provisioned.
+    profiles:
+      - signal-backplane
+    # A digest rather than a tag, and the same digest the Helm chart renders — Garnet 2.1.0 — so the server this starts
+    # is the server the other deployment shape starts. Garnet publishes its release tags beside moving `1`, `2`, and
+    # `latest` ones, so a digest is the only reference that names one artifact. Garnet is Microsoft's RESP server and is
+    # MIT-licensed; THIRD_PARTY_LICENSES.md records the reading, including the base image it is built on. Any
+    # Redis-compatible endpoint answers the same protocol, which is what makes pointing the setting below at one you
+    # already operate the other supported shape.
+    image: ${MAILFATHOM_GARNET_IMAGE:-ghcr.io/microsoft/garnet@sha256:4e298b9b274088cded4156853a32b85fed7b42242eb9ca90216d332e25f2bceb}
+    restart: unless-stopped
+    # **The password arrives as a file, which on this server means an ACL file.** This is the one place this deployment
+    # differs from the chart, which expands the password into `--auth Password --password` from a Secret the kubelet
+    # reads. Nothing here has that expansion: Compose interpolates `${...}` from `.env` while it parses this file, so
+    # that route would put the password in `.env`, in `docker inspect`, and in this host's process list rather than in
+    # the secrets directory beside every other credential. `--auth ACL` is the one mode Garnet reads its credentials
+    # from a path in, so the secret below carries a single Redis-style ACL line with the password inside it. The default
+    # user is what a RESP client authenticating with a password alone becomes, and this server holds nothing but
+    # subscriptions, so it is granted every command rather than a subset nobody could enumerate from the client
+    # library's own handshake.
+    command:
+      - --auth
+      - ACL
+      - --acl-file
+      - /run/secrets/garnet-acl
+    secrets:
+      - garnet-acl
+    # No volume, and nothing to persist. A backplane holds a live subscription rather than a record: a restart loses
+    # nothing, and a server that kept anything across one would replay a statement whose subject has already moved.
+    # Write-ahead logging and checkpointing are both off in this server's own defaults, so nothing here turns them off.
+    #
+    # No health check either, for the reason MailFathom's own service has none: the image carries a .NET runtime and no
+    # RESP client, so there is nothing inside the container for a check to run. A replica whose backplane is down
+    # reports itself through `/health` and says so in its telemetry.
+    read_only: true
+    tmpfs:
+      # Two writable paths on an otherwise read-only root filesystem, which is what the chart's pod gives this image as
+      # well: the runtime's scratch directory, and the data directory the image's own `VOLUME` declares and a checkpoint
+      # would go to if anything ever asked for one. In memory rather than on disk so that nothing derived from a signal
+      # outlives the container. Both are owned by the image's own unprivileged account, which is what runs the server.
+      - /tmp:mode=1777,size=64m
+      - /data:mode=1777,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      # The internal network only, and no published port. What crosses this server is which mailbox changed and for
+      # whom — enough to be personal data on its own — so it is reachable from MailFathom and from nothing outside the
+      # host, exactly as the database is.
+      - backend
+    logging:
+      driver: json-file
+      options:
+        max-size: ${MAILFATHOM_LOG_MAX_SIZE:-10m}
+        max-file: ${MAILFATHOM_LOG_MAX_FILES:-3}
+    deploy:
+      resources:
+        limits:
+          cpus: ${MAILFATHOM_GARNET_CPU_LIMIT:-1}
+          # The server allocates its hash index while it starts and grows its log only as records are written, and this
+          # one is never written to — so what the limit covers is that index and the .NET runtime around it rather than
+          # anything this deployment stores.
+          memory: ${MAILFATHOM_GARNET_MEMORY_LIMIT:-1g}
+
 networks:
   # What the database is reachable on, and nothing that is not on it can reach the database. `internal` keeps this
   # network without a route out of the host.
@@ -483,3 +581,10 @@ secrets:
     file: ./secrets/silo-public.crt
   silo-private-key:
     file: ./secrets/silo-private.key
+  # The backplane server's own, read by the `garnet` service alone. It is beside the store's credentials rather than
+  # under ./secrets/mailfathom/ for the same reason they are: this file is the server's authority to accept a
+  # connection, and what MailFathom reads is the connection string that presents the password to it. It does not exist
+  # until an operator creates it, and a missing one fails the container rather than starting a RESP server that accepts
+  # every connection unauthenticated.
+  garnet-acl:
+    file: ./secrets/garnet-acl

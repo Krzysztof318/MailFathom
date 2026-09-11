@@ -1,0 +1,109 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# The RESP server a client signal crosses from the instance that raised it to the instances holding the connections that
+# have to hear about it. It is optional in the way the analyzer, the scanner, and the object store are: Quadlet has no
+# equivalent of Compose's profiles, so an operator who wants none of this copies the other files and never this one — and
+# then no image is pulled, no container exists, and none of the memory below is held. Installing it is half of the
+# arrangement; the other half is the SignalBackplane lines in mailfathom.container, and either one alone is a deployment
+# that does not work. docs/operations/deployment-quadlet.md states the order and the one password that goes between them.
+#
+# **On one host it does nothing, and that is the expected state rather than a misconfiguration.** This directory runs one
+# MailFathom, so every signal already reaches every client connection the deployment holds and the server relays each one
+# back to the single subscriber that published it. It is here so that this shape offers the same component the Helm chart
+# does, and so that a deployment which grows a second instance has the piece provisioned before it needs one. Running
+# more than one MailFathom under Quadlet is not supported today; issue #1295 decides whether it will be.
+#
+# Rootless, like the units beside it, and installed under ~/.config/containers/systemd/.
+
+[Unit]
+Description=Cache backplane for MailFathom
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+# A digest rather than a tag, and the same pin the Compose deployment and the Helm chart carry — Garnet 2.1.0 — so the
+# server this starts is the server the other two shapes start. Garnet publishes its release tags beside moving `1`, `2`,
+# and `latest` ones, so a digest is the only reference that names one artifact. Garnet is Microsoft's RESP server and is
+# MIT-licensed; THIRD_PARTY_LICENSES.md records the reading, including the base image it is built on. Any
+# Redis-compatible endpoint answers the same protocol, which is what makes pointing mailfathom.container at one you
+# already operate the other supported shape — and then no unit is installed here at all.
+Image=ghcr.io/microsoft/garnet@sha256:4e298b9b274088cded4156853a32b85fed7b42242eb9ca90216d332e25f2bceb
+ContainerName=mailfathom-garnet
+
+# Only the internal network, and no PublishPort= at all. What crosses this server is which mailbox changed and for whom,
+# which is personal data on its own, so it is reachable from MailFathom and from nothing outside the host — exactly as
+# the database is.
+Network=mailfathom-backend.network
+
+# The credential systemd decrypted for this unit. `%d` is $CREDENTIALS_DIRECTORY, which exists only because the [Service]
+# section below asked for one; the `Z` is what gives the file an SELinux label a container may read, and
+# docs/operations/deployment-quadlet.md states what happens on a host where that relabel is refused.
+Volume=%d:/etc/garnet/credentials:ro,Z
+
+# The invoking user is uid 1654 inside this container, for the reason mailfathom.container states it: the image runs the
+# server as its own unprivileged account, which under the default rootless mapping would be a subordinate uid belonging
+# to nobody — and the credential below is readable by the unit's user alone. It is the same account number, because both
+# images take it from the .NET base they are built on.
+UserNS=keep-id:uid=1654,gid=1654
+
+# **The password arrives as a file, which on this server means an ACL file.** This is the one place this deployment
+# differs from the chart, which expands the password into `--auth Password --password` from a Secret the kubelet reads.
+# Nothing here has that expansion: podman passes these arguments through unchanged, so that route would put the password
+# in this unit file, in `podman inspect`, and in this host's process list rather than in the credential store beside
+# every other secret. `--auth ACL` is the one mode Garnet reads its credentials from a path in, so the credential above
+# carries a single Redis-style ACL line with the password inside it. The default user is what a RESP client
+# authenticating with a password alone becomes, and this server holds nothing but subscriptions, so it is granted every
+# command rather than a subset nobody could enumerate from the client library's own handshake.
+Exec=--auth ACL --acl-file /etc/garnet/credentials/garnet-acl
+
+# No volume and nothing to persist. A backplane holds a live subscription rather than a record: a restart loses nothing,
+# and a server that kept anything across one would replay a statement whose subject has already moved. Write-ahead
+# logging and checkpointing are both off in this server's own defaults, so nothing here turns them off.
+
+# No health check, and therefore no Notify=healthy and no ordering in mailfathom.container. The image carries a .NET
+# runtime and no RESP client, so there is nothing inside the container for a check to run — and nothing has to wait for
+# it either: MailFathom finishes starting whether or not the endpoint answers, which is what lets an instance whose
+# backplane is down keep serving every screen correctly from its own connections.
+
+# Two writable paths on an otherwise read-only root filesystem, which is what the chart's pod gives this image as well:
+# the runtime's scratch directory, and the data directory the image's own `VOLUME` declares and a checkpoint would go to
+# if anything ever asked for one. In memory rather than on disk so that nothing derived from a signal outlives the
+# container.
+ReadOnly=true
+Tmpfs=/tmp:mode=1777,size=64m
+Tmpfs=/data:mode=1777,size=16m
+DropCapability=all
+NoNewPrivileges=true
+
+LogDriver=journald
+
+# Core dumps off, like every other container here. This one holds the ACL password in memory, which is the same reason
+# docs/operations/secret-provisioning.md gives for the units that hold credentials.
+Ulimit=core=0
+
+# No AutoUpdate=. The image is pinned to a digest, and moving it is a decision rather than something that happens on its
+# own; docs/operations/deployment-quadlet.md states the order an upgrade takes.
+
+[Service]
+# Decrypted by systemd as the unit starts, from a file that is ciphertext at rest and bound to this machine, produced
+# with `systemd-creds --user encrypt`. It names an absolute path rather than a bare credential name: a bare name is
+# looked up in the credential store and a miss is *not* fatal, which here would start a RESP server with no ACL file and
+# no authentication at all.
+LoadCredentialEncrypted=garnet-acl:%h/.config/credstore.encrypted/garnet-acl
+
+# Bound the in-memory exposure that no code-level measure addresses, for the process that decrypts the ACL password
+# before handing it on.
+LimitCORE=0
+
+# The unit-level bounds. The server allocates its hash index while it starts and grows its log only as records are
+# written, and this one is never written to — so what the limit covers is that index and the .NET runtime around it
+# rather than anything this deployment stores.
+MemoryMax=1G
+CPUQuota=100%
+
+Restart=always
+
+[Install]
+WantedBy=default.target
