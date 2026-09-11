@@ -67,4 +67,23 @@ public sealed class MailAccountSupervisionScopeTests
         Assert.Equal(firstScope, MailAccountSupervisionScope.For(first));
         Assert.NotEqual(firstScope, secondScope);
     }
+
+    /// <summary>
+    /// A scope carries no control character, and configuration rejects only a blank account identifier, so a short one
+    /// holding a control character reaches this the same way an overlong one does and is named by its digest too.
+    /// </summary>
+    [Fact]
+    public void For_AccountIdentifierHoldingAControlCharacter_NamesTheAccountByItsDigest()
+    {
+        // Arrange
+        var account = MailAccountIdentity.Create(User, MailAccountId.Create("prim\u0007ary"));
+
+        // Act
+        var scope = MailAccountSupervisionScope.For(account);
+
+        // Assert
+        Assert.StartsWith("mail-synchronization/0197c0de-0000-7000-8000-000000001290/sha256-", scope.Value, StringComparison.Ordinal);
+        Assert.DoesNotContain(scope.Value, char.IsControl);
+        Assert.Equal(scope, MailAccountSupervisionScope.For(account));
+    }
 }

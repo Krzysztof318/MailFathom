@@ -5,6 +5,7 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Coordination;
 using MailFathom.Application.Emails.AttachmentText.Administration;
+using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -24,6 +25,7 @@ public sealed class MailboxSynchronizationStatusEndpointTests
     private static readonly DateTimeOffset Now = new(2026, 8, 15, 10, 0, 0, TimeSpan.Zero);
     private static readonly MailAccountId Work = MailAccountId.Create("work");
     private static readonly MailFolderIdentity Inbox = new(Work, MailFolderAlias.Create("inbox"));
+    private static readonly DateTimeOffset HoldExpiresAt = Now.AddMinutes(15);
 
     /// <summary>
     /// The deployment's half of an agreement with a command it cannot reference. <c>mfctl</c> composes this path from a
@@ -156,10 +158,37 @@ public sealed class MailboxSynchronizationStatusEndpointTests
         Assert.Equal(new AttachmentSkipResponse("Encrypted", 7), Assert.Single(attachments.Skips));
     }
 
+    /// <summary>
+    /// The answer a second replica gives about an account it does not hold. Naming the holder and the replica that
+    /// composed the answer is what stops an operator reading this replica's empty ledger as the deployment's, which is
+    /// exactly what a caller reaching whichever pod answered would otherwise be told.
+    /// </summary>
+    [Fact]
+    public async Task ReadStatusAsync_AnAccountAnotherReplicaHolds_NamesTheHolderTheExpiryAndWhoAnswered()
+    {
+        // Arrange
+        var holder = ReplicaIdentity.Create("mailfathom-1:7");
+        var reader = Reader(new MailSynchronizationRunLedger(new FakeTimeProvider(Now)), supervisedBy: holder);
+
+        // Act
+        var result = await MailboxSynchronizationStatusEndpoint.ReadStatusAsync(
+            reader,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(SyntheticReplica.Answering.Value, result.Value!.Replica);
+
+        var account = Assert.Single(result.Value.Accounts);
+        Assert.Equal(holder.Value, account.SupervisedBy);
+        Assert.Equal(HoldExpiresAt, account.SupervisionHeldUntil);
+        Assert.Equal(nameof(MailAccountRunPhase.SupervisedElsewhere), account.Phase);
+    }
+
     private static MailSynchronizationStatusReader Reader(
         MailSynchronizationRunLedger ledger,
         IReadOnlyList<MailFolderSynchronizationProgress>? progress = null,
-        IAttachmentDerivationCoverageReader? attachmentCoverage = null)
+        IAttachmentDerivationCoverageReader? attachmentCoverage = null,
+        ReplicaIdentity? supervisedBy = null)
     {
         var accounts = Substitute.For<IDeploymentMailAccountCatalog>();
         accounts.SynchronizationEnabled.Returns(true);
@@ -174,18 +203,29 @@ public sealed class MailboxSynchronizationStatusEndpointTests
             ledger,
             progressReader,
             attachmentCoverage ?? new InMemoryAttachmentDerivationCoverageReader(),
-            NoHeldLeases(),
+            Leases(supervisedBy),
             SyntheticReplica.Answering,
             AdministrativeGrant.WholeSurface);
     }
 
-    /// <summary>Stands in for a lease table holding nothing, which is what a deployment with no worker running has.</summary>
-    private static IWorkLeaseStore NoHeldLeases()
+    /// <summary>Stands in for the lease table, holding the served account under one replica or holding nothing at all.</summary>
+    private static IWorkLeaseStore Leases(ReplicaIdentity? supervisedBy)
     {
         var leases = Substitute.For<IWorkLeaseStore>();
+        IReadOnlyList<WorkLease> held = supervisedBy is null
+            ? []
+            :
+            [
+                new WorkLease(
+                    MailAccountSupervisionScope.For(SyntheticServedAccount.Of(Work).Identity),
+                    WorkLeaseHolder.Create("a-hold"),
+                    supervisedBy,
+                    HoldExpiresAt),
+            ];
+
         leases
             .ReadHeldAsync(Arg.Any<IReadOnlyCollection<WorkScope>>(), Arg.Any<CancellationToken>())
-            .Returns([]);
+            .Returns(held);
 
         return leases;
     }

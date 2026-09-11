@@ -104,8 +104,15 @@ internal sealed record MailSynchronizationStatusResponse(
 /// <param name="SupervisionHeldUntil">When that hold expires unless it is renewed, or <see langword="null" /> when no replica holds the account.</param>
 /// <param name="Phase">What the account's supervisor is doing, as the phase's own name.</param>
 /// <param name="NextRunDueAt">When its next run is due, or <see langword="null" /> while it is not waiting for one.</param>
-/// <param name="ConsecutiveFailureCount">How many of its runs failed in a row; zero once one succeeds.</param>
-/// <param name="LastRun">How its most recent finished run ended, or <see langword="null" /> when none has finished in this process.</param>
+/// <param name="ConsecutiveFailureCount">
+/// How many of its runs failed in a row; zero once one succeeds. It is read after <paramref name="Phase" /> rather than
+/// before it: a phase of <c>SupervisedElsewhere</c> reports zero because this replica has run nothing, while the
+/// replica named in <paramref name="SupervisedBy" /> is where the account's real backoff is read.
+/// </param>
+/// <param name="LastRun">
+/// How its most recent finished run ended, or <see langword="null" /> when none has finished in this process — which a
+/// phase of <c>SupervisedElsewhere</c> always reports, the runs being the holder's rather than this replica's.
+/// </param>
 /// <param name="Folders">One entry per folder the account maps, ordered ordinally by alias.</param>
 /// <param name="AttachmentText">How far reading this account's attachments and images has come, and why the ones that yielded nothing did not.</param>
 internal sealed record MailAccountSynchronizationResponse(

@@ -20,7 +20,7 @@ namespace MailFathom.Application.Synchronization.Administration;
 /// </remarks>
 public enum MailAccountRunPhase
 {
-    /// <summary>No run of this account has begun in this process, which is what an account this replica holds reads as until its first one starts.</summary>
+    /// <summary>No run of this account has begun in this process, which is what an account this replica holds reads as until its first one starts, and what an account no replica currently holds reads as too.</summary>
     NotStarted = 0,
 
     /// <summary>The account has finished a run and is waiting out the delay before its next one.</summary>

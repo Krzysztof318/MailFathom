@@ -110,6 +110,26 @@ public sealed class EmbeddingProfileEndpointsTests
         Assert.Equal(Now, result.Value?.NextBackfillPassDueAt);
     }
 
+    /// <summary>
+    /// Two members of this body are the answering replica's own readings rather than the deployment's, so the answer
+    /// names which replica composed it; without that an operator reads one process's pass and provider as everybody's.
+    /// </summary>
+    [Fact]
+    public async Task ReadStatusAsync_ADeploymentRunningMoreThanOneReplica_NamesTheReplicaThatAnswered()
+    {
+        // Arrange
+        var world = CreateWorld();
+
+        // Act
+        var result = await EmbeddingProfileEndpoints.ReadStatusAsync(
+            new DeclaredEmbeddingGeometry(CreateIdentity("a-model")),
+            world.StatusReader,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(SyntheticReplica.Answering.Value, result.Value?.Replica);
+    }
+
     /// <summary>There is nothing to activate where nothing is declared, and the answer names the setting that would declare one.</summary>
     [Fact]
     public async Task ActivateAsync_NothingDeclared_IsRefusedNamingTheConfigurationSection()

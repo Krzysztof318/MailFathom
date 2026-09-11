@@ -162,12 +162,16 @@ internal sealed record EmbeddingSpendResponse(
 /// <param name="ActivationOutstanding">Whether the declaration is waiting for an activation nobody has performed.</param>
 /// <param name="Serving">The generation searches are answered from, or <see langword="null" /> when this instance has activated none.</param>
 /// <param name="Building">The generation a reindex is filling, or <see langword="null" /> when no reindex is running.</param>
-/// <param name="Provider">What the last call to the embedding provider established.</param>
+/// <param name="Provider">
+/// What the last call to the embedding provider established, as the replica named above read it. Another replica of the
+/// same deployment calls the provider on its own and may report a different reading.
+/// </param>
 /// <param name="Spend">Where the budget period stands.</param>
 /// <param name="NextBackfillPassDueAt">
-/// When the backfill's next pass is due, or <see langword="null" /> while none is scheduled. It is what tells a
-/// deployment that is waiting apart from one that is failing, which every other member here reads alike: an instance
-/// between passes reports no vectors, no provider call, and no reason.
+/// When the replica named above will next take a backfill pass, or <see langword="null" /> while it has scheduled none.
+/// Another replica schedules its own passes and may report a different instant. It is what tells a replica that is
+/// waiting apart from one that is failing, which every other member here reads alike: an instance between passes
+/// reports no vectors, no provider call, and no reason.
 /// </param>
 /// <param name="AttachmentDerivation">
 /// How far reading this deployment's attachments and images has come, and where their own two ceilings stand. Reported
