@@ -413,6 +413,50 @@ describe('useNotificationCentre', () => {
         expect(result.current.notifications.map((row) => row.id)).toEqual(['n-second', 'n-mail']);
     });
 
+    // An empty centre is the one that would show it: the panel draws the failure wherever it has no row to draw, so a
+    // refresh nobody pressed would otherwise turn a quiet bell into an error.
+    it('says nothing when a refresh is not answered, leaving an empty centre empty', async () => {
+        const { transport } = deployment({ unreadCount: 0, notifications: [] });
+        let refusing = false;
+        const refusingThePage: MailFathomTransport = (request) =>
+            refusing && new URL(request.path).pathname === '/api/client/notifications'
+                ? Promise.resolve({ status: 503, headers: {}, body: '' })
+                : transport(request);
+        const signalling = deploymentSaying();
+        const { result } = centreOf(refusingThePage, session, signalling.changes);
+
+        act(() => {
+            result.current.show();
+        });
+        await settled();
+
+        refusing = true;
+
+        act(() => {
+            signalling.say({ kind: 'refresh' });
+        });
+        await settled();
+
+        expect(result.current.failure).toBeNull();
+        expect(result.current.notifications).toEqual([]);
+    });
+
+    it('still says a page read failed when it was the panel opening that asked for it', async () => {
+        const { transport } = deployment({ unreadCount: 0, notifications: [] });
+        const refusingThePage: MailFathomTransport = (request) =>
+            new URL(request.path).pathname === '/api/client/notifications'
+                ? Promise.resolve({ status: 503, headers: {}, body: '' })
+                : transport(request);
+        const { result } = centreOf(refusingThePage);
+
+        act(() => {
+            result.current.show();
+        });
+        await settled();
+
+        expect(result.current.failure).toBe('unavailable');
+    });
+
     it('costs one page read when the refresh finds something waiting, and marks it as having arrived', async () => {
         const { transport, requests, hold } = deployment({ unreadCount: 1, notifications: [mail] });
         const signalling = deploymentSaying();

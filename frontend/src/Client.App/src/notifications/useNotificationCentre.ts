@@ -131,6 +131,12 @@ export function useNotificationCentre(
     // rather than two effects racing to read the same route.
     const [asked, setAsked] = useState(0);
 
+    // Whether the page read the token asks for next is a refresh's, handed from the listener that asks to the read it
+    // starts. A refresh the deployment did not answer says nothing and leaves what is drawn — an empty centre stays the
+    // empty state rather than becoming a failure — for the next one to try again. A ref because nothing is drawn from it
+    // and setting it must not start a read of its own.
+    const quietly = useRef(false);
+
     // What has already been drawn or announced, so an arrival is a notification this client has not seen rather than
     // one it has stopped showing. A ref because nothing on the screen is drawn from it, and it must not restart the
     // reads below when it grows.
@@ -233,6 +239,7 @@ export function useNotificationCentre(
             // The count is read rather than left to the interval because the badge is what a reader who does not open
             // the panel is looking at.
             if (signal.kind === 'refresh') {
+                quietly.current = true;
                 setAsked((token) => token + 1);
                 void count(false);
             }
@@ -363,6 +370,10 @@ export function useNotificationCentre(
 
         const attempted = new AbortController();
 
+        // Taken by the read it was set for, so a read the panel opening or an arrival asks for afterwards is not quiet.
+        const keepsWhatStands = quietly.current;
+        quietly.current = false;
+
         setReading(known.current?.session !== session);
 
         void (async () => {
@@ -375,7 +386,9 @@ export function useNotificationCentre(
             setReading(false);
 
             if (answer.outcome === 'failed') {
-                setFailure(answer.failure.reason);
+                if (!keepsWhatStands) {
+                    setFailure(answer.failure.reason);
+                }
 
                 return;
             }
