@@ -363,6 +363,26 @@ public sealed class SecretConfigurationStartupValidatorTests
         Assert.StartsWith("SignalBackplane:ConnectionString", failure, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The case every deployment that scaled out actually runs, which the two refusals beside it would both pass while
+    /// the gate refused all of them: the section is handed to the same secret walk every other credential is, so a rule
+    /// applied where none belongs would stop every host that configured a backplane.
+    /// </summary>
+    [Fact]
+    public async Task StartingAsync_ADeclaredBackplaneWhoseReferenceResolves_CompletesSoHostedServicesMayStart()
+    {
+        // Arrange
+        var harness = CreateHarness(
+            new PersistenceOptions(),
+            signalBackplaneOptions: new SignalBackplaneOptions
+            {
+                ConnectionString = new ConfiguredSecret { Name = "signal-backplane", SecretReference = "plaintext:signal-backplane" },
+            });
+
+        // Act, Assert
+        await harness.Validator.StartingAsync(CancellationToken.None);
+    }
+
     /// <summary>A deployment that declared no backplane is asked nothing about one, which is what makes the section optional rather than defaulted.</summary>
     [Fact]
     public async Task StartingAsync_NoBackplaneDeclared_IsAskedNothingAboutOne()

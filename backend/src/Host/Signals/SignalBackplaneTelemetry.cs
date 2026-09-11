@@ -22,7 +22,9 @@ namespace MailFathom.Host.Signals;
 /// its own, so a replica that cannot reach the backplane is still serving every screen correctly; taking it out of
 /// rotation would turn a late list into an outage. The transition is what is reported rather than the state, because
 /// StackExchange.Redis reconnects on its own and a level that reported the state would either write a line per attempt
-/// or write nothing after the first.
+/// or write nothing after the first. Which is why the state this replica last reported is held here rather than by a
+/// caller: the callers are the connection's own events and a connect attempt made per raised signal, and none of them
+/// can tell a fault it is meeting again from one nobody has reported yet.
 /// </para>
 /// <para>
 /// The one dimension is a closed set of this process's own two words, so nothing here opens a series per endpoint, per
@@ -44,6 +46,7 @@ internal sealed partial class SignalBackplaneTelemetry
 
     private readonly ILogger<SignalBackplaneTelemetry> logger;
     private readonly Counter<long> transitionCount;
+    private int reachable = 1;
 
     /// <summary>Initializes the instrument both transitions are counted on.</summary>
     /// <param name="logger">Where a transition is written, at a level an operator watching a deployment sees.</param>
@@ -59,18 +62,34 @@ internal sealed partial class SignalBackplaneTelemetry
             description: "Times this replica lost the signal backplane or had it back, by state.");
     }
 
-    /// <summary>Records that this replica can no longer reach the backplane.</summary>
-    /// <remarks>Written whether or not the endpoint ever answered: a replica that never connected and one whose connection dropped are the same condition to the screens that stop being told things.</remarks>
+    /// <summary>Records that this replica can no longer reach the backplane, unless it already said so.</summary>
+    /// <remarks>
+    /// Written whether or not the endpoint ever answered: a replica that never connected and one whose connection
+    /// dropped are the same condition to the screens that stop being told things. Written once per fault rather than
+    /// once per caller, because the callers are as many as the signals a replica raises — an endpoint that cannot be
+    /// dialled is re-dialled on every publish — and a line and a measurement per publish would make this a rate of
+    /// mail rather than a report of a transition.
+    /// </remarks>
     internal void RecordLost()
     {
+        if (Interlocked.Exchange(ref this.reachable, 0) is 0)
+        {
+            return;
+        }
+
         this.transitionCount.Add(1, new TagList { { StateTagName, LostState } });
         this.LogBackplaneLost();
     }
 
-    /// <summary>Records that this replica has the backplane back.</summary>
-    /// <remarks>What the gap is measured against. Nothing is replayed across it — a statement raised while the connection was down reached nobody and is not buffered anywhere — so the client's own refresh is what closes it.</remarks>
+    /// <summary>Records that this replica has the backplane back, unless nothing said it was gone.</summary>
+    /// <remarks>What the gap is measured against. Nothing is replayed across it — a statement raised while the connection was down reached nobody and is not buffered anywhere — so the client's own refresh is what closes it. A restoration nothing lost is silent for the reason a repeated loss is: the library raises its own events per connection, and a pair that never opened is not a gap an operator has to read.</remarks>
     internal void RecordRestored()
     {
+        if (Interlocked.Exchange(ref this.reachable, 1) is 1)
+        {
+            return;
+        }
+
         this.transitionCount.Add(1, new TagList { { StateTagName, RestoredState } });
         this.LogBackplaneRestored();
     }

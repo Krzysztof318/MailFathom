@@ -78,7 +78,8 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
         await using var raising = await this.StartAsync(ports[0], cancellationToken);
         await using var holding = await this.StartAsync(ports[1], cancellationToken);
 
-        var ticket = holding.Services.GetRequiredService<ClientSignalTickets>().Mint(SyntheticMailUser.Deployment)
+        var ticket = await holding.Services.GetRequiredService<ClientSignalTickets>()
+                .MintAsync(SyntheticMailUser.Deployment, cancellationToken)
             ?? throw new InvalidOperationException("The host holding the connection refused to mint a signal ticket.");
 
         await using var connection = ConnectionTo(ports[1], ticket.Value);
@@ -161,9 +162,18 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
     private Task<InProcessComposedHost> StartAsync(int port, CancellationToken cancellationToken) =>
         InProcessComposedHost.StartAsync(
             [
+                // The orchestration's own database rather than the shape's unreachable default, because a ticket is
+                // minted on one replica and redeemed on the other: the store behind it is PostgreSQL, and two replicas
+                // that did not share it would refuse the connection this class exists to hold open.
+                new("ConnectionStrings:mailfathom", orchestration.DatabaseConnectionString),
                 new("ClientEndpoint:Enabled", "true"),
                 new("ClientEndpoint:BindAddress", "127.0.0.1"),
                 new("ClientEndpoint:Port", port.ToString(CultureInfo.InvariantCulture)),
+
+                // The probe listener is on by default and binds one fixed port on every interface, which two replicas
+                // in one process cannot both have; neither of them is driven here, and the second would fail to start
+                // on an address already in use before this class reached the signal it exists to follow.
+                new("HealthEndpoints:Enabled", "false"),
                 new("SignalBackplane:ConnectionString:Name", "signal-backplane"),
 
                 // Inline rather than a file, for the reason every other secret in a composed shape is: what the section

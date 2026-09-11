@@ -82,25 +82,27 @@ internal sealed class SignalBackplaneConnection : IConfigureOptions<RedisOptions
     /// </remarks>
     private async Task<IConnectionMultiplexer> ConnectAsync(TextWriter log)
     {
-        ConfigurationOptions endpoint;
+        ConnectionMultiplexer connection;
 
         try
         {
-            endpoint = await this.ReadEndpointAsync();
+            var endpoint = await this.ReadEndpointAsync();
+            connection = await ConnectionMultiplexer.ConnectAsync(endpoint, log);
         }
         catch
         {
-            // A reference that resolves to nothing and a connection string the client refuses are both endpoints this
-            // replica will never dial, which is the same condition to every screen that stops being told things as one
-            // it dialled and could not reach. Neither is proved at startup — the gate there proves the reference
-            // resolves, not that what it resolved to is a connection string — so without this the whole symptom of a
-            // typo is a deployment that serves correctly and fans nothing out.
+            // A reference that resolves to nothing, a connection string the client refuses, and one that parses to no
+            // endpoint at all are the same condition to every screen that stops being told things as an endpoint this
+            // replica dialled and could not reach. None of the three is proved at startup — the gate there proves the
+            // reference resolves, not that what it resolved to is a connection string — so without this the whole
+            // symptom of a typo is a deployment that serves correctly and fans nothing out. The lifetime manager keeps
+            // no multiplexer after an attempt that threw and asks the factory again on the next publish, so this runs
+            // once per raised signal for as long as the fault lasts; what keeps that from becoming a line and a
+            // measurement per publish is the telemetry reporting a transition rather than a state.
             this.telemetry.RecordLost();
 
             throw;
         }
-
-        var connection = await ConnectionMultiplexer.ConnectAsync(endpoint, log);
 
         // Both events are raised once per connection the multiplexer holds, and the interactive one is left out for
         // the reason the library leaves it out of its own logging: a drop raises the same condition twice, and it is

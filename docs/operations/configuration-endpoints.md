@@ -430,6 +430,13 @@ RESP endpoint is usually reached with a password, and a password written into a 
 whatever the operator's configuration is backed by. A section naming no connection string is refused at startup, as is
 one whose channel prefix was written empty.
 
+**The default prefix separates one MailFathom from something else, never one MailFathom from another.** `mailfathom`
+is the same literal in every deployment that writes no prefix, so two of them pointed at one RESP server publish and
+subscribe under the same channels: each one's statements reach the other's client connections, carrying an account
+alias, a folder alias, and the two lines of a raised notification. A deployment sharing a RESP server with another
+MailFathom therefore writes a prefix of its own, and a deployment sharing one with anything else is already separated
+by this default.
+
 **An unreachable endpoint does not stop the host.** The connection is opened with `AbortOnConnectFail` off, so a
 deployment whose backplane is down starts and serves; the signals raised while it is down are the ones a client catches
 up on. Losing and regaining it is logged at `Warning` and counted, which

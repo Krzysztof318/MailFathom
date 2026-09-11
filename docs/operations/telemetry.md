@@ -1453,7 +1453,10 @@ times this replica lost the connection to the RESP endpoint and the times it had
 `mailfathom.client_signals.backplane.state`, whose values are `lost` and `restored` and nothing else. **It is written
 only on a transition**, so an absent series is either a deployment that configured no backplane or one whose backplane
 has never dropped, and this instrument alone cannot tell the two apart. Whether a replica is fanning signals at all is
-read from the section it was configured with rather than from here.
+read from the section it was configured with rather than from here. A fault that lasts is one measurement and not a
+series: an endpoint this replica cannot dial is dialled again for every signal raised, and each of those attempts
+reports nothing further until a `restored` has been counted — so the value to alert on is a `lost` without its pair
+rather than a rate.
 
 **Every transition is also a log record at `Warning`**, on both sides. The backplane is silent while it works, which is
 what makes losing it worth a level an operator watching a deployment actually sees: nothing else in the process says
