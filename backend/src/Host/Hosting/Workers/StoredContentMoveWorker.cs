@@ -167,7 +167,7 @@ internal sealed partial class StoredContentMoveWorker : BackgroundService
         }
         catch (Exception exception)
         {
-            LogPassFailed(this.logger, exception);
+            LogReadinessReadFailed(this.logger, exception);
 
             return false;
         }
@@ -224,6 +224,12 @@ internal sealed partial class StoredContentMoveWorker : BackgroundService
         Level = LogLevel.Warning,
         Message = "A pass of the stored-content move failed; the next interval will resume from the committed position.")]
     private static partial void LogPassFailed(ILogger logger, Exception exception);
+
+    /// <summary>Records a readiness read that failed, which is no pass at all: nothing was reached and nothing was committed.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Could not read whether a stored-content move is waiting for a pass; the next interval will ask again.")]
+    private static partial void LogReadinessReadFailed(ILogger logger, Exception exception);
 
     /// <summary>Records the ordinary answer for a replica another one is carrying the move for, which is why it is not worth more than debug.</summary>
     [LoggerMessage(

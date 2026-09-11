@@ -114,7 +114,7 @@ public sealed class StoredContentMoveWorkerTests
 
         // Assert
         Assert.False(worker.ExecuteTask!.IsFaulted);
-        Assert.Contains(logger.Messages, message => message.Contains("failed", StringComparison.Ordinal));
+        Assert.Contains(logger.Messages, message => message.Contains("Could not read whether a stored-content move is waiting", StringComparison.Ordinal));
     }
 
     /// <summary>A failed pass is not a failed move, so the worker stays alive and a later interval carries the next one.</summary>
