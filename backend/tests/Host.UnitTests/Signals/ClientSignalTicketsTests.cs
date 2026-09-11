@@ -203,7 +203,7 @@ public sealed class ClientSignalTicketsTests
             .Select(ticket => tickets.RedeemAsync(ticket, TestContext.Current.CancellationToken))
             .ToArray();
 
-        await deployment.WaitUntilRedeeming(ClientSignalTickets.MostRedemptionsInFlight);
+        await deployment.WaitUntilRedeemingAsync(ClientSignalTickets.MostRedemptionsInFlight);
 
         // Act
         var refused = await tickets.RedeemAsync(minted[^1], TestContext.Current.CancellationToken);
@@ -358,7 +358,7 @@ public sealed class ClientSignalTicketsTests
         internal void ReleaseRedemptions() => this.released.TrySetResult();
 
         /// <summary>Waits until the store is holding the given number of redemptions, so the bound is full before the next arrives.</summary>
-        internal async Task WaitUntilRedeeming(int count)
+        internal async Task WaitUntilRedeemingAsync(int count)
         {
             while (Volatile.Read(ref this.redeeming) < count)
             {

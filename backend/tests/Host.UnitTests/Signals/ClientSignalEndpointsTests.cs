@@ -4,6 +4,8 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Failures;
+using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Signals;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
@@ -75,6 +77,32 @@ public sealed class ClientSignalEndpointsTests
         // Assert
         var refused = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, refused.StatusCode);
+    }
+
+    /// <summary>
+    /// A deployment whose tickets cannot be reached answers the condition the client waits on rather than a fault,
+    /// because what the client does about it is what it does about the bound: wait and mint again.
+    /// </summary>
+    [Fact]
+    public async Task MintTicket_WhenTheTicketStoreCannotBeReached_AnswersServiceUnavailableCarryingTheErrorCode()
+    {
+        // Arrange
+        var tickets = new ClientSignalTickets(
+            new UnreachableClientSignalTicketStore(),
+            new FakeTimeProvider(Instant));
+
+        // Act
+        var result = await ClientSignalEndpoints.MintTicket(
+            AuthorizationFor(SyntheticMailUser.Deployment),
+            tickets,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refused = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, refused.StatusCode);
+        Assert.Equal(
+            MailFathomErrorCode.ClientSignalTicketStoreUnavailable.Value,
+            Assert.Contains(RouteAuthorization.ErrorCodeExtension, refused.ProblemDetails.Extensions));
     }
 
     /// <summary>

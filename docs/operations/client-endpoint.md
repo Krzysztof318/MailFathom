@@ -2440,6 +2440,7 @@ answer leaves what is drawn in place for the next to try again.
 **A proxy in front of this endpoint has to pass the upgrade** — `Upgrade` and `Connection` on the request, and no
 buffering or idle timeout shorter than a connection that is meant to stand open. Nothing here fails when it does not;
 the client falls back to its interval, which is what makes this safe to deploy behind a proxy nobody reconfigured.
+
 **It needs no session affinity, at any replica count**, and configuring it anyway gains nothing while pinning load: a
 cookie pins every request a client makes and hashing the source address puts every client behind one NAT on one
 replica, both of which distort the load the replicas were added to share.

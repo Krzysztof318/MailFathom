@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Signals;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Endpoints;
@@ -85,11 +86,20 @@ internal static class ClientSignalEndpoints
     /// <param name="authorization">Reports the grant the caller holds and the user it acts for.</param>
     /// <param name="tickets">Mints the ticket and holds it until it is spent or expires.</param>
     /// <param name="cancellationToken">Cancels the mint with the request that asked for it.</param>
-    /// <returns><c>200</c> with the ticket, or <c>503</c> where the deployment already holds every ticket it will hold.</returns>
+    /// <returns><c>200</c> with the ticket, or <c>503</c> where the deployment already holds every ticket it will hold or could not be asked.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required service is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// A <c>POST</c> rather than a <c>GET</c>, because minting a single-use credential changes state: a <c>GET</c> would
     /// be a route a cache, a prefetch, or a link preview could spend a ticket through.
+    /// </para>
+    /// <para>
+    /// A deployment whose tickets cannot be reached answers the same <c>503</c> as one that holds every ticket it will
+    /// hold, because what the client does about either is identical — wait and mint again, reading its screens over the
+    /// ordinary routes meanwhile. The two are told apart by the error code the answer carries and by the failure an
+    /// operator's log holds, never by the status, which is the arrangement a scanner this surface cannot reach is
+    /// answered under.
+    /// </para>
     /// </remarks>
     internal static async Task<Results<Ok<ClientSignalTicketResponse>, ProblemHttpResult>> MintTicket(
         [FromServices] AccessAuthorization authorization,
@@ -99,7 +109,22 @@ internal static class ClientSignalEndpoints
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(tickets);
 
-        var minted = await tickets.MintAsync(authorization.RequireUser(), cancellationToken);
+        MintedClientSignalTicket? minted;
+
+        try
+        {
+            minted = await tickets.MintAsync(authorization.RequireUser(), cancellationToken);
+        }
+        catch (ClientSignalTicketStoreUnavailableException unreachable)
+        {
+            return TypedResults.Problem(
+                unreachable.Message,
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                extensions: new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    [RouteAuthorization.ErrorCodeExtension] = unreachable.ErrorCode.Value,
+                });
+        }
 
         return minted is null
             ? TypedResults.Problem(

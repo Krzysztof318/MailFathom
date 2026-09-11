@@ -5,7 +5,9 @@
 using MailFathom.Application.Signals;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Signals;
+using MailFathom.Infrastructure.Persistence;
 using MailFathom.IntegrationTests.Orchestration;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -181,6 +183,61 @@ public sealed class OrchestratedClientSignalTicketTests(MailFathomOrchestrationF
         }
     }
 
+    /// <summary>
+    /// The ceiling on unspent tickets is counted by the statement that writes one, so a deployment already holding as
+    /// many as it will hold refuses the next mint whichever replica issues it.
+    /// </summary>
+    /// <remarks>
+    /// The bound is passed to the port rather than held by it, so this case states one the table already meets instead
+    /// of writing ten thousand rows. Nothing below a real server settles it: the refusal is the
+    /// <c>WHERE (SELECT count(*) …) &lt; @mostOutstanding</c> clause of the insert, and a fake counting its own
+    /// dictionary is a different mechanism in a different process — which is exactly the per-process bound this table
+    /// replaced.
+    /// </remarks>
+    [Fact]
+    public async Task TryMintAsync_WhenTheDeploymentAlreadyHoldsTheCeiling_RefusesTheMint()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var mintingHost = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await using var secondHost = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.NewGuid();
+
+        await OrchestratedForeignUser.ProvisionAsync(mintingHost, user, cancellationToken);
+
+        try
+        {
+            // Arrange
+            var deployment = await StoreOfAsync(mintingHost, cancellationToken);
+            var secondReplica = await StoreOfAsync(secondHost, cancellationToken);
+            var held = await CountUnspentTicketsAsync(mintingHost, cancellationToken);
+
+            // Act
+            var refused = await secondReplica.TryMintAsync(
+                Guid.NewGuid().ToString("N"),
+                MailUserId.Create(user),
+                new byte[32],
+                Instant + ClientSignalTickets.Lifetime,
+                (int)held,
+                cancellationToken);
+
+            var admitted = await deployment.TryMintAsync(
+                Guid.NewGuid().ToString("N"),
+                MailUserId.Create(user),
+                new byte[32],
+                Instant + ClientSignalTickets.Lifetime,
+                (int)held + 1,
+                cancellationToken);
+
+            // Assert
+            Assert.False(refused);
+            Assert.True(admitted);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(mintingHost, user);
+        }
+    }
+
     /// <summary>Erasing a user takes their unspent tickets with them, so nothing about a person outlives their record.</summary>
     [Fact]
     public async Task EraseAsync_AUserHoldingAnUnspentTicket_TakesTheTicketWithThem()
@@ -191,21 +248,47 @@ public sealed class OrchestratedClientSignalTicketTests(MailFathomOrchestrationF
 
         await OrchestratedForeignUser.ProvisionAsync(host, user, cancellationToken);
 
-        // Arrange
-        var minted = await (await TicketsOnAsync(host, cancellationToken)).MintAsync(MailUserId.Create(user), cancellationToken);
+        try
+        {
+            // Arrange
+            var minted = await (await TicketsOnAsync(host, cancellationToken)).MintAsync(MailUserId.Create(user), cancellationToken);
 
-        // Act
-        await OrchestratedForeignUser.EraseAsync(host, user);
+            // Act
+            await OrchestratedForeignUser.EraseAsync(host, user);
 
-        // Assert
-        Assert.Null(await (await TicketsOnAsync(host, cancellationToken)).RedeemAsync(minted?.Value, cancellationToken));
+            // Assert
+            Assert.Null(await (await TicketsOnAsync(host, cancellationToken)).RedeemAsync(minted?.Value, cancellationToken));
+        }
+        finally
+        {
+            // Erased a second time on the ordinary path, which reports that there was nothing to erase rather than
+            // failing. What the block is for is the mint above: a store that could not answer would otherwise leave a
+            // second row in the one shared settings_accounts and break every class the orderer runs after this one.
+            await OrchestratedForeignUser.EraseAsync(host, user);
+        }
     }
 
     /// <summary>Mints and spends through the host's own registered store, the way the minting route and the hub do.</summary>
+    /// <remarks>
+    /// Over a clock this class fixes rather than the wall clock, because the lifetime a ticket is judged against is
+    /// thirty seconds and what these cases measure is the statement rather than elapsed time: a contended runner
+    /// between the mint and the redemption would otherwise report a ticket that expired as a spend that returned
+    /// nothing. Each replica gets its own instance at the same instant, as two processes would.
+    /// </remarks>
     private static async Task<ClientSignalTickets> TicketsOnAsync(
         OrchestratedMailFathomServices host,
         CancellationToken cancellationToken) =>
-        new(await StoreOfAsync(host, cancellationToken), TimeProvider.System);
+        new(await StoreOfAsync(host, cancellationToken), new FakeTimeProvider(Instant));
+
+    /// <summary>Counts what the deployment holds right now, which is what the ceiling above is stated against.</summary>
+    /// <remarks>Read rather than assumed to be zero: the table is the whole deployment's and the collection this class joins leaves whatever the classes before it minted and did not spend.</remarks>
+    private static Task<long> CountUnspentTicketsAsync(
+        OrchestratedMailFathomServices host,
+        CancellationToken cancellationToken) => host.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailFathomDbContext>()
+                .ClientSignalTickets
+                .LongCountAsync(token),
+            cancellationToken);
 
     private static Task<IClientSignalTicketStore> StoreOfAsync(
         OrchestratedMailFathomServices host,

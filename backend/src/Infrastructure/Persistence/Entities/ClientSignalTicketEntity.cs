@@ -44,10 +44,12 @@ internal sealed class ClientSignalTicketEntity
 
     /// <summary>The longest identifier the column takes.</summary>
     /// <remarks>
-    /// A bound on the row rather than a statement of the format: what a minting host writes here is the base64url of
-    /// sixteen random bytes, which is twenty-two characters, and the host refuses a longer presented value before any
-    /// statement runs. The column is given room past that so the format stays the minting host's to decide, and stays
-    /// short enough that nothing else could be stored in it.
+    /// A bound on the row rather than a statement of the format, and it bounds what is written rather than what is
+    /// looked up: only minting writes this column, and what a minting host writes is the base64url of sixteen random
+    /// bytes, which is twenty-two characters. A presented value is bounded separately and more loosely — the host
+    /// refuses one past a length of its own before any statement runs — so an identifier longer than this simply
+    /// matches no row. The column is given room past twenty-two so the format stays the minting host's to decide, and
+    /// stays short enough that nothing else could be stored in it.
     /// </remarks>
     internal const int IdentifierLengthLimit = 64;
 
