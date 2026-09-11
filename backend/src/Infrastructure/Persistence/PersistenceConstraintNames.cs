@@ -584,4 +584,12 @@ internal static class PersistenceConstraintNames
     /// makes that removal proportional to what has expired rather than to everything ever spent.
     /// </remarks>
     internal const string SpentClientAssertionExpiryIndexName = "ix_spent_client_assertions_expires_at";
+
+    /// <summary>The order the unspent signal tickets are aged out through.</summary>
+    /// <remarks>
+    /// Stated for the reason the index above it is: no query reads an unspent ticket, and the one statement that
+    /// touches the table other than the insert and the spend is the removal of everything already expired. The index is
+    /// what makes that removal proportional to what has expired rather than to every ticket the deployment holds.
+    /// </remarks>
+    internal const string ClientSignalTicketExpiryIndexName = "ix_client_signal_tickets_expires_at";
 }

@@ -450,6 +450,40 @@ path rather than on a timer, so a deployment whose assertion traffic stops keeps
 until the next assertion arrives. A cap with an eviction policy would be worse than none: evicting a row that has not
 expired is precisely the replay this exists to refuse.
 
+## The unspent signal connection tickets
+
+`client_signal_tickets` holds the single-use tickets a client's
+[live signal connection](../operations/client-endpoint.md#the-signal-channel) is opened against. A browser cannot put a
+header on a WebSocket, so the connection carries a ticket instead: an authenticated route mints one, the client hands
+it to the connection, and the hub spends it.
+
+It is a table rather than a dictionary in a process because a load balancer places the mint and the connection
+independently — the connection skips negotiation precisely so that nothing has to route the two together — so a ticket
+held in the process that minted it would be redeemable about one time in the replica count, silently.
+[ADR 0032](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md)
+records that, and records why the ticket is not kept in the optional signal backplane instead: an authentication path
+must not depend on a component a deployment may not run.
+
+| Column | What it records |
+|---|---|
+| `Identifier` | The public half of the ticket, as the minting replica drew it — the base64url of sixteen random bytes — at most 64 characters, and the primary key. It is what a presentation is looked up by, and the row being removed by the presentation that finds it is the single-use rule itself: the spend is one `DELETE ... RETURNING` and the returned row is the whole answer |
+| `UserId` | Whose connection the ticket opens. It is the foreign key onto `settings_accounts` with `ON DELETE CASCADE`, for the reason `client_preferences` keys the same way: a ticket is minted for one person and names nobody else |
+| `SecretDigest` | The SHA-256 digest of the ticket's secret half, 32 bytes. The secret itself is never stored, so a row read out of the database or out of a backup opens no connection; the presented secret is hashed and the two digests compared in constant time |
+| `ExpiresAt` | When presenting the ticket stops working, thirty seconds after it was minted. It is the one index beside the key and the foreign key's own, and the index is what makes the removal proportional to what has expired rather than to everything the deployment holds |
+
+**Nothing here is mail, and nothing an unauthenticated caller sends reaches it.** Only a request that already
+authenticated against a credential holding `mailfathom.mail.read` produces a row, so a row is a generated user
+identity, a digest, and an instant — no message, no header, no address, and no credential.
+
+**It cannot grow without bound, and two things hold it.** A ticket lives thirty seconds, and the removal keeps the
+table proportional to the connections opened since the last one. Beside that is a ceiling on how many unspent tickets
+the deployment holds at once, counted in the same statement that writes the ticket — so it is the deployment's number
+rather than one each replica finds room under separately, and a mint past it answers `503` rather than growing the
+table. Reaching it is a refusal rather than an eviction, because evicting somebody else's live ticket would turn one
+caller's noise into another caller's failed connection. The sweep runs on the minting path rather than on a timer, at
+most once per ticket lifetime per replica, so a deployment whose clients stop connecting keeps whatever rows it held at
+that moment until the next mint arrives.
+
 ## The derived search document
 
 `email_search_documents` is one-to-one with `stored_emails` and holds what lexical search reads: `subject_text`, `participant_addresses`, `body_text`, `body_text_before_trimming`, `text_source`, `extracted_at`, and the generated `search_vector`. [Body text and the lexical index](../features/imap-synchronization.md#body-text-and-the-lexical-index) describes how each of them is derived. Every stored email has one, including a message whose body was never read: that row carries the envelope's subject alone and records its text source as not extracted, so an oversized or unparseable message is still findable rather than absent from search entirely.
@@ -1622,6 +1656,9 @@ account reach these four tables through the same cascade every other table is re
 | `ix_notifications_user_unread_condition` | `(UserId, DeduplicationKey)`, unique, where `NOT "IsRead"` | The deduplication rule itself: one unread statement per condition, and no bound at all on conditions the person has already read. Being partial is also what makes it the index an unread count is answered from, since that count is one user's rows in it — and what keeps a repeated raise a lost race a retry resolves rather than a check the application could win between the read and the write |
 | `PK_spent_client_assertions` | `(CredentialKey, Identifier)`, unique | The anti-replay rule itself. The spend is one `INSERT ... ON CONFLICT DO NOTHING` and whether a row was written is the whole answer, so two replicas presenting one identifier at the same instant are settled here rather than by a check either of them makes between two statements |
 | `ix_spent_client_assertions_expires_at` | `(ExpiresAt)` | The order the served assertions are aged out through. Nothing reads a spent assertion, so the column is indexed for the removal alone — which is what keeps that removal proportional to what has expired since the last one rather than to everything ever spent |
+| `PK_client_signal_tickets` | `(Identifier)`, unique | The single-use rule itself. The spend is one `DELETE ... RETURNING` reaching exactly one row, so two connections presenting one ticket at the same instant are settled here rather than by a check either replica makes between two statements |
+| `ix_client_signal_tickets_expires_at` | `(ExpiresAt)` | The order the unspent tickets are aged out through, indexed for the removal alone for the reason the assertions' expiry is: nothing reads a ticket by its age |
+| `IX_client_signal_tickets_UserId` | `(UserId)` | The foreign key onto the user record, which is what erasing a person reaches their unspent tickets by rather than scanning |
 | `ix_notifications_user_occurred` | `(UserId, OccurredAt, Id)` | The two ways the notification centre is worked: a page of one person's notifications newest first, and the retention sweep that erases the same person's oldest. The identifier is in the key because two notifications raised in one instant need a total order for a keyset page to continue from |
 | `IX_notifications_TargetStoredEmailId` | `(TargetStoredEmailId)` | The foreign key back to the message a notification leads to, which is what erasing that message reaches its notifications by rather than scanning |
 | `IX_stored_content_claims_ExpiresAt` | `(ExpiresAt)` | The sweep every claim statement opens with, which is what keeps the table the size of the payloads currently in flight rather than of every claim a replica ever died holding. Unfiltered, because what an expiry divides the table into changes with the clock rather than with a row |
@@ -1738,6 +1775,8 @@ user's generated identifier and the account alias are what a failure names, and 
 personal data.
 
 `spent_client_assertions` is the one table on this page whose classification depends on which credential a row was written under. For a configured key pair the `CredentialKey` column holds the name an operator gave the key, which is MailFathom's own configuration and nobody's data; for a user's registered key it holds that key's 43-character fingerprint, which is a pseudonymous identifier for an identified person and is read as their data. The other two columns are neither in both cases — a value the client minted for one request, and an instant. Nothing cascades into the table, and that is deliberate rather than an omission: the column holds a configured name as readily as a fingerprint and belongs to neither record, so there is nothing for a constraint to point at. What replaces the cascade is the row's own lifetime, which is minutes rather than a retention window somebody has to sweep against — a data-subject erasure is therefore not owed a statement here, because whatever a fingerprint could still identify is gone on its own before such a request could be answered. Neither the fingerprint nor the identifier reaches a log, a metric, a trace, or an error message — a refusal on the user path names the credential's own generated identifier. The configured key name does reach one, in the warnings that say which key presented a replayed or overlong assertion, and it is the column value there as well as in the row; it is MailFathom's own configuration rather than anybody's data, which is why that is the one part of the table a log carries.
+
+`client_signal_tickets` holds a generated user identity, which is a pseudonymous identifier for an identified person and is read as their data; the digest and the instant beside it are neither. It does cascade from the user record, so a data-subject erasure takes whatever it holds without having to know the table exists — and the row's own lifetime of thirty seconds means there is almost never anything for that cascade to reach. The digest is not a credential: it opens nothing, because what a connection presents is the secret it was derived from. Nothing here reaches a log, a metric, a trace, or an error message — a refused connection is counted rather than described, and the one refusal that names anything names the deployment's own inability to reach its database.
 
 `embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 

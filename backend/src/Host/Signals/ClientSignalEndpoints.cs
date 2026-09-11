@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Endpoints;
+using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -29,6 +30,11 @@ namespace MailFathom.Host.Signals;
 /// It sits beneath the client endpoint's route prefix, so <c>SurfaceIsolation</c> reads it as one of this surface's
 /// paths and a listener that does not serve the client surface answers it <c>404</c> like every other route here.
 /// </para>
+/// <para>
+/// <b>It serves one transport</b>, for the reason <see cref="ServeOverWebSocketsAlone" /> gives: a connection that
+/// skips negotiation is a single request, so nothing has to route a pair of requests to one replica and a deployment
+/// scaling out configures no session affinity.
+/// </para>
 /// </remarks>
 internal static class ClientSignalEndpoints
 {
@@ -37,6 +43,32 @@ internal static class ClientSignalEndpoints
 
     /// <summary>The path the hub answers on, which is absolute because a hub is mapped outside the client group.</summary>
     internal const string HubPath = ClientEndpointOptions.RoutePrefix + "/signals";
+
+    /// <summary>Serves the hub over WebSockets and refuses every other transport.</summary>
+    /// <param name="options">What the hub's own connection dispatcher is configured with.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// A SignalR handshake is ordinarily two requests — a negotiation and the transport it chose — and both have to
+    /// reach the same process, which is why the framework's scale-out guidance asks for session affinity. It names
+    /// WebSockets alone with negotiation skipped as one of the arrangements that needs none, and that is what the
+    /// client already does. Refusing the other two transports here is what makes that a property of the deployment
+    /// rather than a habit of one client: nothing can open a connection that would then have to be routed back to the
+    /// replica that answered its negotiation.
+    /// </para>
+    /// <para>
+    /// What it costs is stated in
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md">ADR 0032</see>:
+    /// a network or a proxy that will not pass the WebSocket upgrade gives that client no live updates at all, and it
+    /// reads its screens over the ordinary routes on its own schedule instead.
+    /// </para>
+    /// </remarks>
+    internal static void ServeOverWebSocketsAlone(HttpConnectionDispatcherOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        options.Transports = HttpTransportType.WebSockets;
+    }
 
     /// <summary>Maps the ticket route into the client group, so it inherits its requirement, its policy, and its limits.</summary>
     /// <param name="api">The client route group.</param>
@@ -52,20 +84,22 @@ internal static class ClientSignalEndpoints
     /// <summary>Mints a ticket for the person the credential named.</summary>
     /// <param name="authorization">Reports the grant the caller holds and the user it acts for.</param>
     /// <param name="tickets">Mints the ticket and holds it until it is spent or expires.</param>
-    /// <returns><c>200</c> with the ticket, or <c>503</c> where too many tickets already stand outstanding.</returns>
+    /// <param name="cancellationToken">Cancels the mint with the request that asked for it.</param>
+    /// <returns><c>200</c> with the ticket, or <c>503</c> where the deployment already holds every ticket it will hold.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required service is <see langword="null" />.</exception>
     /// <remarks>
     /// A <c>POST</c> rather than a <c>GET</c>, because minting a single-use credential changes state: a <c>GET</c> would
     /// be a route a cache, a prefetch, or a link preview could spend a ticket through.
     /// </remarks>
-    internal static Results<Ok<ClientSignalTicketResponse>, ProblemHttpResult> MintTicket(
+    internal static async Task<Results<Ok<ClientSignalTicketResponse>, ProblemHttpResult>> MintTicket(
         [FromServices] AccessAuthorization authorization,
-        [FromServices] ClientSignalTickets tickets)
+        [FromServices] ClientSignalTickets tickets,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(tickets);
 
-        var minted = tickets.Mint(authorization.RequireUser());
+        var minted = await tickets.MintAsync(authorization.RequireUser(), cancellationToken);
 
         return minted is null
             ? TypedResults.Problem(
