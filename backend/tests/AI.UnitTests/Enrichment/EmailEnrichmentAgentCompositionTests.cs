@@ -5,6 +5,7 @@
 using MailFathom.AI.Enrichment;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -56,7 +57,7 @@ public sealed class EmailEnrichmentAgentCompositionTests
         // Assert
         Assert.All(
             chatClient.Calls,
-            call => Assert.Equal(EmailEnrichmentInstructions.Text, call.Options?.Instructions));
+            call => Assert.Equal(EmailEnrichmentInstructions.TextFor(MailUserLanguage.English), call.Options?.Instructions));
     }
 
     /// <summary>The name is what every mark records as its origin, so it is this agent's alone.</summary>
@@ -78,6 +79,7 @@ public sealed class EmailEnrichmentAgentCompositionTests
         EmailEnrichmentAgentComposition.Compose(
             chatClient,
             ChatDeclarations.Plan(),
+            MailUserLanguage.English,
             new EmptyAgentInstructionEnvelope(),
             NullLoggerFactory.Instance);
 }

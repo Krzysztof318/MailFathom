@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Enrichment;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.AI.Enrichment;
 
@@ -32,7 +33,10 @@ internal sealed class InactiveEmailEnricher : IEmailEnricher
     public bool IsActive => false;
 
     /// <inheritdoc />
-    public Task<EmailEnrichmentDerivation> DeriveAsync(EnrichableEmail email, CancellationToken cancellationToken)
+    public Task<EmailEnrichmentDerivation> DeriveAsync(
+        EnrichableEmail email,
+        MailUserLanguage language,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(email);
         cancellationToken.ThrowIfCancellationRequested();

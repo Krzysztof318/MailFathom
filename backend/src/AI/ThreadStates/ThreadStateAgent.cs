@@ -12,6 +12,7 @@ using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using Microsoft.Extensions.Logging;
 
@@ -122,7 +123,10 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
     public bool IsActive => true;
 
     /// <inheritdoc />
-    public async Task<ThreadStateDerivation> DeriveAsync(DerivableThread thread, CancellationToken cancellationToken)
+    public async Task<ThreadStateDerivation> DeriveAsync(
+        DerivableThread thread,
+        MailUserLanguage language,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(thread);
 
@@ -162,7 +166,7 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
             this.plan.MaximumRequestCharacters,
             this.plan.MaximumRequestImageOctets);
 
-        if (await this.AskAsync(turn, cancellationToken) is not { } answerText)
+        if (await this.AskAsync(turn, language, cancellationToken) is not { } answerText)
         {
             return this.Withhold(ThreadStateWithholding.ProviderUnavailable);
         }
@@ -235,7 +239,10 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
     /// deployment's availability gate reads. A cancellation stays outside, being the caller withdrawing the work rather
     /// than a provider failing to answer.
     /// </remarks>
-    private async Task<string?> AskAsync(string turn, CancellationToken cancellationToken)
+    private async Task<string?> AskAsync(
+        string turn,
+        MailUserLanguage language,
+        CancellationToken cancellationToken)
     {
         var endpoint = this.plan.Endpoint;
 
@@ -264,6 +271,7 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
             var agent = ThreadStateAgentComposition.Compose(
                 chatClient,
                 this.plan,
+                language,
                 this.instructionEnvelope,
                 this.loggerFactory);
 

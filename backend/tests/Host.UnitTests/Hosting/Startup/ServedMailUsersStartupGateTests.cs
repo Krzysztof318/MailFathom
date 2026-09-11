@@ -35,6 +35,9 @@ namespace MailFathom.Host.UnitTests.Hosting.Startup;
 /// </summary>
 public sealed class ServedMailUsersStartupGateTests
 {
+    /// <summary>A record of a user's language and nothing else, which is what a provisioning leaves behind.</summary>
+    private const string LanguageOnlyRecord = """{"Language":"English"}""";
+
     private static readonly Guid RecordedIdentifier = new("33333333-3333-3333-3333-333333333333");
 
     /// <summary>
@@ -80,7 +83,7 @@ public sealed class ServedMailUsersStartupGateTests
                 [Held(SyntheticMailUser.Deployment, "alex")],
                 SynchronizationSwitchedOn(),
                 servedUsers: roster,
-                documents: RecordsHolding((SyntheticMailUser.Deployment, "{}")),
+                documents: RecordsHolding((SyntheticMailUser.Deployment, LanguageOnlyRecord)),
                 startupLog: startupLog)
             .StartAsync(TestContext.Current.CancellationToken);
 
@@ -233,7 +236,7 @@ public sealed class ServedMailUsersStartupGateTests
         await CreateGate(
                 held ? [Held(user, "alex")] : [],
                 servedUsers: roster,
-                documents: RecordsHolding((user, "{}")),
+                documents: RecordsHolding((user, LanguageOnlyRecord)),
                 mcpEndpointSettings: new McpEndpointOptions { Enabled = true },
                 clientEndpointSettings: new ClientEndpointOptions { Enabled = true })
             .StartAsync(TestContext.Current.CancellationToken);
@@ -370,6 +373,49 @@ public sealed class ServedMailUsersStartupGateTests
         Assert.Equal(2, roster.Users.Count);
     }
 
+    /// <summary>The language a user's record states reaches the roster, which is where every derivation reads it from.</summary>
+    [Theory]
+    [InlineData("Polish", MailUserLanguage.Polish)]
+    [InlineData("English", MailUserLanguage.English)]
+    public async Task StartAsync_AUserWhoseRecordNamesALanguage_PublishesIt(string written, MailUserLanguage expected)
+    {
+        // Arrange
+        var user = MailUserId.Create(RecordedIdentifier);
+        var roster = new ServedMailUsers();
+
+        // Act
+        await CreateGate(
+                [Held(user, "alex")],
+                servedUsers: roster,
+                documents: RecordsHolding((user, $$"""{"Language":"{{written}}"}""")))
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(expected, Assert.Single(roster.Users).Language);
+    }
+
+    /// <summary>
+    /// A record committed before the property existed names no language, and nothing could have added one to it in
+    /// advance, so the start reads it as English rather than refusing the deployment its own administrative surface.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_AUserWhoseRecordNamesNoLanguage_ServesThemInEnglish()
+    {
+        // Arrange
+        var user = MailUserId.Create(RecordedIdentifier);
+        var roster = new ServedMailUsers();
+
+        // Act
+        await CreateGate(
+                [Held(user, "alex")],
+                servedUsers: roster,
+                documents: RecordsHolding((user, "{}")))
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailUserLanguage.English, Assert.Single(roster.Users).Language);
+    }
+
     /// <summary>The scanning posture a user asked for in their own record reaches the roster beside their mailboxes.</summary>
     [Fact]
     public async Task StartAsync_AUserWhoseRecordAsksForAScanner_PublishesWhatTheyAskedFor()
@@ -384,7 +430,7 @@ public sealed class ServedMailUsersStartupGateTests
                 servedUsers: roster,
                 documents: RecordsHolding((
                     user,
-                    """{"MailAccounts":[],"SensitiveContent":{"Secrets":{"Enabled":true},"ScreenOutgoingMailFor":["Secrets"]}}""")))
+                    """{"Language":"English","MailAccounts":[],"SensitiveContent":{"Secrets":{"Enabled":true},"ScreenOutgoingMailFor":["Secrets"]}}""")))
             .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
@@ -404,7 +450,7 @@ public sealed class ServedMailUsersStartupGateTests
         await CreateGate(
                 [Held(SyntheticMailUser.Deployment, "alex")],
                 startupGates: startupGates,
-                documents: RecordsHolding((SyntheticMailUser.Deployment, "{}")))
+                documents: RecordsHolding((SyntheticMailUser.Deployment, LanguageOnlyRecord)))
             .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
@@ -516,6 +562,7 @@ public sealed class ServedMailUsersStartupGateTests
         string secretReference = "systemd-credential:imap-password") =>
         $$"""
           {
+            "Language": "English",
             "MailAccounts": [
               {
                 "AccountId": "{{accountId}}",

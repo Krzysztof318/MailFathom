@@ -229,6 +229,10 @@ internal static class HostComposition
         builder.Services.AddSingleton<ServedMailUsers>();
         builder.Services.AddSingleton<IDeploymentMailUserSource>(provider =>
             provider.GetRequiredService<ServedMailUsers>());
+        // A singleton over that same roster, for the same reason: which language somebody reads is a fact about them
+        // rather than about the request being served, and a pass composing a derivation for them must reach it without
+        // a query.
+        builder.Services.AddSingleton<IMailUserLanguages, ServedUserLanguages>();
         // ReferenceOnly is the default, so a deployment that configures nothing gets the mode under which a plain-text value
         // where a reference belongs fails startup instead of authenticating.
         builder.Services.AddSecretResolution(

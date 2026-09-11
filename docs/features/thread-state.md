@@ -37,6 +37,11 @@ block is a row of cards a reader glances at, one line under each label, and a se
 paragraph nobody reads in the place a glance was promised. A state recorded while more were kept is read as the first
 statement of each aspect rather than derived again, which is what it would have led with anyway.
 
+**Every statement is written in the language its reader reads, whatever language the conversation was in.** That
+language is [the one their own record names](../operations/configuration-sources.md#the-language-a-user-reads) —
+`English` or `Polish` — so a conversation carried on in two languages still reads as one statement in theirs. A name, a
+subject, or a phrase quoted out of the conversation stays as it was written.
+
 ## Nothing to say, and too much to read
 
 A record with **no statements at all** is a real outcome rather than a failure. It says a derivation ran and found

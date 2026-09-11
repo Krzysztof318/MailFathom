@@ -894,6 +894,7 @@ public sealed class MailSynchronizationOptionsTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["Language"] = "English",
                 ["MailAccounts:0:AccountId"] = "primary",
                 ["MailAccounts:0:DisplayName"] = "The primary mailbox",
                 ["MailAccounts:0:Host"] = "imap.example.test",
@@ -991,6 +992,7 @@ public sealed class MailSynchronizationOptionsTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["Language"] = "English",
                 ["MailAccounts:0:AccountId"] = "primary",
                 ["MailAccounts:0:DisplayName"] = "The primary mailbox",
                 ["MailAccounts:0:Host"] = "imap.example.test",
@@ -1056,6 +1058,7 @@ public sealed class MailSynchronizationOptionsTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["Language"] = "English",
                 ["MailAccounts:0:AccountId"] = "primary",
                 ["MailAccounts:0:DisplayName"] = "The primary mailbox",
                 ["MailAccounts:0:Host"] = "imap.example.test",
@@ -1198,6 +1201,7 @@ public sealed class MailSynchronizationOptionsTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["Language"] = "English",
                 ["MailAccounts:0:AccountId"] = "primary",
                 ["MailAccounts:0:DisplayName"] = "The primary mailbox",
                 ["MailAccounts:0:Host"] = "imap.example.test",

@@ -5,6 +5,7 @@
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ThreadStates;
 using MailFathom.AI.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -57,7 +58,7 @@ public sealed class ThreadStateAgentCompositionTests
         // Assert
         Assert.All(
             chatClient.Calls,
-            call => Assert.Equal(ThreadStateInstructions.Text, call.Options?.Instructions));
+            call => Assert.Equal(ThreadStateInstructions.TextFor(MailUserLanguage.English), call.Options?.Instructions));
     }
 
     /// <summary>The name is what the composition is recorded under, so it is this agent's alone.</summary>
@@ -79,6 +80,7 @@ public sealed class ThreadStateAgentCompositionTests
         ThreadStateAgentComposition.Compose(
             chatClient,
             ChatDeclarations.Plan(),
+            MailUserLanguage.English,
             new EmptyAgentInstructionEnvelope(),
             NullLoggerFactory.Instance);
 }

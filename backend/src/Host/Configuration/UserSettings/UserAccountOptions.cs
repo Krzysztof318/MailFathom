@@ -4,6 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.Configuration.SensitiveContent;
@@ -20,7 +21,8 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// an entry here rather than a row to the table.
 /// </para>
 /// <para>
-/// What belongs in it is whatever is that user's own rather than the deployment's. Today that is their mail-account
+/// What belongs in it is whatever is that user's own rather than the deployment's. Today that is the language this
+/// deployment writes for them in, their mail-account
 /// declarations, how their own mail is classified as spam, and what they ask to have it scanned for; the mail rules and
 /// the trusted senders join them as each moves out of the deployment's section, and each arrives as a property here
 /// rather than as a second document. What never belongs in it is a value the deployment set: there is no user
@@ -38,6 +40,28 @@ namespace MailFathom.Host.Configuration.UserSettings;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The configuration binder materializes this type when a user's document is read.")]
 internal sealed class UserAccountOptions : IValidatableObject
 {
+    /// <summary>Every language this build writes in, as one phrase a refusal ends with.</summary>
+    /// <remarks>Composed from the members rather than written out, so a third language added to the enumeration reaches both refusals below without either being edited.</remarks>
+    private static readonly string PublishedLanguages =
+        string.Join(" or ", Enum.GetValues<MailUserLanguage>().Select(language => $"'{language}'"));
+
+    /// <summary>Gets or sets the language this deployment writes for this user in, named as it is spelled in English.</summary>
+    /// <remarks>
+    /// <para>
+    /// The one property here a record being written must state. Everything else in this document is something a user
+    /// asks for, and absence is the answer for somebody who asked for nothing; a language has no such absence, because
+    /// a derivation written for them comes out in some language whether or not anybody chose it — and what it fell
+    /// back to before this property existed was whatever language their mail happened to be in. A record already held
+    /// is the one case the requirement is not asked of, for the reason <see cref="FindMissingLanguageError" /> gives.
+    /// </para>
+    /// <para>
+    /// Carried as the written name rather than as the resolved value, because the binder that reads this document
+    /// reports an unknown member as a refusal naming both values it takes, and a typed property would have made the
+    /// same mistake a binding failure with the configuration binder's own sentence in place of that one.
+    /// </para>
+    /// </remarks>
+    public string? Language { get; set; }
+
     /// <summary>Gets or sets the mail accounts this user owns, which may be none.</summary>
     /// <remarks>
     /// Zero is an ordinary state rather than an unfinished one: a user is provisioned before their first mailbox is
@@ -64,6 +88,21 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// </remarks>
     public UserSensitiveContentOptions SensitiveContent { get; } = new();
 
+    /// <summary>Gets the language this record states, or <see langword="null" /> where it states none this build writes in.</summary>
+    /// <remarks>
+    /// Read only where the record has already been judged, which leaves exactly one way for this to answer
+    /// <see langword="null" />: a record held from before the property existed, whose reader takes
+    /// <see cref="MailUserLanguage.English" /> for it. The comparison is against the member names and is
+    /// case-insensitive, so a record written by hand is read the way it was typed, and a number is not a language
+    /// however well it would have parsed.
+    /// </remarks>
+    internal MailUserLanguage? ReadingLanguage => this.Language is { } written
+        ? Enum.GetValues<MailUserLanguage>()
+            .Where(language => string.Equals(language.ToString(), written, StringComparison.OrdinalIgnoreCase))
+            .Select(language => (MailUserLanguage?)language)
+            .FirstOrDefault()
+        : null;
+
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.FindRefusals();
 
@@ -84,7 +123,8 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// </para>
     /// </remarks>
     internal IEnumerable<ValidationResult> FindRefusals() =>
-        UserMailAccountRules.FindRefusals(this.MailAccounts, nameof(this.MailAccounts))
+        this.FindUnwritableLanguageError()
+            .Concat(UserMailAccountRules.FindRefusals(this.MailAccounts, nameof(this.MailAccounts)))
             .Concat(this.SpamClassification.FindRefusals(DeclaredMailAccounts.ReadFrom(this.MailAccounts)));
 
     /// <summary>Finds every declared earliest received date that could not mean anything on the supplied date.</summary>
@@ -110,4 +150,48 @@ internal sealed class UserAccountOptions : IValidatableObject
         UserSensitiveContentRules
             .FindRefusals(this.SensitiveContent, deployment, UserSensitiveContentOptions.BlockName)
             .Select(refusal => new ValidationResult(refusal, [nameof(this.SensitiveContent)]));
+
+    /// <summary>Finds the refusal for a record stating a language this build does not write in.</summary>
+    /// <returns>One result where <see cref="Language" /> names something no member does, empty where it names a member or nothing at all.</returns>
+    /// <remarks>
+    /// A value nobody writes in is wrong whichever direction the record arrived from, because no release ever accepted
+    /// one: the property binds strictly, so a stored record naming <c>German</c> was never committed through this
+    /// binder. The absence is the case that differs, and <see cref="FindMissingLanguageError" /> holds it.
+    /// </remarks>
+    private IEnumerable<ValidationResult> FindUnwritableLanguageError()
+    {
+        if (!string.IsNullOrWhiteSpace(this.Language) && this.ReadingLanguage is null)
+        {
+            yield return new ValidationResult(
+                $"{nameof(this.Language)} states '{this.Language}', which is not a language MailFathom writes in. It takes {PublishedLanguages}.",
+                [nameof(this.Language)]);
+        }
+    }
+
+    /// <summary>Finds the refusal for a record that states no language at all.</summary>
+    /// <returns>One result where <see cref="Language" /> is unstated, empty otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// Asked of a record being written and of no other, which is the second case <see cref="UserRecordArrival" />
+    /// exists for and it is there rather than here. Every record committed before this property existed states no
+    /// language, and this property binds strictly, so no administrator could have added one in advance — refusing
+    /// those at the next start would refuse the start itself, for every user, through the surface they would have
+    /// rewritten the record from. A held record stating nothing therefore reads as <see cref="MailUserLanguage.English" />,
+    /// which is the answer every unresolved read already gives, and states a language the first time it is written.
+    /// </para>
+    /// <para>
+    /// The sentence is worded apart from the one above because the administrator's next act differs: an absence is one
+    /// line to add, and an unknown name is a value to correct. Both name every language this build writes in, so
+    /// neither leaves anybody guessing at the spelling.
+    /// </para>
+    /// </remarks>
+    internal IEnumerable<ValidationResult> FindMissingLanguageError()
+    {
+        if (string.IsNullOrWhiteSpace(this.Language))
+        {
+            yield return new ValidationResult(
+                $"{nameof(this.Language)} is not stated, and every user record names the language MailFathom writes for that person in — the reading on a message row, the statement about a conversation. State {PublishedLanguages}.",
+                [nameof(this.Language)]);
+        }
+    }
 }

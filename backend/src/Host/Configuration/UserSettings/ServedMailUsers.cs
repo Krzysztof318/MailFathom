@@ -200,6 +200,7 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
                     user,
                     displayName,
                     [.. record.MailAccounts],
+                    record.ReadingLanguage ?? MailUserLanguage.English,
                     record.SpamClassification,
                     record.SensitiveContent);
 

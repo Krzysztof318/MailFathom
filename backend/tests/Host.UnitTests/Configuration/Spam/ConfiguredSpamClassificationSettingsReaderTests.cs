@@ -324,7 +324,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
             user,
             accountId,
             [Account(accountId, folders)],
-            classification);
+            SpamClassification: classification);
 
     private static MailSynchronizationAccountOptions Account(
         string accountId,

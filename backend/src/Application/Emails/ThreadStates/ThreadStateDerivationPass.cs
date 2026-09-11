@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Accounts;
@@ -62,6 +63,7 @@ public sealed class ThreadStateDerivationPass
 
     private readonly IStoredThreadStateStore stateStore;
     private readonly IThreadStateDeriver deriver;
+    private readonly IMailUserLanguages languages;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly TimeProvider timeProvider;
@@ -69,6 +71,7 @@ public sealed class ThreadStateDerivationPass
     /// <summary>Initializes the pass from the state it walks and the derivation it asks.</summary>
     /// <param name="stateStore">Reads which conversations are awaiting a state and writes down what one derivation produced.</param>
     /// <param name="deriver">Derives one conversation's state, in whichever state the deployment left it.</param>
+    /// <param name="languages">Answers which language the account's owner reads, which the statements are written in.</param>
     /// <param name="egressGuard">States whose mail the conversation is, so the derivation scans it under that user's posture.</param>
     /// <param name="commitPolicy">Commits one conversation's record, retrying a conflict with a competing writer.</param>
     /// <param name="timeProvider">Reads when a derivation ran.</param>
@@ -76,18 +79,21 @@ public sealed class ThreadStateDerivationPass
     public ThreadStateDerivationPass(
         IStoredThreadStateStore stateStore,
         IThreadStateDeriver deriver,
+        IMailUserLanguages languages,
         SensitiveContentEgressGuard egressGuard,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(stateStore);
         ArgumentNullException.ThrowIfNull(deriver);
+        ArgumentNullException.ThrowIfNull(languages);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.stateStore = stateStore;
         this.deriver = deriver;
+        this.languages = languages;
         this.egressGuard = egressGuard;
         this.commitPolicy = commitPolicy;
         this.timeProvider = timeProvider;
@@ -123,6 +129,10 @@ public sealed class ThreadStateDerivationPass
         // posture it is scanned under and every conversation in the batch belongs to the one account this pass walks.
         using var actingFor = this.egressGuard.ActingFor(account.User);
 
+        // Resolved once for the same reason and from the same fact: every conversation in this batch is one person's,
+        // and what they read is what every statement derived from it is written in.
+        var language = this.languages.ForUser(account.User);
+
         var batch = await this.stateStore.GetThreadsAwaitingStateAsync(
             account,
             MaximumThreadsPerPass,
@@ -136,7 +146,7 @@ public sealed class ThreadStateDerivationPass
 
         foreach (var thread in batch)
         {
-            var derivation = await this.deriver.DeriveAsync(thread, cancellationToken);
+            var derivation = await this.deriver.DeriveAsync(thread, language, cancellationToken);
 
             if (derivation.Withheld is { } withholding)
             {

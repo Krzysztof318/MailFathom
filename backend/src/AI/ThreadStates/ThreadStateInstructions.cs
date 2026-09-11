@@ -2,9 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text;
 using MailFathom.Application.Emails.ThreadStates;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.AI.ThreadStates;
 
@@ -28,14 +30,33 @@ namespace MailFathom.AI.ThreadStates;
 /// </remarks>
 internal static class ThreadStateInstructions
 {
-    /// <summary>The instruction the agent is composed with.</summary>
-    internal static string Text { get; } = string.Create(
+    /// <summary>The instruction for each language this deployment writes in, composed once per language.</summary>
+    /// <remarks>Composed from the members rather than written out twice, so the set is the enumeration's and a language added to it arrives here without this file being edited.</remarks>
+    private static readonly FrozenDictionary<MailUserLanguage, string> TextByLanguage = Enum
+        .GetValues<MailUserLanguage>()
+        .ToFrozenDictionary(static language => language, Compose);
+
+    /// <summary>Gets the instruction the agent is composed with for one user's language.</summary>
+    /// <param name="language">The language this derivation's statements are written in.</param>
+    /// <returns>The instruction text.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the value names no language this deployment writes in.</exception>
+    internal static string TextFor(MailUserLanguage language) => TextByLanguage.TryGetValue(language, out var text)
+        ? text
+        : throw new ArgumentOutOfRangeException(
+            nameof(language),
+            language,
+            "The thread-state agent is composed for a language MailFathom writes in.");
+
+    private static string Compose(MailUserLanguage language) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
         You read one email conversation from somebody's own mailbox and write down where it stands: what the people in
         it agreed, what they raised and have not settled, what anybody undertook to do, and how a document they
         exchanged changed between two versions of it. You are writing the block somebody reads instead of the
         conversation, not a summary of it and not a reply to it.
+
+        Write every sentence you produce in {language}, whatever language the conversation is in. A name, a subject,
+        or a phrase you quote from it stays as it was written.
 
         Answer with one JSON object and nothing else — no prose around it, no code fence.
 
@@ -45,8 +66,7 @@ internal static class ThreadStateInstructions
         to say about. Put at most {EmailThreadState.MaximumEntriesPerAspect} in each array, the most important first.
 
         Every entry is an object with two required fields. "text" is the statement itself, at most
-        {ThreadStateEntry.MaximumTextLength} characters, written as one plain sentence in the language the conversation
-        is written in. "messages" is an array of at most {ThreadStateEntry.MaximumSourceCount} message numbers from the
+        {ThreadStateEntry.MaximumTextLength} characters, written as one plain sentence. "messages" is an array of at most {ThreadStateEntry.MaximumSourceCount} message numbers from the
         turn that the statement rests on, best first, and it is never empty — a statement no message supports is one to
         omit.
 

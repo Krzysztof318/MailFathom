@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
+
 namespace MailFathom.Application.Emails.ThreadStates;
 
 /// <summary>Derives where one conversation stands: what was agreed, what is open, and who owes what.</summary>
@@ -28,11 +30,20 @@ public interface IThreadStateDeriver
     /// </remarks>
     bool IsActive { get; }
 
-    /// <summary>Derives one conversation's state.</summary>
+    /// <summary>Derives one conversation's state, written in the language the person it is for reads.</summary>
     /// <param name="thread">The conversation and the messages the derivation reads.</param>
+    /// <param name="language">The language every statement the derivation produces is written in.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The statements that were settled, or the reason nothing was derived this time.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="thread" /> is <see langword="null" />.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
-    Task<ThreadStateDerivation> DeriveAsync(DerivableThread thread, CancellationToken cancellationToken);
+    /// <remarks>
+    /// The language is the caller's rather than the conversation's, and it is an argument rather than a property of
+    /// <see cref="DerivableThread" /> because it is a fact about whom the derivation is for. What that record carries
+    /// stays what a derivation reads, which is what keeps the person out of the text sent to a provider.
+    /// </remarks>
+    Task<ThreadStateDerivation> DeriveAsync(
+        DerivableThread thread,
+        MailUserLanguage language,
+        CancellationToken cancellationToken);
 }
