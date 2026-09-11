@@ -7,7 +7,7 @@ consulted:
 informed:
 ---
 
-# Keep a signed-in client's session in one PostgreSQL table every replica reads, verify it with one indexed read and no cache, refuse an unreachable store rather than signing anybody out, and let a foreign key and a share lock on the credential row carry the revocation the mint barrier carried
+# Keep a signed-in client's session in one PostgreSQL table every replica reads, verify it with one indexed read and no cache, refuse an unreachable store rather than signing anybody out, and let two cascading foreign keys and one lock order carry the revocation the mint barrier carried
 
 <!-- describes: backend/src/Host/Security/Sessions/**, backend/src/Host/Api/ClientSessionTokenEndpoints.cs -->
 
@@ -91,7 +91,7 @@ Renewal replaces the presented session so one sign-in is one live token however 
 
 A revocation is a delete keyed on the identifier and guarded by the secret, for the reason it is guarded today: the identifier is the half of a token that is not a secret, and a delete keyed on it alone would be a sign-out anybody could perform.
 
-### A foreign key and a share lock replace the mint barrier
+### Two foreign keys and one lock order replace the mint barrier
 
 The barriers are the part of the current store that does not survive being split across replicas, and the answer is not to move them into a table. PostgreSQL already serializes what they were written to serialize.
 
@@ -166,7 +166,7 @@ Until issue 1900 lands, the chart is the record of a limit rather than a mechani
 - **The lock order.** The integration suite requires two pairs arriving together to end in one side waiting rather than in either being aborted: a renewal against an administrative disable, and a mint against an erasure. Those are the two inversions the order exists to prevent, one lock order over all four paths is what buys it, and nothing in a unit suite can settle either. Issue 1900 owns them.
 - **No cache.** The absence is validated by review against *Verification is one read, and nothing caches it*, because nothing mechanical distinguishes a cache from a field.
 - **The revocation, against a real database, and across replicas.** The integration suite the owner runs starts two hosts against one database and proves that a session minted on one host authenticates on the other, that disabling a credential on one host refuses its sessions on the other, that deleting a credential and erasing a user each remove the sessions by cascade, that a renewal presented twice succeeds once, that a mint racing a disable ends with no live session, and — separately, because it is the path the lock was nearly left off — that a **renewal** racing a disable ends with no live session either. Those proofs belong there rather than in a unit suite, for the reason `ClientSignalTicketStore` and `ClientAssertionSpendStore` both carry `[RequiresIntegrationCoverage]`: the store is raw SQL and a row lock, only PostgreSQL settles what either does, and a fake would only prove itself. Issue 1900 owns them.
-- **The migration.** The change adds a table and a foreign key and regenerates no baseline, which `$add-migration` and the `Pending model changes` job both hold.
+- **The migration.** The change adds a table and **two** cascading foreign keys — the one to the user row, which is never null, and the one to the nullable credential row — and regenerates no baseline, which `$add-migration` and the `Pending model changes` job both hold. The count is named here because the user reference is the one an implementer is likeliest to leave out and the one the erasure guarantee rests on, being the only thing that reaches a session minted on an endpoint requiring no credential.
 - **The documentation.** `docs/operations/client-endpoint.md` § *Sessions live in the process's memory* is what an operator reads for all three of the consequences this record changes, and it moves in the same change set as the code rather than after it. Issue 1900 owns it.
 
 ## Pros and Cons of the Options
