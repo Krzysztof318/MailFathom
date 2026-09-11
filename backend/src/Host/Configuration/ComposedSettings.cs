@@ -117,7 +117,7 @@ internal static class ComposedSettings
                     : []),
             .. Refusal<ServedMailUsers>(
                 WithdrawnDeploymentMailAccountsSection,
-                configuration.GetSection(WithdrawnDeploymentMailAccountsSection).GetChildren().Any()
+                configuration.GetSection(WithdrawnDeploymentMailAccountsSection).Exists()
                     ?
                     [
                         $"{WithdrawnDeploymentMailAccountsSection} is no longer read: a mail account belongs to the user who owns it, and this deployment reads every one of them from that user's own record. Nothing imports what the section declared. Declare each account with 'mfctl user account add' in the record of the user this deployment already serves, keeping its AccountId so the mail already stored under it stays that mailbox's, and record anybody else with 'mfctl user add' first; then remove the section from your configuration.",

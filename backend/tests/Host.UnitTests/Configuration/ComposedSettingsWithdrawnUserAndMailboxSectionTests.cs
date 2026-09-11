@@ -62,11 +62,13 @@ public sealed class ComposedSettingsWithdrawnUserAndMailboxSectionTests
     }
 
     /// <summary>
-    /// An upgraded file whose accounts were emptied rather than deleted declares no mailbox, so it stops no start. It is
-    /// read from JSON because an empty array is a shape only a file can state.
+    /// An upgraded file whose accounts were emptied rather than deleted still names a key the strict mail binding has no
+    /// property for, so the start stops either way; refusing it here is what makes the sentence naming the section,
+    /// rather than the binder's report of an unknown key, the one the operator reads. It is read from JSON because an
+    /// empty array is a shape only a file can state.
     /// </summary>
     [Fact]
-    public void FindWithdrawnUserAndMailboxSectionRefusals_AMailSectionCarryingAnEmptyAccountList_IsNotRefused()
+    public void FindWithdrawnUserAndMailboxSectionRefusals_AMailSectionCarryingAnEmptyAccountList_IsRefusedNamingTheSection()
     {
         // Arrange
         var configuration = new ConfigurationBuilder()
@@ -78,7 +80,8 @@ public sealed class ComposedSettingsWithdrawnUserAndMailboxSectionTests
         var refusals = ComposedSettings.FindWithdrawnUserAndMailboxSectionRefusals(configuration);
 
         // Assert
-        Assert.Empty(refusals);
+        var refusal = Assert.Single(refusals);
+        Assert.Equal("MailSynchronization:Accounts", refusal.SectionName);
     }
 
     /// <summary>
