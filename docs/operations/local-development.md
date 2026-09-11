@@ -1671,10 +1671,11 @@ body refers to carries it, whether the change closes that issue or merely names 
 `main`, and on any of the six workflows a pull request runs concluding, it instead reads what those
 pull requests are in — whether each still merges, whether the reviewer approved the head, and what
 its checks concluded — and writes the roadmap board where
-`.github/pull-request/select-board-status.sh` says a state earns a status: `Conflicts` for what a
-conflicting pull request closes, `Changes requested` for a failed check or a withheld approval, and
-`Ready to merge` where the approval and the checks agree — the last three decided only once every
-pipeline outside `CodeQL` has finished, so neither verdict is published while one is still running. The push sweeps every open pull request and a concluded pipeline
+`.github/pull-request/select-board-status.sh` says a state earns a status: `Changes requested` for a
+failed check or a withheld approval, and `Ready to merge` or `Conflicts` where the approval and the
+checks agree and the change does or does not still merge — each decided only once every pipeline
+outside `CodeQL` has finished, so no verdict is published while one is still running — and
+`Conflicts` from `Ready to merge` alone for a conflicting pull request nothing has a verdict about. The push sweeps every open pull request and a concluded pipeline
 decides the one it ran on. Each job runs on its own events and skips the others, which is what keeps
 the labelling as short as it was: `Fathom review` waits for this workflow's run before it reads the
 labels. It reports no status check and blocks nothing; a draft runs it, because a label is worth
