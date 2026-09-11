@@ -43,8 +43,18 @@ internal sealed partial class UserRosterAdministration(
     SeveralUserAdmission admission,
     ILogger<UserRosterAdministration> logger)
 {
-    /// <summary>The record a user is provisioned with, which is the empty one until they declare something.</summary>
-    private const string EmptyRecord = "{}";
+    /// <summary>The language a user is provisioned reading, which is the one the client also opens in.</summary>
+    /// <remarks>
+    /// A provisioning states no language, so one is chosen here rather than asked for: a record being written is
+    /// required to name one, and provisioning the empty record instead would hand back a user whose own record could
+    /// not be committed again until somebody guessed which line to add. English is the same answer the client reaches
+    /// when it can read no preference, and the administrator who declares that user's first mailbox changes it in the
+    /// same edit.
+    /// </remarks>
+    private const string ProvisionedLanguage = nameof(MailUserLanguage.English);
+
+    /// <summary>The record a user is provisioned with, which names their language and nothing else until they declare something.</summary>
+    private const string ProvisionedRecord = $$"""{"Language":"{{ProvisionedLanguage}}"}""";
 
     /// <summary>The version a freshly provisioned row stands at, which the record's first commit is composed over.</summary>
     private const long ProvisionedVersion = 1;
@@ -127,7 +137,7 @@ internal sealed partial class UserRosterAdministration(
 
             // Committed rather than published from the insert alone, because the commit is what proves the row still
             // stands and it answers the version the published record is composed over.
-            if (await documents.CommitAsync(user, EmptyRecord, ProvisionedVersion, cancellationToken) is not { } committed)
+            if (await documents.CommitAsync(user, ProvisionedRecord, ProvisionedVersion, cancellationToken) is not { } committed)
             {
                 // The envelope was written and the row is gone again, which is another administrator erasing this user
                 // between the two statements. Reporting the user as recorded would hand back an identifier nothing holds.
@@ -135,9 +145,13 @@ internal sealed partial class UserRosterAdministration(
                     "The user was recorded and then removed before their record could be written, so this deployment holds nobody under that label. Record them again.");
             }
 
-            // The committed record is empty, so the user it publishes declares no mailbox, classifies nothing,
-            // and reads the deployment's own scanning posture until they write one.
-            servedUsers.UserDocumentPublished(user, label, new UserAccountOptions(), committed);
+            // The committed record names a language and nothing else, so the user it publishes declares no mailbox,
+            // classifies nothing, and reads the deployment's own scanning posture until they write one.
+            servedUsers.UserDocumentPublished(
+                user,
+                label,
+                new UserAccountOptions { Language = ProvisionedLanguage },
+                committed);
 
             this.LogUserProvisioned(label);
 

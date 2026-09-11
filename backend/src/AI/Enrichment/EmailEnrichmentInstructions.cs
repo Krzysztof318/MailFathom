@@ -2,9 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text;
 using MailFathom.Application.Emails.Enrichment;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.AI.Enrichment;
 
@@ -25,15 +27,41 @@ namespace MailFathom.AI.Enrichment;
 /// system reads: a message that asks to be marked urgent is a sender writing on a row somebody else's triage depends
 /// on.
 /// </para>
+/// <para>
+/// What the readings are written in is the reader's language rather than the message's. A derivation is produced for
+/// one person and nobody asked it a question, so there is no language in the request to answer in — before their record
+/// stated one, a mailbox carrying two languages produced a list that alternated between them. Quoted text is the one
+/// exception the instruction states, because a subject rendered into another language is no longer the subject
+/// somebody would find in their mail.
+/// </para>
 /// </remarks>
 internal static class EmailEnrichmentInstructions
 {
-    /// <summary>The instruction the agent is composed with.</summary>
-    internal static string Text { get; } = string.Create(
+    /// <summary>The instruction for each language this deployment writes in, composed once per language.</summary>
+    /// <remarks>Composed from the members rather than written out twice, so the set is the enumeration's and a language added to it arrives here without this file being edited.</remarks>
+    private static readonly FrozenDictionary<MailUserLanguage, string> TextByLanguage = Enum
+        .GetValues<MailUserLanguage>()
+        .ToFrozenDictionary(static language => language, Compose);
+
+    /// <summary>Gets the instruction the agent is composed with for one user's language.</summary>
+    /// <param name="language">The language this derivation's readings are written in.</param>
+    /// <returns>The instruction text.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the value names no language this deployment writes in.</exception>
+    internal static string TextFor(MailUserLanguage language) => TextByLanguage.TryGetValue(language, out var text)
+        ? text
+        : throw new ArgumentOutOfRangeException(
+            nameof(language),
+            language,
+            "The enrichment agent is composed for a language MailFathom writes in.");
+
+    private static string Compose(MailUserLanguage language) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
         You read one message from somebody's own mailbox and write down what it is about, why it may matter to them, and
         any commitment it contains. You are writing one line of a mail list, not a summary and not a reply.
+
+        Write every sentence you produce in {language}, whatever language the message is in. A name, a subject, or a
+        phrase you quote from the message stays as it was written.
 
         Answer with one JSON object and nothing else — no prose around it, no code fence.
 
@@ -42,8 +70,8 @@ internal static class EmailEnrichmentInstructions
         a valid answer for a message there is nothing to say about.
 
         Each of the three is an object with three required fields. "text" is the reading itself, at most
-        {EmailEnrichmentMark.MaximumTextLength} characters, written as one plain sentence in the language the message is
-        written in. "reason" is why you say it, in one short sentence, and is what somebody checks the reading against.
+        {EmailEnrichmentMark.MaximumTextLength} characters, written as one plain sentence. "reason" is why you say it,
+        in one short sentence, and is what somebody checks the reading against.
         "passages" is an array of at most {EmailEnrichmentMark.MaximumEvidenceCount} passage numbers from the turn that
         your reading rests on, best first, and it is never empty — a reading no passage supports is one to omit.
 

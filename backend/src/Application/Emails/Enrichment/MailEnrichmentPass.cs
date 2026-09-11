@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Accounts;
@@ -60,6 +61,7 @@ public sealed class MailEnrichmentPass
 
     private readonly IStoredEmailEnrichmentStore enrichmentStore;
     private readonly IEmailEnricher enricher;
+    private readonly IMailUserLanguages languages;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly TimeProvider timeProvider;
@@ -67,6 +69,7 @@ public sealed class MailEnrichmentPass
     /// <summary>Initializes the pass from the state it walks and the derivation it asks.</summary>
     /// <param name="enrichmentStore">Reads what is awaiting a derivation and writes down what one produced.</param>
     /// <param name="enricher">Derives one message's marks, in whichever state the deployment left it.</param>
+    /// <param name="languages">Answers which language the account's owner reads, which the readings are written in.</param>
     /// <param name="egressGuard">States whose mail the passages are, so the derivation scans them under that user's posture.</param>
     /// <param name="commitPolicy">Commits one message's record, retrying a conflict with a competing writer.</param>
     /// <param name="timeProvider">Reads when a derivation ran.</param>
@@ -74,18 +77,21 @@ public sealed class MailEnrichmentPass
     public MailEnrichmentPass(
         IStoredEmailEnrichmentStore enrichmentStore,
         IEmailEnricher enricher,
+        IMailUserLanguages languages,
         SensitiveContentEgressGuard egressGuard,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(enrichmentStore);
         ArgumentNullException.ThrowIfNull(enricher);
+        ArgumentNullException.ThrowIfNull(languages);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.enrichmentStore = enrichmentStore;
         this.enricher = enricher;
+        this.languages = languages;
         this.egressGuard = egressGuard;
         this.commitPolicy = commitPolicy;
         this.timeProvider = timeProvider;
@@ -120,6 +126,10 @@ public sealed class MailEnrichmentPass
         // is scanned under and every message in the batch belongs to the one account this pass walks.
         using var actingFor = this.egressGuard.ActingFor(account.User);
 
+        // Resolved once for the same reason and from the same fact: every message in this batch is one person's, and
+        // what they read is what every reading derived from it is written in.
+        var language = this.languages.ForUser(account.User);
+
         var batch = await this.enrichmentStore.GetEmailsAwaitingEnrichmentAsync(
             account,
             MaximumEmailsPerPass,
@@ -131,7 +141,7 @@ public sealed class MailEnrichmentPass
 
         foreach (var email in batch)
         {
-            var derivation = await this.enricher.DeriveAsync(email, cancellationToken);
+            var derivation = await this.enricher.DeriveAsync(email, language, cancellationToken);
 
             if (derivation.Withheld is { } withholding)
             {

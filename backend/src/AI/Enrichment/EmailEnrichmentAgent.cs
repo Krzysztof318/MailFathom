@@ -12,6 +12,7 @@ using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using Microsoft.Extensions.Logging;
 
@@ -124,6 +125,7 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
     /// <inheritdoc />
     public async Task<EmailEnrichmentDerivation> DeriveAsync(
         EnrichableEmail email,
+        MailUserLanguage language,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(email);
@@ -161,7 +163,7 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
             this.plan.MaximumRequestCharacters,
             this.plan.MaximumRequestImageOctets);
 
-        if (await this.AskAsync(turn, cancellationToken) is not { } answerText)
+        if (await this.AskAsync(turn, language, cancellationToken) is not { } answerText)
         {
             return this.Withhold(EmailEnrichmentWithholding.ProviderUnavailable);
         }
@@ -208,7 +210,10 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
     /// derivation that never reached the endpoint was withheld the same way as one the endpoint refused. A cancellation
     /// stays outside, being the caller withdrawing the work rather than a provider failing to answer.
     /// </remarks>
-    private async Task<string?> AskAsync(string turn, CancellationToken cancellationToken)
+    private async Task<string?> AskAsync(
+        string turn,
+        MailUserLanguage language,
+        CancellationToken cancellationToken)
     {
         var endpoint = this.plan.Endpoint;
 
@@ -237,6 +242,7 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
             var agent = EmailEnrichmentAgentComposition.Compose(
                 chatClient,
                 this.plan,
+                language,
                 this.instructionEnvelope,
                 this.loggerFactory);
 

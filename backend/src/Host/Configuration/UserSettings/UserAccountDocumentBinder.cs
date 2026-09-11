@@ -29,7 +29,7 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// One binder rather than one per direction, which is the point of it. Whatever comes to read a user's record and
 /// whatever comes to accept a new one are both meant to arrive here, so the rules a candidate is judged by and the
 /// rules a stored record is judged by cannot drift apart — there is one set of them, and
-/// <see cref="UserRecordArrival" /> names the one rule that is not in it and why.
+/// <see cref="UserRecordArrival" /> names the two rules that are not in it and why.
 /// </para>
 /// <para>
 /// Nothing here composes a configuration layer over the deployment's. The record is bound from the document alone, so
@@ -241,6 +241,7 @@ internal sealed class UserAccountDocumentBinder(
 
         if (arrival == UserRecordArrival.BeingWritten)
         {
+            refusals.AddRange(user.FindMissingLanguageError());
             refusals.AddRange(user.FindSensitiveContentErrors(sensitiveContent.Value));
         }
 

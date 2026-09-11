@@ -271,6 +271,10 @@ their record. It names no user, because this deployment now holds exactly one: `
 several says which of them — `mfctl user add` records each further person — and an invocation that omits it where there
 are several is refused rather than guessed at.
 
+The record `user add` writes names English as the language MailFathom writes for that person in — the reading on a
+message row, the statement about a conversation. `mfctl user edit` is where that becomes `Polish`, and
+[the language a user reads](../operations/configuration-sources.md#the-language-a-user-reads) is the whole of it.
+
 **The mailbox is served from that moment, without a restart.** The write that commits the record publishes it to the
 running roster, so the next synchronization run is this account's first one — and the same holds for every user
 recorded later.

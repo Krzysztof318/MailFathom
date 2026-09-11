@@ -5,6 +5,7 @@
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ThreadStates;
 using MailFathom.AI.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -40,12 +41,18 @@ public sealed class ThreadStateAgentCompositionTests
         Assert.All(chatClient.Calls, call => Assert.True(call.Options?.Tools is null or []));
     }
 
-    [Fact]
-    public async Task Compose_TheThreadStateAgent_CarriesItsOwnInstructionInsideTheEnvelope()
+    /// <summary>
+    /// Over every language, so that composing the instruction for one and sending another is a failure here rather
+    /// than something only the pure instruction tests would have noticed.
+    /// </summary>
+    [Theory]
+    [InlineData(MailUserLanguage.English)]
+    [InlineData(MailUserLanguage.Polish)]
+    public async Task Compose_TheThreadStateAgent_CarriesItsOwnInstructionInsideTheEnvelope(MailUserLanguage language)
     {
         // Arrange
         using var chatClient = ScriptedChatClient.Answering(Answer);
-        var agent = AgentOver(chatClient);
+        var agent = AgentOver(chatClient, language);
 
         // Act
         await agent.RunAsync(
@@ -57,7 +64,7 @@ public sealed class ThreadStateAgentCompositionTests
         // Assert
         Assert.All(
             chatClient.Calls,
-            call => Assert.Equal(ThreadStateInstructions.Text, call.Options?.Instructions));
+            call => Assert.Equal(ThreadStateInstructions.TextFor(language), call.Options?.Instructions));
     }
 
     /// <summary>The name is what the composition is recorded under, so it is this agent's alone.</summary>
@@ -75,10 +82,13 @@ public sealed class ThreadStateAgentCompositionTests
         Assert.NotEqual(MailAnsweringAgentComposition.AgentName, agent.Name);
     }
 
-    private static ChatClientAgent AgentOver(ScriptedChatClient chatClient) =>
+    private static ChatClientAgent AgentOver(
+        ScriptedChatClient chatClient,
+        MailUserLanguage language = MailUserLanguage.English) =>
         ThreadStateAgentComposition.Compose(
             chatClient,
             ChatDeclarations.Plan(),
+            language,
             new EmptyAgentInstructionEnvelope(),
             NullLoggerFactory.Instance);
 }

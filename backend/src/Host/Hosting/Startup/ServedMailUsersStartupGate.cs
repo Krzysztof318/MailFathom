@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Access;
 using MailFathom.Application.Rules.Conditions;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Rules;
@@ -139,10 +140,11 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// user served with nothing: the alternative is a deployment quietly synchronizing none of the mailboxes their
     /// record names while reporting itself started.
     /// <para>
-    /// It is read as a record already held, which drops exactly one rule — see <see cref="UserRecordArrival" />. The
+    /// It is read as a record already held, which drops exactly two rules — see <see cref="UserRecordArrival" />. The
     /// scanning block a stored record carries is composed against the deployment's section rather than refused against
-    /// it, so an operator tightening what the deployment requires does not turn every record accepted before that into
-    /// a start this host cannot complete.
+    /// it, and a record naming no language reads as English rather than stopping the start, so neither an operator
+    /// tightening what the deployment requires nor a release that began asking for a new property turns every record
+    /// accepted before it into a start this host cannot complete.
     /// </para>
     /// </remarks>
     private async Task<ServedMailUser> ServeFromTheOwnDocumentAsync(
@@ -170,6 +172,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
             record.User,
             record.DisplayName,
             bound.MailAccounts,
+            bound.ReadingLanguage ?? MailUserLanguage.English,
             bound.SpamClassification,
             bound.SensitiveContent);
     }

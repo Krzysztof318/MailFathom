@@ -2,8 +2,10 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
@@ -147,7 +149,10 @@ public sealed class ThreadStateDerivationPassTests
         Assert.Equal(withholding, report.StoppedBy);
         Assert.Equal(0, report.DerivedThreadCount);
         Assert.True(report.ThreadsRemain);
-        await deriver.Received(1).DeriveAsync(Arg.Any<DerivableThread>(), Arg.Any<CancellationToken>());
+        await deriver.Received(1).DeriveAsync(
+            Arg.Any<DerivableThread>(),
+            Arg.Any<MailUserLanguage>(),
+            Arg.Any<CancellationToken>());
         await store.DidNotReceiveWithAnyArgs().SaveAsync(
             Arg.Any<IPersistenceSession>(),
             Arg.Any<EmailThreadState>(),
@@ -195,6 +200,7 @@ public sealed class ThreadStateDerivationPassTests
         Assert.False(report.ThreadsRemain);
         await deriver.DidNotReceiveWithAnyArgs().DeriveAsync(
             Arg.Any<DerivableThread>(),
+            Arg.Any<MailUserLanguage>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -313,16 +319,51 @@ public sealed class ThreadStateDerivationPassTests
         var deriver = Substitute.For<IThreadStateDeriver>();
         deriver.IsActive.Returns(true);
         deriver
-            .DeriveAsync(Arg.Any<DerivableThread>(), Arg.Any<CancellationToken>())
+            .DeriveAsync(Arg.Any<DerivableThread>(), Arg.Any<MailUserLanguage>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(answer(call.ArgAt<DerivableThread>(0))));
 
         return deriver;
     }
 
+    /// <summary>
+    /// Every conversation in one pass belongs to one person, and what that person reads is what every statement
+    /// derived from their mail is written in — the pass is where the two meet, because the derivation is handed a
+    /// language rather than resolving one.
+    /// </summary>
+    [Theory]
+    [InlineData(MailUserLanguage.Polish)]
+    [InlineData(MailUserLanguage.English)]
+    public async Task RunAsync_AnAccountWhoseOwnerReadsALanguage_DerivesInIt(MailUserLanguage language)
+    {
+        // Arrange
+        var store = StoreReturning([Derivable()]);
+        var deriver = DeriverAnswering(_ => ThreadStateDerivation.Settled([]));
+        var pass = CreatePass(store, deriver, language);
+
+        // Act
+        await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        await deriver.Received(1).DeriveAsync(
+            Arg.Any<DerivableThread>(),
+            language,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Answers one language for whoever is asked about, which is what a pass over one account's mail needs.</summary>
+    private static IMailUserLanguages LanguagesAnswering(MailUserLanguage language)
+    {
+        var languages = Substitute.For<IMailUserLanguages>();
+        languages.ForUser(Arg.Any<MailUserId>()).Returns(language);
+
+        return languages;
+    }
+
     /// <summary>Composes the pass over a deployment with no scanner switched on, which is the ordinary shape.</summary>
     private static ThreadStateDerivationPass CreatePass(
         IStoredThreadStateStore store,
-        IThreadStateDeriver deriver)
+        IThreadStateDeriver deriver,
+        MailUserLanguage language = MailUserLanguage.English)
     {
         var timeProvider = new FakeTimeProvider(DerivedAt);
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -333,6 +374,7 @@ public sealed class ThreadStateDerivationPassTests
         return new ThreadStateDerivationPass(
             store,
             deriver,
+            LanguagesAnswering(language),
             SensitiveContentEgressGuards.Inactive(),
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,

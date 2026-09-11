@@ -147,5 +147,5 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
         new(new MailSynchronizationOptions().WithServedUsers(served));
 
     private static ServedMailUser User(MailUserId user, UserSpamClassificationOptions classification) =>
-        new(user, $"user-{user.Value:D}", [], classification);
+        new(user, $"user-{user.Value:D}", [], SpamClassification: classification);
 }

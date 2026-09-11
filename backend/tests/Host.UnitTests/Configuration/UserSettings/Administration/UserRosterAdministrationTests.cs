@@ -98,10 +98,12 @@ public sealed class UserRosterAdministrationTests
 
     /// <summary>
     /// The record rather than only the envelope, because a user nothing declares is served from their own record or
-    /// from nothing at all — and the marker beside the document is what the next start reads to decide that.
+    /// from nothing at all — and the marker beside the document is what the next start reads to decide that. What it
+    /// carries is the one property a record must state, so a deployment that has just recorded its first user holds a
+    /// record its own gate accepts rather than one it refuses at the next start.
     /// </summary>
     [Fact]
-    public async Task ProvisionAsync_ALabelTheDeploymentAccepts_CommitsTheEmptyRecordBesideTheEnvelope()
+    public async Task ProvisionAsync_ALabelTheDeploymentAccepts_CommitsARecordOfTheirLanguageBesideTheEnvelope()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -112,7 +114,7 @@ public sealed class UserRosterAdministrationTests
         // Assert
         await harness.Documents.Received(1).CommitAsync(
             outcome.User,
-            "{}",
+            """{"Language":"English"}""",
             1,
             Arg.Any<CancellationToken>());
         Assert.Contains(harness.ServedUsers.Users, user => user.User == outcome.User);

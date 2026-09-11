@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using System.Text;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.Spam;
@@ -31,9 +32,29 @@ public sealed class UserAccountDocumentBinderTests
     /// <summary>The instant every binding here is judged against, so a date-bound rule is decided rather than drawn.</summary>
     private static readonly DateTimeOffset Today = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
 
-    /// <summary>A user is provisioned before their first mailbox, so the empty record is an ordinary one.</summary>
+    /// <summary>A user is provisioned before their first mailbox, so a record of their language alone is an ordinary one.</summary>
     [Fact]
-    public void Bind_EmptyDocument_IsAUserWhoOwnsNoMailAccount()
+    public void Bind_ADocumentNamingOnlyALanguage_IsAUserWhoOwnsNoMailAccount()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""{"Language":"Polish"}""", UserRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.True(binding.IsBound);
+        Assert.Empty(binding.User!.MailAccounts);
+        Assert.Equal(MailUserLanguage.Polish, binding.User!.ReadingLanguage);
+    }
+
+    /// <summary>
+    /// The one property a record must state. What this deployment writes for somebody comes out in some language
+    /// whether or not anybody chose it, so an unstated one is a record written before the property existed rather than
+    /// a user who asked for nothing.
+    /// </summary>
+    [Fact]
+    public void Bind_ADocumentNamingNoLanguage_IsRefusedNamingBothItTakes()
     {
         // Arrange
         var binder = CreateBinder();
@@ -42,8 +63,88 @@ public sealed class UserAccountDocumentBinderTests
         var binding = binder.Bind("{}", UserRecordArrival.BeingWritten);
 
         // Assert
+        Assert.False(binding.IsBound);
+        var refusal = Assert.Single(binding.Refusals);
+        Assert.Contains("Language is not stated", refusal, StringComparison.Ordinal);
+        Assert.Contains("'English'", refusal, StringComparison.Ordinal);
+        Assert.Contains("'Polish'", refusal, StringComparison.Ordinal);
+    }
+
+    /// <summary>A language this build does not write in is a value to correct rather than one to fall back from.</summary>
+    [Theory]
+    [InlineData("German")]
+    [InlineData("pl")]
+    [InlineData("0")]
+    [InlineData("")]
+    public void Bind_ADocumentNamingALanguageThisBuildDoesNotWriteIn_IsRefused(string language)
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind($$"""{"Language":"{{language}}"}""", UserRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.False(binding.IsBound);
+        Assert.Contains(
+            binding.Refusals,
+            refusal => refusal.Contains("'English'", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A record committed before the property existed states no language and could not have stated one, so a start
+    /// reads it rather than refusing it — the surface an administrator would add the line from is behind the gate that
+    /// would be failing.
+    /// </summary>
+    [Fact]
+    public void Bind_AHeldRecordNamingNoLanguage_BindsAndIsReadAsEnglish()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("{}", UserRecordArrival.AlreadyHeld);
+
+        // Assert
         Assert.True(binding.IsBound);
-        Assert.Empty(binding.User!.MailAccounts);
+        Assert.Null(binding.User!.ReadingLanguage);
+    }
+
+    /// <summary>
+    /// The value no release ever accepted is refused whichever direction it arrived from, so the leniency above covers
+    /// the absence alone rather than the property.
+    /// </summary>
+    [Fact]
+    public void Bind_AHeldRecordNamingALanguageThisBuildDoesNotWriteIn_IsRefused()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""{"Language":"German"}""", UserRecordArrival.AlreadyHeld);
+
+        // Assert
+        Assert.False(binding.IsBound);
+        Assert.Contains(
+            binding.Refusals,
+            refusal => refusal.Contains("not a language MailFathom writes in", StringComparison.Ordinal));
+    }
+
+    /// <summary>The name is written by hand in a document, so it is read the way it was typed.</summary>
+    [Theory]
+    [InlineData("polish", MailUserLanguage.Polish)]
+    [InlineData("ENGLISH", MailUserLanguage.English)]
+    public void Bind_ALanguageNamedInAnotherCase_BindsToTheSameLanguage(string written, MailUserLanguage expected)
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind($$"""{"Language":"{{written}}"}""", UserRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.True(binding.IsBound);
+        Assert.Equal(expected, binding.User!.ReadingLanguage);
     }
 
     /// <summary>A declaration in the record is the same declaration a file carried, bound by the same type.</summary>
@@ -308,6 +409,7 @@ public sealed class UserAccountDocumentBinderTests
         // Act
         var binding = binder.Bind("""
             {
+              "Language": "English",
               "MailAccounts": [],
               "SpamClassification": {
                 "Enabled": true,
@@ -493,7 +595,7 @@ public sealed class UserAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("""{"SensitiveContent":{"Secrets":{"Enabled":true}}}""", UserRecordArrival.BeingWritten);
+        var binding = binder.Bind("""{"Language":"English","SensitiveContent":{"Secrets":{"Enabled":true}}}""", UserRecordArrival.BeingWritten);
 
         // Assert
         Assert.True(binding.IsBound);
@@ -513,7 +615,7 @@ public sealed class UserAccountDocumentBinderTests
         var binder = CreateBinder(deployment);
 
         // Act
-        var binding = binder.Bind("""{"SensitiveContent":{"Secrets":{"Enabled":false}}}""", UserRecordArrival.BeingWritten);
+        var binding = binder.Bind("""{"Language":"English","SensitiveContent":{"Secrets":{"Enabled":false}}}""", UserRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -530,7 +632,7 @@ public sealed class UserAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("""{"SensitiveContent":{"Pii":{"Enabled":true}}}""", UserRecordArrival.BeingWritten);
+        var binding = binder.Bind("""{"Language":"English","SensitiveContent":{"Pii":{"Enabled":true}}}""", UserRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -552,7 +654,7 @@ public sealed class UserAccountDocumentBinderTests
         deployment.Secrets.Enabled = true;
         deployment.ScreenOutgoingMailFor = ["Secrets", "Pii"];
         var binder = CreateBinder(deployment);
-        const string held = """{"SensitiveContent":{"Secrets":{"Enabled":false},"ScreenOutgoingMailFor":["Secrets"]}}""";
+        const string held = """{"Language":"English","SensitiveContent":{"Secrets":{"Enabled":false},"ScreenOutgoingMailFor":["Secrets"]}}""";
 
         // Act
         var written = binder.Bind(held, UserRecordArrival.BeingWritten);
@@ -572,7 +674,7 @@ public sealed class UserAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("""{"SensitiveContent":{"Secrets":{"Enabled":true}},"Nonsense":1}""", UserRecordArrival.AlreadyHeld);
+        var binding = binder.Bind("""{"Language":"English","SensitiveContent":{"Secrets":{"Enabled":true}},"Nonsense":1}""", UserRecordArrival.AlreadyHeld);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -610,6 +712,6 @@ public sealed class UserAccountDocumentBinderTests
               }
               """);
 
-        return $$"""{ "MailAccounts": [ {{string.Join(",", declarations)}} ] }""";
+        return $$"""{ "Language": "English", "MailAccounts": [ {{string.Join(",", declarations)}} ] }""";
     }
 }

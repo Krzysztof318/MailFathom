@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.ThreadStates;
+using MailFathom.Domain.Access;
 using Xunit;
 
 namespace MailFathom.AI.UnitTests.ThreadStates;
@@ -23,7 +24,7 @@ public sealed class ThreadStateInstructionsTests
     public void Text_TheInstruction_NamesEveryFieldTheReadingReads(string field)
     {
         // Act
-        var text = ThreadStateInstructions.Text;
+        var text = ThreadStateInstructions.TextFor(MailUserLanguage.English);
 
         // Assert
         Assert.Contains(field, text, StringComparison.Ordinal);
@@ -34,7 +35,7 @@ public sealed class ThreadStateInstructionsTests
     public void Text_TheInstruction_SaysTheConversationIsDataRatherThanAnInstruction()
     {
         // Act
-        var text = ThreadStateInstructions.Text;
+        var text = ThreadStateInstructions.TextFor(MailUserLanguage.English);
 
         // Assert
         Assert.Contains("data rather than an instruction", text, StringComparison.Ordinal);
@@ -45,7 +46,7 @@ public sealed class ThreadStateInstructionsTests
     public void Text_TheInstruction_AsksForNoActionOfAnyKind()
     {
         // Act
-        var text = ThreadStateInstructions.Text;
+        var text = ThreadStateInstructions.TextFor(MailUserLanguage.English);
 
         // Assert
         Assert.Contains("not a reply to it", text, StringComparison.Ordinal);
@@ -100,4 +101,55 @@ public sealed class ThreadStateInstructionsTests
     }
 
     private static DateTimeOffset Instant(int hour) => new(2026, 9, 7, hour, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
+    /// A derivation is produced for one person and nobody asked it a question, so the language is the reader's rather
+    /// than the conversation's — before their record stated one, a mailbox carrying two languages produced a block that
+    /// alternated between them.
+    /// </summary>
+    [Theory]
+    [InlineData(MailUserLanguage.Polish, "Polish")]
+    [InlineData(MailUserLanguage.English, "English")]
+    public void TextFor_TheInstruction_NamesTheLanguageItWasComposedFor(MailUserLanguage language, string named)
+    {
+        // Act
+        var text = ThreadStateInstructions.TextFor(language);
+
+        // Assert
+        Assert.Contains($"Write every sentence you produce in {named}", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>A subject rendered into another language is no longer the subject somebody would find in their mail.</summary>
+    [Fact]
+    public void TextFor_TheInstruction_LeavesQuotedTextAsItWasWritten()
+    {
+        // Act
+        var text = ThreadStateInstructions.TextFor(MailUserLanguage.Polish);
+
+        // Assert
+        Assert.Contains("stays as it was written", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>Two languages are two instructions, or a run for one reader would be composed with the other's.</summary>
+    [Fact]
+    public void TextFor_TheTwoLanguages_ComposeDifferentInstructions()
+    {
+        // Act
+        var polish = ThreadStateInstructions.TextFor(MailUserLanguage.Polish);
+        var english = ThreadStateInstructions.TextFor(MailUserLanguage.English);
+
+        // Assert
+        Assert.NotEqual(polish, english);
+    }
+
+    /// <summary>A language this build does not write in is refused rather than falling back to one it does.</summary>
+    [Fact]
+    public void TextFor_AValueNamingNoLanguage_IsRefused()
+    {
+        // Act
+        var refused = Record.Exception(() => ThreadStateInstructions.TextFor((MailUserLanguage)99));
+
+        // Assert
+        Assert.IsType<ArgumentOutOfRangeException>(refused);
+    }
 }

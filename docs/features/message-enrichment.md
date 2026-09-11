@@ -33,6 +33,12 @@ The evidence names passages in the same terms the Discover run's citations name 
 message again. A passage the store no longer holds resolves to nothing, which is a mark whose message has been re-cut
 rather than a mark that never had any.
 
+**Every mark is written in the language its reader reads, whatever language the message was in.** That language is
+[the one their own record names](../operations/configuration-sources.md#the-language-a-user-reads) — `English` or
+`Polish` — so a Polish reader's German mail is marked in Polish, and the two readers of one thread read it each in
+their own. A name, a subject, or a phrase quoted out of the message stays as it was written, because a quotation that
+was translated is no longer evidence of anything.
+
 ## A rule's verdict and a model's are different in the data
 
 The provenance is two columns rather than a convention, and that is the point of it. `Source` says whether a

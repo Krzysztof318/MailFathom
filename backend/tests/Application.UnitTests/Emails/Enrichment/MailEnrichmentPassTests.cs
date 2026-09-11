@@ -2,9 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
@@ -98,7 +100,10 @@ public sealed class MailEnrichmentPassTests
         Assert.Equal(withholding, report.StoppedBy);
         Assert.Equal(0, report.DerivedEmailCount);
         Assert.True(report.EmailsRemain);
-        await enricher.Received(1).DeriveAsync(Arg.Any<EnrichableEmail>(), Arg.Any<CancellationToken>());
+        await enricher.Received(1).DeriveAsync(
+            Arg.Any<EnrichableEmail>(),
+            Arg.Any<MailUserLanguage>(),
+            Arg.Any<CancellationToken>());
         await store.DidNotReceiveWithAnyArgs().SaveAsync(
             Arg.Any<IPersistenceSession>(),
             Arg.Any<EmailEnrichment>(),
@@ -146,6 +151,7 @@ public sealed class MailEnrichmentPassTests
         Assert.False(report.EmailsRemain);
         await enricher.DidNotReceiveWithAnyArgs().DeriveAsync(
             Arg.Any<EnrichableEmail>(),
+            Arg.Any<MailUserLanguage>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -251,10 +257,44 @@ public sealed class MailEnrichmentPassTests
         var enricher = Substitute.For<IEmailEnricher>();
         enricher.IsActive.Returns(true);
         enricher
-            .DeriveAsync(Arg.Any<EnrichableEmail>(), Arg.Any<CancellationToken>())
+            .DeriveAsync(Arg.Any<EnrichableEmail>(), Arg.Any<MailUserLanguage>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(answer(call.ArgAt<EnrichableEmail>(0))));
 
         return enricher;
+    }
+
+    /// <summary>
+    /// Every message in one pass belongs to one person, and what that person reads is what every reading derived from
+    /// their mail is written in — the pass is where the two meet, because the derivation is handed a language rather
+    /// than resolving one.
+    /// </summary>
+    [Theory]
+    [InlineData(MailUserLanguage.Polish)]
+    [InlineData(MailUserLanguage.English)]
+    public async Task RunAsync_AnAccountWhoseOwnerReadsALanguage_DerivesInIt(MailUserLanguage language)
+    {
+        // Arrange
+        var store = StoreReturning([Enrichable()]);
+        var enricher = EnricherAnswering(_ => EmailEnrichmentDerivation.Settled([]));
+        var pass = CreatePass(store, enricher, language);
+
+        // Act
+        await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        await enricher.Received(1).DeriveAsync(
+            Arg.Any<EnrichableEmail>(),
+            language,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Answers one language for whoever is asked about, which is what a pass over one account's mail needs.</summary>
+    private static IMailUserLanguages LanguagesAnswering(MailUserLanguage language)
+    {
+        var languages = Substitute.For<IMailUserLanguages>();
+        languages.ForUser(Arg.Any<MailUserId>()).Returns(language);
+
+        return languages;
     }
 
     /// <summary>Composes the pass over a deployment with no scanner switched on, which is the ordinary shape.</summary>
@@ -262,7 +302,10 @@ public sealed class MailEnrichmentPassTests
     /// What a scanner does to a passage is asserted where the derivation sends one, because the pass hands the guard to
     /// the derivation rather than scanning anything itself.
     /// </remarks>
-    private static MailEnrichmentPass CreatePass(IStoredEmailEnrichmentStore store, IEmailEnricher enricher)
+    private static MailEnrichmentPass CreatePass(
+        IStoredEmailEnrichmentStore store,
+        IEmailEnricher enricher,
+        MailUserLanguage language = MailUserLanguage.English)
     {
         var timeProvider = new FakeTimeProvider(DerivedAt);
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -273,6 +316,7 @@ public sealed class MailEnrichmentPassTests
         return new MailEnrichmentPass(
             store,
             enricher,
+            LanguagesAnswering(language),
             SensitiveContentEgressGuards.Inactive(),
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
