@@ -46,6 +46,9 @@
   @keyframes mfshim { from { background-position: 130% 0 } to { background-position: -130% 0 } }
   @keyframes mfrowin { from { opacity: 0; max-height: 0; transform: translateY(-7px) } to { opacity: 1; max-height: 260px; transform: none } }
   @keyframes mfrowout { from { opacity: 1; max-height: 260px; transform: none } to { opacity: 0; max-height: 0; transform: translateX(-22px) } }
+  @keyframes mfrowdel { 0% { box-shadow: inset 3px 0 0 transparent, inset 0 0 0 0 var(--err-soft) } 28% { box-shadow: inset 3px 0 0 var(--err), inset 0 0 0 40px var(--err-soft) } 100% { box-shadow: inset 3px 0 0 var(--err), inset 0 0 0 40px var(--err-soft) } }
+  @keyframes mfrowarc { 0% { box-shadow: inset 3px 0 0 transparent, inset 0 0 0 0 var(--warn-soft) } 28% { box-shadow: inset 3px 0 0 var(--warn), inset 0 0 0 40px var(--warn-soft) } 100% { box-shadow: inset 3px 0 0 var(--warn), inset 0 0 0 40px var(--warn-soft) } }
+  @keyframes mfrowmoved { 0% { box-shadow: inset 3px 0 0 transparent, inset 0 0 0 0 var(--warn-soft) } 14% { box-shadow: inset 3px 0 0 var(--warn), inset 0 0 0 40px var(--warn-soft) } 62% { box-shadow: inset 3px 0 0 var(--warn), inset 0 0 0 40px var(--warn-soft) } 100% { box-shadow: inset 3px 0 0 transparent, inset 0 0 0 0 var(--warn-soft) } }
   @keyframes mfrowedit { 0% { box-shadow: inset 3px 0 0 var(--accent), inset 0 0 0 40px var(--accent-soft) } 55% { box-shadow: inset 3px 0 0 var(--accent), inset 0 0 0 40px var(--accent-soft) } 100% { box-shadow: inset 3px 0 0 transparent, inset 0 0 0 40px transparent } }
 </style>
 </helmet>
@@ -4407,7 +4410,7 @@ class Component extends DCLogic {
       this.animateRowsOut([id], () => this.setState(s2 => ({
         archived: (s2.archived || []).concat([id]),
         lastArchived: id,
-      })));
+      })), "arc");
     }
   };
 
@@ -4497,7 +4500,7 @@ class Component extends DCLogic {
     const t = this.opTargets(ids);
     const op = { kind: "archive", ids: t };
     this.setState({ lastOp: op, sel: [], mailPane: "list" });
-    this.animateRowsOut(t, () => { if (op.undone) return; this.setState(s => ({ archived: (s.archived || []).concat(t) })); });
+    this.animateRowsOut(t, () => { if (op.undone) return; this.setState(s => ({ archived: (s.archived || []).concat(t) })); }, "arc");
     this.notify("Archived " + this.countWord(t.length), true);
   };
 
@@ -4625,14 +4628,14 @@ class Component extends DCLogic {
 
   purgeThreads = (t) => {
     this.setState({ lastOp: null, sel: [], mailPane: "list" });
-    this.animateRowsOut(t, () => this.setState(s => ({ deleted: (s.deleted || []).concat(t) })));
+    this.animateRowsOut(t, () => this.setState(s => ({ deleted: (s.deleted || []).concat(t) })), "del");
     this.notify("Permanently deleted — " + this.countWord(t.length), false);
   };
 
   doDeleteThreads = (t) => {
     const op = { kind: "delete", ids: t };
     this.setState({ lastOp: op, sel: [], mailPane: "list" });
-    this.animateRowsOut(t, () => { if (op.undone) return; this.setState(s => ({ deleted: (s.deleted || []).concat(t) })); });
+    this.animateRowsOut(t, () => { if (op.undone) return; this.setState(s => ({ deleted: (s.deleted || []).concat(t) })); }, "del");
     this.notify("Moved to trash — " + this.countWord(t.length), true);
   };
 
@@ -4802,6 +4805,7 @@ class Component extends DCLogic {
       t.forEach(id => { moved[id] = folder; });
       return { moved: moved, moveFor: null, sel: [], lastOp: { kind: "move", ids: t } };
     });
+    t.forEach(id => this.setRowAnim(id, "move", 900));
     this.notify("Moved to “" + folder + "”" + (account ? " in " + account : "") + " — " + this.countWord(t.length), true);
   };
 
@@ -5310,10 +5314,11 @@ class Component extends DCLogic {
   /* "out" is the feedback for a removal the person performed — archive, delete, purge. The row
      collapses under the gesture that removed it, then the state change lands. A row that goes
      because the mailbox was re-read never plays it: that arrives as a new list, not as an act. */
-  animateRowsOut = (ids, commit) => {
+  animateRowsOut = (ids, commit, tone) => {
     const list = (ids || []).filter(Boolean);
     if (!list.length) { commit(); return; }
-    list.forEach(id => this.setRowAnim(id, "out", 440));
+    const kind = tone === "del" ? "outdel" : tone === "arc" ? "outarc" : "out";
+    list.forEach(id => this.setRowAnim(id, kind, 460));
     this.timers.push(setTimeout(commit, 380));
   };
 
@@ -5800,6 +5805,12 @@ class Component extends DCLogic {
     const unreadMap = st.unread || DEFAULT_UNREAD;
     const movedMap = st.moved || {};
     const rowAnim = st.rowAnim || {};
+    const rowOut = (id) => rowAnim[id] === "out" || rowAnim[id] === "outdel" || rowAnim[id] === "outarc";
+    /* the wash names the act: red for a deletion, orange for archive and move */
+    const rowWash = (id) => rowAnim[id] === "outdel" ? "animation:mfrowdel 460ms ease-out both;"
+      : rowAnim[id] === "outarc" ? "animation:mfrowarc 460ms ease-out both;"
+      : rowAnim[id] === "move" ? "animation:mfrowmoved 900ms ease-out both;"
+      : rowAnim[id] === "edit" ? "animation:mfrowedit 1700ms ease-out both;" : "";
     const notifAnim = st.notifAnim || {};
     const actTargets = sel.length ? sel : [st.threadId];
     const flagOn = actTargets.every(id => !!flags[id]);
@@ -7802,12 +7813,12 @@ class Component extends DCLogic {
         showMoved: !!movedMap[t.id],
         swipeWrapStyle: "position:relative;overflow:hidden" +
           (rowAnim[t.id] === "in" ? ";animation:mfrowin 480ms cubic-bezier(.22,1,.36,1) both"
-            : rowAnim[t.id] === "out" ? ";animation:mfrowout 440ms cubic-bezier(.4,0,.2,1) both;pointer-events:none" : ""),
+            : rowOut(t.id) ? ";animation:mfrowout 440ms cubic-bezier(.4,0,.2,1) both;pointer-events:none" : ""),
         swiping: isMobile && st.swipeId === t.id && Math.abs(st.swipeDx || 0) > 8,
         swipeBgStyle: "position:absolute;inset:0;display:flex;align-items:center;" +
           ((st.swipeDx || 0) < 0
             ? "justify-content:flex-end;padding-right:22px;background:var(--accent-soft);color:var(--accent-d);"
-            : "justify-content:flex-start;padding-left:22px;background:var(--ok-soft);color:var(--ok-text);"),
+            : "justify-content:flex-start;padding-left:22px;background:var(--warn-soft);color:var(--warn-text);"),
         swipeIcon: (st.swipeDx || 0) < 0 ? "reply" : "archive",
         swipeLabel: (st.swipeDx || 0) < 0 ? "Reply" : "Archive",
         swipeIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:21px;line-height:1;margin-right:8px" + (Math.abs(st.swipeDx || 0) >= 96 ? ";font-variation-settings:'wght' 500" : ""),
@@ -7837,7 +7848,7 @@ class Component extends DCLogic {
           (isMobile && st.swipeId === t.id
             ? "transform:translateX(" + (st.swipeDx || 0) + "px);"
             : "transform:translateX(0);transition:transform 160ms ease,background 120ms ease;") +
-          (rowAnim[t.id] === "edit" ? "animation:mfrowedit 1700ms ease-out both;" : ""),
+          rowWash(t.id),
         count: parseInt(((t.meta || "").match(/thread: (\d+)/) || [])[1] || "1", 10),
         multi: parseInt(((t.meta || "").match(/thread: (\d+)/) || [])[1] || "1", 10) > 1,
       })),
