@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
 import { ComposingContext, type Composing } from '../composer/useComposing';
 import { swipeDistance } from '../controls/swipeAcross';
-import { MailboxActsContext, nothingActed, type MailboxActs } from '../mailboxActs/useMailboxActs';
+import { MailboxActsContext, nothingActed, type AskedAct, type MailboxActs } from '../mailboxActs/useMailboxActs';
 import { LocalizationProvider } from '../localization/Localization';
 import {
     SignalledChangesContext,
@@ -300,6 +300,25 @@ describe('MessageList', () => {
         drawn.rerender(listUnder(transport, { acts: nothingActed }));
 
         expect(row(2)).toBeDefined();
+    });
+
+    // The other half of the same rule. An act performed on the selection reaches every row the list holds, and most of
+    // them are past the window's edges, where nothing is mounted and nothing reports an animation ending. Held for an
+    // animation they cannot play, those rows would stand in the length of the list until a scroll swept the lot — and
+    // that sweep is a page of rows taken out from under the reader's cursor mid-gesture.
+    it('takes a whole selection out at the press rather than holding rows no reader could watch go', async () => {
+        const filed = Array.from({ length: 30 }, (_, at): [string, AskedAct] => [
+            `message-${String(at)}`,
+            { act: 'archive', from: 'INBOX', leaves: true },
+        ]);
+
+        renderList(answering(wholeFolder), { acts: { ...nothingActed, asked: new Map(filed) } });
+
+        const drawn = await rows();
+
+        expect(drawn.some((option) => option.textContent.includes('Archiving'))).toBe(false);
+        expect(row(30)).toBeDefined();
+        expect(screen.queryByRole('option', { name: /Message 0$/ })).toBeNull();
     });
 
     it('says it is reading from the moment the read starts, where the mail will appear', () => {

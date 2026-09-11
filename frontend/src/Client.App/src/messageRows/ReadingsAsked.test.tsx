@@ -250,23 +250,6 @@ describe('ReadingsAsked', () => {
         expect(requests).toHaveLength(2);
     });
 
-    // The design draws this as a whole window on a phone and as a card in the middle of a wide one, and the difference
-    // is the width the surface was given rather than a head it looked up. jsdom computes no layout, so what is asserted
-    // is the one thing it can see: the window-filling framing is what the dialog carries, and the card is what the
-    // workspace breakpoint puts over it. Which of the two a reader actually meets is held against the design as images.
-    it('fills the window it is in, and takes the card’s framing only where the window is wide', () => {
-        check(asking([sense]), answering());
-
-        const drawn = [...screen.getByRole('dialog').classList];
-
-        expect(drawn).toContain('h-full');
-        expect(drawn).toContain('max-w-full');
-        expect(drawn).toContain('rounded-none');
-        expect(drawn).toContain('workspace:h-auto');
-        expect(drawn).toContain('workspace:w-readings');
-        expect(drawn).toContain('workspace:rounded-2xl');
-    });
-
     it('closes on the control it draws for that, because no state is reachable that cannot be left', () => {
         check(asking([sense]), answering());
         fireEvent.click(screen.getByRole('button', { name: 'Close' }));

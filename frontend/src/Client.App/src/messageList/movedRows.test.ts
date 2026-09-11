@@ -4,7 +4,16 @@
 
 import { describe, expect, it } from 'vitest';
 import type { RowContents } from '../messageRows/rowContents';
-import { mostRowsRemembered, noRows, rowSettled, rowsAlsoMoved, rowsNoticed, rowsStillDrawn } from './movedRows';
+import {
+    mostRowsGone,
+    mostRowsRemembered,
+    noRows,
+    rowSettled,
+    rowWentOut,
+    rowsAlsoMoved,
+    rowsNoticed,
+    rowsStillDrawn,
+} from './movedRows';
 
 /** One row's drawing, with whatever the case under test cares about written over it. */
 function drawn(over: Partial<RowContents> = {}): RowContents {
@@ -149,5 +158,33 @@ describe('rowsStillDrawn', () => {
 
     it('answers with the one empty set where the window has left every row it held behind', () => {
         expect(rowsStillDrawn(new Set(['one']), new Set(['two']))).toBe(noRows);
+    });
+});
+
+describe('rowWentOut', () => {
+    it('remembers the act a row went out under, which is what tells a second press from the first', () => {
+        const asked = { act: 'archive' } as const;
+
+        expect(rowWentOut(new Map(), 'one', asked).get('one')).toBe(asked);
+    });
+
+    it('replaces what a row went out under before, so a row asked again is remembered once', () => {
+        const again = { act: 'delete' } as const;
+        const gone = rowWentOut(rowWentOut(new Map(), 'one', { act: 'archive' } as const), 'one', again);
+
+        expect(gone.size).toBe(1);
+        expect(gone.get('one')).toBe(again);
+    });
+
+    it('gives up the rows that went out first once it holds more than it remembers', () => {
+        let gone: ReadonlyMap<string, number> = new Map();
+
+        for (let at = 0; at <= mostRowsGone; at += 1) {
+            gone = rowWentOut(gone, `row-${String(at)}`, at);
+        }
+
+        expect(gone.size).toBe(mostRowsGone);
+        expect(gone.has('row-0')).toBe(false);
+        expect(gone.has(`row-${String(mostRowsGone)}`)).toBe(true);
     });
 });

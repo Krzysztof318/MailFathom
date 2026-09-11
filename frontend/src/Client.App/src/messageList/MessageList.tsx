@@ -40,7 +40,7 @@ import { MessageRow } from '../messageRows/MessageRow';
 import { MessageRowMenu, type ActAsked } from '../messageRows/MessageRowMenu';
 import { ReadingsAsked, type AskedReadings } from '../messageRows/ReadingsAsked';
 import { rowMark, rowWithFlags, type RowContents } from '../messageRows/rowContents';
-import { estimatedRowHeight, leadingRow, offsetOfRow, windowOf } from '../messageRows/rowWindow';
+import { estimatedRowHeight, leadingRow, offsetOfRow, rowsDrawnAtOnce, windowOf } from '../messageRows/rowWindow';
 import { needsAttention } from '../synchronization/synchronizationState';
 import { accountInScope, scopeReaches, type MailScope } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -68,7 +68,7 @@ import {
 import { ListSettings } from './ListSettings';
 import { narrowed, narrowedByReading, narrowedToView, queryFor, type MailListing } from './listing';
 import { extendedTo, inReadingOrder, withToggled } from './messageSelection';
-import { noRows, rowSettled, rowsAlsoMoved, rowsNoticed, rowsStillDrawn } from './movedRows';
+import { noRows, rowSettled, rowWentOut, rowsAlsoMoved, rowsNoticed, rowsStillDrawn } from './movedRows';
 import { rememberedListing, rememberListing } from './rememberedListings';
 import { actedMessages, useListedMail } from './useListedMail';
 
@@ -216,8 +216,26 @@ export function MessageList({
     // work it out from a list that is one row shorter. Stated once, because the trimming a scroll performs counts rows
     // in the same numbering the window was worked out in and a second reading of *this row has left* is how the two
     // would come to disagree about how many rows there are.
+    // How many rows an act has just asked to leave, counted over every page the list holds rather than over the window,
+    // because that is what the selection bar's *everything* reaches: a page and a half either side of the screen, none
+    // of it mounted. Read off `held` rather than off what is drawn below, so it says the same thing whichever way the
+    // reader has scrolled since.
+    const leaving = heldRows(held).filter((email) => actLeaving(acts, email)).length;
+
+    // Whether a reader could have watched them go, which is the whole of what decides whether they are held for the
+    // animation at all. An act on one row, or on a handful, is held: each of them is on the screen and each reports its
+    // own end. An act on the selection is not, and holding those would be a count that lies — an unmounted row never
+    // reports, so every one of them would stand in the length of the list until a scroll swept the lot, and that sweep
+    // would take a page's worth of rows out from under the reader's cursor mid-gesture. Past what the window draws they
+    // go at the press, and the toast in the corner is what says the act happened.
+    const watched = leaving <= rowsDrawnAtOnce(rowHeight, viewport);
+
     function hasLeft(email: MailTimelineEntry): boolean {
-        return actLeaving(acts, email) && goneRows.get(email.id) === acts.asked.get(email.id);
+        if (!actLeaving(acts, email)) {
+            return false;
+        }
+
+        return !watched || goneRows.get(email.id) === acts.asked.get(email.id);
     }
 
     const shown = withoutLeaving(held, hasLeft);
@@ -505,13 +523,13 @@ export function MessageList({
 
             if (carriedOff.length > 0) {
                 setGoneRows((current) => {
-                    const gone = new Map(current);
+                    let gone = current;
 
                     for (const email of carriedOff) {
                         const asked = acts.asked.get(email.id);
 
                         if (asked !== undefined) {
-                            gone.set(email.id, asked);
+                            gone = rowWentOut(gone, email.id, asked);
                         }
                     }
 
@@ -976,7 +994,7 @@ export function MessageList({
                                         const asked = acts.asked.get(email.id);
 
                                         if (asked !== undefined) {
-                                            setGoneRows((gone) => new Map(gone).set(email.id, asked));
+                                            setGoneRows((gone) => rowWentOut(gone, email.id, asked));
                                         }
                                     }}
                                     note={readingOn(email)}

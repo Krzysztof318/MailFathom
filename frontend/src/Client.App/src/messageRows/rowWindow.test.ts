@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { leadingRow, offsetOfRow, overscanRows, windowOf } from './rowWindow';
+import { leadingRow, offsetOfRow, overscanRows, rowsDrawnAtOnce, windowOf } from './rowWindow';
 
 // Ten rows of a hundred pixels each, so a number in an expectation reads as the row it stands for.
 const rowHeight = 100;
@@ -84,5 +84,16 @@ describe('leadingRow', () => {
 
     it('answers the first row before anything has been measured', () => {
         expect(leadingRow(4_250, 0)).toBe(0);
+    });
+});
+
+describe('rowsDrawnAtOnce', () => {
+    it('answers a screenful and the overscan either side of it, wherever the scroller stands', () => {
+        expect(rowsDrawnAtOnce(rowHeight, 500)).toBe(windowOf(10_000, rowHeight, 0, 500).count);
+        expect(rowsDrawnAtOnce(rowHeight, 500)).toBe(windowOf(10_000, rowHeight, 40_000, 500).count);
+    });
+
+    it('answers no rows before one has been measured, there being no height to divide by', () => {
+        expect(rowsDrawnAtOnce(0, 500)).toBe(0);
     });
 });

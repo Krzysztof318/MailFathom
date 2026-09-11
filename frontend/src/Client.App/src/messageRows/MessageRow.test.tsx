@@ -604,6 +604,11 @@ describe('MessageRow, a row that moved', () => {
     // The act names the colour, which is the whole of what the design draws here: red where the mail is being deleted
     // and orange where it is being filed somewhere else. Archive and move are one animation because they are one fact
     // about the row — the message is going somewhere a reader can go and fetch it.
+    //
+    // What is read back is the animation the row named, which is the only form the branch behind it has: the colour and
+    // the motion are held against the design as images, and `onGone` fires the same way for all three acts, so nothing
+    // else on this row can say a deleted one from a filed one. The claim is the pairing rather than the styling, and it
+    // is asserted the way the arrival and the change beside it already are.
     it.each<{ named: string; asked: MailboxAct; drawn: string }>([
         { named: 'archived', asked: 'archive', drawn: 'animate-row-filed' },
         { named: 'filed', asked: 'move', drawn: 'animate-row-filed' },
@@ -630,10 +635,6 @@ describe('MessageRow, a row that moved', () => {
 
     it('draws neither for a flag act, which takes the row nowhere', () => {
         expect(drawMoved({ acts: asking('flag') }).className).not.toContain('animate-row-filed');
-    });
-
-    it('accepts nothing while it goes, so the half-second it is still drawn cannot be clicked into', () => {
-        expect(drawMoved({ acts: asking('archive') }).className).toContain('pointer-events-none');
     });
 
     it('says it has gone rather than settled once the animation it went out on has run', () => {

@@ -18,6 +18,16 @@ import { type RowContents, sameRow } from '../messageRows/rowContents';
  */
 export const mostRowsRemembered = 10_000;
 
+/**
+ * The most rows whose having gone out of the folder is remembered, oldest dropped first.
+ *
+ * Far below the bound above, because what this counts is not what somebody scrolled past: it is the messages they
+ * themselves filed, archived or deleted without leaving the folder, and a thousand of those by hand is already past
+ * what one sitting holds. Dropping the oldest costs nothing by then — an act that far back has been read out of the
+ * folder by a later pass, so the row it was about is no longer in the list to come back to.
+ */
+export const mostRowsGone = 1_000;
+
 /** No rows at all, held as one object so a list that noticed nothing renders nothing again. */
 export const noRows: ReadonlySet<string> = new Set();
 
@@ -51,6 +61,38 @@ export function rowsAlsoMoved(rows: ReadonlySet<string>, moved: ReadonlySet<stri
     }
 
     return new Set([...rows, ...moved]);
+}
+
+/**
+ * The rows remembered as having gone out of the folder, with this one among them.
+ *
+ * Held against the act each of them went out under rather than by row alone, which is what the caller reads it back
+ * for — so this says nothing about what that value is. Bounded like the map below it and for the same reason: a list
+ * mounted for a working day would otherwise keep one entry per message its reader ever filed, and every addition
+ * copies the map.
+ *
+ * @param gone What is remembered, by row.
+ * @param id The row that has gone.
+ * @param under The act it went out under.
+ * @returns The same remembering with that row in it, less the oldest rows past the bound.
+ */
+export function rowWentOut<T>(gone: ReadonlyMap<string, T>, id: string, under: T): ReadonlyMap<string, T> {
+    const left = new Map(gone);
+
+    // Re-inserted rather than written in place, for the reason `rowsNoticed` re-inserts a mark: a Map keeps what was
+    // put in it in that order, and this is what the bound gives up first.
+    left.delete(id);
+    left.set(id, under);
+
+    for (const oldest of left.keys()) {
+        if (left.size <= mostRowsGone) {
+            break;
+        }
+
+        left.delete(oldest);
+    }
+
+    return left;
 }
 
 /**
