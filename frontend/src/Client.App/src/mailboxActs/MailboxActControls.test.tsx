@@ -9,8 +9,8 @@ import { MailboxActControls } from './MailboxActControls';
 import type { ActRefusal, MoveDestination, MoveDestinationGroup } from './mailboxDestinations';
 import { MailboxActsContext, nothingActed, type ActedMessage, type MailboxActs } from './useMailboxActs';
 
-const invoice: ActedMessage = { storedEmailId: 'message-1', account: 'work', folder: 'work-inbox' };
-const receipt: ActedMessage = { storedEmailId: 'message-2', account: 'work', folder: 'work-inbox' };
+const invoice: ActedMessage = { storedEmailId: 'message-1', account: 'work', folder: 'work-inbox', unread: false };
+const receipt: ActedMessage = { storedEmailId: 'message-2', account: 'work', folder: 'work-inbox', unread: false };
 
 const clients: MoveDestination = { alias: 'work-clients', name: 'Projects / Clients', role: null };
 const work: MoveDestinationGroup = {
@@ -61,6 +61,31 @@ describe('MailboxActControls', () => {
 
         expect(performed).toHaveBeenCalledWith(act, [invoice, receipt]);
         expect(acted).toHaveBeenCalledOnce();
+    });
+
+    // One control, both directions. Where every message shares a state it offers the opposite of it, so the press does
+    // something to every one of them; where they differ it marks read, which is the one act a mixed selection can all
+    // take. The two messages above are read, which is why every other test here meets *Mark unread*.
+    it('offers to mark read where every message is unread, and performs that rather than its opposite', () => {
+        const performed = vi.fn();
+        const unread = [
+            { ...invoice, unread: true },
+            { ...receipt, unread: true },
+        ];
+
+        drawControls({ perform: performed }, unread);
+
+        expect(screen.queryByRole('button', { name: 'Mark unread' })).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Mark read' }));
+
+        expect(performed).toHaveBeenCalledWith('markRead', unread);
+    });
+
+    it('offers to mark read where the messages are a mixture, which is the one act all of them can take', () => {
+        drawControls({}, [invoice, { ...receipt, unread: true }]);
+
+        expect(screen.getByRole('button', { name: 'Mark read' })).toBeDefined();
     });
 
     it('counts the messages in the question about deleting, and says both what it does and how long it can be undone', () => {

@@ -80,9 +80,14 @@ export function ReadingsAsked({
         <dialog
             ref={dialog}
             aria-labelledby={names}
-            className="m-auto w-160 max-w-full rounded-2xl border border-line bg-panel p-0 text-text shadow-dialog backdrop:bg-scrim"
+            // The whole screen at a phone width and a card above it, which is the design project's own `dlgAi` and the
+            // arrangement the settings surface already takes: a card of readings centred in a 390-pixel window leaves
+            // a strip of scrim down either side and a body too narrow for the passages the surface exists to show.
+            // So the narrow shape is the screen — full size, no border, no radius, no shadow, its own safe-area
+            // insets, since a dialog stands in the platform's top layer and the frame's padding is not around it.
+            className="m-0 h-full max-h-full w-full max-w-full rounded-none border-0 bg-panel p-0 pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left text-text open:flex open:flex-col backdrop:bg-scrim workspace:m-auto workspace:h-auto workspace:max-h-readings-tall workspace:w-readings workspace:max-w-full workspace:rounded-2xl workspace:border workspace:border-line workspace:shadow-dialog"
         >
-            <div className="flex items-center gap-2.5 border-b border-line px-4 py-3">
+            <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
                 <Icon name="auto_awesome" className="size-5 shrink-0 text-accent-strong" />
 
                 <h2 id={names} className="flex-1 truncate text-base font-semibold">
@@ -120,7 +125,11 @@ function AskedMessage({
     const evidence = useCitedEvidence(session, transport, asked);
 
     return (
-        <div className="flex max-h-144 flex-col gap-3.5 overflow-y-auto px-4 py-3.5">
+        // The readings scroll inside whatever height the surface has, which is the whole screen at a phone width and
+        // the card's ceiling above it. Neither is a height this states: the dialog is the flex column and this is the
+        // one part of it that gives, so a message carrying one reading draws a short card and one carrying three
+        // scrolls in a tall one without either being measured here.
+        <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-4 py-3.5">
             <p className="text-sm text-muted text-pretty">{translate('reading.about')}</p>
 
             <p className="text-base font-semibold text-pretty">{asked.subject ?? translate('list.noSubject')}</p>

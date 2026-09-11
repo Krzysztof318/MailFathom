@@ -709,10 +709,13 @@ export function App({
                     the three between them has a reason to name a file it never opens. */}
                                                         <OpenAttachmentContext value={openTabs.openAttachment}>
                                                             <div className="flex h-dvh flex-col bg-rail pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left workspace:flex-row">
+                                                                {/* Positioned because the Mail space stays on the screen
+                    while another space is in front of it, laid out over this region rather than beside it —
+                    `shell/Space.tsx` holds why a space is stood aside instead of taken down. */}
                                                                 <div
                                                                     ref={workspaceRegion}
                                                                     tabIndex={-1}
-                                                                    className="flex min-h-0 min-w-0 flex-1 flex-col bg-page"
+                                                                    className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-page"
                                                                 >
                                                                     {/* Inside the frame as well as on the sign-in screen, because a credential that could not be kept is
                     learned about at the moment somebody successfully signed in — which is the one of these sentences

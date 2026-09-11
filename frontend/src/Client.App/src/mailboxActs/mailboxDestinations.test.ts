@@ -49,13 +49,13 @@ const wholeMailbox = directoryOf({
 });
 
 function inWork(storedEmailId: string): ActedMessage {
-    return { storedEmailId, account: 'work', folder: 'work-inbox' };
+    return { storedEmailId, account: 'work', folder: 'work-inbox', unread: false };
 }
 
-const atHome: ActedMessage = { storedEmailId: 'message-9', account: 'home', folder: 'home-inbox' };
+const atHome: ActedMessage = { storedEmailId: 'message-9', account: 'home', folder: 'home-inbox', unread: false };
 
 function inWorkTrash(storedEmailId: string): ActedMessage {
-    return { storedEmailId, account: 'work', folder: 'work-trash' };
+    return { storedEmailId, account: 'work', folder: 'work-trash', unread: false };
 }
 
 describe('folderWithRole', () => {
@@ -153,7 +153,12 @@ describe('refusalFor', () => {
         const twoFolders = directoryOf({
             work: [folder('work-inbox', 'Inbox', ['INBOX']), folder('work-clients', null, ['Clients'])],
         });
-        const filed: ActedMessage = { storedEmailId: 'message-2', account: 'work', folder: 'work-clients' };
+        const filed: ActedMessage = {
+            storedEmailId: 'message-2',
+            account: 'work',
+            folder: 'work-clients',
+            unread: false,
+        };
 
         expect(refusalFor('move', [inWork('message-1'), filed], twoFolders, everythingOffered)).toBeNull();
     });
@@ -206,7 +211,12 @@ describe('deletesPermanently', () => {
     });
 
     it('reads a trash folder as its own account, so an alias another account uses decides nothing', () => {
-        const elsewhere: ActedMessage = { storedEmailId: 'message-3', account: 'home', folder: 'work-trash' };
+        const elsewhere: ActedMessage = {
+            storedEmailId: 'message-3',
+            account: 'home',
+            folder: 'work-trash',
+            unread: false,
+        };
 
         expect(deletesPermanently(wholeMailbox, [elsewhere])).toBe(false);
     });

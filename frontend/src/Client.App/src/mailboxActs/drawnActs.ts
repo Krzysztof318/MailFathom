@@ -4,8 +4,9 @@
 
 import type { IconName } from '../controls/icons';
 import type { MessageKey } from '../localization/en';
+import { drawnUnread, type ReadMarking } from '../readMarking/useReadMarking';
 import type { ActRefusal } from './mailboxDestinations';
-import type { ActedMessage, MailboxAct, MailboxActs } from './useMailboxActs';
+import type { ActedMessage, FlagAct, MailboxAct, MailboxActs } from './useMailboxActs';
 
 // What the acts are called and what they are drawn as, for every surface that offers one. It is here rather than
 // beside the controls that draw them because a fourth surface now does — the toolbar, the selection bar, a row's own
@@ -22,6 +23,7 @@ export const actsDrawn: Readonly<Record<MailboxAct, { readonly icon: IconName; r
     delete: { icon: 'delete', label: 'mail.delete' },
     flag: { icon: 'flag', label: 'mail.flag' },
     unflag: { icon: 'flag', label: 'mail.unflag' },
+    markRead: { icon: 'mark_email_read', label: 'mail.markRead' },
     markUnread: { icon: 'mark_email_unread', label: 'mail.markUnread' },
     move: { icon: 'drive_file_move', label: 'mail.move' },
 };
@@ -35,6 +37,7 @@ export const actsSaidInAMenu: Readonly<Record<MailboxAct, MessageKey>> = {
     delete: 'mail.delete',
     flag: 'menu.flag',
     unflag: 'menu.unflag',
+    markRead: 'menu.markRead',
     markUnread: 'menu.markUnread',
     move: 'menu.move',
 };
@@ -44,12 +47,50 @@ export const actsSaidInAMenu: Readonly<Record<MailboxAct, MessageKey>> = {
 // unflagged among them — so which direction a single control would go in is a question they cannot answer; the head of
 // the message being read is about exactly one message whose flag the screen is already holding, which is why the design
 // draws the toggle there and *Flaga* here.
+//
+// **Marking read is the one slot in an order below that goes both ways**, which is not the same case: a rule decides it
+// rather than a single message, so a strip can answer it over any number of them. `readActFor` is that rule, and the
+// two orders name the slot by the act it reads as most of the time.
 
 /** The order a strip of controls draws them in: the toolbar, and the bar that stands over a selection. */
 export const actsOnAStrip: readonly MailboxAct[] = ['archive', 'delete', 'flag', 'markUnread', 'move'];
 
 /** The order a row's own menu draws them in, with the one that cannot be taken back last. */
 export const actsInARowMenu: readonly MailboxAct[] = ['archive', 'flag', 'markUnread', 'move', 'delete'];
+
+/**
+ * Which way the read control goes for these messages, which is the act the `markUnread` slot above actually offers.
+ *
+ * **Marking read is the default, and one shared state turns it round.** Every message drawn read is offered the act
+ * that marks them unread; anything else — every message unread, or a mixture of the two — is offered the act that
+ * marks them read. Read against what the reader is looking at rather than against what the deployment last answered,
+ * because those differ for minutes at a time: a message whose body has just been drawn is already marked read by this
+ * client, and a control offering to mark it read again would be offering to do what has been done.
+ *
+ * A pending act of its own wins over both, which is what makes pressing the control twice in a row give a reader the
+ * two directions rather than the same one: the second press reads the first press's state.
+ *
+ * An empty list is offered the same act as messages that are all read. It is refused before it can be pressed —
+ * `nothingToActOn` — so what this decides there is only which name the control wears while it says so, and the slot
+ * keeping the name the order above gives it is what stops a strip's wording from changing as a selection is cleared.
+ */
+export function readActFor(acts: MailboxActs, marking: ReadMarking, messages: readonly ActedMessage[]): FlagAct {
+    function unreadNow(message: ActedMessage): boolean {
+        const asked = acts.asked.get(message.storedEmailId);
+
+        if (asked?.act === 'markUnread') {
+            return true;
+        }
+
+        if (asked?.act === 'markRead') {
+            return false;
+        }
+
+        return drawnUnread(marking, message.storedEmailId, message.unread);
+    }
+
+    return messages.every((message) => !unreadNow(message)) ? 'markUnread' : 'markRead';
+}
 
 /** Why a control cannot act, exhaustive by its own type so a reason added later has to be given words. */
 export const refusalSaid: Readonly<Record<ActRefusal, MessageKey>> = {

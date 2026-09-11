@@ -49,6 +49,39 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
     const goings = useRef(new Map<number, () => void>());
     const raised = useRef(0);
 
+    // Which cards were standing when that was last read. It is what makes a going one thing rather than three: a card
+    // leaves because its lifetime ran out, because somebody closed it, or because the bound pushed it off the end of
+    // the list, and only the last of those has no code path of its own to report from. A card pushed out with its
+    // going unreported is the defect this exists against — the offer a card carries is open for exactly as long as the
+    // card is, so a permanent delete buried under two later toasts would otherwise be held by the deployment for the
+    // whole of a window nobody is watching any more, and its rows would go on saying they were being deleted.
+    const stood = useRef<readonly number[]>([]);
+
+    // The one place a going is reported, which is what the rule above amounts to in code: it is read off the cards that
+    // have left rather than called by whatever took them away. An effect because what it reaches is outside React
+    // entirely — a callback the caller registered and this surface promised to call once.
+    useEffect(() => {
+        const standingNow = new Set(standing.map((toast) => toast.id));
+
+        for (const id of stood.current) {
+            if (standingNow.has(id)) {
+                continue;
+            }
+
+            // The lifetime of a card pushed off the end is cancelled with it: what it was waiting to do is dismiss a
+            // card that is no longer there. A card that is merely leaving is still in the list and keeps its own.
+            clearTimeout(timers.current.get(id));
+            timers.current.delete(id);
+
+            const going = goings.current.get(id);
+
+            goings.current.delete(id);
+            going?.();
+        }
+
+        stood.current = [...standingNow];
+    }, [standing]);
+
     useEffect(
         () => () => {
             for (const timer of timers.current.values()) {
@@ -82,13 +115,10 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
         function dismiss(id: number): void {
             setStanding((current) => current.map((toast) => (toast.id === id ? { ...toast, leaving: true } : toast)));
 
+            // The card is taken out once its leaving animation is over, and nothing is reported from here: what the
+            // card was offering is closed by its having left, which the effect above reads off the list.
             wait(id, toastLeaving, () => {
                 setStanding((current) => current.filter((toast) => toast.id !== id));
-
-                const going = goings.current.get(id);
-
-                goings.current.delete(id);
-                going?.();
             });
         }
 

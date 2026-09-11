@@ -7,8 +7,8 @@ import type { ActedMessage } from '../mailboxActs/useMailboxActs';
 import { actedMessages, nothingListed, type ListedMail } from './useListedMail';
 
 const drawn: readonly ActedMessage[] = [
-    { storedEmailId: 'message-1', account: 'work', folder: 'work-inbox' },
-    { storedEmailId: 'message-2', account: 'home', folder: 'home-inbox' },
+    { storedEmailId: 'message-1', account: 'work', folder: 'work-inbox', unread: false },
+    { storedEmailId: 'message-2', account: 'home', folder: 'home-inbox', unread: true },
 ];
 
 const listing: ListedMail = {

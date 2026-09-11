@@ -37,7 +37,9 @@ const email = {
     preview: 'The opening of the message.',
 } as unknown as MailTimelineEntry;
 
-const messages: readonly ActedMessage[] = [{ storedEmailId: email.id, account: 'work', folder: 'INBOX' }];
+const messages: readonly ActedMessage[] = [
+    { storedEmailId: email.id, account: 'work', folder: 'INBOX', unread: false },
+];
 
 function actsWhere(refusalOf: (act: MailboxAct) => ActRefusal | null, perform = vi.fn()): MailboxActs {
     return { ...nothingActed, refusalOf, perform };
@@ -48,12 +50,14 @@ const writing: Composing = { offered: true, opening: null, compose: vi.fn(), clo
 function menuUnder({
     acts = actsWhere(() => null),
     composing = writing,
+    about = messages,
     onSelect = vi.fn(),
     onAsk = vi.fn(),
     onCheckReadings,
 }: {
     acts?: MailboxActs;
     composing?: Composing;
+    about?: readonly ActedMessage[];
     onSelect?: () => void;
     onAsk?: (act: 'delete' | 'move', messages: readonly ActedMessage[]) => void;
     onCheckReadings?: () => void;
@@ -64,7 +68,7 @@ function menuUnder({
                 <MailboxActsContext value={acts}>
                     <MessageRowMenu
                         email={email}
-                        messages={messages}
+                        messages={about}
                         at={{ x: 20, y: 30 }}
                         onSelect={onSelect}
                         onAsk={onAsk}
@@ -95,6 +99,15 @@ describe('MessageRowMenu', () => {
             'Move…',
             'Delete',
         ]);
+    });
+
+    // The same one control read the same way the strip reads it: the menu offers the opposite of the state the row is
+    // in, so what it says is decided by the row rather than fixed in the list of acts.
+    it('offers to mark an unread row read, which is the other direction of the one act', () => {
+        menuUnder({ about: [{ storedEmailId: email.id, account: 'work', folder: 'INBOX', unread: true }] });
+
+        expect(drawn()).toContain('Mark as read');
+        expect(drawn()).not.toContain('Mark as unread');
     });
 
     it('names the menu by what the row is about', () => {

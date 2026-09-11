@@ -7,6 +7,7 @@ import type { MailTimelineEntry } from '@mailfathom/client-backend';
 import {
     actLeaving,
     actPending,
+    drawnFlagged,
     nothingActed,
     opensAsDraft,
     type MailboxAct,
@@ -78,10 +79,41 @@ describe('actPending', () => {
         expect(actPending(asking('markUnread'), { ...email, unread: true })).toBeNull();
     });
 
+    it('stops saying a message is being marked read once the deployment reports it read, the same rule turned round', () => {
+        expect(actPending(asking('markRead'), { ...email, unread: true })?.act).toBe('markRead');
+        expect(actPending(asking('markRead'), email)).toBeNull();
+    });
+
     // An act is about a message in a place, so the sentence belongs to the place it was asked from: the same message
     // drawn in the folder it was filed into has arrived rather than being on its way.
     it('says nothing about the same message drawn in the folder the act filed it into', () => {
         expect(actPending(asking('move'), { ...email, folder: 'Archive' })).toBeNull();
+    });
+});
+
+// The mark a row draws rather than a sentence about it, which is the whole of what either flag act reports: it appears
+// at the press and goes at the press, because a mutation is durable the moment it is written down and the design draws
+// the outcome instead of the mechanism.
+describe('drawnFlagged', () => {
+    it('draws what the deployment reported where nothing was asked of the message', () => {
+        expect(drawnFlagged(nothingActed, email)).toBe(false);
+        expect(drawnFlagged(nothingActed, { ...email, flagged: true })).toBe(true);
+    });
+
+    it('draws the flag from the press, ahead of the deployment reporting it', () => {
+        expect(drawnFlagged(asking('flag'), email)).toBe(true);
+    });
+
+    it('takes the flag off at the press, which is the same rule in the other direction', () => {
+        expect(drawnFlagged(asking('unflag'), { ...email, flagged: true })).toBe(false);
+    });
+
+    it('draws what the deployment reported once the act about the message has landed', () => {
+        expect(drawnFlagged(asking('flag'), { ...email, flagged: true })).toBe(true);
+    });
+
+    it('leaves an act about another message out of it', () => {
+        expect(drawnFlagged(asking('flag', 'another-message'), email)).toBe(false);
     });
 });
 

@@ -29,14 +29,17 @@ import type { ActRefusal, MoveDestination, MoveDestinationGroup } from './mailbo
  * holds afterwards is the act it asked for, and only the act says which side of the change the message is converging
  * towards — so a single name would leave a message asked to be unflagged reading as one still waiting to be flagged.
  */
-export type MailboxAct = 'flag' | 'unflag' | 'markUnread' | 'archive' | 'delete' | 'move';
+export type MailboxAct = 'flag' | 'unflag' | 'markRead' | 'markUnread' | 'archive' | 'delete' | 'move';
 
 /** The acts that write one of the two flags a mail server keeps, which are the ones no folder is involved in. */
-export type FlagAct = 'flag' | 'unflag' | 'markUnread';
+export type FlagAct = 'flag' | 'unflag' | 'markRead' | 'markUnread';
+
+/** The rest: the acts that file the message in another folder, which are the ones a folder is involved in. */
+export type FilingAct = Exclude<MailboxAct, FlagAct>;
 
 /** Whether the act writes one of those flags rather than filing the message somewhere else. */
 export function changesAFlag(act: MailboxAct): act is FlagAct {
-    return act === 'flag' || act === 'unflag' || act === 'markUnread';
+    return act === 'flag' || act === 'unflag' || act === 'markRead' || act === 'markUnread';
 }
 
 /** One message an act is about: what names it, and where it is, which is what filing and taking that back both need. */
@@ -46,6 +49,17 @@ export interface ActedMessage {
 
     /** The folder the message is in, which is where taking a move back puts it. */
     readonly folder: string;
+
+    /**
+     * Whether the deployment last reported the message without `\Seen`.
+     *
+     * Carried with the message because one act's *direction* is the message's own state rather than a control's: the
+     * read control offers to mark read or to mark unread depending on where the messages under it stand, and a strip
+     * standing over a selection knows nothing about those messages except what is written down here. It is what the
+     * deployment answered rather than what a row draws — `drawnActs.ts` reads this against what this client has marked
+     * since, which is the one place that correction belongs.
+     */
+    readonly unread: boolean;
 }
 
 /**
@@ -161,7 +175,14 @@ export function useMailboxActs(): MailboxActs {
  * shares is the upgrade, and it closes this window in the same move as it closes the second read.
  */
 export function opensAsDraft(acts: MailboxActs, email: MailTimelineEntry): boolean {
-    return acts.folderRoleOf({ storedEmailId: email.id, account: email.account, folder: email.folder }) === 'Drafts';
+    return (
+        acts.folderRoleOf({
+            storedEmailId: email.id,
+            account: email.account,
+            folder: email.folder,
+            unread: email.unread,
+        }) === 'Drafts'
+    );
 }
 
 /**
@@ -196,7 +217,38 @@ export function actPending(acts: MailboxActs, email: MailTimelineEntry): AskedAc
         return email.unread ? null : asked;
     }
 
+    if (asked.act === 'markRead') {
+        return email.unread ? asked : null;
+    }
+
     return asked;
+}
+
+/**
+ * Whether the row is drawn flagged: what the deployment last reported, less what this client has asked since.
+ *
+ * **The flag appears at the press and goes at the press**, which is the whole of what either act reports. A mailbox
+ * mutation is durable the moment it is written down and converges minutes later, so a mark drawn from the observation
+ * alone would leave somebody who pressed *flag* looking at an unflagged row and pressing it again — and a sentence in
+ * the row's own line saying the flag is on its way is the client narrating a mechanism instead of showing an outcome.
+ * The design draws neither: it draws the flag.
+ *
+ * Read here rather than in the component that draws the mark, for the reason `drawnUnread` is read out of
+ * `readMarking/`: the conversation draws the same marks about the same message, and a second reading of *this message
+ * is flagged* is how two screens come to disagree about one message.
+ */
+export function drawnFlagged(acts: MailboxActs, email: MailTimelineEntry): boolean {
+    const asked = actPending(acts, email);
+
+    if (asked?.act === 'flag') {
+        return true;
+    }
+
+    if (asked?.act === 'unflag') {
+        return false;
+    }
+
+    return email.flagged;
 }
 
 /**

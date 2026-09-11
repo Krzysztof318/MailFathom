@@ -2,12 +2,31 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { type RowContents, sameRow } from '../messageRows/rowContents';
+
 // Which rows of a list moved, which is what the standing rule for every list in this client is drawn from: a list is
 // drawn as a skeleton once, when it holds nothing, and every change after that reaches the rows it actually touched.
 // So a page arriving is not a list arriving, and the difference between the two is exactly what this answers.
 
-/** The most rows whose having been drawn is remembered, oldest dropped first, for the reason the places map is bounded. */
+/**
+ * The most rows whose having been drawn is remembered, oldest dropped first, for the reason the places map is bounded.
+ *
+ * What is kept per row is the mark of what it drew rather than the answer it drew from, which is what makes a bound
+ * this high affordable at all: a mark holds a dozen fields of a row, while the answer beside it holds every address
+ * the message was sent to, its preview, and its size — a mailbox held in memory to answer a question about the line
+ * the reader is looking at.
+ */
 export const mostRowsRemembered = 10_000;
+
+/**
+ * The most rows whose having gone out of the folder is remembered, oldest dropped first.
+ *
+ * Far below the bound above, because what this counts is not what somebody scrolled past: it is the messages they
+ * themselves filed, archived or deleted without leaving the folder, and a thousand of those by hand is already past
+ * what one sitting holds. Dropping the oldest costs nothing by then — an act that far back has been read out of the
+ * folder by a later pass, so the row it was about is no longer in the list to come back to.
+ */
+export const mostRowsGone = 1_000;
 
 /** No rows at all, held as one object so a list that noticed nothing renders nothing again. */
 export const noRows: ReadonlySet<string> = new Set();
@@ -45,6 +64,38 @@ export function rowsAlsoMoved(rows: ReadonlySet<string>, moved: ReadonlySet<stri
 }
 
 /**
+ * The rows remembered as having gone out of the folder, with this one among them.
+ *
+ * Held against the act each of them went out under rather than by row alone, which is what the caller reads it back
+ * for — so this says nothing about what that value is. Bounded like the map below it and for the same reason: a list
+ * mounted for a working day would otherwise keep one entry per message its reader ever filed, and every addition
+ * copies the map.
+ *
+ * @param gone What is remembered, by row.
+ * @param id The row that has gone.
+ * @param under The act it went out under.
+ * @returns The same remembering with that row in it, less the oldest rows past the bound.
+ */
+export function rowWentOut<T>(gone: ReadonlyMap<string, T>, id: string, under: T): ReadonlyMap<string, T> {
+    const left = new Map(gone);
+
+    // Re-inserted rather than written in place, for the reason `rowsNoticed` re-inserts a mark: a Map keeps what was
+    // put in it in that order, and this is what the bound gives up first.
+    left.delete(id);
+    left.set(id, under);
+
+    for (const oldest of left.keys()) {
+        if (left.size <= mostRowsGone) {
+            break;
+        }
+
+        left.delete(oldest);
+    }
+
+    return left;
+}
+
+/**
  * The rows still saying they moved, less the ones the list has stopped drawing.
  *
  * A windowed list unmounts a row that scrolled out of it, and an unmounted row never reports its animation ending — so
@@ -61,32 +112,59 @@ export function rowsStillDrawn(rows: ReadonlySet<string>, drawn: ReadonlySet<str
     return left.length === 0 ? noRows : new Set(left);
 }
 
-/** What a page's arrival amounts to: which of its rows are new to the reader, and what they have now been shown. */
+/**
+ * What a page's arrival amounts to: which of its rows are new to the reader, which of them they are being shown
+ * changing, and what they have now been shown.
+ *
+ * The third is a map from each row to the mark of what was drawn in it rather than a set of identities, and that is
+ * what makes the second answerable at all: a page read again carries a whole answer per message, so the only way to
+ * tell a row that changed from one the deployment merely wrote down again is against what the reader was last shown.
+ */
 export interface RowsNoticed {
     readonly arrived: ReadonlySet<string>;
-    readonly shown: Set<string>;
+    readonly changed: ReadonlySet<string>;
+    readonly shown: Map<string, RowContents>;
 }
 
 /**
  * Reads a page against what the reader has already been shown.
  *
- * @param shown What this list has drawn before, or `null` for a list that has drawn nothing — whose first page is the
- * list appearing rather than rows arriving in it, and none of which is therefore an arrival.
- * @param ids The rows the page carries, in the order it carries them.
- * @returns The rows that arrived, and what the reader has been shown once this page is drawn.
+ * A row the page carries is one of three things, and only the first two are something to show happening. It **arrived**
+ * where the reader has not been shown it before; it **changed** where they have and the page draws it differently; and
+ * it is the same row where they have and it does not, which is the ordinary case for every page a refresh reads again
+ * and the whole reason this is asked at all.
+ *
+ * @param shown What this list has drawn before, by row, or `null` for a list that has drawn nothing — whose first page
+ * is the list appearing rather than rows arriving in it, so none of it is an arrival and none of it has changed.
+ * @param marks The rows the page carries with the mark of what each of them draws, in the order it carries them.
+ * @returns The rows that arrived, the rows that changed, and what the reader has been shown once this page is drawn.
  */
-export function rowsNoticed(shown: ReadonlySet<string> | null, ids: readonly string[]): RowsNoticed {
-    const drawn = new Set(shown ?? []);
-    const arrived = shown === null ? noRows : new Set(ids.filter((id) => !drawn.has(id)));
+export function rowsNoticed(
+    shown: ReadonlyMap<string, RowContents> | null,
+    marks: readonly (readonly [string, RowContents])[],
+): RowsNoticed {
+    const drawn = new Map(shown ?? []);
+    const arrived = new Set<string>();
+    const changed = new Set<string>();
 
-    for (const id of ids) {
-        // Re-inserted rather than left where it was, so a row the reader is still looking at is not the oldest thing
-        // in the map: a Set keeps what was put in it in that order, and this is what the bound below gives up first.
+    for (const [id, mark] of marks) {
+        const before = shown?.get(id);
+
+        if (shown !== null) {
+            if (before === undefined) {
+                arrived.add(id);
+            } else if (!sameRow(before, mark)) {
+                changed.add(id);
+            }
+        }
+
+        // Re-inserted rather than written in place, so a row the reader is still looking at is not the oldest thing in
+        // the map: a Map keeps what was put in it in that order, and this is what the bound below gives up first.
         drawn.delete(id);
-        drawn.add(id);
+        drawn.set(id, mark);
     }
 
-    for (const oldest of drawn) {
+    for (const oldest of drawn.keys()) {
         if (drawn.size <= mostRowsRemembered) {
             break;
         }
@@ -94,5 +172,9 @@ export function rowsNoticed(shown: ReadonlySet<string> | null, ids: readonly str
         drawn.delete(oldest);
     }
 
-    return { arrived, shown: drawn };
+    return {
+        arrived: arrived.size === 0 ? noRows : arrived,
+        changed: changed.size === 0 ? noRows : changed,
+        shown: drawn,
+    };
 }

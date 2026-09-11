@@ -149,6 +149,13 @@ export function MailSpace({
     // toolbar stays either way, which is what leaves the control there to turn it back off.
     const listGivenUp = workspace.panelsHidden && twoPanes && !desktop && readingOpen;
 
+    // Whether the list stands behind what is in front of it rather than beside it. Both cases above put the reading
+    // column where the list was, and neither is a reason to take the list down: what it holds is the pages the
+    // deployment answered and the place in them the reader had scrolled to, so a reader who opens a message on a phone
+    // and goes back is owed the list they left rather than a skeleton of it — `shell/Space.tsx` carries the whole of
+    // that reasoning, including why standing a surface aside is `visibility` and not `display`.
+    const listAside = readingInFront || listGivenUp;
+
     // Read from the workspace rather than held here, because the column is not the only thing that draws differently
     // once it is folded: the tree inside it draws a symbol where it drew a name, and the tree is a region handed in
     // already built rather than a child this component could pass a prop to.
@@ -263,7 +270,7 @@ export function MailSpace({
                 toolbar to replace and a selection still needs both a way to act on it and a way out of it. */}
             {selecting ? <SelectionBar /> : wide ? <MailToolbar strip={toolbarStrip} fit={toolbarFit} /> : null}
 
-            <div className="flex min-h-0 flex-1">
+            <div className="relative flex min-h-0 flex-1">
                 {desktop ? (
                     <>
                         <aside
@@ -345,61 +352,71 @@ export function MailSpace({
                     </dialog>
                 )}
 
-                {(twoPanes || !readingInFront) && !listGivenUp ? (
-                    <section
-                        ref={listColumn}
-                        tabIndex={-1}
-                        aria-label={translate('mail.listColumn')}
-                        className={`flex min-h-0 min-w-0 flex-col bg-panel ${
-                            twoPanes ? (desktop ? '' : 'w-list-tablet shrink-0') : 'flex-1'
-                        }`}
-                        /* The one width in the client a person sets rather than the design, which is why it is drawn
-                           from a value instead of a utility — and only in the desktop composition, which is the one
-                           with a boundary to move: the tablet's list is the width the design draws it at, and the
-                           narrow shape takes the whole column, so neither reads this.
-                           Left able to shrink on purpose: a width chosen on a wider screen is read back before
-                           anything has measured this one, and a column that refuses to give way in that frame would
-                           push the message off the side. Flexbox holds it inside the window until the measurement
-                           below brings it back to a width that fits. */
-                        style={twoPanes && desktop ? { width: `${String(listWidth)}px` } : undefined}
-                    >
-                        {/* The list and, wherever composing has no place in the toolbar, the control that writes a
-                            message standing over its bottom corner: the narrow shape has no toolbar, and a wider one
-                            gives composing up first when the names stop fitting — `useStripFit.ts` holds that order.
-                            It goes while messages are picked out, because the bar standing then is about what is
-                            picked out and writing is not.
-                            Over the *list* rather than over the window, because the window's own bottom corner is
-                            where the question field and the navigation are: a control placed against the viewport
-                            would sit on top of both, and it would move whenever either changed height. Positioned
-                            against this box instead, it keeps the corner a thumb reaches whatever stands under it. */}
-                        <div className="relative flex min-h-0 flex-1 flex-col">
-                            {/* The list's own head row draws the way into the drawer, at its start, wherever there is
-                                a drawer to open; the column has none, and offers nothing. */}
-                            <MailboxesDrawerContext value={desktop ? null : openDrawer}>{list}</MailboxesDrawerContext>
+                <section
+                    ref={listColumn}
+                    tabIndex={-1}
+                    aria-label={translate('mail.listColumn')}
+                    aria-hidden={listAside ? true : undefined}
+                    inert={listAside}
+                    /* Aside, it is laid out over the row at the width it is drawn at rather than at whatever the row
+                       has left, so the offset it keeps points at the row it pointed at. Only the two narrow cases
+                       reach it: the desktop composition draws both columns, so the width somebody dragged is read
+                       below and never here. */
+                    className={`flex min-h-0 min-w-0 flex-col bg-panel ${
+                        listAside
+                            ? `invisible absolute inset-y-0 start-0 ${twoPanes ? 'w-list-tablet' : 'w-full'}`
+                            : twoPanes
+                              ? desktop
+                                  ? ''
+                                  : 'w-list-tablet shrink-0'
+                              : 'flex-1'
+                    }`}
+                    /* The one width in the client a person sets rather than the design, which is why it is drawn
+                       from a value instead of a utility — and only in the desktop composition, which is the one
+                       with a boundary to move: the tablet's list is the width the design draws it at, and the
+                       narrow shape takes the whole column, so neither reads this.
+                       Left able to shrink on purpose: a width chosen on a wider screen is read back before
+                       anything has measured this one, and a column that refuses to give way in that frame would
+                       push the message off the side. Flexbox holds it inside the window until the measurement
+                       below brings it back to a width that fits. */
+                    style={twoPanes && desktop ? { width: `${String(listWidth)}px` } : undefined}
+                >
+                    {/* The list and, wherever composing has no place in the toolbar, the control that writes a
+                        message standing over its bottom corner: the narrow shape has no toolbar, and a wider one
+                        gives composing up first when the names stop fitting — `useStripFit.ts` holds that order.
+                        It goes while messages are picked out, because the bar standing then is about what is
+                        picked out and writing is not.
+                        Over the *list* rather than over the window, because the window's own bottom corner is
+                        where the question field and the navigation are: a control placed against the viewport
+                        would sit on top of both, and it would move whenever either changed height. Positioned
+                        against this box instead, it keeps the corner a thumb reaches whatever stands under it. */}
+                    <div className="relative flex min-h-0 flex-1 flex-col">
+                        {/* The list's own head row draws the way into the drawer, at its start, wherever there is
+                            a drawer to open; the column has none, and offers nothing. */}
+                        <MailboxesDrawerContext value={desktop ? null : openDrawer}>{list}</MailboxesDrawerContext>
 
-                            {(wide && toolbarFit === 'labelled') ||
-                            readingInFront ||
-                            selecting ? null : composing.offered ? (
-                                <Control
-                                    label={translate('mail.compose')}
-                                    icon="edit_square"
-                                    shape="floating"
-                                    className="absolute right-4.5 bottom-4.5"
-                                    onPress={() => {
-                                        composing.compose({ kind: 'new' });
-                                    }}
-                                />
-                            ) : (
-                                <PlannedControl
-                                    label={translate('mail.compose')}
-                                    icon="edit_square"
-                                    shape="floating"
-                                    className="absolute right-4.5 bottom-4.5"
-                                />
-                            )}
-                        </div>
-                    </section>
-                ) : null}
+                        {(wide && toolbarFit === 'labelled') ||
+                        readingInFront ||
+                        selecting ? null : composing.offered ? (
+                            <Control
+                                label={translate('mail.compose')}
+                                icon="edit_square"
+                                shape="floating"
+                                className="absolute right-4.5 bottom-4.5"
+                                onPress={() => {
+                                    composing.compose({ kind: 'new' });
+                                }}
+                            />
+                        ) : (
+                            <PlannedControl
+                                label={translate('mail.compose')}
+                                icon="edit_square"
+                                shape="floating"
+                                className="absolute right-4.5 bottom-4.5"
+                            />
+                        )}
+                    </div>
+                </section>
 
                 {/* The boundary is only there where both columns are and the list's width is somebody's to set: one
                     column at a time has nothing between them, and the tablet's list is the width the design draws it

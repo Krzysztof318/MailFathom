@@ -6,10 +6,11 @@ import type { MailTimelineEntry } from '@mailfathom/client-backend';
 import { useComposing, type Composing } from '../composer/useComposing';
 import { ContextMenu, type ContextMenuItem } from '../contextMenu/ContextMenu';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
-import { actsDrawn, actsInARowMenu, actsSaidInAMenu, underway } from '../mailboxActs/drawnActs';
+import { actsDrawn, actsInARowMenu, actsSaidInAMenu, readActFor, underway } from '../mailboxActs/drawnActs';
 import { useMailboxActs, type ActedMessage, type MailboxActs } from '../mailboxActs/useMailboxActs';
 import type { Translate } from '../localization/useLocalization';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadMarking, type ReadMarking } from '../readMarking/useReadMarking';
 
 // What a message row offers, which is the design project's own menu for it: picking messages out, answering the
 // message, and the five acts that change the mailbox it is in. It is this row's items and nothing else — where the
@@ -67,13 +68,24 @@ export function MessageRowMenu({
 }) {
     const { translate } = useLocalization();
     const acts = useMailboxActs();
+    const marking = useReadMarking();
     const composing = useComposing();
 
     return (
         <ContextMenu
             header={email.subject ?? translate('list.noSubject')}
             at={at}
-            items={rowItems({ email, messages, acts, composing, translate, onSelect, onAsk, onCheckReadings })}
+            items={rowItems({
+                email,
+                messages,
+                acts,
+                marking,
+                composing,
+                translate,
+                onSelect,
+                onAsk,
+                onCheckReadings,
+            })}
             onClose={onClose}
         />
     );
@@ -84,6 +96,7 @@ function rowItems({
     email,
     messages,
     acts,
+    marking,
     composing,
     translate,
     onSelect,
@@ -93,6 +106,7 @@ function rowItems({
     readonly email: MailTimelineEntry;
     readonly messages: readonly ActedMessage[];
     readonly acts: MailboxActs;
+    readonly marking: ReadMarking;
     readonly composing: Composing;
     readonly translate: Translate;
     readonly onSelect: () => void;
@@ -119,6 +133,10 @@ function rowItems({
         : [];
 
     const mailbox = actsInARowMenu
+        // The read item is the one slot that goes both ways, and which way is the message's own state rather than the
+        // menu's — `mailboxActs/drawnActs.ts` holds the rule, and it is the same rule a strip reads, so a row's menu
+        // and the toolbar over it never offer opposite directions for one message.
+        .map((slot) => (slot === 'markUnread' ? readActFor(acts, marking, messages) : slot))
         .filter((act) => acts.refusalOf(act, messages) === null && !underway(acts, act, messages))
         .map((act) => ({
             icon: actsDrawn[act].icon,

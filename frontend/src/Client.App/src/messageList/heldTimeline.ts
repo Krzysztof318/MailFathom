@@ -227,24 +227,41 @@ function slotFor(page: MailTimelinePage, read: TimelineRead): TimelineSlot {
 /**
  * What the list knows once the deployment said mail arrived at the end this list is read from.
  *
- * The leading page's rows are dropped rather than read again here, because dropping is what makes the re-read
- * conditional: `wantedFor` asks for a dropped page only while it is on the screen, so a reader who has scrolled away
- * keeps every row they are looking at and the page comes back when they come back to it.
+ * The leading page is marked rather than dropped, and the marking is what makes the re-read conditional: `wantedFor`
+ * asks for a stale page only while it is on the screen, so a reader who has scrolled away keeps every row they are
+ * looking at and the page is read again when they come back to it.
+ *
+ * **Marked rather than dropped, which is the whole of the rule this file states.** Dropping a page's rows turns a
+ * hundred rows a reader is looking at into the space they stood in, drawn as *reading this message again* — for a
+ * signal saying one message arrived above them. The rows stay, the page is read again underneath, and what the reader
+ * is shown changing is whatever the answer actually differs in.
  *
  * @param held What the list knows now.
- * @returns What the list knows.
+ * @returns What the list knows, and the list itself where its leading page holds no rows to mark.
  */
 export function arrivalNoticed(held: HeldTimeline): HeldTimeline {
-    return held.slots.length === 0
-        ? held
-        : { slots: held.slots.map((slot, at) => (at === 0 ? { ...slot, emails: null } : slot)) };
+    const leading = held.slots[0];
+
+    if (leading === undefined) {
+        return held;
+    }
+
+    if (leading.emails === null || leading.stale) {
+        return held;
+    }
+
+    return { slots: held.slots.map((slot, at) => (at === 0 ? { ...slot, stale: true } : slot)) };
 }
 
 /**
  * What the list knows once the deployment named rows whose mail is no longer what was drawn.
  *
- * Only the pages actually holding one of the named rows are dropped, on the same rule: what a reader is looking at is
+ * Only the pages actually holding one of the named rows are marked, on the same rule: what a reader is looking at is
  * read again while they are looking at it, and what they are not stays where it is until they reach it.
+ *
+ * Marked rather than dropped for the reason {@link arrivalNoticed} gives, and the cost of getting it wrong is highest
+ * here: a page is a hundred rows and a signal may name one of them, so dropping the page emptied ninety-nine rows
+ * nothing had said anything about.
  *
  * @param held What the list knows now.
  * @param storedEmailIds The rows the deployment named.
@@ -257,15 +274,17 @@ export function changeNoticed(held: HeldTimeline, storedEmailIds: readonly strin
         return held;
     }
 
-    const holdsNamed = (slot: TimelineSlot): boolean => slot.emails?.some((email) => named.has(email.id)) === true;
+    const holdsNamed = (slot: TimelineSlot): boolean =>
+        !slot.stale && slot.emails?.some((email) => named.has(email.id)) === true;
 
     // Answered before anything is rebuilt, so a change naming mail this list is not holding leaves the list the object
-    // it already was — which is what keeps a signal about another folder from re-rendering every row of this one.
+    // it already was — which is what keeps a signal about another folder from re-rendering every row of this one. A
+    // page already marked is among those: it is being read again already, and marking it twice is the same page.
     if (!held.slots.some(holdsNamed)) {
         return held;
     }
 
-    return { slots: held.slots.map((slot) => (holdsNamed(slot) ? { ...slot, emails: null } : slot)) };
+    return { slots: held.slots.map((slot) => (holdsNamed(slot) ? { ...slot, stale: true } : slot)) };
 }
 
 /**

@@ -26,14 +26,21 @@ import { Skeleton } from '../controls/Skeleton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { ActQuestions } from '../mailboxActs/ActQuestions';
-import { actLeaving, opensAsDraft, useMailboxActs, type ActedMessage } from '../mailboxActs/useMailboxActs';
+import {
+    actLeaving,
+    opensAsDraft,
+    useMailboxActs,
+    type ActedMessage,
+    type AskedAct,
+} from '../mailboxActs/useMailboxActs';
 import { useComposing } from '../composer/useComposing';
 import { MessageReading } from '../messageRows/MessageReading';
 import { leadingReading, readingsOf } from '../messageRows/messageReadings';
 import { MessageRow } from '../messageRows/MessageRow';
 import { MessageRowMenu, type ActAsked } from '../messageRows/MessageRowMenu';
 import { ReadingsAsked, type AskedReadings } from '../messageRows/ReadingsAsked';
-import { estimatedRowHeight, leadingRow, offsetOfRow, windowOf } from '../messageRows/rowWindow';
+import { rowMark, rowWithFlags, type RowContents } from '../messageRows/rowContents';
+import { estimatedRowHeight, leadingRow, offsetOfRow, rowsDrawnAtOnce, windowOf } from '../messageRows/rowWindow';
 import { needsAttention } from '../synchronization/synchronizationState';
 import { accountInScope, scopeReaches, type MailScope } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -61,7 +68,7 @@ import {
 import { ListSettings } from './ListSettings';
 import { narrowed, narrowedByReading, narrowedToView, queryFor, type MailListing } from './listing';
 import { extendedTo, inReadingOrder, withToggled } from './messageSelection';
-import { noRows, rowSettled, rowsAlsoMoved, rowsNoticed, rowsStillDrawn } from './movedRows';
+import { noRows, rowSettled, rowWentOut, rowsAlsoMoved, rowsNoticed, rowsStillDrawn } from './movedRows';
 import { rememberedListing, rememberListing } from './rememberedListings';
 import { actedMessages, useListedMail } from './useListedMail';
 
@@ -141,9 +148,26 @@ export function MessageList({
     // the read below when it grows; it is `null` until the first page for this listing lands, which is what keeps the
     // first read from animating every row as an arrival. It is bounded for the reason `mostPlacesRemembered` is: a
     // reader scrolling a folder of two hundred thousand messages would otherwise grow it without end.
-    const drawnBefore = useRef<Set<string> | null>(null);
+    //
+    // What it holds per row is the mark of what that row drew, which is what lets a page read again be told from a page
+    // that changed. A refresh, an arrival, and a signal naming mail each read pages the reader is looking at, and the
+    // answer carries a whole entry per message whether anything about it moved or not — so the mark is the only thing
+    // that says whether a reader would see a difference, and it is why nothing here animates a row on the strength of
+    // what a signal named.
+    const drawnBefore = useRef<Map<string, RowContents> | null>(null);
     const [arrivedRows, setArrivedRows] = useState<ReadonlySet<string>>(noRows);
     const [changedRows, setChangedRows] = useState<ReadonlySet<string>>(noRows);
+
+    // The rows that have finished going. An act that takes a message out of the folder takes its row with it, and the
+    // row is held for exactly as long as the animation saying so — so what is stored is which rows are *through* that
+    // animation rather than which are in it, and the list needs no effect to notice an act being asked: a row asked to
+    // leave and not named here is one still going, which is a reading of state the press already changed.
+    //
+    // Each is held against the act it went out under rather than by row alone, so an act taken back leaves nothing
+    // behind: a refusal puts the row where it stood, and the ask a second press writes is a different act, which is
+    // what keeps the second press of the same act on the same message from skipping its animation. It grows by one
+    // entry per message somebody files in one sitting, and every entry a message gains again replaces its own.
+    const [goneRows, setGoneRows] = useState<ReadonlyMap<string, AskedAct>>(() => new Map());
     const [failure, setFailure] = useState<ClientFailure | null>(null);
 
     const [scrollTop, setScrollTop] = useState(0);
@@ -187,7 +211,34 @@ export function MessageList({
     // and the keyboard all agree with what is on the screen. What writes back into `held` agrees with it too: a page is
     // named by its slot, which this never drops, so the page a read refills is the same page either way, and the
     // trimming is handed what is leaving so that it counts rows in the numbering the window was worked out in.
-    const shown = withoutLeaving(held, (email) => actLeaving(acts, email));
+    // A row asked to leave is drawn until it has finished going, which is the second half of the same rule: the act
+    // takes it out of the folder at the press, and the animation is how a reader is shown that rather than left to
+    // work it out from a list that is one row shorter. Stated once, because the trimming a scroll performs counts rows
+    // in the same numbering the window was worked out in and a second reading of *this row has left* is how the two
+    // would come to disagree about how many rows there are.
+    // How many rows an act has just asked to leave, counted over every page the list holds rather than over the window,
+    // because that is what the selection bar's *everything* reaches: a page and a half either side of the screen, none
+    // of it mounted. Read off `held` rather than off what is drawn below, so it says the same thing whichever way the
+    // reader has scrolled since.
+    const leaving = heldRows(held).filter((email) => actLeaving(acts, email)).length;
+
+    // Whether a reader could have watched them go, which is the whole of what decides whether they are held for the
+    // animation at all. An act on one row, or on a handful, is held: each of them is on the screen and each reports its
+    // own end. An act on the selection is not, and holding those would be a count that lies — an unmounted row never
+    // reports, so every one of them would stand in the length of the list until a scroll swept the lot, and that sweep
+    // would take a page's worth of rows out from under the reader's cursor mid-gesture. Past what the window draws they
+    // go at the press, and the toast in the corner is what says the act happened.
+    const watched = leaving <= rowsDrawnAtOnce(rowHeight, viewport);
+
+    function hasLeft(email: MailTimelineEntry): boolean {
+        if (!actLeaving(acts, email)) {
+            return false;
+        }
+
+        return !watched || goneRows.get(email.id) === acts.asked.get(email.id);
+    }
+
+    const shown = withoutLeaving(held, hasLeft);
 
     const rowCount = rowCountOf(shown);
     const drawn = windowOf(rowCount, rowHeight, scrollTop, viewport);
@@ -269,13 +320,17 @@ export function MessageList({
                     listed.drew(result.value.emails);
                     setHeld((current) => answered(current, result.value, asked));
 
+                    // What this page's arrival amounts to, read against what the reader has already been shown: the
+                    // rows that are new to them land, the rows the page draws differently are washed, and the rows it
+                    // repeats — which is most of a page a refresh read again — are left alone.
                     const noticed = rowsNoticed(
                         drawnBefore.current,
-                        result.value.emails.map((email) => email.id),
+                        result.value.emails.map((email) => [email.id, rowMark(email)] as const),
                     );
 
                     drawnBefore.current = noticed.shown;
                     setArrivedRows((rows) => rowsAlsoMoved(rows, noticed.arrived));
+                    setChangedRows((rows) => rowsAlsoMoved(rows, noticed.changed));
                 }
             },
         );
@@ -370,9 +425,13 @@ export function MessageList({
                     setHeld(arrivalNoticed);
                 }
 
+                // The pages holding the named rows are read again and nothing is washed here. What a signal names is
+                // mail the deployment wrote down, which is not the same question as whether a reader would see the row
+                // differently: the answer is what says that, and the read above is where it is asked. A row washed
+                // from the signal was washed for a re-derived preview or a rewritten record as readily as for a
+                // subject that moved, which is the reload this whole mechanism exists to stop, one row at a time.
                 if (signal.kind === 'mail.changed' && scopeReaches(scope, signal.account, signal.folder)) {
                     setHeld((current) => changeNoticed(current, signal.emails));
-                    setChangedRows((rows) => rowsAlsoMoved(rows, new Set(signal.emails)));
                 }
 
                 // A flag is applied to the rows in place rather than dropping the page they are on, which is the one
@@ -380,6 +439,17 @@ export function MessageList({
                 if (signal.kind === 'mail.flags.changed' && scopeReaches(scope, signal.account, signal.folder)) {
                     setHeld((current) => flagsNoticed(current, signal.flags));
                     setChangedRows((rows) => rowsAlsoMoved(rows, new Set(signal.flags.map((stated) => stated.email))));
+
+                    // The mark moves with the row, because this is the one change drawn without a page answering. A
+                    // mark left behind would make the next read of that page differ from what is on the screen and
+                    // wash a row the reader has already been shown changing — the same replay the mark exists to stop.
+                    for (const stated of signal.flags) {
+                        const drawn = drawnBefore.current?.get(stated.email);
+
+                        if (drawn !== undefined) {
+                            drawnBefore.current?.set(stated.email, rowWithFlags(drawn, stated));
+                        }
+                    }
                 }
             }),
         [signalledChanges, scope],
@@ -425,12 +495,12 @@ export function MessageList({
         const moved = windowOf(rowCount, rowHeight, top, viewport);
         const last = moved.first + moved.count - 1;
 
-        setHeld((current) => trimmedAround(current, moved.first, last, (email) => actLeaving(acts, email)));
+        setHeld((current) => trimmedAround(current, moved.first, last, hasLeft));
 
         // What the rows that moved are let go of, and it is a scroll rather than an animation that does it: a row
         // carried out of the window is unmounted, and an unmounted row never reports its own animation ending. Asked
         // only where something is actually being held, so an ordinary scroll down a folder reads nothing.
-        if (arrivedRows.size > 0 || changedRows.size > 0) {
+        if (arrivedRows.size > 0 || changedRows.size > 0 || acts.asked.size > 0) {
             const stillDrawn = new Set<string>();
 
             for (let row = moved.first; row <= last; row += 1) {
@@ -443,6 +513,29 @@ export function MessageList({
 
             setArrivedRows((rows) => rowsStillDrawn(rows, stillDrawn));
             setChangedRows((rows) => rowsStillDrawn(rows, stillDrawn));
+
+            // A row still going when the scroll carries it out of the window is finished by the scroll, for the same
+            // reason and in the other direction: it is unmounted before it can report its own end, and a row left
+            // held as still going would go on counting toward how long the list is until somebody scrolled back to it.
+            const carriedOff = rows.filter(
+                (email) => !stillDrawn.has(email.id) && actLeaving(acts, email) && !hasLeft(email),
+            );
+
+            if (carriedOff.length > 0) {
+                setGoneRows((current) => {
+                    let gone = current;
+
+                    for (const email of carriedOff) {
+                        const asked = acts.asked.get(email.id);
+
+                        if (asked !== undefined) {
+                            gone = rowWentOut(gone, email.id, asked);
+                        }
+                    }
+
+                    return gone;
+                });
+            }
         }
     }
 
@@ -896,6 +989,13 @@ export function MessageList({
                                     onSettled={() => {
                                         setArrivedRows((rows) => rowSettled(rows, email.id));
                                         setChangedRows((rows) => rowSettled(rows, email.id));
+                                    }}
+                                    onGone={() => {
+                                        const asked = acts.asked.get(email.id);
+
+                                        if (asked !== undefined) {
+                                            setGoneRows((gone) => rowWentOut(gone, email.id, asked));
+                                        }
                                     }}
                                     note={readingOn(email)}
                                     onReadings={

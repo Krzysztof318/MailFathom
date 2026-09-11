@@ -15,7 +15,14 @@ import { SenderAvatar } from '../controls/SenderAvatar';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { actsDrawn } from '../mailboxActs/drawnActs';
-import { actPending, useMailboxActs, type AskedAct, type MailboxAct } from '../mailboxActs/useMailboxActs';
+import {
+    actPending,
+    changesAFlag,
+    drawnFlagged,
+    useMailboxActs,
+    type AskedAct,
+    type FilingAct,
+} from '../mailboxActs/useMailboxActs';
 import { drawnUnread, useReadMarking } from '../readMarking/useReadMarking';
 import { useRowSwipe, type RowSwipeAct } from './rowSwipe';
 
@@ -43,10 +50,12 @@ import { useRowSwipe, type RowSwipeAct } from './rowSwipe';
 // What the row says while a change this client asked for has not been seen to have reached the mail server. A mailbox
 // mutation is durable the moment it is written down and converges minutes later, so a row that said nothing would leave
 // somebody pressing archive twice; the sentence goes on its own once the change has arrived.
-const actPendingSaid: Readonly<Record<MailboxAct, MessageKey>> = {
-    flag: 'act.flagging',
-    unflag: 'act.unflagging',
-    markUnread: 'act.markingUnread',
+//
+// **Only the acts that file a message elsewhere say anything.** What a flag act does is a mark this row draws from the
+// press — the flag, or the unread dot — so the outcome is already on the screen, and a sentence beside it saying the
+// mark is on its way would be the row narrating a mechanism instead of showing a state. The design draws the mark and
+// no sentence, which is also why nothing reports one in the corner: `mailboxActs/MailboxActs.tsx` says that half.
+const actPendingSaid: Readonly<Record<FilingAct, MessageKey>> = {
     archive: 'act.archiving',
     delete: 'act.deleting',
     move: 'act.filing',
@@ -57,7 +66,11 @@ const actPendingSaid: Readonly<Record<MailboxAct, MessageKey>> = {
 // already in the trash it destroys the mail, so the row stays where it is for the seconds in which the deployment is
 // still holding the change back — and it says *that*, because a row reading `Moving to the trash…` in the trash would
 // be describing an act that is not the one about to happen.
-function actPendingWording(asked: AskedAct): MessageKey {
+function actPendingWording(asked: AskedAct): MessageKey | null {
+    if (changesAFlag(asked.act)) {
+        return null;
+    }
+
     return asked.act === 'delete' && !asked.leaves ? 'act.deletingPermanently' : actPendingSaid[asked.act];
 }
 
@@ -72,7 +85,7 @@ const swipeDrawn: Readonly<
     archive: {
         icon: actsDrawn.archive.icon,
         said: actsDrawn.archive.label,
-        tint: 'justify-start ps-5.5 bg-healthy-soft text-healthy-text',
+        tint: 'justify-start ps-5.5 bg-warning-soft text-warning-text',
     },
 };
 
@@ -93,6 +106,7 @@ export function MessageRow({
     onArchive,
     onPointerEnter,
     onSettled,
+    onGone,
     onElement,
 }: {
     readonly email: MailTimelineEntry;
@@ -165,6 +179,16 @@ export function MessageRow({
      */
     readonly onSettled?: (() => void) | undefined;
 
+    /**
+     * That the row has finished going, so the list stops drawing it at all.
+     *
+     * The other half of `onSettled` and reported from the same event, because what a row's animation ending means
+     * depends on which animation it was: a row that landed or was washed is still in the list, and a row that went out
+     * under an act has left it. The list holds it for exactly as long as that animation, for the reason the row
+     * reports the end of one rather than the list timing it.
+     */
+    readonly onGone?: (() => void) | undefined;
+
     readonly onElement: (element: HTMLLIElement | null) => void;
 }) {
     const { translate } = useLocalization();
@@ -190,7 +214,31 @@ export function MessageRow({
     // A message this client has just asked to be marked unread is drawn unread from the press, for the same reason and
     // in the other direction: the two statements are one pending mutation each, and the row draws from whichever of
     // them was asked for last.
-    const unread = acting?.act === 'markUnread' || drawnUnread(marking, email.id, email.unread);
+    // A message this client has just asked to be marked unread is drawn unread from the press, and one asked to be
+    // marked read is drawn read from it, which is the same rule in both directions.
+    const unread =
+        acting?.act === 'markUnread' || (acting?.act !== 'markRead' && drawnUnread(marking, email.id, email.unread));
+
+    // The flag the row draws, which is the mark either flag act reports and the whole of what it reports.
+    const flagged = drawnFlagged(acts, email);
+
+    // Which animation this row is going out on, or nothing for a row standing where the list drew it. Only an act that
+    // takes the message out of the folder it is drawn in goes out at all, and the act is what names the colour: the
+    // design draws red for a deletion and orange for filing a message somewhere else, archive and move alike. A row
+    // that goes because the folder was read again is not held while it goes and plays neither.
+    // Nothing lands on it while it goes, which is the design project's own: a row already out of the folder is not a
+    // row to open, and the half-second it is still drawn for is exactly long enough to be clicked on by accident.
+    const going = !acting?.leaves
+        ? null
+        : acting.act === 'delete'
+          ? 'pointer-events-none animate-row-deleted'
+          : 'pointer-events-none animate-row-filed';
+
+    // What the reserved line holds: what the act says about itself where it says anything, else whatever the screen
+    // would otherwise put there. Worked out here rather than in the markup, because the line is also hidden from the
+    // accessibility tree where it holds nothing, and two readings of *nothing* is how one of them comes to be wrong.
+    const pendingSaid = acting === null ? null : actPendingWording(acting);
+    const said = pendingSaid === null ? note : translate(pendingSaid);
 
     // What is showing behind the row while a finger carries it, or nothing for a row standing where the list drew it.
     // Which of the two it is is the direction alone: what the threshold decides is how firmly it is drawn rather than
@@ -211,8 +259,18 @@ export function MessageRow({
             onAnimationEnd={(event) => {
                 // The row's own animation and not one inside it: `animationend` bubbles, so a symbol animating within
                 // the row would otherwise report the row as having finished moving before it had.
-                if (event.target === event.currentTarget) {
+                //
+                // Which of the two it reports is decided by which animation the row is drawing rather than by the
+                // event's own name: at most one of them is on the row at a time, and reading the class the row chose
+                // is the same answer without a second place for the two to disagree about an animation's name.
+                if (event.target !== event.currentTarget) {
+                    return;
+                }
+
+                if (going === null) {
                     onSettled?.();
+                } else {
+                    onGone?.();
                 }
             }}
             onContextMenu={press.onContextMenu}
@@ -259,12 +317,13 @@ export function MessageRow({
             // Vertical panning stays the scroller's and everything sideways is the row's, which is what stops a browser
             // from taking the gesture over as a scroll before it has been read.
             //
-            // One of the two animations at most, and the arrival wins: a row that has only just been drawn has nothing
-            // to have changed from, so washing it as well would be marking it against a version of itself the reader
-            // never saw. Both are the design project's, and `styles.css` holds why the arrival here is the travel
-            // without the height a flowing list gets.
+            // One animation at most, and going wins over both of the others: a row on its way out of the folder is not
+            // also arriving in it or changing in place. Between those two the arrival wins, because a row that has only
+            // just been drawn has nothing to have changed from, so washing it as well would be marking it against a
+            // version of itself the reader never saw. All three are the design project's, and `styles.css` holds why
+            // neither the arrival nor the going here carries the height a flowing list's does.
             className={`relative h-message-row-narrow touch-pan-y overflow-hidden border-b border-b-sunken workspace:h-message-row ${
-                arrived === true ? 'animate-row-landing' : changed === true ? 'animate-row-changed' : ''
+                going ?? (arrived === true ? 'animate-row-landing' : changed === true ? 'animate-row-changed' : '')
             }`}
         >
             {carrying === undefined ? null : (
@@ -318,7 +377,7 @@ export function MessageRow({
 
                     <Organisation address={email.senderAddress} />
 
-                    <MessageMarkers email={email} />
+                    <MessageMarkers email={email} flagged={flagged} />
 
                     {/* Unread, and the whole of what says so. The design project draws the mark here — at the end of
                         the marks, between the flag and the time, rather than ahead of the avatar, where it would inset
@@ -387,10 +446,10 @@ export function MessageRow({
                 {/* The reserved line. Hidden from the accessibility tree where it holds nothing, so a row with nothing
                     to say about itself is not announced as one with an empty line in it. */}
                 <div
-                    aria-hidden={acting === null && note === undefined ? 'true' : undefined}
+                    aria-hidden={said === undefined ? 'true' : undefined}
                     className="h-4 overflow-hidden text-xs text-muted"
                 >
-                    {acting === null ? note : translate(actPendingWording(acting))}
+                    {said}
                 </div>
             </div>
         </li>

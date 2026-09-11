@@ -32,6 +32,7 @@ const message: HeadMessage = {
     storedEmailId: 'a1',
     account: 'reader@example.invalid',
     folder: 'INBOX',
+    unread: false,
     flagged: false,
 };
 

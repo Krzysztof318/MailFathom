@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { MailAccountFolders, MailFolder, MailFolderDirectory, MailFolderRole } from '@mailfathom/client-backend';
-import { everything, roleRank, scopeKey, type MailScope } from '../workspace/mailScope';
+import { everything, roleRank, rolesAcrossAccounts, scopeKey, type MailScope } from '../workspace/mailScope';
 
 // What the service answered, turned into the rows a tree draws. It is a function over values rather than anything a
 // component does while rendering: the shape of the tree is the interesting decision here, and a decision that can be
@@ -212,8 +212,11 @@ function gather(siblings: readonly FolderTreeRow[], toggled: ReadonlySet<string>
     });
 }
 
-// Every mailbox at once, and under it the roles at least one of them plays. The counts are summed rather than reported
-// because that is what the row stands for: an inbox row spanning three accounts holds what the three inboxes hold.
+// Every mailbox at once, and under it the three roles worth reading unified — `rolesAcrossAccounts` names them and
+// says why the rest are read in the account they happened in. The counts are summed rather than reported because that
+// is what a row stands for: an inbox row spanning three accounts holds what the three inboxes hold. The group's own
+// counts are of every folder rather than of those three, because what the row above them stands for is the whole of
+// what the person has.
 function everythingRow(directory: MailFolderDirectory): FolderTreeRow {
     const roles = rolesAcross(directory);
 
@@ -412,12 +415,18 @@ function bySiblingOrder(one: FolderTreeRow, other: FolderTreeRow): number {
     return byRole === 0 ? one.name.localeCompare(other.name) : byRole;
 }
 
+// Which folders play each of the roles offered across every account, gathered from every account at once.
+//
+// Only the roles `rolesAcrossAccounts` names are gathered at all, which is where the unified group's *three* rows come
+// from rather than one per role any account happens to play: what a role is worth reading unified is decided there,
+// beside the order the roles are offered in, because the dialog that files mail into a folder and the scope a returning
+// reader is put back into both answer to the same decision.
 function rolesAcross(directory: MailFolderDirectory): ReadonlyMap<MailFolderRole, readonly MailFolder[]> {
     const roles = new Map<MailFolderRole, MailFolder[]>();
 
     for (const entry of directory.accounts) {
         for (const folder of entry.folders) {
-            if (folder.role === null) {
+            if (folder.role === null || !rolesAcrossAccounts.includes(folder.role)) {
                 continue;
             }
 

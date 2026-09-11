@@ -267,7 +267,7 @@ describe('App sign-in', () => {
         expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toHaveProperty('value', '');
         expect(screen.getByRole('combobox', { name: 'What the question is asked about' })).toHaveProperty(
             'value',
-            'everything',
+            'role:Inbox',
         );
     });
 

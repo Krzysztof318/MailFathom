@@ -42,6 +42,21 @@ export interface RowWindow {
 }
 
 /**
+ * How many rows a scroller of this size draws at once, wherever in the list it happens to stand.
+ *
+ * The count without the offset, which is what a caller asking *could a reader have watched this* needs: the window
+ * below answers where the rows are, and that answer moves with every scroll, while how many of them there are does
+ * not.
+ *
+ * @param rowHeight What one row measures, in pixels.
+ * @param viewportHeight How tall the scroller is, in pixels.
+ * @returns How many rows are in the document at once, or none where a row has no height to measure against.
+ */
+export function rowsDrawnAtOnce(rowHeight: number, viewportHeight: number): number {
+    return rowHeight <= 0 ? 0 : Math.ceil(viewportHeight / rowHeight) + overscanRows * 2;
+}
+
+/**
  * The rows a scroller of this size shows at this offset, with the overscan either side of them.
  *
  * @param rowCount How many rows the list holds.
@@ -55,7 +70,7 @@ export function windowOf(rowCount: number, rowHeight: number, scrollTop: number,
         return { first: 0, count: 0, above: 0, below: 0 };
     }
 
-    const drawn = Math.ceil(viewportHeight / rowHeight) + overscanRows * 2;
+    const drawn = rowsDrawnAtOnce(rowHeight, viewportHeight);
     const reached = Math.floor(Math.max(scrollTop, 0) / rowHeight);
     const first = Math.min(Math.max(reached - overscanRows, 0), Math.max(rowCount - 1, 0));
     const count = Math.min(drawn, rowCount - first);

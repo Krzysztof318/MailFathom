@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
 import { ComposingContext, type Composing } from '../composer/useComposing';
 import { swipeDistance } from '../controls/swipeAcross';
-import { MailboxActsContext, nothingActed, type MailboxActs } from '../mailboxActs/useMailboxActs';
+import { MailboxActsContext, nothingActed, type AskedAct, type MailboxActs } from '../mailboxActs/useMailboxActs';
 import { LocalizationProvider } from '../localization/Localization';
 import {
     SignalledChangesContext,
@@ -241,6 +241,14 @@ async function rows(): Promise<HTMLElement[]> {
     return within(list).getAllByRole('option');
 }
 
+// The row for message two while it is going, which is the one row `row` below cannot reach: a row on its way out says
+// so in its own line, so its name no longer ends with what the message is about.
+function going2(): HTMLElement | null {
+    const list = screen.getByRole('listbox', { name: 'Messages' });
+
+    return within(list).queryByRole('option', { name: /Message 2 Archiving/ });
+}
+
 // By what it is about, which is the last part of a row's name: the name runs its parts together, so the subject is
 // matched to the end of it — which is what keeps the row for message one from also being the row for message ten.
 function row(at: number): HTMLElement {
@@ -249,15 +257,24 @@ function row(at: number): HTMLElement {
     return within(list).getByRole('option', { name: new RegExp(`Message ${String(at)}$`) });
 }
 
+// The end of a row's own animation, dispatched under the name React is actually listening for: it binds the
+// vendor-prefixed name wherever the environment declares no `AnimationEvent` constructor, which jsdom does not.
+function animationEnded(element: Element): void {
+    const named = 'AnimationEvent' in window ? 'animationend' : 'webkitAnimationEnd';
+
+    element.dispatchEvent(new Event(named, { bubbles: true }));
+}
+
 afterEach(() => {
     window.sessionStorage.clear();
 });
 
 describe('MessageList', () => {
     // An act that files a message elsewhere is the reader's, so the row goes at the press rather than when the
-    // deployment next agrees — and it comes back where it stood the moment the act is let go of, which is all a
-    // refusal leaves behind.
-    it('draws no row for a message just asked to be filed elsewhere, and draws it again once the act is let go of', async () => {
+    // deployment next agrees. It goes out under the animation that says which act took it, and it is drawn until that
+    // animation has run — then it is gone, and it comes back where it stood the moment the act is let go of, which is
+    // all a refusal leaves behind.
+    it('holds a row asked to be filed elsewhere until it has gone, then draws it again once the act is let go of', async () => {
         const transport = answering(wholeFolder);
         const leaving: MailboxActs = {
             ...nothingActed,
@@ -267,14 +284,41 @@ describe('MessageList', () => {
 
         await rows();
 
-        expect(row(1)).toBeDefined();
-        expect(
-            within(screen.getByRole('listbox', { name: 'Messages' })).queryByRole('option', { name: /Message 2$/ }),
-        ).toBeNull();
+        const going = going2();
+
+        expect(going).not.toBeNull();
+        expect([...(going?.classList ?? [])]).toContain('animate-row-filed');
+
+        act(() => {
+            animationEnded(going as Element);
+        });
+
+        await waitFor(() => {
+            expect(going2()).toBeNull();
+        });
 
         drawn.rerender(listUnder(transport, { acts: nothingActed }));
 
         expect(row(2)).toBeDefined();
+    });
+
+    // The other half of the same rule. An act performed on the selection reaches every row the list holds, and most of
+    // them are past the window's edges, where nothing is mounted and nothing reports an animation ending. Held for an
+    // animation they cannot play, those rows would stand in the length of the list until a scroll swept the lot — and
+    // that sweep is a page of rows taken out from under the reader's cursor mid-gesture.
+    it('takes a whole selection out at the press rather than holding rows no reader could watch go', async () => {
+        const filed = Array.from({ length: 30 }, (_, at): [string, AskedAct] => [
+            `message-${String(at)}`,
+            { act: 'archive', from: 'INBOX', leaves: true },
+        ]);
+
+        renderList(answering(wholeFolder), { acts: { ...nothingActed, asked: new Map(filed) } });
+
+        const drawn = await rows();
+
+        expect(drawn.some((option) => option.textContent.includes('Archiving'))).toBe(false);
+        expect(row(30)).toBeDefined();
+        expect(screen.queryByRole('option', { name: /Message 0$/ })).toBeNull();
     });
 
     it('says it is reading from the moment the read starts, where the mail will appear', () => {
@@ -422,10 +466,12 @@ describe('MessageList', () => {
         expect(await screen.findByText('There is no mail in this folder.')).toBeDefined();
     });
 
-    // A folder every row of which was asked to leave is empty from where the reader stands, and the act landing changes
-    // nothing the list holds — the read it would take to see it is not asked again — so it says so now rather than
-    // standing in a state no act ends.
-    it('says a folder is empty once every message drawn in it has been asked to leave', async () => {
+    // A folder every row of which has gone is empty from where the reader stands, and the act landing changes nothing
+    // the list holds — the read it would take to see it is not asked again — so it says so then rather than standing
+    // in a state no act ends. It says it once every row has *gone* rather than at the press: the rows are still on the
+    // screen while they go, and a folder that called itself empty over two rows going out would be answering the act
+    // before the act had been drawn.
+    it('says a folder is empty once every message drawn in it has gone', async () => {
         renderList(answering(pageOf([message(0), message(1)])), {
             acts: {
                 ...nothingActed,
@@ -434,6 +480,17 @@ describe('MessageList', () => {
                     ['message-1', { act: 'archive', from: 'INBOX', leaves: true }],
                 ]),
             },
+        });
+
+        const going = await rows();
+
+        expect(going).toHaveLength(2);
+        expect(screen.queryByText('There is no mail in this folder.')).toBeNull();
+
+        act(() => {
+            for (const element of going) {
+                animationEnded(element);
+            }
         });
 
         expect(await screen.findByText('There is no mail in this folder.')).toBeDefined();
@@ -995,10 +1052,28 @@ describe('MessageList', () => {
     // The standing rule for every list in this client: it is drawn as a skeleton once, and a change after that reaches
     // the rows it touched rather than the list. So what is asserted here is which rows carry the design's animation,
     // not that the list read something again — that is the pair of cases above.
-    it('moves only the rows the deployment named as changed', async () => {
+    //
+    // And the row that carries it is decided by the answer rather than by the signal. What a signal names is mail the
+    // deployment wrote down, which is a different question from whether a reader would see the row differently: the
+    // page it makes the list read again is what says that, one row at a time.
+    it('moves only the rows a page read again draws differently', async () => {
         const deployment = deploymentSaying();
+        // The same folder, answered a second time with one row's read mark moved — which is a difference a reader sees.
+        const moved = pageOf([
+            message(0),
+            message(1, { unread: true }),
+            ...Array.from({ length: rowsPerPage - 2 }, (_, at) => message(at + 2)),
+        ]);
+        let reads = 0;
 
-        renderList(answering(wholeFolder), { changes: deployment.changes });
+        renderList(
+            () => {
+                reads += 1;
+
+                return Promise.resolve({ status: 200, body: reads === 1 ? wholeFolder : moved, headers: {} });
+            },
+            { changes: deployment.changes },
+        );
         await rows();
 
         act(() => {
@@ -1010,6 +1085,35 @@ describe('MessageList', () => {
         });
 
         expect([...row(0).classList]).not.toContain('animate-row-changed');
+    });
+
+    // The defect this whole mechanism exists against: a deployment that re-derived a preview, re-counted a passage, or
+    // merely wrote the record down again names the mail it touched, and a list reading the signal rather than the
+    // answer washed every row of the page it was on — which is the reload a reader sees as the list reappearing.
+    it('moves no row where the page it read again carries the same mail', async () => {
+        const deployment = deploymentSaying();
+        const asked = recording(wholeFolder);
+
+        renderList(asked.transport, { changes: deployment.changes });
+        await rows();
+
+        const before = asked.requests.length;
+
+        act(() => {
+            deployment.say({ kind: 'mail.changed', account: 'work', folder: 'INBOX', emails: ['message-1'] });
+        });
+
+        await waitFor(() => {
+            expect(asked.requests.length).toBe(before + 1);
+        });
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        for (const drawn of await rows()) {
+            expect([...drawn.classList]).not.toContain('animate-row-changed');
+            expect([...drawn.classList]).not.toContain('animate-row-landing');
+        }
     });
 
     it('lands the rows a later page brought, and none of the ones it had already drawn', async () => {
@@ -1050,8 +1154,20 @@ describe('MessageList', () => {
     // changed a folder's length of scrolling ago.
     it('stops holding a row that changed once a scroll has carried it out of the list', async () => {
         const deployment = deploymentSaying();
+        const moved = pageOf([
+            message(0, { unread: true }),
+            ...Array.from({ length: rowsPerPage - 1 }, (_, at) => message(at + 1)),
+        ]);
+        let reads = 0;
 
-        renderList(answering(wholeFolder), { changes: deployment.changes });
+        renderList(
+            () => {
+                reads += 1;
+
+                return Promise.resolve({ status: 200, body: reads === 1 ? wholeFolder : moved, headers: {} });
+            },
+            { changes: deployment.changes },
+        );
         await rows();
 
         act(() => {
@@ -1188,7 +1304,7 @@ describe('MessageList, under a finger carried across a row', () => {
     // The places the list has drawn, which is what every act names and which a list under no provider holds none of.
     const listed = {
         ...nothingListed,
-        placeOf: (id: string) => ({ storedEmailId: id, account: 'work', folder: 'INBOX' }),
+        placeOf: (id: string) => ({ storedEmailId: id, account: 'work', folder: 'INBOX', unread: false }),
     };
 
     function listWithPlaces(drawn: Partial<Drawn> = {}): RenderResult {
@@ -1214,7 +1330,7 @@ describe('MessageList, under a finger carried across a row', () => {
         carry(row(0), swipeDistance);
 
         expect(performed).toHaveBeenCalledWith('archive', [
-            { storedEmailId: 'message-0', account: 'work', folder: 'INBOX' },
+            { storedEmailId: 'message-0', account: 'work', folder: 'INBOX', unread: false },
         ]);
     });
 

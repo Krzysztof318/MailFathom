@@ -38,6 +38,7 @@ import {
     nothingActed,
     type ActedMessage,
     type AskedAct,
+    type FilingAct,
     type MailboxAct,
     type MailboxActs,
 } from './useMailboxActs';
@@ -61,11 +62,14 @@ import {
 // **What each act may do at all is answered before it is offered**, which is `mailboxDestinations.ts`. An account with
 // no archive folder is a control that says so rather than one that fails once it has been pressed.
 
-/** What the toast reporting a finished act is titled, exhaustive by its own type. */
-const actReported: Readonly<Record<MailboxAct, MessageKey>> = {
-    flag: 'act.flagged',
-    unflag: 'act.unflagged',
-    markUnread: 'act.markedUnread',
+// The three acts that file a message elsewhere are reported and the four that write a flag are not, which is the
+// design project's own and is a statement about what a report is for rather than about how much each act matters. A
+// message filed somewhere else has left the screen it was on, so the toast is where somebody learns where it went and
+// the only place the way back is offered; a flag is a mark the row draws the moment it is asked for, and a card in the
+// corner saying the mark that just appeared has appeared is the client narrating itself.
+
+/** What the toast reporting a finished act is titled, exhaustive by the acts that raise one. */
+const actReported: Readonly<Record<FilingAct, MessageKey>> = {
     archive: 'act.archived',
     delete: 'act.deleted',
     move: 'act.filed',
@@ -342,8 +346,8 @@ export function MailboxActsProvider({
                       asking,
                       transport,
                       batch.map((message) =>
-                          act === 'markUnread'
-                              ? { storedEmailId: message.storedEmailId, seen: false }
+                          act === 'markUnread' || act === 'markRead'
+                              ? { storedEmailId: message.storedEmailId, seen: act === 'markRead' }
                               : { storedEmailId: message.storedEmailId, flagged: act === 'flag' },
                       ),
                   )
@@ -361,6 +365,10 @@ export function MailboxActsProvider({
      * Only the half the queue has no notion of. A batch that was written down is reported as written down however the
      * batch beside it ended, because what the deployment holds does not turn on what it was asked next — and what it
      * refused, or never answered at all, is the queue's to say, which `handOver` gives it.
+     *
+     * **An act that writes a flag reports nothing at all**, for the reason stated beside `actReported`: what it did is
+     * the mark the row is already drawing. The queue still follows it, so a refusal is still said — what is silent is
+     * the success.
      */
     function report(
         act: MailboxAct,
@@ -369,35 +377,29 @@ export function MailboxActsProvider({
         destroying: boolean,
         records: readonly string[],
     ): void {
-        if (recorded.length === 0) {
+        if (recorded.length === 0 || changesAFlag(act)) {
             return;
         }
 
-        // The way back is the toast's single action, which is the design project's own: the three acts that change a
-        // flag offer none, because a flag is what the control that set it takes off again. A delete that destroys the
-        // mail offers a different one — the wait in front of it rather than a reverse move — which is why it is
-        // composed apart rather than folded in here.
-        const wayBack = changesAFlag(act)
-            ? {}
-            : {
-                  action: {
-                      label: translate('act.undo'),
-                      take: () => {
-                          takeBack(recorded);
-                      },
-                  },
-              };
-
         toasts.raise(
             destroying
-                ? deleting(recorded.length, records)
+                ? deleting(recorded, records)
                 : {
                       kind: 'neutral',
                       title: translate(actReported[act], {
                           folder: destination === undefined ? '' : destinationName(destination, translate),
                       }),
                       body: counted(recorded.length),
-                      ...wayBack,
+
+                      // The way back is the toast's single action, which is the design project's own. A delete that
+                      // destroys the mail offers a different one — the wait in front of it rather than a reverse
+                      // move — which is why it is composed apart above rather than folded in here.
+                      action: {
+                          label: translate('act.undo'),
+                          take: () => {
+                              takeBack(recorded);
+                          },
+                      },
                   },
         );
     }
@@ -481,13 +483,13 @@ export function MailboxActsProvider({
      * same moment read two ways, which is why one toast carries both rather than a timer somewhere else agreeing with
      * a card somewhere else.
      */
-    function deleting(messages: number, records: readonly string[]): Toast {
+    function deleting(messages: readonly ActedMessage[], records: readonly string[]): Toast {
         let takenBack = false;
 
         return {
             kind: 'neutral',
             title: translate('act.deletingPermanently'),
-            body: counted(messages),
+            body: counted(messages.length),
             action: {
                 label: translate('act.undo'),
                 take: () => {
@@ -497,7 +499,7 @@ export function MailboxActsProvider({
             },
             whenGone: () => {
                 if (!takenBack) {
-                    release(records);
+                    release(messages, records);
                 }
             },
         };
@@ -546,11 +548,22 @@ export function MailboxActsProvider({
         );
     }
 
-    /** Says the way back has closed, so the deployment stops holding the delete and takes it in hand at once. */
-    function release(records: readonly string[]): void {
+    /**
+     * Says the way back has closed, so the deployment stops holding the delete and takes it in hand at once.
+     *
+     * **The rows go with the offer.** While the card stood there was still a message to put back, so the row stayed
+     * where it was and said what was about to happen to it; the moment the card goes there is nothing left of that
+     * message to draw, and a row that went on standing would be a row claiming a message the deployment is destroying.
+     * It is the same claim the three filing acts write from the press — `leaves` rather than a second kind of state —
+     * so the queue that follows this delete lets go of it exactly as it lets go of an archive, and a delete the
+     * deployment ends up refusing puts the row back rather than leaving a gap nobody can account for.
+     */
+    function release(messages: readonly ActedMessage[], records: readonly string[]): void {
         if (session === null) {
             return;
         }
+
+        remember('delete', messages, true);
 
         for (const batch of batchesOf(records)) {
             // Nothing is reported and nothing is waited for: what this asks for is what would have happened anyway

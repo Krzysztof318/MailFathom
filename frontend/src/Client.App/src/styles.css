@@ -285,6 +285,16 @@
     --spacing-file-window: min(58.75rem, calc(100% - 3.5rem));
     --spacing-file-window-tall: min(88vh, calc(100% - 3.5rem));
 
+    /* The surface a message's readings are checked on, in the composition where it is a card rather than the whole
+       screen — the width the design project draws it at, and the height it stops short of the viewport by the room the
+       project leaves above and below it. The height is a ceiling rather than a size, which is where this parts from the
+       settings card: a message carrying one reading is a short card and one carrying three scrolls inside a tall one,
+       and the project draws the surface that way because what is in it varies with the message. Below the workspace
+       breakpoint neither is read, because the surface is the screen there, which is what the project draws for a
+       phone. */
+    --spacing-readings: 38.75rem;
+    --spacing-readings-tall: calc(100vh - 2.75rem);
+
     /* The share of the sign-in screen its brand column takes above the split breakpoint, which the design draws as a
        proportion of the window rather than as a width — so the column and the form beside it keep their ratio at
        every size the composition holds. Read by `basis-sign-in-brand`, which is why it is a `--container-*` name. */
@@ -375,13 +385,17 @@
        into its own height, and a row whose message changed is washed in the accent and marked down its leading edge
        for long enough to be found before it settles back.
 
-       The design draws a third — a row leaving, closing the same way it opened — and no surface in this client removes
-       a tile today: mail leaves a folder by being read again and a notification leaves the centre by ageing out of it,
-       and neither is a row this client is holding while it goes. It joins the two below with the first surface that
-       genuinely takes one away. */
+       The design draws a third — a row leaving — and two of them are it: what a row does as it goes is one animation
+       per act rather than one for going, because the colour is the whole point of it. Red is a message being deleted
+       and orange is one being filed somewhere else, archive and move alike, which is what tells the two apart at the
+       only moment a reader is looking at the row rather than at the corner. A row leaving because the folder was read
+       again plays neither: that arrives as a list, and going out under an animation is what an act a person performed
+       looks like. */
     --animate-row-opening: row-opening 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
     --animate-row-landing: row-landing 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
     --animate-row-changed: row-changed 1700ms ease-out both;
+    --animate-row-deleted: row-deleted 460ms cubic-bezier(0.4, 0, 0.2, 1) both;
+    --animate-row-filed: row-filed 460ms cubic-bezier(0.4, 0, 0.2, 1) both;
 
     @keyframes row-opening {
         from {
@@ -429,6 +443,60 @@
             box-shadow:
                 inset 3px 0 0 transparent,
                 inset 0 0 0 40px transparent;
+        }
+    }
+
+    /* The wash and the going are one animation each rather than the design's two on two elements, for the reason the
+       arrival above is the travel without the height: the window over this list is arithmetic over one row height, so
+       a row closing to nothing would take every row under it away from where the window says it is for half a second.
+       What is left is the fade and the travel off the leading edge, which is the part that says *this one is going*.
+
+       The wash arrives quickly and holds, because the row is gone before it could settle back — a row that faded out
+       of a wash still half drawn would be saying the act was half performed. The shadows are inset for the reason
+       `row-changed`'s are: the row keeps its own place in the column while it goes. */
+    @keyframes row-deleted {
+        0% {
+            box-shadow:
+                inset 3px 0 0 transparent,
+                inset 0 0 0 0 var(--color-error-soft);
+            opacity: 1;
+        }
+
+        28% {
+            box-shadow:
+                inset 3px 0 0 var(--color-error),
+                inset 0 0 0 40px var(--color-error-soft);
+        }
+
+        100% {
+            box-shadow:
+                inset 3px 0 0 var(--color-error),
+                inset 0 0 0 40px var(--color-error-soft);
+            opacity: 0;
+            transform: translateX(-22px);
+        }
+    }
+
+    @keyframes row-filed {
+        0% {
+            box-shadow:
+                inset 3px 0 0 transparent,
+                inset 0 0 0 0 var(--color-warning-soft);
+            opacity: 1;
+        }
+
+        28% {
+            box-shadow:
+                inset 3px 0 0 var(--color-warning),
+                inset 0 0 0 40px var(--color-warning-soft);
+        }
+
+        100% {
+            box-shadow:
+                inset 3px 0 0 var(--color-warning),
+                inset 0 0 0 40px var(--color-warning-soft);
+            opacity: 0;
+            transform: translateX(-22px);
         }
     }
 

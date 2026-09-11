@@ -7,8 +7,9 @@ import { Control } from '../controls/Control';
 import type { ControlShape } from '../controls/controlShapes';
 import { PlannedControl } from '../controls/PlannedControl';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadMarking } from '../readMarking/useReadMarking';
 import { ActQuestions } from './ActQuestions';
-import { actsDrawn, actsOnAStrip, refusalSaid, standsInTheWay } from './drawnActs';
+import { actsDrawn, actsOnAStrip, readActFor, refusalSaid, standsInTheWay } from './drawnActs';
 import { useMailboxActs, type ActedMessage, type MailboxAct } from './useMailboxActs';
 
 // The five things a person does to a mailbox, drawn once for the two strips that offer them: the toolbar, over the
@@ -38,6 +39,7 @@ export function MailboxActControls({
 }) {
     const { translate } = useLocalization();
     const acts = useMailboxActs();
+    const marking = useReadMarking();
     const deleting = useRef<HTMLDialogElement>(null);
     const filing = useRef<HTMLDialogElement>(null);
 
@@ -48,7 +50,11 @@ export function MailboxActControls({
 
     return (
         <>
-            {actsOnAStrip.map((asked) => {
+            {actsOnAStrip.map((slot) => {
+                // The read control is the one slot that goes both ways, and which way is the messages' own state
+                // rather than the strip's: everything under it drawn read is offered the act that marks them unread,
+                // and anything else the act that marks them read. Every other slot is the act it names.
+                const asked = slot === 'markUnread' ? readActFor(acts, marking, messages) : slot;
                 const { icon, label } = actsDrawn[asked];
 
                 // Either the deployment's refusal or the fact that this act is already on its way for every message
@@ -59,7 +65,7 @@ export function MailboxActControls({
 
                 return inTheWay === null ? (
                     <Control
-                        key={asked}
+                        key={slot}
                         label={translate(label)}
                         icon={icon}
                         shape={shape}
@@ -75,7 +81,7 @@ export function MailboxActControls({
                     />
                 ) : (
                     <PlannedControl
-                        key={asked}
+                        key={slot}
                         label={translate(label)}
                         icon={icon}
                         shape={shape}
