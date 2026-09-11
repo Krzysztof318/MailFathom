@@ -799,6 +799,12 @@ segment, and it moves between replicas as the segments do. A refused claim for s
 another one holding it; it walked nothing and deferred the rest of the walk by `Jobs:LeaseDuration`, so an occasional
 one is ordinary and a steady stream for one scope is worth a look at the lease table.
 
+The stored-content move holds the one scope `stored-content-move`, for a pass and the interval after it, so while a
+move is running one replica at a time publishes it, and a granted claim is counted about once per
+`ContentStorage:Move:Interval` — usually on the replica that carried the last pass, which asks again first. A replica
+that finds the move held counts a refused claim on each of its own intervals. None is counted while no move is running,
+because a replica asks for the lease only once it has read that a move is waiting for a pass.
+
 ### What a synchronization cycle emits
 
 No instrumentation package exists for the mail library, so without what follows the part of MailFathom that spends the

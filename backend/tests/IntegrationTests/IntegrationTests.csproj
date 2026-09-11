@@ -7,6 +7,8 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="MailKit" />
     <PackageReference Include="NSubstitute" />
+    <!-- A clock a test advances by hand, where two replicas' intervals have to elapse in one instant and never again. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="MimeKit" />
     <PackageReference Include="xRetry.v3" />
     <PackageReference Include="xunit.v3.mtp-v2" />

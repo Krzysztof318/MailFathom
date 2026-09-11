@@ -440,6 +440,65 @@ public sealed class StoredContentMoveTests
         Assert.Empty(this.content.Repoints);
     }
 
+    /// <summary>A running move is what a replica asks for the move's lease for.</summary>
+    [Fact]
+    public async Task HasMoveToCarryAsync_MoveRunning_ReportsIt()
+    {
+        // Arrange
+        this.ArrangeRunningMove();
+
+        // Act
+        var hasMove = await this.MoveOver().HasMoveToCarryAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(hasMove);
+    }
+
+    /// <summary>A move nobody is waiting on gives a replica nothing to hold a lease for.</summary>
+    [Theory]
+    [InlineData(StoredContentMoveState.Paused)]
+    [InlineData(StoredContentMoveState.Completed)]
+    public async Task HasMoveToCarryAsync_MoveNotRunning_ReportsNone(StoredContentMoveState state)
+    {
+        // Arrange
+        this.ArrangeRunningMove(state);
+
+        // Act
+        var hasMove = await this.MoveOver().HasMoveToCarryAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(hasMove);
+    }
+
+    /// <summary>A deployment nobody asked for a move has none to carry.</summary>
+    [Fact]
+    public async Task HasMoveToCarryAsync_NoMoveAsked_ReportsNone()
+    {
+        // Act
+        var hasMove = await this.MoveOver().HasMoveToCarryAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(hasMove);
+    }
+
+    /// <summary>Whether the deployment is moving its mail is the process's question, whatever grant a caller carries.</summary>
+    [Fact]
+    public async Task HasMoveToCarryAsync_ReachedByACallerRatherThanTheProcess_IsRefused()
+    {
+        // Arrange
+        this.ArrangeRunningMove();
+
+        var move = this.MoveOver(
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            move.HasMoveToCarryAsync(TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.False(refusal.RequiredPermission.IsSpecified);
+    }
+
     /// <summary>Builds a payload identity whose order is the order the walk visits it in.</summary>
     private static Guid PayloadId(int position) => Guid.Parse($"00000000-0000-0000-0000-{position:D12}");
 

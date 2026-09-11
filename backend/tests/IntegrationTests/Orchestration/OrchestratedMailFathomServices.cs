@@ -10,6 +10,7 @@ using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
+using MailFathom.Application.EmailContent.Move;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.AttachmentText.Limits;
 using MailFathom.Application.Emails.Embeddings.Backfill;
@@ -453,6 +454,12 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
                 OrchestratedObjectStorage.EndpointAt(orchestration.ObjectStorage),
                 OrchestratedObjectStorage.ReclamationBounds,
                 configuredTrustAnchor: null);
+
+            // The move the composition root registers beside the backend. One payload a pass rather than the shipped
+            // twenty, because the walk spans every class's content in the one shared database: a test reaching it has
+            // to decide exactly how far each pass goes, or a pass would carry another class's mail with its own.
+            builder.Services.AddSingleton(new StoredContentMoveOptions { PayloadsPerPass = 1 });
+            builder.Services.AddScoped<StoredContentMove>();
         }
         // Registered by a composition root for the reason the generator above is: AddInfrastructure registers neither
         // the embedding generation nor the backfill, because both resolve a text embedding generator an instance that

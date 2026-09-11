@@ -67,6 +67,49 @@ public sealed class ContentMoveOptionsTests
         Assert.Empty(errors);
     }
 
+    /// <summary>A lease outside its range is either renewed as fast as it expires or leaves a crashed holder's move parked for hours.</summary>
+    [Theory]
+    [InlineData(nameof(ContentMoveOptions.LeaseDuration), 9)]
+    [InlineData(nameof(ContentMoveOptions.LeaseDuration), 3_601)]
+    [InlineData(nameof(ContentMoveOptions.LeaseRenewalInterval), 0.5)]
+    [InlineData(nameof(ContentMoveOptions.LeaseRenewalInterval), 1_801)]
+    public void FindConfigurationErrors_ALeaseSettingOutsideItsRange_IsRefusedNamingTheKey(string propertyName, double seconds)
+    {
+        // Arrange
+        var options = propertyName == nameof(ContentMoveOptions.LeaseDuration)
+            ? new ContentMoveOptions { LeaseDuration = TimeSpan.FromSeconds(seconds), LeaseRenewalInterval = TimeSpan.FromSeconds(1) }
+            : new ContentMoveOptions { LeaseRenewalInterval = TimeSpan.FromSeconds(seconds), LeaseDuration = TimeSpan.FromHours(1) };
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors());
+
+        // Assert
+        Assert.Contains($"{ContentMoveOptions.SectionPath}:{propertyName}", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>A lease renewed no sooner than it expires lets a second replica start a pass while the first is still carrying one.</summary>
+    [Theory]
+    [InlineData(30)]
+    [InlineData(45)]
+    public void FindConfigurationErrors_ARenewalIntervalNotShorterThanTheLease_IsRefusedNamingTheKey(int renewalSeconds)
+    {
+        // Arrange
+        var options = new ContentMoveOptions
+        {
+            LeaseDuration = TimeSpan.FromSeconds(30),
+            LeaseRenewalInterval = TimeSpan.FromSeconds(renewalSeconds),
+        };
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors());
+
+        // Assert
+        Assert.Contains(
+            $"{ContentMoveOptions.SectionPath}:{nameof(ContentMoveOptions.LeaseRenewalInterval)}",
+            error,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>A pass that carries no payload is a move that runs forever and moves nothing.</summary>
     [Theory]
     [InlineData(0)]

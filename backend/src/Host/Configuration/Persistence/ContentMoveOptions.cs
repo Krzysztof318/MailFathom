@@ -36,6 +36,11 @@ internal sealed class ContentMoveOptions
     /// <remarks>An hour between passes over a mailbox of tens of thousands of messages is a move that would not finish in a year, which is a bound nobody meant to set.</remarks>
     internal static readonly TimeSpan MaximumInterval = TimeSpan.FromHours(1);
 
+    private static readonly TimeSpan MinimumLeaseDuration = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan MaximumLeaseDuration = TimeSpan.FromHours(1);
+    private static readonly TimeSpan MinimumLeaseRenewalInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan MaximumLeaseRenewalInterval = TimeSpan.FromMinutes(30);
+
     /// <summary>Gets or sets how long the deployment waits between two bounded passes.</summary>
     public TimeSpan Interval { get; set; } = TimeSpan.FromSeconds(10);
 
@@ -45,20 +50,54 @@ internal sealed class ContentMoveOptions
     /// <summary>Gets or sets how many bytes of raw MIME one pass carries before it ends, whatever the count says.</summary>
     public long MaxBytesPerPass { get; set; } = 64L * 1024 * 1024;
 
+    /// <summary>Gets or sets how long a replica holds the move from each claim or renewal of its lease.</summary>
+    /// <remarks>
+    /// <para>
+    /// One replica carries the move at a time, holding it for a pass and for the interval after it, so this is the longest
+    /// the move waits for another replica after its holder crashed. A replica that stops gracefully gives it back at once.
+    /// </para>
+    /// <para>
+    /// Must be longer than <see cref="LeaseRenewalInterval" />. Half the difference between the two is how long a renewal
+    /// may take to be answered, and the other half is how long a pass stopped by a renewal that was not has to record
+    /// where it got to before another replica may start one.
+    /// </para>
+    /// </remarks>
+    public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>Gets or sets how long after the last confirmed claim or renewal the move's lease is renewed.</summary>
+    /// <remarks>Only a pass that outlasts it, or an interval longer than it, writes a renewal at all.</remarks>
+    public TimeSpan LeaseRenewalInterval { get; set; } = TimeSpan.FromSeconds(30);
+
     /// <summary>Reports every reason these bounds could not be used, by reading the declaration alone.</summary>
     /// <returns>One message per faulty setting, each naming its configuration path, empty when the declaration is usable.</returns>
     public IEnumerable<string> FindConfigurationErrors()
     {
-        if (this.Interval < MinimumInterval || this.Interval > MaximumInterval)
+        if (RangeError(nameof(this.Interval), this.Interval, MinimumInterval, MaximumInterval) is { } intervalError)
+        {
+            yield return intervalError;
+        }
+
+        if (RangeError(nameof(this.LeaseDuration), this.LeaseDuration, MinimumLeaseDuration, MaximumLeaseDuration) is { } leaseError)
+        {
+            yield return leaseError;
+        }
+
+        if (RangeError(nameof(this.LeaseRenewalInterval), this.LeaseRenewalInterval, MinimumLeaseRenewalInterval, MaximumLeaseRenewalInterval) is { } renewalError)
+        {
+            yield return renewalError;
+        }
+
+        if (this.LeaseRenewalInterval >= this.LeaseDuration)
         {
             yield return Error(
-                nameof(this.Interval),
+                nameof(this.LeaseRenewalInterval),
                 string.Format(
                     CultureInfo.InvariantCulture,
-                    "is '{0}', which is outside the permitted range of {1} to {2}.",
-                    this.Interval,
-                    MinimumInterval,
-                    MaximumInterval));
+                    "is '{0}', which is not shorter than {1}:{2} ('{3}'). A lease renewed no sooner than it expires lets a second replica start a pass while the first is still carrying one.",
+                    this.LeaseRenewalInterval,
+                    SectionPath,
+                    nameof(this.LeaseDuration),
+                    this.LeaseDuration));
         }
 
         if (this.PayloadsPerPass <= 0)
@@ -83,6 +122,18 @@ internal sealed class ContentMoveOptions
         PayloadsPerPass = this.PayloadsPerPass,
         MaxBytesPerPass = this.MaxBytesPerPass,
     };
+
+    private static string? RangeError(string propertyName, TimeSpan value, TimeSpan minimum, TimeSpan maximum) =>
+        value < minimum || value > maximum
+            ? Error(
+                propertyName,
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "is '{0}', which is outside the permitted range of {1} to {2}.",
+                    value,
+                    minimum,
+                    maximum))
+            : null;
 
     private static string Error(string propertyName, string detail) =>
         string.Format(CultureInfo.InvariantCulture, "{0}:{1} {2}", SectionPath, propertyName, detail);
