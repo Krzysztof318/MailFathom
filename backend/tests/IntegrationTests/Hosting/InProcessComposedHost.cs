@@ -39,8 +39,9 @@ namespace MailFathom.IntegrationTests.Hosting;
 /// </para>
 /// <para>
 /// Three things are taken out so that what starts is a pipeline rather than a deployment.
-/// <see cref="PipelineCapturingServer" /> replaces Kestrel, so no socket is bound and no port is contended for with
-/// the orchestrated hosts this suite already runs. Every hosted service the composition added is removed, because those
+/// <see cref="PipelineCapturingServer" /> replaces Kestrel by default — a shape proving something about a protocol a
+/// request feature cannot carry asks for the real server instead, and states its own ports — so no socket is bound and
+/// no port is contended for with the orchestrated hosts this suite already runs. Every hosted service the composition added is removed, because those
 /// are the workers that reach a database, a mail server, and a model endpoint the moment they start — this host is
 /// composed for its request pipeline and shares neither the orchestrated database nor the orchestrated mailbox. And the
 /// data protection key ring is held in memory rather than under whoever ran the suite.
@@ -56,9 +57,9 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
     ];
 
     private readonly WebApplication app;
-    private readonly PipelineCapturingServer server;
+    private readonly PipelineCapturingServer? server;
 
-    private InProcessComposedHost(WebApplication app, PipelineCapturingServer server, AuthenticationSchemeLog authenticatedSchemes)
+    private InProcessComposedHost(WebApplication app, PipelineCapturingServer? server, AuthenticationSchemeLog authenticatedSchemes)
     {
         this.app = app;
         this.server = server;
@@ -83,12 +84,21 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
     /// <param name="configuration">The settings the shape is written as, which is the input the composition actually reads.</param>
     /// <param name="cancellationToken">Cancels the start.</param>
     /// <param name="beyondComposition">Anything a test has to register after the composition has run and before the container is built.</param>
+    /// <param name="overRealSockets">
+    /// Leaves Kestrel in place, so the shape binds the listeners its sections declared and answers a client that
+    /// connects to one. The default is the substituted server, which every shape here wants: it binds nothing, so no
+    /// port is contended for with the orchestrated hosts and a test drives the pipeline directly. What needs the
+    /// exception is a claim about a protocol a request feature cannot carry — a WebSocket standing open against the
+    /// signal hub is the one that exists — and a shape asking for it states its own ports and drives the host over the
+    /// network rather than through <see cref="SendAsync" />, which is unavailable there.
+    /// </param>
     /// <returns>The started host.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
     internal static async Task<InProcessComposedHost> StartAsync(
         IReadOnlyList<KeyValuePair<string, string?>> configuration,
         CancellationToken cancellationToken,
-        Action<WebApplicationBuilder>? beyondComposition = null)
+        Action<WebApplicationBuilder>? beyondComposition = null,
+        bool overRealSockets = false)
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
@@ -123,8 +133,12 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
             builder.Services.Remove(composedWorker);
         }
 
-        var server = new PipelineCapturingServer();
-        builder.Services.AddSingleton<IServer>(server);
+        var server = overRealSockets ? null : new PipelineCapturingServer();
+
+        if (server is not null)
+        {
+            builder.Services.AddSingleton<IServer>(server);
+        }
 
         // The console lifetime registers process-wide signal handlers and writes to standard output. Neither belongs in
         // a suite that starts several hosts of its own.
@@ -170,6 +184,12 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(headers);
 
+        // A shape started over real sockets has no captured pipeline to hand a request to, and driving it here would
+        // silently answer from a server nobody connected to.
+        var pipeline = this.server
+            ?? throw new InvalidOperationException(
+                "This shape was started over real sockets, so it is driven with an HTTP client against the ports its sections declared rather than through the captured pipeline.");
+
         var request = new HttpRequestFeature
         {
             Method = method,
@@ -210,7 +230,7 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
             RemotePort = 51234,
         });
 
-        await this.server.SendAsync(requestFeatures);
+        await pipeline.SendAsync(requestFeatures);
 
         this.AppliedRequestBodySizeLimit = bodySizeLimit.MaxRequestBodySize;
 

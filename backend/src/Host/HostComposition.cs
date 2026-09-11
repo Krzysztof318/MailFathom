@@ -62,6 +62,7 @@ using MailFathom.Host.Configuration.Providers;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.Configuration.SensitiveContent;
+using MailFathom.Host.Configuration.Signals;
 using MailFathom.Host.Configuration.Spam;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Configuration.UserSettings.Administration;
@@ -84,6 +85,7 @@ using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Rules;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Mcp;
+using Microsoft.AspNetCore.SignalR.StackExchangeRedis;
 using Microsoft.Extensions.Options;
 using OpenTelemetry.Exporter;
 
@@ -1227,6 +1229,14 @@ internal static class HostComposition
         var clientEndpointSettings = ClientEndpointOptions.ReadFrom(builder.Configuration);
         builder.Services.AddSingleton(Options.Create(clientEndpointSettings));
 
+        // Read beside the client surface because it is that surface's own second server, and registered whether or not
+        // the surface is served: the startup gate that proves every declared credential resolves reads it from the
+        // container, and a deployment that declared a backplane it never connects to is told about a broken reference
+        // rather than left to discover it on the day it enables the client. Whether anything is registered for it is
+        // AddClientSignalChannel's, which runs only where that surface is served.
+        var signalBackplaneSettings = SignalBackplaneOptions.ReadFrom(builder.Configuration);
+        builder.Services.AddSingleton(Options.Create(signalBackplaneSettings));
+
         // Read once, like the three sections above and for the same reason: it decides which sockets are opened and which
         // routes exist, both of which are settled while the application is being built. Bound strictly, so a misspelled key
         // cannot leave a deployment serving a posture nobody selected.
@@ -1393,7 +1403,7 @@ internal static class HostComposition
             builder.Services.AddClientTransportSecurity(clientEndpointSettings);
             builder.Services.AddClientResponseCompression();
             AddClientTelemetryProxy(builder);
-            AddClientSignalChannel(builder);
+            AddClientSignalChannel(builder, signalBackplaneSettings);
             // What puts a Discover run on a scope of its own and keeps it running past the request that asked for it.
             // Behind the client endpoint's switch because the routes that start and read a run are, and a singleton
             // because it holds nothing per request — the scope a run executes on is made per run rather than inherited.
@@ -1508,11 +1518,32 @@ internal static class HostComposition
     /// the rest of the application graph, unconditionally, because every raise site reaches it whether or not anything
     /// is listening.
     /// </para>
+    /// <para>
+    /// <b>The backplane is registered here or nowhere</b>, which is what makes a deployment answering an agent alone
+    /// connect to no RESP endpoint however much is configured: the signals it would carry are this surface's, so a
+    /// process that serves none has nothing to fan out. Where the section is absent nothing is registered either, and a
+    /// deployment running one replica keeps exactly the behaviour it had before the section existed — one process, one
+    /// set of connections, and every signal delivered in memory.
+    /// </para>
     /// </remarks>
-    private static void AddClientSignalChannel(WebApplicationBuilder builder)
+    private static void AddClientSignalChannel(WebApplicationBuilder builder, SignalBackplaneOptions backplaneSettings)
     {
-        builder.Services.AddSignalR();
+        var signals = builder.Services.AddSignalR();
         builder.Services.AddSingleton<ClientSignalTickets>();
         builder.Services.AddSingleton<IClientSignalChannel, SignalRClientSignalChannel>();
+
+        if (!backplaneSettings.IsConfigured)
+        {
+            return;
+        }
+
+        builder.Services.AddSingleton<SignalBackplaneTelemetry>();
+
+        // The endpoint is configured through the container rather than through the overload that takes a connection
+        // string, because the string is behind a secret reference and resolving one is asynchronous: the factory
+        // SignalBackplaneConnection installs runs when a connection is wanted, which is where an await belongs and
+        // where a rotated credential is picked up.
+        builder.Services.AddSingleton<IConfigureOptions<RedisOptions>, SignalBackplaneConnection>();
+        signals.AddStackExchangeRedis();
     }
 }

@@ -484,6 +484,37 @@ docker volume rm <volume>
 
 Aspire names that volume after the AppHost project's path, so every clone and every worktree owns a different one and the name has to be read rather than assumed. List them first and take the one belonging to the checkout being reset; removing another one destroys a database the reset was not about.
 
+### Two replicas over a signal backplane
+
+The signal channel is the one behaviour a single-replica run cannot show, because the gap it has above one replica is
+the gap between two processes: a signal raised where an account is synchronized has to reach a connection held
+somewhere else. So the orchestration can start that shape, and it is off unless it is asked for — a second host and a
+container nobody needs for ordinary work.
+
+```bash
+dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "SignalBackplane:Enabled" "true"
+```
+
+or, for one run rather than for the machine:
+
+```bash
+SignalBackplane__Enabled=true dotnet run --project backend/src/AppHost/AppHost.csproj
+```
+
+A value that is not a boolean fails the app host at startup naming the key, the same way a port that is not a number
+does. What the switch adds is two resources. `signal-backplane` is a [Garnet](https://github.com/microsoft/garnet)
+container — Microsoft's RESP server — with no volume and no persistence, because a backplane holds a live subscription
+rather than a record and an empty one is ready in under a second. `mailfathom-host-replica` is a second MailFathom
+process against the same database, the same data-encryption key, and two more free ports of its own: it serves the
+client surface and the probes and nothing else, because the MCP and administrative surfaces belong to the first host
+and a second of each would be sockets for nothing this shape is being started to show. Both hosts are handed the
+backplane's address as `SignalBackplane__ConnectionString__SecretReference` and wait for it to be up.
+
+Both replicas synchronize, which is what makes the shape worth starting: an account belongs to whichever replica holds
+its lease, so the process that raises a signal is as likely to be one as the other. Sign in to each replica's client
+surface in its own browser tab — the dashboard lists both ports — and a change made through one is announced on both.
+Turning the switch off again leaves an ordinary single-host run, and the client behaves exactly as it did.
+
 ## Development secrets
 
 Secrets are never written into configuration as values, in development either. `appsettings.Development.json` sets the interpretation mode to `ReferenceOrInline`, which keeps `plaintext:` references convenient without weakening the shipped `ReferenceOnly` default:

@@ -6,6 +6,8 @@
          available to anything that opens a connection. -->
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="MailKit" />
+    <!-- The connection the signal backplane is proven from. Nothing else here speaks the hub protocol. -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
     <PackageReference Include="NSubstitute" />
     <!-- A clock a test advances by hand, where two replicas' intervals have to elapse in one instant and never again. -->
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />

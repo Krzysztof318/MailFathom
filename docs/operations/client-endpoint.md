@@ -2428,7 +2428,7 @@ to the front or the browser reports its network back.
 
 **A client catches up on what it could not be told.** Nothing buffers a statement for a connection that is not open, so
 a gap in the channel is a gap in what the client heard — a dropped socket, a rolling upgrade, a network that went and
-came back, and, above one replica, a statement lost behind a connection that stayed open. So the client refreshes: it
+came back, and, above one replica with no backplane configured, a statement lost behind a connection that stayed open. So the client refreshes: it
 reads again everything it draws — the folder tree and its counts, the pages of the list it holds, the open message, the
 accounts, and the notification centre — whenever a connection stands again after one stood for the same sign-in, and
 every five minutes while its window is visible, counted from the last refresh rather than on a fixed clock. It never
@@ -2436,6 +2436,46 @@ refreshes while the window is hidden, and refreshes at once when a window hidden
 refresh is the act the client's *Refresh* control performs, it keeps what the person is in the middle of — the
 selection, the open message, where they are in the list, and any change still pending — and one the deployment does not
 answer leaves what is drawn in place for the next to try again.
+
+#### Fanning signals across replicas
+
+**One replica's hub reaches one replica's connections.** A signal is published to the connections the process that
+raised it is holding, so above one replica the arithmetic is unkind: the replica that synchronized an account is the
+one [#1290](https://github.com/Krzysztof318/MailFathom/issues/1290) gave the account to, the connection that has to
+hear about it is wherever the browser's socket landed, and those are the same process only by chance. What the client
+sees is a channel that stands open and says almost nothing, which is worse than one that is plainly down: the client
+falls back to its five-minute refresh either way, but nothing an operator reads says the fan-out is the reason.
+
+**A RESP endpoint closes that gap, and it is optional.** Writing
+[`SignalBackplane`](configuration-endpoints.md#signalbackplane) makes every replica publish each statement to that
+endpoint and subscribe to what the others publish, so a signal raised anywhere reaches a connection held anywhere. A
+deployment running one replica writes nothing and loses nothing. A deployment serving no client surface connects to
+nothing whatever it wrote, because the backplane is registered inside the client surface's own composition.
+
+**What it costs when it is not there, or when it breaks**, is exactly what the paragraph above describes and no more:
+the channel degrades to the client's own refresh. The connection is opened so that an endpoint that is down at startup
+does not stop the host from serving, a lost or regained connection is logged at `Warning` and counted rather than
+failing a readiness probe, and nothing is buffered for a replica that was not listening — a statement is an
+instruction to look again, and the next refresh is the catch-up.
+
+**Only what a signal already carries crosses it.** The backplane transports the same payload the hub would have sent
+over the WebSocket: a kind, a count, an account alias, a folder alias, stored identities, the two server flags, and a
+raised notification's own two lines. No subject, address, body fragment, filename, or attachment name reaches it, for
+the same reason none reaches the connection. That still makes it **personal data in transit**: an account alias, a
+folder alias, and a notification's headline are about a person, and a RESP server sees them. It is **stored nowhere** —
+publish and subscribe keeps no message, this deployment sets no key, and a replica that was not subscribed at the
+moment is simply not told — so there is nothing on that server to retain, export, or erase, and nothing about it enters
+a data-subject workflow.
+
+**Keep it inside the deployment's trust boundary, and secure the transport when it is not.** The intended shape is a
+RESP server on the same network as the replicas, reached over a private address and by nothing else. No deployment
+asset here renders one yet — the section takes an address an operator already has, and the
+[local orchestration](local-development.md#two-replicas-over-a-signal-backplane) is the only place in this repository
+that starts a server for it. Pointing the section at a managed endpoint outside that boundary makes the transport the
+operator's obligation: reach it over TLS by writing `ssl=true` in the connection string, give it a password and let
+[secret provisioning](secret-provisioning.md) carry that, and restrict the endpoint to the addresses the replicas
+answer from. A clear-text RESP connection across a network somebody else runs publishes those aliases to whoever is on
+the path, and nothing in MailFathom can tell one network from another.
 
 **A proxy in front of this endpoint has to pass the upgrade** — `Upgrade` and `Connection` on the request, and no
 buffering or idle timeout shorter than a connection that is meant to stand open. Nothing here fails when it does not;

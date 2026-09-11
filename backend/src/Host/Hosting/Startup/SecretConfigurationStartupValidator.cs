@@ -7,6 +7,7 @@ using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.DataEncryption;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Persistence;
+using MailFathom.Host.Configuration.Signals;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using Microsoft.Extensions.Options;
 
@@ -37,6 +38,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
     private readonly AdminEndpointOptions adminEndpointSettings;
     private readonly ClientEndpointOptions clientEndpointSettings;
     private readonly ContentStorageOptions contentStorageSettings;
+    private readonly SignalBackplaneOptions signalBackplaneSettings;
     private readonly SecretConfigurationValidator validator;
     private readonly SecretResolutionOptions resolutionOptions;
     private readonly HostStartupGates startupGates;
@@ -52,6 +54,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         IOptions<AdminEndpointOptions> adminEndpointSettings,
         IOptions<ClientEndpointOptions> clientEndpointSettings,
         IOptions<ContentStorageOptions> contentStorageSettings,
+        IOptions<SignalBackplaneOptions> signalBackplaneSettings,
         SecretConfigurationValidator validator,
         SecretResolutionOptions resolutionOptions,
         HostStartupGates startupGates,
@@ -61,6 +64,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         ArgumentNullException.ThrowIfNull(adminEndpointSettings);
         ArgumentNullException.ThrowIfNull(clientEndpointSettings);
         ArgumentNullException.ThrowIfNull(contentStorageSettings);
+        ArgumentNullException.ThrowIfNull(signalBackplaneSettings);
         ArgumentNullException.ThrowIfNull(startupGates);
 
         this.persistenceSettings = persistenceSettings;
@@ -69,6 +73,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         this.adminEndpointSettings = adminEndpointSettings.Value;
         this.clientEndpointSettings = clientEndpointSettings.Value;
         this.contentStorageSettings = contentStorageSettings.Value;
+        this.signalBackplaneSettings = signalBackplaneSettings.Value;
         this.validator = validator;
         this.resolutionOptions = resolutionOptions;
         this.startupGates = startupGates;
@@ -111,6 +116,11 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         failures.AddRange(
             await this.validator.FindContentStorageConfigurationErrorsAsync(
                 this.contentStorageSettings,
+                cancellationToken));
+
+        failures.AddRange(
+            await this.validator.FindSignalBackplaneConfigurationErrorsAsync(
+                this.signalBackplaneSettings,
                 cancellationToken));
 
         if (failures.Count > 0)

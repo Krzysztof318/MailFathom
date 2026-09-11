@@ -297,6 +297,22 @@ if (runsIntegrationTests)
             targetPort: OrchestrationContract.SpamScannerContainerPort,
             scheme: "tcp",
             name: OrchestrationContract.SpamScannerEndpointName);
+
+    // The RESP server the client signal backplane crosses, real for the reason every other server in this topology is:
+    // what the suite exists to prove about the backplane is that a statement raised in one process reaches a connection
+    // held by another, and a substituted multiplexer proves only that MailFathom published what it meant to.
+    //
+    // Nothing in the app model references it, which is deliberate rather than an omission. The claim is about two hosts
+    // serving the client surface over one endpoint, and a shape a running process was configured once cannot be varied
+    // per test — so the suite composes both hosts in its own process against this server, exactly as it composes the
+    // pipeline shapes no orchestrated resource could express.
+    //
+    // No volume, like the object endpoint and for the same reason: a backplane holds a subscription rather than a
+    // record, nothing here outlives a run, and a server that kept anything between runs would let one run's statement
+    // reach the next.
+    builder
+        .AddGarnet(OrchestrationContract.SignalBackplaneResourceName)
+        .WithContainerName($"{ephemeralResourceNamePrefix}-signal-backplane");
 }
 
 var database = postgres.AddDatabase(OrchestrationContract.DatabaseResourceName);
@@ -474,7 +490,15 @@ else
     // other; a pinned value then replaces the one it was found for and the others stay where they were put. The last
     // one belongs to the client below, and is found here rather than beside it for that reason: a second call would
     // release these before choosing, and two sockets handed one number is a run that fails on whichever binds second.
-    var foundPorts = OrchestrationContract.FindFreePorts(5);
+    // Off unless a developer asked for it, because what it adds is a container and a second MailFathom process: the
+    // shape of a scaled-out deployment rather than of the one this topology is for.
+    var runsSignalBackplane = OrchestrationContract.ResolveSignalBackplaneEnabled(
+        builder.Configuration[OrchestrationContract.SignalBackplaneEnabledKey]);
+
+    // Two more where a second host is started, and found in the same call as the first five for the reason stated
+    // above: a second call would release these before choosing again, and two sockets handed one number is a run that
+    // fails on whichever binds second.
+    var foundPorts = OrchestrationContract.FindFreePorts(runsSignalBackplane ? 7 : 5);
     var mcpEndpointPort = PinnedPort(OrchestrationContract.PinnedMcpEndpointPortKey) ?? foundPorts[0];
     var healthEndpointsPort = PinnedPort(OrchestrationContract.PinnedHealthEndpointsPortKey) ?? foundPorts[1];
     var adminEndpointPort = foundPorts[2];
@@ -642,6 +666,82 @@ else
                 OrchestrationContract.ClientHttpEndpointName,
                 endpoint => endpoint.TargetHost = OrchestrationContract.DeveloperLoopbackAddress,
                 createIfNotExists: false);
+    }
+
+    // The scaled-out shape, which a developer asks for and no ordinary run pays for. What it adds is the RESP server a
+    // signal crosses and a second MailFathom serving the client surface beside the first, so the replica that
+    // synchronized a mailbox and the replica holding the connection that has to hear about it are two processes — which
+    // is the only arrangement in which the backplane does anything at all.
+    if (runsSignalBackplane)
+    {
+        // No volume and no persistence: a backplane holds a live subscription rather than a record, so there is nothing
+        // a restart should bring back. The container's own lifetime is the run's, unlike PostgreSQL's, because nothing
+        // is lost by starting a fresh one and an empty server is ready in under a second.
+        var signalBackplane = builder.AddGarnet(OrchestrationContract.SignalBackplaneResourceName);
+
+        // A second host resource rather than a second replica of the first, for the reason
+        // OrchestrationContract.HostReplicaResourceName gives: every socket here is stated and unproxied, so two
+        // processes asked to bind one port is a run that fails on whichever starts second.
+        //
+        // It serves the client surface and the probes alone. The MCP and administrative surfaces belong to the first
+        // host — the credential provisioning below writes through that one — and a second of each would be two more
+        // sockets for nothing this shape is being started to show.
+        var replicaHost = builder.AddProject<Projects.Host>(OrchestrationContract.HostReplicaResourceName)
+            .WithReference(database)
+            .WaitFor(database)
+            // The same key as the first host rather than one of its own, because the two open the same database: a
+            // replica holding a different key would find every sealed row unopenable.
+            .WithEnvironment("DataEncryption__ActiveKeyId", OrchestrationContract.DataEncryptionKeyId)
+            .WithEnvironment("DataEncryption__Keys__0__KeyId", OrchestrationContract.DataEncryptionKeyId)
+            .WithEnvironment("DataEncryption__Keys__0__Material__Name", OrchestrationContract.DataEncryptionKeyName)
+            .WithEnvironment(
+                "DataEncryption__Keys__0__Material__SecretReference",
+                $"plaintext:{OrchestrationContract.DataEncryptionKeyMaterial}")
+            // Synchronizing like the first host rather than serving alone, which is the point of the shape: an account
+            // belongs to whichever replica holds its lease, so the run a signal is raised by is as likely to be this
+            // process as the other one.
+            .WithEnvironment("MailSynchronization__Enabled", "true")
+            .WithEnvironment("ClientEndpoint__Enabled", "true")
+            .WithEnvironment("ClientEndpoint__Authentication__0__Method", "password")
+            .WithEnvironment("ClientEndpoint__BindAddress", OrchestrationContract.DeveloperLoopbackAddress)
+            .WithEndpoint(
+                name: OrchestrationContract.HostClientEndpointName,
+                scheme: "tcp",
+                port: foundPorts[5],
+                targetPort: foundPorts[5],
+                isProxied: false,
+                env: "ClientEndpoint__Port")
+            .WithEnvironment("HealthEndpoints__BindAddress", OrchestrationContract.DeveloperLoopbackAddress)
+            .WithEndpoint(
+                name: "health",
+                scheme: "tcp",
+                port: foundPorts[6],
+                targetPort: foundPorts[6],
+                isProxied: false,
+                env: "HealthEndpoints__Port");
+
+        if (openSslConfigurationPath is not null)
+        {
+            replicaHost.WithEnvironment(OrchestrationContract.OpenSslConfigurationVariable, openSslConfigurationPath);
+        }
+
+        foreach (var host in new[] { mailFathomHost, replicaHost })
+        {
+            // The endpoint is handed over as a plaintext reference, like every other credential this app model
+            // supplies: the value is a loopback address the orchestration allocated rather than a secret anything is
+            // being asked to keep, and the host reads it through the same secret block a deployment provisions.
+            host
+                .WithEnvironment(
+                    "SignalBackplane__ConnectionString__Name",
+                    OrchestrationContract.SignalBackplaneSecretName)
+                .WithEnvironment(
+                    "SignalBackplane__ConnectionString__SecretReference",
+                    ReferenceExpression.Create($"plaintext:{signalBackplane.Resource.ConnectionStringExpression}"))
+                // Waited for rather than dialled optimistically, unlike a deployment: a host that starts first reaches
+                // the endpoint on its own reconnection anyway, and waiting is what keeps the dashboard's account of a
+                // developer's run honest about what is up.
+                .WaitFor(signalBackplane);
+        }
     }
 }
 

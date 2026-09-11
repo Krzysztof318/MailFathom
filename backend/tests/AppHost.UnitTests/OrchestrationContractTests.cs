@@ -487,6 +487,52 @@ public sealed class OrchestrationContractTests
         Assert.Contains(OrchestrationContract.ClientEnabledKey, failure.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>One replica needs no backplane, so a checkout that states nothing starts neither the server nor the second host.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResolveSignalBackplaneEnabled_NothingStated_RunsOneReplica(string? statedValue)
+    {
+        // Act
+        var backplaneEnabled = OrchestrationContract.ResolveSignalBackplaneEnabled(statedValue);
+
+        // Assert
+        Assert.False(backplaneEnabled);
+    }
+
+    /// <summary>A developer looking at what a scaled-out deployment does asks for it by name, which is what the key is for.</summary>
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("True", true)]
+    [InlineData(" true ", true)]
+    [InlineData("false", false)]
+    public void ResolveSignalBackplaneEnabled_ValueStated_IsTheAnswerTheDeveloperWrote(string statedValue, bool expected)
+    {
+        // Act
+        var backplaneEnabled = OrchestrationContract.ResolveSignalBackplaneEnabled(statedValue);
+
+        // Assert
+        Assert.Equal(expected, backplaneEnabled);
+    }
+
+    /// <summary>A developer who wrote something else asked for a second process and a container, so the run says why rather than leaving both out.</summary>
+    [Theory]
+    [InlineData("0")]
+    [InlineData("1")]
+    [InlineData("yes")]
+    [InlineData("on")]
+    [InlineData("enabled")]
+    public void ResolveSignalBackplaneEnabled_ValueIsNotABoolean_FailsNamingTheKey(string statedValue)
+    {
+        // Act
+        var failure = Assert.Throws<InvalidOperationException>(
+            () => OrchestrationContract.ResolveSignalBackplaneEnabled(statedValue));
+
+        // Assert
+        Assert.Contains(OrchestrationContract.SignalBackplaneEnabledKey, failure.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>The address the client is handed is the surface's own origin, and the client appends its route prefix to it.</summary>
     /// <remarks>
     /// The trailing separator is the whole of what this establishes and nothing states it twice: the client composes a
