@@ -4,10 +4,12 @@
 
 using System.Security.Cryptography;
 using MailFathom.Application.Access;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Observability;
@@ -43,9 +45,18 @@ public sealed class StoredMailRederivationHandlerTests
 
     private static readonly StoredMailScope WholeAccount = new(MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")), null);
 
+    private static readonly JobExecutionSettings JobSettings = JobExecutionSettings.Create(
+        batchSize: 10,
+        leaseDuration: TimeSpan.FromMinutes(5),
+        executionTimeout: TimeSpan.FromMinutes(2),
+        maxAttempts: 5,
+        retryBaseDelay: TimeSpan.FromSeconds(30),
+        retryMaxDelay: TimeSpan.FromMinutes(30));
+
     private readonly InMemoryStoredMailRederivationRunStore runs = new();
     private readonly IJobStore jobs = Substitute.For<IJobStore>();
     private readonly RecordingRederivationTelemetry telemetry = new();
+    private readonly ScriptedLeaseRunner leases = new();
     private readonly FakeTimeProvider timeProvider = new(Now);
 
     public StoredMailRederivationHandlerTests() => this.jobs
@@ -147,7 +158,7 @@ public sealed class StoredMailRederivationHandlerTests
 
         using CancellationTokenSource attempt = new();
         var store = new WalkStore(StoredMail(EmailsPerPass + 1), stopAfterBatches: 11, attempt);
-        var handler = this.CreateHandler(store, new RunEndingOnceStopped(this.runs, attempt, Now));
+        var handler = this.CreateHandler(store, new RunMovedOnceStopped(this.runs, attempt, run => run with { EndedAt = Now }));
 
         // Act
         await handler.RunAsync(PayloadOf(WholeAccount), attempt.Token);
@@ -250,31 +261,148 @@ public sealed class StoredMailRederivationHandlerTests
         Assert.Equal(EmailsPerPass + 2, this.runs.Find(WholeAccount)!.RederivedEmailCount);
     }
 
+    /// <summary>A segment walks under the lease its scope is named by, which is the same name on every replica.</summary>
+    [Fact]
+    public async Task RunAsync_ASegmentOfAWholeAccountRun_WalksUnderTheLeaseOfThatScope()
+    {
+        // Arrange
+        this.runs.Arrange(RunOf(segmentCount: 1));
+
+        // Act
+        await this.CreateHandler(new WalkStore(StoredMail(1)))
+            .RunAsync(PayloadOf(WholeAccount), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [$"mail-rederivation/{SyntheticMailUser.Deployment.Value}/work/*"],
+            [.. this.leases.AskedScopes.Select(scope => scope.Value)]);
+    }
+
+    /// <summary>
+    /// A scope another segment holds is not walked a second time. The segment reads no mail and still hands the rest on,
+    /// because it cannot tell a holder that is walking from one whose replica stopped holding the scope — and it defers
+    /// that successor by a lease's length, so the successor never meets a stopped holder's lease still standing.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_AScopeAnotherSegmentHolds_ReadsNoMailAndDefersItsSuccessorByALease()
+    {
+        // Arrange
+        this.runs.Arrange(RunOf(segmentCount: 1));
+        this.leases.HeldElsewhere = true;
+
+        var store = new WalkStore(StoredMail(3));
+
+        // Act
+        await this.CreateHandler(store).RunAsync(PayloadOf(WholeAccount), TestContext.Current.CancellationToken);
+
+        // Assert
+        var run = this.runs.Find(WholeAccount)!;
+        var enqueued = this.EnqueuedRequests().Single();
+
+        Assert.Empty(store.CandidateScopes);
+        Assert.Equal((0, 2), (run.RederivedEmailCount, run.SegmentCount));
+        Assert.Equal(StoredMailRederivationRequests.KeyOf(run).Value, enqueued.Key.Value);
+        Assert.Equal(Now + JobSettings.LeaseDuration, enqueued.AvailableAt);
+        Assert.Empty(this.telemetry.Runs.Single().Passes);
+    }
+
+    /// <summary>
+    /// A walk whose lease another replica took stops where it is rather than at the end of its pass, and what its
+    /// committed batches re-read stays on the run for the next holder to resume past.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_AWalkThatLosesItsLeaseMidPass_KeepsWhatItCommittedAndHandsTheRestOn()
+    {
+        // Arrange
+        this.runs.Arrange(RunOf(segmentCount: 1));
+
+        using CancellationTokenSource leaseLoss = new();
+        this.leases.Loss = leaseLoss.Token;
+
+        var store = new WalkStore(StoredMail(EmailsPerPass + 1), stopAfterBatches: 3, leaseLoss);
+
+        // Act
+        await this.CreateHandler(store).RunAsync(PayloadOf(WholeAccount), TestContext.Current.CancellationToken);
+
+        // Assert
+        var run = this.runs.Find(WholeAccount)!;
+
+        Assert.True(run.IsOutstanding);
+        Assert.Equal((BatchSize * 2, 2), (run.RederivedEmailCount, run.SegmentCount));
+        Assert.Equal(3, store.CandidateScopes.Count);
+        Assert.Null(this.EnqueuedRequests().Single().AvailableAt);
+    }
+
+    /// <summary>
+    /// Of two segments that stop over one run, only the first writes a successor down. The second finds the run already
+    /// moved past the segment it carried and names that successor rather than a second one, so the walk goes on as one
+    /// chain of segments instead of two walking the same mail by turns.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_ASegmentStoppingAfterAnotherHandedTheRunOn_NamesThatSuccessorRatherThanASecond()
+    {
+        // Arrange
+        this.runs.Arrange(RunOf(segmentCount: 1));
+
+        using CancellationTokenSource attempt = new();
+        var store = new WalkStore(StoredMail(EmailsPerPass + 1), stopAfterBatches: 11, attempt);
+        var handler = this.CreateHandler(
+            store,
+            new RunMovedOnceStopped(this.runs, attempt, run => run with { SegmentCount = 2 }));
+
+        // Act
+        await handler.RunAsync(PayloadOf(WholeAccount), attempt.Token);
+
+        // Assert
+        var run = this.runs.Find(WholeAccount)!;
+
+        Assert.Equal(2, run.SegmentCount);
+        Assert.Equal(StoredMailRederivationRequests.KeyOf(run).Value, this.EnqueuedRequests().Single().Key.Value);
+    }
+
+    /// <summary>An account identifier longer than a lease scope can carry names its lease by a digest rather than failing every segment.</summary>
+    [Fact]
+    public void LeaseScopeOf_AnAccountTooLongForAScopeToCarry_IsNamedByItsDigestWithinTheBound()
+    {
+        // Arrange
+        StoredMailScope longAccount = new(
+            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create(new string('a', WorkScope.MaximumLength))),
+            MailFolderAlias.Create("inbox"));
+
+        // Act
+        var scope = StoredMailRederivationHandler.LeaseScopeOf(longAccount);
+
+        // Assert
+        Assert.StartsWith($"mail-rederivation/{SyntheticMailUser.Deployment.Value}/sha256-", scope.Value, StringComparison.Ordinal);
+        Assert.InRange(scope.Value.Length, 1, WorkScope.MaximumLength);
+    }
+
     private static RederiveStoredMailJobPayload PayloadOf(StoredMailScope scope) =>
         RederiveStoredMailJobPayload.For(scope.Account, scope.Folder);
 
-    /// <summary>Ends the scope's run on the first reading taken after the attempt was stopped, and reads through otherwise.</summary>
+    /// <summary>Moves the scope's run on the first reading taken after the attempt was stopped, and reads through otherwise.</summary>
     /// <remarks>
     /// The walk raises the cancellation from the batch that met it, so the next reading of the run is the one the
-    /// segment takes to write down what carries the rest of the scope. Ending it there is the race this covers: the
-    /// walk saw an outstanding run, and by the time the segment wrote, an overlapping attempt had finished the scope.
+    /// segment takes to write down what carries the rest of the scope. Moving it there is the race this covers: the
+    /// walk saw an outstanding run on its own segment, and by the time the segment wrote, an overlapping attempt had
+    /// finished the scope or handed the run on past it.
     /// </remarks>
-    private sealed class RunEndingOnceStopped(
+    private sealed class RunMovedOnceStopped(
         InMemoryStoredMailRederivationRunStore runs,
         CancellationTokenSource attempt,
-        DateTimeOffset endedAt)
+        Func<StoredMailRederivationRun, StoredMailRederivationRun> move)
         : IStoredMailRederivationRunStore
     {
-        private bool ended;
+        private bool moved;
 
         public async Task<StoredMailRederivationRun?> FindAsync(
             StoredMailScope scope,
             CancellationToken cancellationToken)
         {
-            if (attempt.IsCancellationRequested && !this.ended && runs.Find(scope) is { } outstanding)
+            if (attempt.IsCancellationRequested && !this.moved && runs.Find(scope) is { } outstanding)
             {
-                this.ended = true;
-                runs.Arrange(outstanding with { EndedAt = endedAt });
+                this.moved = true;
+                runs.Arrange(move(outstanding));
             }
 
             return await runs.FindAsync(scope, cancellationToken);
@@ -354,6 +482,9 @@ public sealed class StoredMailRederivationHandlerTests
             runStore ?? this.runs,
             this.jobs,
             commitPolicy,
+            this.leases,
+            JobSettings,
+            this.timeProvider,
             this.telemetry);
     }
 
@@ -492,6 +623,38 @@ public sealed class StoredMailRederivationHandlerTests
                     // Nothing is released, for the reason the segment's report releases nothing.
                 }
             }
+        }
+    }
+
+    /// <summary>Stands in for the lease table: grants every scope unless another replica is said to hold it, and lets a test take a granted lease away.</summary>
+    private sealed class ScriptedLeaseRunner : IWorkLeaseRunner
+    {
+        /// <summary>Gets the scopes asked for, in the order they were.</summary>
+        public List<WorkScope> AskedScopes { get; } = [];
+
+        /// <summary>Gets or sets whether another replica holds every scope, so nothing asked for is granted.</summary>
+        public bool HeldElsewhere { get; set; }
+
+        /// <summary>Gets or sets the token that plays a renewal another replica refused, cancelling the work under a granted lease.</summary>
+        public CancellationToken Loss { get; set; }
+
+        public async Task<bool> TryRunUnderLeaseAsync(
+            WorkScope scope,
+            Func<CancellationToken, Task> work,
+            CancellationToken cancellationToken)
+        {
+            this.AskedScopes.Add(scope);
+
+            if (this.HeldElsewhere)
+            {
+                return false;
+            }
+
+            using var heldWork = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.Loss);
+
+            await work(heldWork.Token);
+
+            return true;
         }
     }
 

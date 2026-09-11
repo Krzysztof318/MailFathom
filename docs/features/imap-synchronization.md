@@ -1,6 +1,6 @@
 # IMAP synchronization
 
-<!-- describes: backend/src/Application/Synchronization/**, backend/src/Domain/Synchronization/**, backend/src/Domain/Folders/**, backend/src/Application/Folders/**, backend/src/Infrastructure/Mail/**, backend/src/Application/Mail/Mutations/**, backend/src/Application/Mail/Maintenance/**, backend/src/Domain/Mutations/**, backend/src/Host/Hosting/Workers/MailSynchronizationCoordinator.cs, backend/src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, backend/src/Host/Hosting/Workers/AccountPushNotificationWatch.cs, backend/src/Host/Hosting/Workers/WorkLeaseHold.cs -->
+<!-- describes: backend/src/Application/Synchronization/**, backend/src/Domain/Synchronization/**, backend/src/Domain/Folders/**, backend/src/Application/Folders/**, backend/src/Infrastructure/Mail/**, backend/src/Application/Mail/Mutations/**, backend/src/Application/Mail/Maintenance/**, backend/src/Domain/Mutations/**, backend/src/Host/Hosting/Workers/MailSynchronizationCoordinator.cs, backend/src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, backend/src/Host/Hosting/Workers/AccountPushNotificationWatch.cs, backend/src/Host/Hosting/Workers/WorkLeaseHold.cs, backend/src/Host/Hosting/Workers/WorkLeaseRunner.cs -->
 
 MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for an account that asks for it — the moment the mail server says something changed. Both mechanisms run the same synchronization pass over the same read-only session; what differs is only what starts one.
 
@@ -1789,6 +1789,20 @@ next release starts at the beginning.
 run, and the segment it is on, so a second request finds the segment already queued rather than starting a second walk
 over the same mail — and where the run was written down but its work never reached the queue, the same request is what
 repairs it. `mfctl mailbox rederive-status` reads the run from the row.
+
+**A second replica walks nothing another one is walking.** The request writes the run down on whichever replica
+answered it and walks nothing itself, so which replica walks is decided by the segment. Before its first pass a segment
+takes the lease `mail-rederivation/<user>/<account>/<folder>` in the lease table — `*` standing for the whole account,
+and a scope too long for the table named by a digest, as a supervised account's is — keeps it renewed on the cadence the
+job's own lease is renewed on, and gives it back before it hands the rest on, so the next segment takes it at once on
+whichever replica claims that. A walk of one folder and a walk of the whole account are two runs with two positions,
+so they are two leases as well. A segment that finds the scope held reads no mail, because what holds it is either
+another segment walking the same run or one whose replica stopped without giving it back; it hands the rest on all the
+same, to a segment the queue releases only once `Jobs:LeaseDuration` has passed, by which time a holder that stopped
+renewing has lost the scope. The run moves on only from the segment a stopping segment found it on, so two segments
+stopping over one run write one successor between them rather than two chains of segments walking the same mail by
+turns. A renewal that does not complete stops the walk at once rather than when the lease would have expired, and the
+next segment resumes past the position the last committed batch reached.
 
 A message no reader can parse keeps whatever an earlier release read from it and the walk moves past it; a row whose
 raw MIME is no longer stored is counted apart, because only a fetch could bring that message back. Neither is a failure

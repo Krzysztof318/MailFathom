@@ -486,6 +486,14 @@ that arrived seconds before a shutdown is still a request afterwards. A pass tha
 next fetch: classification reaches no mail server for the mail it reads, so a failure here says nothing about the
 mailbox.
 
+**A second replica neither walks the run nor takes a lease of its own for it.** The request writes the run down on
+whichever replica answered it and classifies nothing. The pass is a step of the account's synchronization run, and that
+run happens only on the replica holding the account's
+[lease](imap-synchronization.md#a-second-replica-supervises-nothing-for-an-account-the-first-one-holds), so one
+outstanding run per account and one holder per account leave one walk, advanced under the account's lease rather than
+a second one beside it. A hold that is lost cancels the pass with the rest of that run, and whichever replica takes the
+account next resumes past the position the last committed batch reached.
+
 A run ends in one of three ways. **Completed** is the walk reaching the end of its scope. **Superseded** is the profile
 having moved while the run was outstanding — a run cannot finish under terms it did not start with, and half a mailbox
 decided each way is worse than a run an operator asks for again. **Disabled** is classification having been switched

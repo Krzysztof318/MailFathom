@@ -792,6 +792,13 @@ they resume from — and only while a pass runs, so on the gauge each is a serie
 running a pass and leaves it when the pass ends. A refused claim for either is the ordinary answer of a replica that asked
 while another was mid-pass.
 
+A segment of an operator's re-derivation holds the scope `mail-rederivation/<user>/<account>/<folder>` — `*` for a run
+over the whole account, and `sha256-` and a digest of the account and the folder where that is too long for a scope —
+for as long as it walks, so on the gauge a walk in progress is one series, published by whichever replica claimed the
+segment, and it moves between replicas as the segments do. A refused claim for such a scope is a segment that found
+another one holding it; it walked nothing and deferred the rest of the walk by `Jobs:LeaseDuration`, so an occasional
+one is ordinary and a steady stream for one scope is worth a look at the lease table.
+
 ### What a synchronization cycle emits
 
 No instrumentation package exists for the mail library, so without what follows the part of MailFathom that spends the

@@ -269,6 +269,12 @@ what keeps two workers off one job: an attempt is cancelled before its lease can
 renewed at half its duration while a handler works, so a job that legitimately takes longer than one lease is not
 reclaimed while it runs.
 
+`LeaseDuration` also times the one lease a job holds beside its own. A segment of a [stored-mail
+re-derivation](../features/imap-synchronization.md#bringing-stored-mail-up-to-a-later-release) walks only while it
+holds the lease on the scope it walks, taken for this duration and renewed at half of it, and a segment that finds the
+scope held defers the segment it hands the rest on to by this duration — which is long enough for a holder that stopped
+renewing to have lost the scope because the two leases are one length.
+
 A failed attempt is classified before the attempt budget is consulted, and only a failure that could clear on its own is
 attempted again. A permanent one — a credential the dependency refused, a request it rejected, anything whose meaning is
 unknown — ends the job on its first attempt rather than spending `MaxAttempts` to reach an answer it already had. What
