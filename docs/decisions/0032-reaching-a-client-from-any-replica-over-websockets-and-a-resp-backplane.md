@@ -21,6 +21,8 @@ informed:
 
 Neither failure corrupts anything and neither is visible: `SignalRClientSignalChannel` swallows a failed delivery by design. What is lost is the feature. Above one replica live updates are effectively off, and nothing tells an operator so. Issue 1870 measured one more fact that changes how much this costs. The client does not catch up on an interval of its own, as the remarks in both packages and `docs/operations/client-endpoint.md` promised. No periodic re-read of mail exists, nothing is re-read after a reconnect, and the stream stops reopening for good after about a minute of failed attempts.
 
+**A third store on the client surface lives in one process as well, and this record does not reach it.** The signed-in session lives in `ClientSessionTokens`, in the process's memory, which is a trade ADR 0023 records. Above one replica, a client's token is known only to the replica that minted it, so the client is signed out on most of its requests. That is not a signal's problem, and issue 1886 owns it. *What a deployment pays* below says what it means for this record.
+
 Issue 1287 refused a message broker or a coordination service for every part of running in more than one replica, and ADR 0009 states the same refusal for durable work. This record decides whether that refusal holds for this surface, and what replaces it where it does not. It produces no code. Issues 1877, 1878, 1879, 1880, and 1881 implement it.
 
 ## Decision Drivers
@@ -81,12 +83,15 @@ The in-process dictionary becomes a table every replica shares, in the shape iss
 - **It pins more than the pair.** A cookie pins every request a client makes, and hashing the source address puts every client behind one NAT on one replica. Both distort the load the replicas were added to share.
 - **It fails in a rollout.** The replica that minted the ticket is the one being replaced.
 
-**Redemption is bounded where it happens, not by the minting route.** Minting costs one insert, on a route that has just authenticated a credential against the same database. Redeeming costs one delete, and it runs on the hub, which is mapped outside the client route group and has authenticated nothing when a ticket arrives. So redemption refuses anything this deployment did not mint, and refuses it before any statement runs. Issue 1878 owns both checks:
+**Redemption is bounded where it happens, not by the minting route.** Minting costs one insert, on a route that has just authenticated a credential against the same database. Redeeming costs one delete, and it runs on the hub, which is mapped outside the client route group and has authenticated nothing when a ticket arrives. So redemption is bounded on the hub itself, and issue 1878 owns both bounds:
 
-- **A value without the shape of a minted ticket is refused first**: its length, its separator, and its encoding. Today's in-memory `Redeem` checks the length and the separator before its lookup, and the encoding only after it. That order moves, because under this record the lookup is the statement.
-- **The identifier half is sealed under the deployment key ring [ADR 0005](0005-data-encryption-key-ring-and-provisioning.md) provisions**, bound to a purpose of its own and carrying the ticket's expiry. Every replica already holds that key ring, so any replica refuses a forged or expired value by failing to open it, with no statement. What reaches the store is a ticket this deployment minted in the last 30 seconds, and minting sits behind an authenticated route and that route's limiter.
+- **A value without the shape of a minted ticket is refused before any statement runs**: its length, its separator, and its encoding. Today's in-memory `Redeem` checks the length and the separator before its lookup, and the encoding only after it. That order moves, because under this record the lookup is the statement.
+- **At most a fixed number of redemptions are in flight in each process**, sized well below the connection pool the rest of the deployment reads mail through. A handshake that arrives while the cap is full is refused without a statement, like any other refused connection, and its client retries on its backoff. A flood of handshakes can therefore hold at most that many connections, never the pool. What it can still do is crowd legitimate handshakes out of live updates while it lasts, which costs signals and never mail, because the client's re-read is the guarantee.
 
-**A rate limit on the handshake was the other way to bound it, and it is refused.** Behind a proxy the deployment declared, the peer address is the proxy's, and this deployment deliberately reads no forwarded client address. A limit counted per address would then be one bucket for every client, which one caller could empty to close live updates for everyone. `BasicAuthenticationHandler` drops its source axis behind a declared proxy for the same reason.
+**Two other bounds were considered and refused.**
+
+- **A rate limit counted per caller address.** Behind a proxy the deployment declared, the peer address is the proxy's, and this deployment deliberately reads no forwarded client address. A per-address limit would then be one bucket for every client. `BasicAuthenticationHandler` drops its source axis behind a declared proxy for the same reason.
+- **Sealing the identifier under the key ring [ADR 0005](0005-data-encryption-key-ring-and-provisioning.md) provisions.** That would refuse a value this deployment never minted with no statement at all. But the ring is optional: a deployment with none is supported, and a capability that needs key material asks whether it is there. An authentication path must not depend on an optional component.
 
 ### Signals cross replicas through a RESP pub/sub backplane
 
@@ -148,9 +153,10 @@ So the worst any lost signal costs a person looking at the screen is five minute
 - **A deployment serving no client surface** pays nothing: no hub, no ticket ever minted, and no backplane connection. The ticket table exists in its schema and stays empty.
 - **A deployment running one replica** runs no backplane in any deployment kind. Its tickets go through PostgreSQL, one insert and one delete per connection, so one implementation serves every replica count.
 - **The backplane is optional in every deployment kind**: the Helm chart, Compose, and Quadlet can each deploy Garnet or point at an external endpoint, and none of them does by default. Compose and Quadlet run one instance on one host today. They carry the option anyway, so the shape of a deployment is the same whichever kind an operator starts from, and a second host behind their own proxy is not refused a component the chart offers.
-- **The chart refuses to render** when `replicaCount` is above 1, the client surface is served, and no backplane is configured. That is the one configuration that looks healthy and silently cannot do what it was configured for.
+- **The chart refuses to render** when `replicaCount` is above 1, the client surface is served, and no backplane is configured. That is the one signal configuration that looks healthy and silently cannot do what it was configured for.
+- **That refusal covers the signal surface alone.** Until issue 1886 shares the session store, a client served by more than one replica is signed out on most of its requests, whatever the backplane. So this record is necessary above one replica, and it is not sufficient.
 
-Above one replica, an operator configures four things:
+Above one replica, and once issue 1886 has shared the session store, an operator configures four things for the signal surface:
 
 - **A load balancer that passes the WebSocket upgrade**, meaning the `Upgrade` and `Connection` headers on the request.
 - **No idle or connection timeout shorter than a connection meant to stand open.** The server sends a keep-alive every 15 seconds, so an idle timeout above that never fires. A cap on a connection's total duration drops it, and each drop costs a reconnect and a re-read.
@@ -159,9 +165,9 @@ Above one replica, an operator configures four things:
 
 ### Consequences
 
-- Good, because scaling out is a replica count and a backplane. No request pair depends on the load balancer remembering anything.
+- Good, because scaling the signal surface out is a replica count and a backplane. No request pair depends on the load balancer remembering anything.
 - Good, because authentication stays on the one store every deployment already runs, with one implementation at every replica count. An optional component's outage costs signals and never connections.
-- Good, because a deployment that needs none of this runs none of it, and the chart refuses the one configuration that would fail silently.
+- Good, because a deployment that needs none of this runs none of it, and the chart refuses the one signal configuration that would fail silently.
 - Good, because what carries personal data between replicas keeps none of it, and the requirements an external endpoint has to meet are written down here rather than left for an operator to infer.
 - Good, because the client's promise no longer rests on the delivery of a signal. A lost signal, a dropped connection, and a backplane outage all end in the same re-read.
 - Neutral, because the backplane is first-party code against a third-party endpoint. The package is Microsoft's, while the endpoint's behaviour belongs to whoever runs it — Garnet by default, or anything else speaking RESP.
@@ -170,12 +176,13 @@ Above one replica, an operator configures four things:
 - Bad, because there is no fallback transport. A network that blocks the WebSocket upgrade gets no live updates, and its client relies on the five-minute re-read.
 - Bad, because a backplane outage loses every signal published while it lasts, and the socket shows no sign of it. The five-minute safety net is the only thing that notices.
 - Bad, because the ticket, which lived in memory, becomes two database statements per connection. That is small against what a connection already costs, but it is not nothing, and it is traffic on the database.
+- Bad, because a flood of handshakes can crowd legitimate ones out of live updates on a replica while it lasts. The in-flight cap keeps it off the connection pool, and the client's re-read keeps the screen current.
 - Bad, because the broker refusal now has an exception. Its boundary has to be held by review, since nothing mechanical stops the next need from reaching for the same endpoint.
 
 ## Validation
 
 - **The transport.** A unit test over the hub's mapping requires a server-sent-events connection and a long-polling connection to be refused. Issue 1878 owns it.
-- **The ticket's bounds.** Unit tests over redemption require three values to be refused without the store being asked: one without the shape of a minted ticket, one whose sealed identifier does not open, and one whose identifier has expired. Issue 1878 owns them.
+- **The ticket's bounds.** Unit tests over redemption require two things to be refused without the store being asked: a value without the shape of a minted ticket, and a redemption that arrives while the in-flight cap is full. Issue 1878 owns them.
 - **The backplane.** Startup validation refuses a backplane section that names no connection, and a unit test requires nothing to be registered when the section is absent or the client surface is not served. Issue 1879 owns both.
 - **The chart.** The golden manifests carry a values case for each mode — Garnet deployed, an external endpoint, and none. A case of `replicaCount: 2` with the client surface served and no backplane must fail to render, and `scripts/render-helm-manifests.sh` holds it. Issue 1880 owns this.
 - **The client.** Unit tests require a re-read after every reconnect, and every five minutes while the window is visible and never while it is hidden. Issue 1877 owns them.
@@ -206,7 +213,7 @@ Above one replica, an operator configures four things:
 - Good, because the shape is issue 1835's, which is already in production and already understood.
 - Good, because authentication never depends on an optional component.
 - Neutral, because the table exists in every deployment's schema, including those that never mint a ticket.
-- Bad, because each connection costs an insert and a delete that the in-memory store did not, and because the identifier has to be sealed so that a value nobody minted costs no statement on a path that has authenticated nothing.
+- Bad, because each connection costs an insert and a delete that the in-memory store did not, and a handshake nobody minted a ticket for can cost a statement on a path that has authenticated nothing, which only the in-flight cap bounds.
 
 ### A ticket store in the backplane's key space
 
@@ -251,7 +258,7 @@ Above one replica, an operator configures four things:
 
 ## More Information
 
-- **The issues.** Issue 1838 asks the question. Issue 1870 is the plan and the measurements this record is written against. Issue 1878 delivers the WebSocket-only hub and the PostgreSQL ticket. Issue 1879 delivers the backplane. Issue 1880 puts Garnet or an external endpoint into the chart, together with the refusal. Issue 1881 does the same for Compose and Quadlet. Issue 1877 is the client's catch-up, which this record names as the guarantee. It waits on nothing here, because a single replica already loses signals across a dropped connection. Issue 1287 carries the exception to its broker refusal, and issues 1294 and 1295 wait on the four server-side children.
+- **The issues.** Issue 1838 asks the question. Issue 1870 is the plan and the measurements this record is written against. Issue 1878 delivers the WebSocket-only hub and the PostgreSQL ticket. Issue 1879 delivers the backplane. Issue 1880 puts Garnet or an external endpoint into the chart, together with the refusal. Issue 1881 does the same for Compose and Quadlet. Issue 1877 is the client's catch-up, which this record names as the guarantee. It waits on nothing here, because a single replica already loses signals across a dropped connection. Issue 1287 carries the exception to its broker refusal, and issues 1294 and 1295 wait on the four server-side children. Issue 1886 decides how a signed-in session survives more than one replica, which this record does not reach, and issue 1295 waits on it as well.
 - **ADR 0009 and ADR 0031.** [ADR 0009](0009-durable-job-store-and-execution-identity.md) states the refusal of a message broker that this record makes one exception to, and that refusal stands for everything else. [ADR 0031](0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) divides the work between replicas, and this record does not touch it. This is a new record rather than an amendment to ADR 0031, because it adds a second kind of shared infrastructure beside PostgreSQL rather than refining the lease. The three records are linked in both directions.
 - **Other records.** [ADR 0016](0016-third-party-licence-obligations-per-artifact.md) governs how the Garnet image and the backplane package are reviewed in `THIRD_PARTY_LICENSES.md`. [ADR 0021](0021-client-stack-react-typescript-tailwind-tauri-and-pnpm.md) decides the two heads that ship, and [ADR 0027](0027-an-android-head-built-every-night-and-supported-by-nothing.md) the Android artifact beside them that nothing supports. All three speak WebSockets.
 - **Out of scope.** Azure SignalR Service and every other hosted backplane, any change to what a signal carries, and any use of the RESP endpoint other than client signals.
