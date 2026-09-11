@@ -212,7 +212,8 @@ public sealed class MailboxChangeWithdrawerTests
     public async Task WithdrawDeletesAsync_ADeleteStillHeld_CancelsItAndLeavesAFlagChangeAlone()
     {
         // Arrange
-        var delete = await this.OpenAsync(DeleteRequestIn(Inbox, uid: 13));
+        var stillWaiting = new DateTimeOffset(2999, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var delete = await this.OpenAsync(DeleteRequestIn(Inbox, uid: 13), stillWaiting);
         var flagChange = await this.OpenAsync(FlagRequestIn(Inbox, uid: 7));
         var withdrawer = this.Withdrawer(
             AccessAuthorizations.ForCallerGranted(
@@ -284,11 +285,12 @@ public sealed class MailboxChangeWithdrawerTests
         ImapUid.Create(uid));
 
     /// <summary>Writes one record down, as an authoring use case would have, so a withdrawal has something to take back.</summary>
-    private Task<MailboxMutationRecord> OpenAsync(MailboxMutationRequest request) => this.records.OpenAsync(
-        CommittingSession(),
-        request,
-        heldUntil: null,
-        TestContext.Current.CancellationToken);
+    private Task<MailboxMutationRecord> OpenAsync(MailboxMutationRequest request, DateTimeOffset? heldUntil = null) =>
+        this.records.OpenAsync(
+            CommittingSession(),
+            request,
+            heldUntil,
+            TestContext.Current.CancellationToken);
 
     private static IPersistenceSession CommittingSession()
     {

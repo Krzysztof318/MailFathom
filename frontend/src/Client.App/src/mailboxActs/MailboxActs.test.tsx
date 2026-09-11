@@ -191,6 +191,20 @@ function perform(held: () => MailboxActs, ...asked: Parameters<MailboxActs['perf
     });
 }
 
+/** More messages in the trash than one call may name, which makes deleting them two submissions rather than one. */
+const heapedInTrash: ActedMessage[] = Array.from({ length: mostMessagesPerMutation + 1 }, (_, at) => ({
+    storedEmailId: `message-${String(at)}`,
+    account: 'work',
+    folder: 'work-trash',
+}));
+
+/** The records each call to a delete's withdrawal or release route named, one list per call. */
+function recordIdsPosted(deployment: Deployment, route: 'withdrawals' | 'releases'): string[][] {
+    return submitted(deployment)
+        .filter(({ path }) => path.endsWith(`/mutations/deletes/${route}`))
+        .map(({ body }) => (body as { recordIds: string[] }).recordIds);
+}
+
 describe('MailboxActsProvider', () => {
     it('asks a deployment to leave a flag where the act puts it, and offers no way back from a flag', async () => {
         const deployment = deploymentAnswering();
@@ -388,6 +402,63 @@ describe('MailboxActsProvider', () => {
 
         expect(submitted(deployment).map(({ path }) => path)).not.toContain(
             'https://mail.example.invalid/api/client/mutations/deletes/releases',
+        );
+    });
+
+    // Taken back and let go of a batch at a time, as it was submitted: every record the delete wrote is named exactly
+    // once, and no call names more than the route takes.
+    it('takes back a delete of more messages than one call may name, a batch at a time', async () => {
+        const deployment = deploymentAnswering();
+        const { held } = acting(deployment);
+
+        await waitFor(() => {
+            expect(held().deletesPermanently(heapedInTrash)).toBe(true);
+        });
+
+        perform(held, 'delete', heapedInTrash);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+
+        await waitFor(() => {
+            expect(recordIdsPosted(deployment, 'withdrawals')).toHaveLength(2);
+        });
+
+        const posted = recordIdsPosted(deployment, 'withdrawals');
+
+        expect(posted.map((batch) => batch.length).sort((left, right) => left - right)).toStrictEqual([
+            1,
+            mostMessagesPerMutation,
+        ]);
+        expect(new Set(posted.flat())).toStrictEqual(
+            new Set(heapedInTrash.map(({ storedEmailId }) => `record-${storedEmailId}`)),
+        );
+    });
+
+    it('lets go of a delete of more messages than one call may name, a batch at a time', async () => {
+        const deployment = deploymentAnswering();
+        const { held } = acting(deployment);
+
+        await waitFor(() => {
+            expect(held().deletesPermanently(heapedInTrash)).toBe(true);
+        });
+
+        perform(held, 'delete', heapedInTrash);
+
+        await screen.findByRole('button', { name: 'Undo' });
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+        await waitFor(() => {
+            expect(recordIdsPosted(deployment, 'releases')).toHaveLength(2);
+        });
+
+        const posted = recordIdsPosted(deployment, 'releases');
+
+        expect(posted.map((batch) => batch.length).sort((left, right) => left - right)).toStrictEqual([
+            1,
+            mostMessagesPerMutation,
+        ]);
+        expect(new Set(posted.flat())).toStrictEqual(
+            new Set(heapedInTrash.map(({ storedEmailId }) => `record-${storedEmailId}`)),
         );
     });
 

@@ -259,6 +259,51 @@ public sealed class MailDeletionRecorderTests
         Assert.Null(this.records.HeldUntilOf(Assert.Single(this.records.OpenedRequests)));
     }
 
+    /// <summary>
+    /// A zero window is no wait at all, so it is written down as the unheld record it is and brings the account forward
+    /// like one — rather than held until the instant it was written, which a pass would find due and nothing would wake.
+    /// </summary>
+    [Fact]
+    public async Task RecordAsync_ADeleteCarryingAZeroWithdrawalWindow_IsRecordedUnheldAndBringsTheRunForward()
+    {
+        // Arrange
+        var runSignal = new MailAccountRunSignal();
+        var recorder = this.Recorder(TargetIn(Trash), runSignal: runSignal);
+
+        // Act
+        await recorder.RecordAsync(LocalEmail, Requester, TimeSpan.Zero, TestContext.Current.CancellationToken);
+
+        // Assert
+        using var waiting = runSignal.Register(Account.Id, TestContext.Current.CancellationToken);
+
+        Assert.True(waiting.Token.IsCancellationRequested);
+        Assert.Null(this.records.HeldUntilOf(Assert.Single(this.records.OpenedRequests)));
+    }
+
+    /// <summary>
+    /// The grant is asked before the window is measured, as a withdrawal asks it before it measures a batch, so a caller
+    /// holding nothing is refused as unauthorized whatever else is wrong with what it sent.
+    /// </summary>
+    [Fact]
+    public async Task RecordAsync_ACallerWithoutTheGrantNamingANegativeWindow_IsRefusedAsUnauthorized()
+    {
+        // Arrange
+        var recorder = this.Recorder(
+            TargetIn(Trash),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailFlagsWrite));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => recorder.RecordAsync(
+            LocalEmail,
+            Requester,
+            TimeSpan.FromSeconds(-1),
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailDelete, refusal.RequiredPermission);
+        Assert.Equal(0, this.records.OpenedRecordCount);
+    }
+
     private MailDeletionRecorder Recorder(
         AuthoredMailboxTarget? target,
         AccessAuthorization? authorization = null,

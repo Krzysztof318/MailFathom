@@ -181,9 +181,9 @@ export function MessageList({
     // derived from puts the row where it stood.
     //
     // Every reading below is against this rather than against `held`, so the row count, the window, the page wanted,
-    // and the keyboard all agree with what is on the screen. The two writes that take a row number stay on what is
-    // held: a slot is never dropped by this, so the page a read refills is the same page either way, and the trimming
-    // keeps two pages either side — two hundred rows of slack each way against a batch bounded at two hundred.
+    // and the keyboard all agree with what is on the screen. What writes back into `held` agrees with it too: a page is
+    // named by its slot, which this never drops, so the page a read refills is the same page either way, and the
+    // trimming is handed what is leaving so that it counts rows in the numbering the window was worked out in.
     const shown = withoutLeaving(held, (email) => actLeaving(acts, email));
 
     const rowCount = rowCountOf(shown);
@@ -407,7 +407,7 @@ export function MessageList({
         const moved = windowOf(rowCount, rowHeight, top, viewport);
         const last = moved.first + moved.count - 1;
 
-        setHeld((current) => trimmedAround(current, moved.first, last));
+        setHeld((current) => trimmedAround(current, moved.first, last, (email) => actLeaving(acts, email)));
 
         // What the rows that moved are let go of, and it is a scroll rather than an animation that does it: a row
         // carried out of the window is unmounted, and an unmounted row never reports its own animation ending. Asked

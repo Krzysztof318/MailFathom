@@ -129,8 +129,8 @@ public interface IMailboxMutationRecordStore
 
     /// <summary>Lifts the hold on the user's changes among those named, so the next convergence pass may take each in hand.</summary>
     /// <param name="session">The session the write joins.</param>
-    /// <param name="recordIds">The records to release.</param>
     /// <param name="user">The user the records must belong to.</param>
+    /// <param name="recordIds">The records to release.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>Each named record as it now stands, unchanged where nothing was holding it, and absent where this user holds no such record.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="recordIds" /> is <see langword="null" />.</exception>

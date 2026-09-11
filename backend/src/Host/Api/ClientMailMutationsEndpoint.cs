@@ -439,7 +439,7 @@ internal static class ClientMailMutationsEndpoint
     }
 
     /// <summary>Reads one batch of authored records and hands it to whichever use case the route belongs to.</summary>
-    /// <remarks>The five routes differ in the grant they carry and in what they do with the records, and in nothing this method does, so the checks are stated once rather than five times.</remarks>
+    /// <remarks>The four routes differ in the grant they carry and in what they do with the records, and in nothing this method does, so the checks are stated once rather than four times.</remarks>
     private static async Task<Results<Ok<ClientMailChangesResponse>, ProblemHttpResult>> OverRecordsAsync(
         ClientMailChangeWithdrawalRequest? request,
         Func<IReadOnlyList<MailboxMutationRecordId>, Task<IReadOnlyList<MailboxChangeProgress>>> act)

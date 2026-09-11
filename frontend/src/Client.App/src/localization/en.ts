@@ -208,6 +208,8 @@ export const en = {
     'settings.notificationSeconds': 'How long a notification stands',
     'settings.notificationSecondsExplanation':
         'In whole seconds, between {shortest} and {longest}. It is also how long you have to take back a permanent delete, which waits for exactly as long as its notification stands.',
+    'settings.notificationSecondsRefused':
+        'That was not changed. A notification stands for a whole number of seconds, between {shortest} and {longest}.',
     'settings.mailbox': 'Mailbox',
     'settings.aiFilters': 'Show the AI filters in the folder tree',
     'settings.aiFiltersExplanation':

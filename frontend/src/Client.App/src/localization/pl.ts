@@ -210,6 +210,8 @@ export const pl: Catalogue = {
     'settings.notificationSeconds': 'Jak długo widać powiadomienie',
     'settings.notificationSecondsExplanation':
         'W pełnych sekundach, od {shortest} do {longest}. Tyle samo masz na cofnięcie trwałego usunięcia, które czeka dokładnie tak długo, jak widać jego powiadomienie.',
+    'settings.notificationSecondsRefused':
+        'Tego nie zmieniono. Powiadomienie jest widoczne przez pełną liczbę sekund, od {shortest} do {longest}.',
     'settings.mailbox': 'Skrzynka',
     'settings.aiFilters': 'Pokazuj filtry AI w drzewie katalogów',
     'settings.aiFiltersExplanation':

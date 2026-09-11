@@ -199,6 +199,17 @@ describe('trimmedAround', () => {
 
         expect(trimmedAround(held, 0, 3)).toBe(held);
     });
+
+    // The window was worked out in rows as they are drawn, so a page leaving above it moves every row number down; the
+    // pages kept are the ones either side of the page on the screen, not of the page that would be there had none left.
+    it('keeps the pages either side of the one on the screen while rows above it are leaving', () => {
+        const held = readForward(9);
+        const leaving = new Set(['message-0', 'message-1', 'message-2', 'message-3']);
+        const trimmed = trimmedAround(held, 20, 23, (email) => leaving.has(email.id));
+
+        expect(rowAt(trimmed, 32)?.id).toBe('message-32');
+        expect(rowAt(trimmed, 12)).toBeNull();
+    });
 });
 
 describe('wantedFor', () => {

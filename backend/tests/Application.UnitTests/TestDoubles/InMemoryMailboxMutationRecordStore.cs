@@ -283,7 +283,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
     {
         IReadOnlyList<MailboxMutationLifecycleCount> counts =
         [
-            .. this.OutstandingOf(account.Id)
+            .. this.UnsettledOf(account.Id)
                 .GroupBy(record => new { record.Request.Mutation, record.Lifecycle })
                 .Select(group => new MailboxMutationLifecycleCount(
                     group.Key.Mutation,
@@ -331,11 +331,16 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
         request.Requester.Identity,
         request.Mutation.Name);
 
-    private IEnumerable<MailboxMutationRecord> OutstandingOf(MailAccountId accountId) =>
+    // Counted without the hold, as the real store counts them: a held delete is still work the account owes, and only
+    // what a pass is handed leaves it out.
+    private IEnumerable<MailboxMutationRecord> UnsettledOf(MailAccountId accountId) =>
         this.recordsById.Values.Where(record => record.Request.Occurrence.AccountId == accountId &&
             record.Stage != MailboxMutationStage.Completed &&
-            record.Stage != MailboxMutationStage.Cancelled &&
-            this.heldUntilByRecord.GetValueOrDefault(record.Id, this.now) <= this.now);
+            record.Stage != MailboxMutationStage.Cancelled);
+
+    private IEnumerable<MailboxMutationRecord> OutstandingOf(MailAccountId accountId) =>
+        this.UnsettledOf(accountId)
+            .Where(record => this.heldUntilByRecord.GetValueOrDefault(record.Id, this.now) <= this.now);
 
     private MailFolderResolution BindingOf(MailboxMutationRecord record)
     {

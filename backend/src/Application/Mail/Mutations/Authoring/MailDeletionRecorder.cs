@@ -100,7 +100,7 @@ public sealed class MailDeletionRecorder
     /// <summary>Writes down one delete, against the email a caller named.</summary>
     /// <param name="storedEmailId">The email to delete, as a listing, a search, or a read returned it.</param>
     /// <param name="requester">The invocation asking, which is what decides whether asking again is the same request.</param>
-    /// <param name="withdrawalWindow">How long the record waits before a convergence pass may take it in hand, or <see langword="null" /> where nothing waits.</param>
+    /// <param name="withdrawalWindow">How long the record waits before a convergence pass may take it in hand, or <see langword="null" /> where nothing waits — as nothing does for a zero window.</param>
     /// <param name="cancellationToken">Cancels the resolution and the write.</param>
     /// <returns>The record that was opened, or the reason none was.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="requester" /> is <see langword="null" />.</exception>
@@ -114,14 +114,15 @@ public sealed class MailDeletionRecorder
     {
         ArgumentNullException.ThrowIfNull(requester);
 
+        // Asked before the email is read at all, so a caller that holds nothing is refused as unauthorized rather than
+        // told the message it named is not there — which would be an answer about somebody else's mailbox — and before
+        // the window is measured, for the reason the withdrawal asks before it measures a batch.
+        this.authorization.RequirePermission(MailFathomPermission.MailDelete);
+
         if (withdrawalWindow is { } window)
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(window, TimeSpan.Zero, nameof(withdrawalWindow));
         }
-
-        // Asked before the email is read at all, so a caller that holds nothing is refused as unauthorized rather than
-        // told the message it named is not there — which would be an answer about somebody else's mailbox.
-        this.authorization.RequirePermission(MailFathomPermission.MailDelete);
 
         var target = await this.targets.FindAsync(storedEmailId, cancellationToken);
 
@@ -148,7 +149,11 @@ public sealed class MailDeletionRecorder
             requester,
             localDisposition);
 
-        var heldUntil = withdrawalWindow is { } granted ? this.timeProvider.GetUtcNow() + granted : (DateTimeOffset?)null;
+        // A zero window is no wait, and is opened as the unheld record it is rather than as one held until the instant
+        // it was written — which would be due at once and still skip the raise below.
+        var heldUntil = withdrawalWindow is { } granted && granted > TimeSpan.Zero
+            ? this.timeProvider.GetUtcNow() + granted
+            : (DateTimeOffset?)null;
 
         var record = await this.commitPolicy.CommitAsync(
             (session, attemptCancellationToken) => this.records.OpenAsync(

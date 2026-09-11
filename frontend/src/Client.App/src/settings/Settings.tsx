@@ -3,7 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { longestNotificationSeconds, shortestNotificationSeconds } from '@mailfathom/client-backend';
+import {
+    isNotificationTime,
+    longestNotificationSeconds,
+    shortestNotificationSeconds,
+} from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
 import { PersonAvatar } from '../controls/PersonAvatar';
 import { Switch } from '../controls/Switch';
@@ -331,42 +335,62 @@ function Application({
 function NotificationDuration({ preferences }: { readonly preferences: ClientPreferencesInForce }) {
     const { locale, translate } = useLocalization();
     const named = useId();
+    const [refused, setRefused] = useState(false);
+    const bounds = {
+        shortest: new Intl.NumberFormat(locale).format(shortestNotificationSeconds),
+        longest: new Intl.NumberFormat(locale).format(longestNotificationSeconds),
+    };
+
+    // Said here as well as refused by the hook, which refuses without a word: a field still holding the number somebody
+    // typed would otherwise read as a number that was taken.
+    function choose(seconds: number): void {
+        const acceptable = isNotificationTime(seconds);
+
+        setRefused(!acceptable);
+
+        if (acceptable) {
+            preferences.chooseNotificationSeconds(seconds);
+        }
+    }
 
     return (
-        <div className="flex items-start gap-2.75 rounded-xl border border-line bg-sunken px-2.5 py-2.25">
-            <label htmlFor={named} className="flex min-w-0 flex-1 flex-col gap-0.75">
-                {translate('settings.notificationSeconds')}
-                <span className="text-xs text-muted">
-                    {translate('settings.notificationSecondsExplanation', {
-                        shortest: new Intl.NumberFormat(locale).format(shortestNotificationSeconds),
-                        longest: new Intl.NumberFormat(locale).format(longestNotificationSeconds),
-                    })}
-                </span>
-            </label>
+        <>
+            <div className="flex items-start gap-2.75 rounded-xl border border-line bg-sunken px-2.5 py-2.25">
+                <label htmlFor={named} className="flex min-w-0 flex-1 flex-col gap-0.75">
+                    {translate('settings.notificationSeconds')}
+                    <span className="text-xs text-muted">
+                        {translate('settings.notificationSecondsExplanation', bounds)}
+                    </span>
+                </label>
 
-            {/* Uncontrolled and remounted by the value in force, for the reason the name field is: what somebody is
-                typing is not state this surface has any use for, and keying on the stated value is what redraws the
-                field when an answer arrives without discarding a correction that has not been sent yet. */}
-            <input
-                key={preferences.notificationSeconds}
-                id={named}
-                type="number"
-                inputMode="numeric"
-                min={shortestNotificationSeconds}
-                max={longestNotificationSeconds}
-                step={1}
-                defaultValue={preferences.notificationSeconds}
-                className="w-16 shrink-0 rounded-lg border border-line-strong bg-sunken px-2.5 py-1.5 text-base text-text outline-none focus:border-accent"
-                onBlur={(event) => {
-                    preferences.chooseNotificationSeconds(event.target.valueAsNumber);
-                }}
-                onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                        preferences.chooseNotificationSeconds(event.currentTarget.valueAsNumber);
-                    }
-                }}
-            />
-        </div>
+                {/* Uncontrolled and remounted by the value in force, for the reason the name field is: what somebody is
+                    typing is not state this surface has any use for, and keying on the stated value is what redraws the
+                    field when an answer arrives without discarding a correction that has not been sent yet. */}
+                <input
+                    key={preferences.notificationSeconds}
+                    id={named}
+                    type="number"
+                    inputMode="numeric"
+                    min={shortestNotificationSeconds}
+                    max={longestNotificationSeconds}
+                    step={1}
+                    defaultValue={preferences.notificationSeconds}
+                    className="w-16 shrink-0 rounded-lg border border-line-strong bg-sunken px-2.5 py-1.5 text-base text-text outline-none focus:border-accent"
+                    onBlur={(event) => {
+                        choose(event.target.valueAsNumber);
+                    }}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                            choose(event.currentTarget.valueAsNumber);
+                        }
+                    }}
+                />
+            </div>
+
+            {refused ? (
+                <p className="text-2xs text-warning">{translate('settings.notificationSecondsRefused', bounds)}</p>
+            ) : null}
+        </>
     );
 }
 

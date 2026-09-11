@@ -359,13 +359,22 @@ function endReached(held: HeldTimeline, direction: MailTimelinePageDirection): H
  * @param held What the list knows.
  * @param firstRow The first row on the screen.
  * @param lastRow The last row on the screen.
+ * @param leaving What is leaving the list, which the two rows above were counted without.
  * @returns The list with distant rows dropped, or the same list where nothing was far enough to drop.
  */
-export function trimmedAround(held: HeldTimeline, firstRow: number, lastRow: number): HeldTimeline {
+export function trimmedAround(
+    held: HeldTimeline,
+    firstRow: number,
+    lastRow: number,
+    leaving: (email: MailTimelineEntry) => boolean = () => false,
+): HeldTimeline {
+    // Rows are counted as they are drawn, because that is the numbering the window was worked out in; the slots line up
+    // with what is held either way, since leaving never drops one.
+    const measured = withoutLeaving(held, leaving);
     const reached: number[] = [];
     let passed = 0;
 
-    for (const [at, slot] of held.slots.entries()) {
+    for (const [at, slot] of measured.slots.entries()) {
         if (passed <= lastRow && passed + slot.rowCount > firstRow) {
             reached.push(at);
         }
