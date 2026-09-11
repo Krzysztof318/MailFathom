@@ -42,8 +42,7 @@ internal static class ThreadStateInstructions
         The object may carry four fields, each an array: "agreements", "openQuestions", "commitments" and
         "differences". Omit any array you have nothing for, or write it empty; an omitted statement is a better answer
         than a guessed one, and an object carrying nothing at all is a valid answer for a conversation there is nothing
-        to say about. Write at most {ThreadStateReading.MaximumEntriesPerAspect} entries in each array, most important
-        first.
+        to say about. Put at most {EmailThreadState.MaximumEntriesPerAspect} in each array, the most important first.
 
         Every entry is an object with two required fields. "text" is the statement itself, at most
         {ThreadStateEntry.MaximumTextLength} characters, written as one plain sentence in the language the conversation

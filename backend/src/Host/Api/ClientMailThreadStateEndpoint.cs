@@ -88,7 +88,12 @@ internal static class ClientMailThreadStateEndpoint
 /// <param name="ThreadId">The conversation, as the request named it.</param>
 /// <param name="Coverage">Whether the whole conversation was read, or it runs past what one derivation may read at all.</param>
 /// <param name="DerivedAt">When the state was derived, which is what a client says the block is as of.</param>
-/// <param name="Entries">The statements, in aspect order and within an aspect in the order the derivation put them.</param>
+/// <param name="Current">
+/// Whether the state was derived from the conversation as it stands now. <see langword="false" /> once a message has
+/// joined or left it since, which is exactly when the next derivation pass would derive it again; a client never draws
+/// such a state as the conversation's current one.
+/// </param>
+/// <param name="Entries">The statements, at most one of each aspect, in aspect order.</param>
 /// <remarks>
 /// <c>coverage</c> is what a conversation too large to read in one bound is published as, and it arrives with no
 /// entries: a partial reading of a long exchange presented as its state would be worse than saying nothing, so the
@@ -98,6 +103,7 @@ internal sealed record ClientMailThreadStateResponse(
     Guid ThreadId,
     string Coverage,
     DateTimeOffset DerivedAt,
+    bool Current,
     IReadOnlyList<ClientMailThreadStateEntryResponse> Entries)
 {
     /// <summary>Describes one conversation's state for the wire.</summary>
@@ -112,6 +118,7 @@ internal sealed record ClientMailThreadStateResponse(
             state.ThreadId.Value,
             state.Coverage.ToString(),
             state.DerivedAt,
+            state.IsCurrent,
             [.. state.Entries.Select(ClientMailThreadStateEntryResponse.For)]);
     }
 }

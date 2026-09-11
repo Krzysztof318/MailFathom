@@ -1001,6 +1001,26 @@ UUID matches no route and is the same `404`. A credential whose grant does not c
 **The conversation is served from the local copy.** Nothing here contacts a mail server, so no screen waits on IMAP, and
 opening a thread cannot set the remote `\Seen` flag.
 
+### The conversation state route
+
+`GET /api/client/threads/{threadId}/state` answers with where one conversation stands, as
+[a conversation's state](../features/thread-state.md) describes: `threadId`, `coverage` (`WholeThread` or
+`ThreadTooLarge`, the second with no entries), `derivedAt`, `current`, and `entries`. Each entry carries its `aspect`,
+its `text`, the `owedBy` and `dueAt` only a commitment may carry, and its `sources` as citation targets the
+[citation route](#the-citation-route) resolves.
+
+**`entries` holds at most one statement per aspect**, in aspect order, and a state recorded while more were kept
+answers with the first of each.
+
+**`current` is `false` once the conversation has changed since the state was derived** — a message joined it or left
+it — decided by the comparison the derivation pass uses to find what it owes a new derivation. The record is still
+served, because it is the only record there is, and a client does not draw it as the conversation's current state.
+
+**A conversation with no state is answered `404`**: a deployment that never turned the derivation on, one that has not
+reached this conversation, and a conversation this user does not hold all answer the same way, and none of them is a
+failure. A credential whose grant does not carry `mailfathom.mail.read` is answered `403`. Nothing on this route starts
+a derivation or reaches a provider.
+
 ### The message route
 
 ```http

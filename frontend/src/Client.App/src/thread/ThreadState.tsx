@@ -27,6 +27,10 @@ import { sourceOf, type ThreadStateSource } from './threadStateSources';
 // Absence is a state rather than a failure, and it is the common one: a deployment that never turned the derivation
 // on and one that has not reached this conversation yet both answer with nothing at all. So a conversation with no
 // state says so in a sentence and keeps its own chrome, rather than drawing an error somebody would try to act on.
+//
+// A state the conversation has moved past since it was derived is drawn the same way, in every composition. The
+// design draws no such state, and its statements may be exactly what the newest message withdrew — so the block says
+// the conversation changed rather than drawing a reading nothing marks as out of date.
 
 const aspectLabels: Readonly<Record<MailThreadStateAspect, MessageKey>> = {
     Agreement: 'threadState.agreement',
@@ -41,6 +45,10 @@ function nothingDrawn(reading: boolean, online: boolean, state: MailThreadState 
         // nothing about it once the messages are in hand: the conversation stands on the screen and only this block is
         // waiting. So the block says which of the two it is rather than looking busy for as long as the network is out.
         return online ? 'threadState.reading' : 'threadState.offline';
+    }
+
+    if (state?.current === false) {
+        return 'threadState.stale';
     }
 
     return state?.coverage === 'ThreadTooLarge' ? 'threadState.tooLarge' : 'threadState.none';
@@ -72,10 +80,11 @@ export function ThreadState({
     const wideWorkspace = useWideWorkspace();
     const desktop = useDesktopComposition();
 
-    const entries = state?.entries ?? [];
+    const entries = state?.current === true ? state.entries : [];
 
-    // Nothing to draw is three different sentences and one shape: a block still being read, a conversation too long
-    // for a state to be derived from in one go, and a conversation nothing has been derived about at all.
+    // Nothing to draw is four different sentences and one shape: a block still being read, a state the conversation
+    // has moved past, a conversation too long for a state to be derived from in one go, and a conversation nothing has
+    // been derived about at all.
     if (entries.length === 0) {
         return (
             <section

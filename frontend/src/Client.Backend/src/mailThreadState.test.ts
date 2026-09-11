@@ -31,6 +31,7 @@ function bodyOf(state: Readonly<Record<string, unknown>> = {}): string {
         threadId,
         coverage: 'WholeThread',
         derivedAt: '2026-09-08T09:00:00+00:00',
+        current: true,
         entries: [agreement],
         ...state,
     });
@@ -86,9 +87,22 @@ describe('readMailThreadState', () => {
                 threadId,
                 coverage: 'WholeThread',
                 derivedAt: '2026-09-08T09:00:00+00:00',
+                current: true,
                 entries: [agreement, commitment],
             },
         });
+    });
+
+    // The conversation gained or lost a message after the state was derived, and the deployment says so rather than a
+    // client having to work it out from anything else the block carries.
+    it('reads a state the conversation has changed since as one that is not current', async () => {
+        const answered = await readMailThreadState(
+            session,
+            answering({ status: 200, body: bodyOf({ current: false }) }),
+            threadId,
+        );
+
+        expect(answered.outcome === 'read' && answered.value?.current).toBe(false);
     });
 
     it('reaches the state on the client surface of the deployment it signed in to', async () => {
@@ -158,6 +172,8 @@ describe('readMailThreadState', () => {
         ['a statement saying nothing', { entries: [{ ...agreement, text: '' }] }],
         ['a coverage this client cannot draw', { coverage: 'Partial' }],
         ['a derivation instant nothing can date', { derivedAt: 'the other day' }],
+        ['no word on whether it is current', { current: undefined }],
+        ['a currency that is not a yes or a no', { current: 'yes' }],
         ['a due date nothing can date', { entries: [{ ...agreement, aspect: 'Commitment', dueAt: 'soon' }] }],
         ['a statement that is not a record at all', { entries: ['settled'] }],
         ['an owner that is not a name', { entries: [{ ...agreement, aspect: 'Commitment', owedBy: 7 }] }],

@@ -108,7 +108,7 @@ public sealed class ThreadStateReadingTests
         var written = string.Join(
             ',',
             Enumerable
-                .Range(0, ThreadStateReading.MaximumEntriesPerAspect + 4)
+                .Range(0, EmailThreadState.MaximumEntriesPerAspect + 4)
                 .Select(static ordinal => $$"""{ "text": "Agreement {{ordinal}}.", "messages": [0] }"""));
         var answer = $$"""{ "agreements": [{{written}}] }""";
 
@@ -116,8 +116,7 @@ public sealed class ThreadStateReadingTests
         var entries = ThreadStateReading.Read(answer, Messages());
 
         // Assert
-        Assert.Equal(ThreadStateReading.MaximumEntriesPerAspect, entries.Count);
-        Assert.Equal("Agreement 0.", entries[0].Text);
+        Assert.Equal("Agreement 0.", Assert.Single(entries).Text);
     }
 
     /// <summary>An owner and a date belong to a commitment, so one written on another aspect is dropped rather than refused.</summary>

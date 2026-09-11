@@ -85,9 +85,16 @@ function entry(overrides: Partial<MailThreadStateEntry> = {}): MailThreadStateEn
     };
 }
 
-function stateOf(entries: readonly MailThreadStateEntry[], coverage: MailThreadState['coverage'] = 'WholeThread') {
-    return { threadId: 'a-conversation', coverage, derivedAt: '2026-09-08T09:00:00+00:00', entries };
+function stateOf(
+    entries: readonly MailThreadStateEntry[],
+    coverage: MailThreadState['coverage'] = 'WholeThread',
+    current = true,
+): MailThreadState {
+    return { threadId: 'a-conversation', coverage, derivedAt: '2026-09-08T09:00:00+00:00', current, entries };
 }
+
+const staleSentence =
+    'This conversation has changed since where it stands was last derived, so that reading is held back until it is derived again.';
 
 function drawing(
     state: MailThreadState | null,
@@ -252,6 +259,33 @@ describe('ThreadState', () => {
         expect(screen.getByRole('status').textContent).toBe(
             'Nothing has been derived about where this conversation stands.',
         );
+    });
+
+    // A message the conversation gained since the state was derived may have withdrawn exactly what the block says, so
+    // no composition draws the statements as though they were still where the conversation stands.
+    it.each([
+        ['the desktop', theDesktopComposition],
+        ['the tablet', theTabletComposition],
+        ['a phone', () => undefined],
+    ])(
+        'says the conversation changed, rather than drawing a state it has moved past, in %s composition',
+        (_, width) => {
+            width();
+
+            render(drawing(stateOf([entry()], 'WholeThread', false)));
+
+            expect(screen.getByRole('status').textContent).toBe(staleSentence);
+            expect(screen.queryByText('The response time stays at two hours.')).toBeNull();
+        },
+    );
+
+    it('draws the statements of a state that still describes the conversation', () => {
+        theDesktopComposition();
+
+        render(drawing(stateOf([entry()], 'WholeThread', true)));
+
+        expect(screen.getByText('The response time stays at two hours.')).toBeDefined();
+        expect(screen.queryByText(staleSentence)).toBeNull();
     });
 
     it('says a conversation too long to derive a state for, rather than drawing one from part of it', () => {

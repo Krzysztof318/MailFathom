@@ -2412,6 +2412,9 @@
           "coverage": {
             "type": "string"
           },
+          "current": {
+            "type": "boolean"
+          },
           "derivedAt": {
             "format": "date-time",
             "type": "string"
@@ -2431,6 +2434,7 @@
           "threadId",
           "coverage",
           "derivedAt",
+          "current",
           "entries"
         ],
         "type": "object"

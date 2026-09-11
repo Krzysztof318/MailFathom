@@ -855,6 +855,7 @@ describe('Thread', () => {
                         threadId,
                         coverage: 'WholeThread',
                         derivedAt: '2026-09-08T09:00:00+00:00',
+                        current: true,
                         entries: [
                             {
                                 aspect: 'Agreement',

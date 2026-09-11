@@ -28,7 +28,9 @@ public interface IStoredThreadStateReader
     /// <returns>
     /// The state, or <see langword="null" /> where no derivation has reached the conversation — which is what a client
     /// draws as not derived yet rather than as nothing to say. A conversation the scope admits no message of also reads
-    /// as nothing, so a state is never published for an exchange this caller may not see.
+    /// as nothing, so a state is never published for an exchange this caller may not see. A state the conversation has
+    /// changed since carries <see cref="EmailThreadState.IsCurrent" /> <see langword="false" />, decided by the same
+    /// comparison that puts the conversation back in front of the derivation.
     /// </returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
     Task<EmailThreadState?> ReadStateAsync(

@@ -67,4 +67,35 @@ public sealed class ThreadAwaitingStateQueryTests
         Assert.True(ordering >= 0, sql);
         Assert.True(bound > ordering, sql);
     }
+
+    /// <summary>
+    /// The read of one conversation's state asks the pass's own question of that conversation alone, so the grouping and
+    /// the comparison reach the server narrowed to it rather than as a scan of the account.
+    /// </summary>
+    [Fact]
+    public void OwedADerivation_TheQuestionOneReadAsksOfItsConversation_TranslatesToTheSelectionNarrowedToIt()
+    {
+        // Arrange
+        var options = MailFathomDbContextDesignTimeFactory.BuildOptions(
+            orchestratedConnectionString: null,
+            designTimeConnectionString: null);
+        using var context = new MailFathomDbContext(options, PostgresTextSearchConfiguration.Default);
+
+        // Act
+        var sql = StoredThreadStateReader.OwedADerivation(
+                context.StoredEmails.AsNoTracking(),
+                context.EmailThreadStates.AsNoTracking(),
+                Guid.CreateVersion7(),
+                Guid.CreateVersion7(),
+                "work",
+                [new MailFolderIdentity(MailAccountId.Create("work"), MailFolderAlias.Create("INBOX"))],
+                new DerivedWorkAdmissionTerms([], [], [], Now))
+            .ToQueryString();
+
+        // Assert
+        Assert.Contains("GROUP BY", sql, StringComparison.Ordinal);
+        Assert.Contains("LEFT JOIN", sql, StringComparison.Ordinal);
+        Assert.Contains("\"DerivedFromMessageCount\"", sql, StringComparison.Ordinal);
+        Assert.Contains("\"DerivedFromLatestArrival\"", sql, StringComparison.Ordinal);
+    }
 }

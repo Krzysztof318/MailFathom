@@ -72,6 +72,7 @@ public sealed class ClientMailThreadStateEndpointTests
         Assert.Equal(Conversation.Value, block.ThreadId);
         Assert.Equal(nameof(ThreadStateCoverage.WholeThread), block.Coverage);
         Assert.Equal(DerivedAt, block.DerivedAt);
+        Assert.True(block.Current);
         Assert.Equal(
             [nameof(ThreadStateAspect.Agreement), nameof(ThreadStateAspect.Commitment)],
             block.Entries.Select(static entry => entry.Aspect));
@@ -124,7 +125,8 @@ public sealed class ClientMailThreadStateEndpointTests
             ThreadStateCoverage.ThreadTooLarge,
             [],
             new ThreadStateRevision(400, null),
-            DerivedAt));
+            DerivedAt,
+            IsCurrent: true));
 
         // Act
         var result = await this.ReadAsync();
@@ -134,6 +136,54 @@ public sealed class ClientMailThreadStateEndpointTests
 
         Assert.Equal(nameof(ThreadStateCoverage.ThreadTooLarge), block!.Coverage);
         Assert.Empty(block.Entries);
+    }
+
+    /// <summary>
+    /// A state recorded while three statements of an aspect were kept is published as the first of them, which is the
+    /// one the derivation ranked most important, rather than as a row of cards the design does not draw.
+    /// </summary>
+    [Fact]
+    public async Task ReadStateAsync_AStoredStateHoldingThreeStatementsOfOneAspect_PublishesTheFirst()
+    {
+        // Arrange
+        this.Holding(State(
+        [
+            ThreadStateEntry.Create(ThreadStateAspect.Agreement, "The response time stays at two hours.", [FirstMessage]),
+            ThreadStateEntry.Create(ThreadStateAspect.Agreement, "The fixings are inside the figure.", [FirstMessage]),
+            ThreadStateEntry.Create(ThreadStateAspect.Agreement, "Delivery is on the ninth.", [SecondMessage]),
+            ThreadStateEntry.Create(ThreadStateAspect.OpenQuestion, "Whether the yard is free.", [SecondMessage]),
+        ]));
+
+        // Act
+        var result = await this.ReadAsync();
+
+        // Assert
+        var block = Assert.IsType<Ok<ClientMailThreadStateResponse>>(result.Result).Value;
+
+        Assert.Equal(
+            ["The response time stays at two hours.", "Whether the yard is free."],
+            block!.Entries.Select(static entry => entry.Text));
+    }
+
+    /// <summary>
+    /// A message joined the conversation after its state was derived, so the reader reports the state as no longer
+    /// describing it and the route says so rather than publishing the block as the conversation's current one.
+    /// </summary>
+    [Fact]
+    public async Task ReadStateAsync_AMessageJoinedTheConversationSinceTheStateWasDerived_AnswersThatItIsNotCurrent()
+    {
+        // Arrange
+        var derivedBeforeTheReply = State(
+            [ThreadStateEntry.Create(ThreadStateAspect.Agreement, "The response time stays at two hours.", [FirstMessage])]);
+        this.Holding(derivedBeforeTheReply with { IsCurrent = false });
+
+        // Act
+        var result = await this.ReadAsync();
+
+        // Assert
+        var block = Assert.IsType<Ok<ClientMailThreadStateResponse>>(result.Result).Value;
+
+        Assert.False(block!.Current);
     }
 
     /// <summary>
@@ -180,7 +230,8 @@ public sealed class ClientMailThreadStateEndpointTests
             ThreadStateCoverage.WholeThread,
             entries,
             new ThreadStateRevision(2, new DateTimeOffset(2026, 9, 7, 16, 0, 0, TimeSpan.Zero)),
-            DerivedAt);
+            DerivedAt,
+            IsCurrent: true);
 
     private void Holding(EmailThreadState? state) =>
         this.stateReader
