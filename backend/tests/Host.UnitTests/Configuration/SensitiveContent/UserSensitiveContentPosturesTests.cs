@@ -373,14 +373,9 @@ public sealed class UserSensitiveContentPosturesTests : IDisposable
             null!));
     }
 
-    /// <summary>Builds the roster entry a user declared in the deployment's own file arrives as.</summary>
+    /// <summary>Builds the roster entry a user recording this posture and no mailbox arrives as.</summary>
     private static ServedMailUser Serving(MailUserId user, UserSensitiveContentOptions sensitiveContent) =>
-        new(
-            user,
-            user.Value.ToString(),
-            MailUserAccountSource.DeploymentSection,
-            [],
-            SensitiveContent: sensitiveContent);
+        new(user, user.Value.ToString(), [], SensitiveContent: sensitiveContent);
 
     /// <summary>Composes the postures of a deployment whose roster is settled and names exactly these users.</summary>
     private UserSensitiveContentPostures PosturesOver(

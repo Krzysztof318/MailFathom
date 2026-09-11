@@ -82,14 +82,12 @@ internal sealed record UserErasureResponse(bool Erased, bool WasServed);
 /// <param name="User">The user the record belongs to.</param>
 /// <param name="DisplayName">The label the user is recorded under.</param>
 /// <param name="Version">The version the record was read at, which the commit that follows is accepted against.</param>
-/// <param name="Source">The published name of where this user's mail accounts are read from.</param>
-/// <param name="ReadFromConfiguration">Whether a configuration source still supplies them, which is what makes every write into the record refused.</param>
+/// <param name="ReadFromConfiguration">Whether a configuration source still supplies this user's mail accounts, which is what would make every write into the record refused.</param>
 /// <param name="Document">The record, with every secret-bearing value replaced by the redaction marker.</param>
 internal sealed record UserRecordResponse(
     Guid User,
     string DisplayName,
     long Version,
-    string Source,
     bool ReadFromConfiguration,
     string Document)
 {
@@ -105,7 +103,6 @@ internal sealed record UserRecordResponse(
             record.User.Value,
             record.DisplayName,
             record.Version,
-            record.Source.ToString(),
             record.ReadFromConfiguration,
             record.Json);
     }

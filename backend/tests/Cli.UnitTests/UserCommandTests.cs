@@ -174,7 +174,7 @@ public sealed class UserCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
             this.harness.Console.Lines,
-            line => line.Contains("MailSynchronization:Accounts, which is where they are changed", StringComparison.Ordinal));
+            line => line.Contains("a configuration source, which is where they are changed", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -192,7 +192,7 @@ public sealed class UserCommandTests : IDisposable
             line => line.Contains("their own record", StringComparison.Ordinal));
     }
 
-    /// <summary>An empty roster is a deployment that has not started successfully, which is worth saying rather than printing nothing.</summary>
+    /// <summary>An empty roster is a deployment whose users have all been removed, which is worth saying rather than printing nothing.</summary>
     [Fact]
     public async Task List_ADeploymentHoldingNoUser_SaysWhatAnEmptyRosterMeans()
     {
@@ -206,7 +206,7 @@ public sealed class UserCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
             this.harness.Console.Lines,
-            line => line.Contains("has not started successfully", StringComparison.Ordinal));
+            line => line.Contains("have all been removed", StringComparison.Ordinal));
     }
 
     /// <summary>A deployment serving one user needs no identifier typed, which is what makes the ordinary invocation short.</summary>
@@ -361,7 +361,7 @@ public sealed class UserCommandTests : IDisposable
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
             this.harness.Console.Lines.Concat(this.harness.Console.Errors),
-            line => line.Contains("Change this user's mail accounts in MailSynchronization:Accounts", StringComparison.Ordinal));
+            line => line.Contains("A configuration source supplies this user's mail accounts", StringComparison.Ordinal));
     }
 
     /// <summary>No configuration change takes somebody's mail away, so a withdrawal says what it did not do.</summary>

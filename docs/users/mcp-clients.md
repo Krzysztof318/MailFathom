@@ -2,7 +2,7 @@
 
 <!-- describes: backend/src/Mcp/**, backend/src/Host/Security/**, backend/src/Host/Configuration/Endpoints/McpEndpointOptions.cs -->
 
-[Getting started § connect an MCP client](getting-started.md#7-connect-an-mcp-client) states the two facts every client
+[Getting started § connect an MCP client](getting-started.md#8-connect-an-mcp-client) states the two facts every client
 needs — the Streamable HTTP endpoint at `/mcp`, and the key as a bearer credential — and that is the complete answer for
 a client you configure by writing a file. This page answers what comes next and what no reference page can answer,
 because the answer belongs to somebody else: **where the dialog is in the product I actually use, what it accepts as an
@@ -75,7 +75,7 @@ repeated per client below:
   [Tool categories](../features/mcp-tools.md#tool-categories) holds the categories, the syntax, and what a value the
   endpoint cannot read does. Most clients send no such header and are offered whatever the deployment publishes.
 - **Enabling the endpoint at all, and choosing what protects it, is one decision made before any of this.**
-  [Getting started § enable the MCP endpoint](getting-started.md#6-enable-the-mcp-endpoint) is the short form and
+  [Getting started § enable the MCP endpoint](getting-started.md#7-enable-the-mcp-endpoint) is the short form and
   [the MCP endpoint](../operations/mcp-endpoint.md) is the whole contract.
 
 ## The clients, in one table
@@ -265,7 +265,7 @@ Sources: [Model Context Protocol (MCP)](https://cursor.com/docs/mcp).
 
 There is no entry to look up here, and that is the point: MailFathom serves the MCP Streamable HTTP transport at `/mcp`
 and asks for whatever its `Authentication` list configures, so any client implementing that transport connects with the
-two facts [getting started](getting-started.md#7-connect-an-mcp-client) already states. Three questions decide whether a
+two facts [getting started](getting-started.md#8-connect-an-mcp-client) already states. Three questions decide whether a
 given client is one of them, and each has an answer above rather than a setting to find:
 
 - **Can it send a header you choose?** If yes, an API key is the whole configuration. If no, the deployment needs an
@@ -323,7 +323,7 @@ tool, with nothing said about the permission that was missing. A shorter tool li
 the deployment's grant rather than a fault in the client configuration.
 
 Then ask the assistant to list recent mail, and read `folderFreshness` in the result before reading the emails:
-[getting started § make the first call](getting-started.md#8-make-the-first-call-and-read-it-correctly) is what that
+[getting started § make the first call](getting-started.md#9-make-the-first-call-and-read-it-correctly) is what that
 field means, and [using the tools](usage.md) is the day-to-day surface.
 
 ## When the connection is refused

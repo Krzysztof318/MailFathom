@@ -170,31 +170,34 @@ the folder.
 
 **The user gate refuses to start rather than reporting unready.** A mail account says nothing about whose mail it
 holds unless something says which user owns it, so the gate settles the question before anything serves a request: it
-reads the users the deployment holds, serves the one its own `MailSynchronization:Accounts` belongs to, serves every
-user whose record is their own, proves the secrets those records' mailboxes carry, and reports which of the two sources
-reaches each of them. No configuration source names a user, so there is nothing here to reconcile a file against; what
-the gate reads is the roster the database holds. It runs behind the schema gate, because that table is the schema's,
-and a deployment it cannot settle does not come up:
+reads the users the deployment holds, serves every one of them from their own record, proves the secrets those records'
+mailboxes carry, and reports the roster it settled on. No configuration source names a user or declares a mailbox, so
+there is nothing here to reconcile a file against; what the gate reads is the roster the database holds. It runs behind
+the schema gate, because that table is the schema's, and a deployment it cannot settle does not come up:
 
 | What the gate found | What it means | What to do |
 |---|---|---|
-| More than one held user record still reading the deployment's own mail section | `MailSynchronization:Accounts` names no user, so with more than one such record there is no sole user for anything configured there to belong to. It is the count of those records that decides it, whether or not the section currently states a mailbox | Give each of those users a record of their own — `mfctl user account add` states their mailboxes, and a user recorded that way stops reading the section — then clear the section |
-| `MailSynchronization:Accounts` that nobody reads | Every user the deployment holds reads a record of their own, so the section describes mailboxes belonging to nobody | Clear the section; the mailboxes it named are recorded against their owners |
-| `MailSynchronization:Enabled` on and not one mailbox anywhere | Neither that section nor any user's record names a mailbox, so there is nothing for synchronization to read | Record the mailbox this deployment exists to synchronize with `mfctl user account add`, or state it in that section, or switch synchronization off |
 | More user records than a deployment serves | The roster is longer than the 256 one deployment may hold, which is a table something generated rather than provisioned | Find what wrote `settings_accounts`; nothing MailFathom ships writes a roster that long |
-| One mail account name reaching two users | An account's settings are resolved by name alone, so a name two users share would reach whichever of them the lookup met first | Rename one of them, in the record or the section it comes from; the refusal names every shared name |
-| Several users while `McpEndpoint` or `ClientEndpoint` requires no authentication | Such a surface admits a caller that brought nothing, so it could not say whose mail an act is about and every caller reaching it is composed against the single user the deployment holds | Require a credential on those two surfaces — every one of them is a record naming its user, whichever method presents it — or switch them off. `AdminEndpoint` is not among them: an administrator acts for the deployment, and every user-scoped route there names the user it is for |
-| A user's own document that will not bind | That user is served from their document rather than from the deployment's own section, and it is not the settings a document holds | Repair the record; the refusal names each sentence of what must change |
-| A user's own mailbox whose secret reference or trust anchor cannot be resolved | A record's mailboxes sit outside the section the secret gate walks, so without this they would start clean and fail one connection at a time | Repair the reference or the anchor; the refusal names the user and the account within their record |
+| One mail account name reaching two users | An account's settings are resolved by name alone, so a name two users share would reach whichever of them the lookup met first | Rename one of them, in the record that declares it; the refusal names every shared name |
+| Several users while `McpEndpoint` or `ClientEndpoint` requires no authentication | Such a surface admits a caller that brought nothing, so it could not say whose mail an act is about and every caller reaching it is composed against the single user the deployment holds. One user or none is admissible: with none there is nobody such a caller could be handed | Require a credential on those two surfaces — every one of them is a record naming its user, whichever method presents it — or switch them off. `AdminEndpoint` is not among them: an administrator acts for the deployment, and every user-scoped route there names the user it is for |
+| A user's document that will not bind | Every user is served from their document, and this one is not the settings a document holds | Repair the record; the refusal names each sentence of what must change |
+| A mailbox whose secret reference or trust anchor cannot be resolved | A record's mailboxes sit outside the configuration the secret gate walks, so without this they would start clean and fail one connection at a time | Repair the reference or the anchor; the refusal names the user and the account within their record |
 
 Every one is a refusal rather than degraded readiness, and deliberately: the alternative is a process that serves mail
 while it cannot say whose mail it is serving.
 
-**A deployment whose mailboxes are all in `MailSynchronization:Accounts` is the ordinary shape and is not refused.**
-Those mailboxes belong to the one user such a deployment holds — the row the release's schema provisions, or one the
-gate records where the deployment holds none at all — and no file has to change. **Every user the deployment holds is
-served**: the one that section belongs to, and every user recorded through `mfctl user add`, whose mailboxes are read
-from their own record. There is no longer a held user nobody serves, because there is no file left to stop naming them.
+**A deployment holding no user is not refused.** A fresh database is seeded with one, so that is a deployment whose
+every user was erased: the gate settles an empty roster, the deployment reports itself started, and it serves nobody
+until somebody is recorded — at which point that person is served without a restart, their mailboxes included.
+Synchronization being switched on with nothing recorded to synchronize — where a first run stands, its one user
+declaring no mailbox yet — is reported at `Information` rather than refused. **Every user the deployment holds
+is served**, each from their own record; there is no held user nobody serves, because there is no file left to stop
+naming them.
+
+**A deployment whose file still carries `MailSynchronization:Accounts` does not start**, and that refusal comes from
+the settings a start composes rather than from this gate. Nothing imports what the section declared, so the message
+names the section and the commands that replace it —
+[configuration sources](configuration-sources.md#a-deployment-that-records-no-user) carries it in full.
 
 The startup gates are reported rather than re-run. The probe reads a flag the gates set as they complete, so polling it
 opens no connection and costs nothing, and once it turns healthy it stays healthy.

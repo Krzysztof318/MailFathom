@@ -34,14 +34,12 @@ internal sealed record UserErasure(
 /// <param name="User">The user the record belongs to.</param>
 /// <param name="DisplayName">The label the user is recorded under.</param>
 /// <param name="Version">The version the record was read at, which the next write is composed over.</param>
-/// <param name="Source">Where this user's mail accounts are read from today.</param>
-/// <param name="ReadFromConfiguration">Whether a configuration source still supplies them, which is what makes every write into their record refused.</param>
+/// <param name="ReadFromConfiguration">Whether a configuration source still supplies this user's mail accounts, which is what would make every write into their record refused.</param>
 /// <param name="Document">The record, with every secret-bearing value replaced by the deployment's redaction marker.</param>
 internal sealed record UserRecord(
     [property: JsonPropertyName("user")] Guid User,
     [property: JsonPropertyName("displayName")] string? DisplayName,
     [property: JsonPropertyName("version")] long Version,
-    [property: JsonPropertyName("source")] string? Source,
     [property: JsonPropertyName("readFromConfiguration")] bool ReadFromConfiguration,
     [property: JsonPropertyName("document")] string? Document);
 

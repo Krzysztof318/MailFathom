@@ -211,34 +211,30 @@ Sending a grant does **not** change the account's configuration. `OAuth:RefreshT
 still what an account is served from until something is stored for it; what changes is that something now is. The
 interaction between the two is [rotation](#rotation).
 
-## Configuring the account
+## Declaring the account
 
 Provision the refresh token and the client secret through [secret provisioning](secret-provisioning.md), then point
-the account at them. The permitted mechanisms are what switch the account onto the token path.
+the account at them. The permitted mechanisms are what switch the account onto the token path. The declaration is
+written into the record of the user whose mailbox it is, with `mfctl user account add --from-file`, rather than into a
+configuration source:
 
 ```jsonc
 {
-  "MailSynchronization": {
-    "Accounts": [
-      {
-        "AccountId": "workspace",
-        "DisplayName": "Workspace mail",
-        "Host": "imap.gmail.com",
-        "Port": 993,
-        "UserName": "mailbox@example.com",
-        "TransportSecurity": {
-          "PermittedAuthenticationMechanisms": ["XOAUTH2", "OAUTHBEARER"]
-        },
-        "OAuth": {
-          "Grant": "refresh_token",
-          "TokenEndpoint": "https://oauth2.googleapis.com/token",
-          "ClientId": "…apps.googleusercontent.com",
-          "Scope": "https://mail.google.com/",
-          "ClientSecret": { "SecretReference": "systemd-credential:workspace-oauth-client-secret" },
-          "RefreshToken": { "SecretReference": "systemd-credential:workspace-oauth-refresh-token" }
-        }
-      }
-    ]
+  "AccountId": "workspace",
+  "DisplayName": "Workspace mail",
+  "Host": "imap.gmail.com",
+  "Port": 993,
+  "UserName": "mailbox@example.com",
+  "TransportSecurity": {
+    "PermittedAuthenticationMechanisms": ["XOAUTH2", "OAUTHBEARER"]
+  },
+  "OAuth": {
+    "Grant": "refresh_token",
+    "TokenEndpoint": "https://oauth2.googleapis.com/token",
+    "ClientId": "…apps.googleusercontent.com",
+    "Scope": "https://mail.google.com/",
+    "ClientSecret": { "SecretReference": "systemd-credential:workspace-oauth-client-secret" },
+    "RefreshToken": { "SecretReference": "systemd-credential:workspace-oauth-refresh-token" }
   }
 }
 ```
@@ -325,7 +321,7 @@ the account eventually answers `invalid_grant`, and the repair is to authorize t
 | --- | --- |
 | `no_refresh_token_issued` | The grant returned an access token only. For Google, consent was not re-prompted; the command already forces it, so check that the client is a Desktop app. For Microsoft, `offline_access` is missing from the scope. |
 | `invalid_grant` at startup or in a run | The refresh token is revoked, expired, or belongs to a different client. Authorize the account again with `--account`, which replaces whatever was stored. [Rotation](#rotation) has the statement, including what to do on a deployment you provision by hand. A rotation MailFathom could not store reaches you this way too; the error logged when the store failed says so. |
-| `This deployment configures no mail account named …` | `--account` named an identifier no `MailSynchronization:Accounts` entry carries, or you are signed in to the wrong deployment. The grant was not stored; nothing was changed. |
+| `This deployment configures no mail account named …` | `--account` named an identifier no served user's record declares, or you are signed in to the wrong deployment. The grant was not stored; nothing was changed. |
 | `The deployment refused the grant without saying why.` | The administrative endpoint refused the request and sent no reason, which is what a proxy answering `400` in front of it looks like. Check that `--endpoint` reaches the deployment rather than something in front of it. |
 | `answered … rather than storing the token` | The endpoint was reached and answered with neither an acceptance nor a refusal it explained. The token was not stored; nothing about the account changed. A `500` is most often a deployment with no key ring, since that is what a stored token seals under — configure `DataEncryption`, or provision the token at the configured reference instead. |
 | `The rotated refresh token … could not be stored` | The database was unreachable, or the key ring the value seals under is not configured. The account keeps working until the previous token stops being accepted, so fix the cause and it recovers on the next rotation. |

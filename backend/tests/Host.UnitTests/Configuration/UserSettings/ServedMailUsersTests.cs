@@ -72,15 +72,38 @@ public sealed class ServedMailUsersTests
         Assert.Equal(MailFathomErrorCode.DeploymentMailUserUnresolved, refusal.ErrorCode);
     }
 
-    /// <summary>The empty roster is what an unresolved holder would look like, and neither is a deployment.</summary>
+    /// <summary>A deployment holding no user serves nobody, which is where one whose every user was erased stands.</summary>
     [Fact]
-    public void Resolved_ARosterServingNobody_IsRejected()
+    public void Resolved_ARosterServingNobody_ServesNobodyRatherThanRefusing()
     {
         // Arrange
         var servedUsers = new ServedMailUsers();
 
-        // Act & Assert
-        Assert.Throws<ArgumentException>(() => servedUsers.Resolved([]));
+        // Act
+        servedUsers.Resolved([]);
+
+        // Assert
+        Assert.Empty(servedUsers.Users);
+        Assert.Throws<DeploymentMailUserUnresolvedException>(() => servedUsers.User);
+    }
+
+    /// <summary>
+    /// A caller naming no user on a deployment holding nobody is told so, and what records somebody — not the sentence
+    /// meant for several users, whose remedy would be a credential for a person who does not exist.
+    /// </summary>
+    [Fact]
+    public void User_WhenNobodyIsServed_NamesTheCommandThatRecordsSomebody()
+    {
+        // Arrange
+        var servedUsers = new ServedMailUsers();
+        servedUsers.Resolved([]);
+
+        // Act
+        var refusal = Assert.Throws<DeploymentMailUserUnresolvedException>(() => servedUsers.User);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.DeploymentMailUserUnresolved, refusal.ErrorCode);
+        Assert.Contains("mfctl user add", refusal.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -164,7 +187,6 @@ public sealed class ServedMailUsersTests
         // Assert
         var served = Assert.Single(servedUsers.Users);
 
-        Assert.False(served.ReadFromConfiguration);
         Assert.Same(classification, served.SpamClassification);
     }
 
@@ -190,11 +212,5 @@ public sealed class ServedMailUsersTests
         MailUserId user,
         string displayName,
         params MailSynchronizationAccountOptions[] mailAccounts) =>
-        new(
-            user,
-            displayName,
-            mailAccounts.Length == 0
-                ? MailUserAccountSource.DeploymentSection
-                : MailUserAccountSource.UserDocument,
-            mailAccounts);
+        new(user, displayName, mailAccounts);
 }

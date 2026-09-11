@@ -27,7 +27,7 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task Current_BeforeAnyReload_IsTheSnapshotBoundAtStartup()
     {
         // Arrange
-        var startupSettings = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
+        var startupSettings = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password"));
         await using var harness = CreateHarness(startupSettings);
 
         // Act
@@ -41,8 +41,8 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task PublishWhenUsableAsync_ResolvableCandidate_PublishesItForNewOperations()
     {
         // Arrange
-        await using var harness = CreateHarness(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")));
-        var rotatedReference = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:rotated-password"));
+        await using var harness = CreateHarness(ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password")));
+        var rotatedReference = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:rotated-password"));
         var reload = harness.Settings.GetReloadToken();
 
         // Act
@@ -59,9 +59,9 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task PublishWhenUsableAsync_CandidateWithAnUnresolvableReference_KeepsThePreviousSnapshotActive()
     {
         // Arrange
-        var startupSettings = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
+        var startupSettings = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password"));
         await using var harness = CreateHarness(startupSettings);
-        var brokenCandidate = ConfiguredAccounts.WithPasswordReferences(("primary", "file:/run/secrets/absent"));
+        var brokenCandidate = ConfiguredAccounts.ServingPasswordReferences(("primary", "file:/run/secrets/absent"));
         var reload = harness.Settings.GetReloadToken();
 
         // Act
@@ -78,8 +78,8 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task PublishWhenUsableAsync_RejectedCandidate_LogsThePathAndFailureAndNoMaterial()
     {
         // Arrange
-        await using var harness = CreateHarness(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")));
-        var brokenCandidate = ConfiguredAccounts.WithPasswordReferences(("primary", "file:/run/secrets/imap-primary-password"));
+        await using var harness = CreateHarness(ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password")));
+        var brokenCandidate = ConfiguredAccounts.ServingPasswordReferences(("primary", "file:/run/secrets/imap-primary-password"));
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
@@ -88,7 +88,7 @@ public sealed class ValidatedSettingsSnapshotTests
 
         // Assert
         var rejection = Assert.Single(harness.SettingsLogger.Messages);
-        Assert.Contains("MailSynchronization:Accounts:0:Secrets:Password", rejection, StringComparison.Ordinal);
+        Assert.Contains("document:MailAccounts:0:Secrets:Password", rejection, StringComparison.Ordinal);
         Assert.Contains(nameof(SecretResolutionFailure.MaterialNotFound), rejection, StringComparison.Ordinal);
         Assert.DoesNotContain("/run/secrets", rejection, StringComparison.Ordinal);
     }
@@ -101,8 +101,8 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task LatestReloadRefused_AfterACandidateNothingCouldResolve_ReportsTheRefusalAndHowManySettingsNamedIt()
     {
         // Arrange
-        await using var harness = CreateHarness(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")));
-        var brokenCandidate = ConfiguredAccounts.WithPasswordReferences(("primary", "file:/run/secrets/absent"));
+        await using var harness = CreateHarness(ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password")));
+        var brokenCandidate = ConfiguredAccounts.ServingPasswordReferences(("primary", "file:/run/secrets/absent"));
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
@@ -119,7 +119,7 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task LatestReloadRefused_BeforeAnyReload_ReportsNothingRefused()
     {
         // Arrange
-        await using var harness = CreateHarness(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")));
+        await using var harness = CreateHarness(ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password")));
 
         // Act, Assert
         Assert.False(harness.Settings.LatestReloadRefused);
@@ -131,18 +131,18 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task LatestReloadRefused_ACandidateThatPublishesAfterOneThatDidNot_ReportsNothingRefused()
     {
         // Arrange
-        await using var harness = CreateHarness(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")));
+        await using var harness = CreateHarness(ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password")));
         await harness.Settings.PublishWhenUsableAsync(
             new ValidatedSettingsSnapshot<MailSynchronizationOptions>.ReloadCandidate(
                 1,
-                ConfiguredAccounts.WithPasswordReferences(("primary", "file:/run/secrets/absent"))),
+                ConfiguredAccounts.ServingPasswordReferences(("primary", "file:/run/secrets/absent"))),
             TestContext.Current.CancellationToken);
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
             new ValidatedSettingsSnapshot<MailSynchronizationOptions>.ReloadCandidate(
                 2,
-                ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:repaired-password"))),
+                ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:repaired-password"))),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -154,11 +154,11 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task PublishWhenUsableAsync_TrustAnchorThatNoLongerLoads_KeepsThePreviousSnapshotActive()
     {
         // Arrange
-        var startupSettings = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
+        var startupSettings = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password"));
         await using var harness = CreateHarness(startupSettings);
-        var brokenCandidate = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
-        brokenCandidate.Accounts[0].TransportSecurity.CertificateTrust = MailServerCertificateTrust.AdditionalTrustedAuthority;
-        brokenCandidate.Accounts[0].TransportSecurity.TrustedCertificateAuthority =
+        var brokenCandidate = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password"));
+        brokenCandidate.DeclaredAccount(0).TransportSecurity.CertificateTrust = MailServerCertificateTrust.AdditionalTrustedAuthority;
+        brokenCandidate.DeclaredAccount(0).TransportSecurity.TrustedCertificateAuthority =
             new ConfiguredSecret { Name = "primary-ca", SecretReference = "plaintext:not-a-certificate" };
 
         // Act
@@ -175,9 +175,9 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task PublishWhenUsableAsync_OlderCandidateAfterANewerOne_LeavesTheNewerOnePublished()
     {
         // Arrange
-        await using var harness = CreateHarness(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")));
-        var newerCandidate = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:newer-password"));
-        var olderCandidate = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:older-password"));
+        await using var harness = CreateHarness(ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password")));
+        var newerCandidate = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:newer-password"));
+        var olderCandidate = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:older-password"));
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
@@ -196,16 +196,16 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task PublishWhenUsableAsync_CandidateSupersededWhileValidating_IsNotPublished()
     {
         // Arrange
-        var startupSettings = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
+        var startupSettings = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password"));
         await using var harness = CreateHarness(startupSettings);
         await harness.Settings.StartingAsync(TestContext.Current.CancellationToken);
-        var supersededCandidate = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:superseded-password"));
+        var supersededCandidate = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:superseded-password"));
 
         // Act
         // Two reports move the observed count past the candidate below, whether or not the reader has reached either
         // of them yet, which is what makes this independent of the background loop's timing.
-        harness.OptionsMonitor.ReportReload(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:newer-password")));
-        harness.OptionsMonitor.ReportReload(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:newest-password")));
+        harness.OptionsMonitor.ReportReload(ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:newer-password")));
+        harness.OptionsMonitor.ReportReload(ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:newest-password")));
         await harness.Settings.PublishWhenUsableAsync(
             new ValidatedSettingsSnapshot<MailSynchronizationOptions>.ReloadCandidate(1, supersededCandidate),
             TestContext.Current.CancellationToken);
@@ -219,9 +219,9 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task StartingAsync_ReloadLandedBeforeSubscribing_AdoptsItInsteadOfHoldingTheCapturedSnapshot()
     {
         // Arrange
-        var startupSettings = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
+        var startupSettings = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password"));
         await using var harness = CreateHarness(startupSettings);
-        var reloadedDuringTheGap = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:rotated-password"));
+        var reloadedDuringTheGap = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:rotated-password"));
         harness.OptionsMonitor.ReportReload(reloadedDuringTheGap);
 
         // Act
@@ -237,9 +237,9 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task PublishWhenUsableAsync_ValidationThrows_KeepsThePreviousSnapshotAndReportsTheFailure()
     {
         // Arrange
-        var startupSettings = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
+        var startupSettings = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password"));
         await using var harness = CreateHarness(startupSettings, new ThrowingSecretReferenceResolver());
-        var candidate = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:rotated-password"));
+        var candidate = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:rotated-password"));
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
@@ -258,12 +258,12 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task OnChange_ReportedReload_ReturnsWithoutValidatingOnTheReportingThread()
     {
         // Arrange
-        var startupSettings = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
+        var startupSettings = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password"));
         await using var harness = CreateHarness(startupSettings, new BlockingSecretReferenceResolver());
         await harness.Settings.StartingAsync(TestContext.Current.CancellationToken);
 
         // Act
-        harness.OptionsMonitor.ReportReload(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:rotated-password")));
+        harness.OptionsMonitor.ReportReload(ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:rotated-password")));
         var settingsAfterTheReportReturned = harness.Settings.Current;
 
         // Assert
@@ -274,9 +274,9 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task StoppedAsync_ReloadReportedBeforeShutdown_StillDecidesTheWaitingCandidate()
     {
         // Arrange
-        await using var harness = CreateHarness(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")));
+        await using var harness = CreateHarness(ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password")));
         await harness.Settings.StartingAsync(TestContext.Current.CancellationToken);
-        var rotatedReference = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:rotated-password"));
+        var rotatedReference = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:rotated-password"));
 
         // Act
         harness.OptionsMonitor.ReportReload(rotatedReference);
@@ -291,13 +291,13 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task OnChange_NamedOptionsReload_IsIgnored()
     {
         // Arrange
-        var startupSettings = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
+        var startupSettings = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password"));
         await using var harness = CreateHarness(startupSettings);
         await harness.Settings.StartingAsync(TestContext.Current.CancellationToken);
 
         // Act
         harness.OptionsMonitor.ReportReload(
-            ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:rotated-password")),
+            ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:rotated-password")),
             name: "secondary");
         await harness.Settings.StoppedAsync(TestContext.Current.CancellationToken);
 
@@ -310,9 +310,9 @@ public sealed class ValidatedSettingsSnapshotTests
     public async Task Current_AfterAPublishedReload_SuppliesTheAdoptedTransportSecurityPolicy()
     {
         // Arrange
-        await using var harness = CreateHarness(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")));
-        var candidate = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
-        candidate.Accounts[0].TransportSecurity.ConnectionSecurity = MailConnectionSecurity.StartTlsRequired;
+        await using var harness = CreateHarness(ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password")));
+        var candidate = ConfiguredAccounts.ServingPasswordReferences(("primary", "plaintext:dev-password"));
+        candidate.ServedUsers![0].MailAccounts[0].TransportSecurity.ConnectionSecurity = MailConnectionSecurity.StartTlsRequired;
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
@@ -344,9 +344,15 @@ public sealed class ValidatedSettingsSnapshotTests
             new FakeTimeProvider(new DateTimeOffset(2026, 7, 31, 12, 0, 0, TimeSpan.Zero)),
             new RecordingLogger<SecretConfigurationValidator>());
 
+        // The subject is the publisher rather than the section, so the candidate is judged by the walk that proves a
+        // user's recorded mailboxes: it is the mail check that can still refuse a credential, now that no mailbox is
+        // declared in the section itself.
         var settings = new ValidatedSettingsSnapshot<MailSynchronizationOptions>(
             optionsMonitor,
-            validator.FindMailConfigurationErrorsAsync,
+            (candidate, cancellationToken) => validator.FindUserMailAccountErrorsAsync(
+                "document",
+                [.. candidate.DeclaredAccounts],
+                cancellationToken),
             "MailSynchronization",
             settingsLogger);
 

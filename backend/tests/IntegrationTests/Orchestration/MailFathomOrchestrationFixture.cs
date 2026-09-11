@@ -451,6 +451,20 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
 
                 await StartHostResourceAsync(startedApplication, resourceName, startCancellation.Token);
 
+                // The mailbox this suite reads through that host is a record rather than configuration, so it is
+                // written once the host is answering and not before it starts. The mutual-TLS host serves no mail and
+                // needs none.
+                if (resourceName == OrchestrationContract.HostResourceName)
+                {
+                    await ComposedHostMailbox.RecordAsync(
+                        AsAddress(
+                            startedApplication.GetEndpoint(
+                                resourceName,
+                                OrchestrationContract.HostAdminEndpointName),
+                            Uri.UriSchemeHttp),
+                        startCancellation.Token);
+                }
+
                 this.startedHostResources.Add(resourceName);
             }
 

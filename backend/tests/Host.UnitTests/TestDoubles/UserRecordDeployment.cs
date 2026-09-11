@@ -82,13 +82,12 @@ internal sealed class UserRecordDeployment
             new(
                 MailUserId.Create(new Guid("99999999-9999-9999-9999-999999999999")),
                 "nobody-these-tests-name",
-                MailUserAccountSource.UserDocument,
                 []),
         ]);
 
         var authorization = new AccessAuthorization(principals);
         var settings = new ConfigurationBuilder().Build();
-        var configured = new ConfiguredUserSettings(settings, this.servedUsers);
+        var configured = new ConfiguredUserSettings();
         var admission = new SeveralUserAdmission(
             Options.Create(new McpEndpointOptions()),
             Options.Create(new ClientEndpointOptions()));

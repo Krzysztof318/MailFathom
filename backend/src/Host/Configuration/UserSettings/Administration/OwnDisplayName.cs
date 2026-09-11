@@ -32,9 +32,10 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// refusal by submitting one.
 /// </para>
 /// <para>
-/// A person whose mail accounts the deployment's own section supplies is refused, for the reason the record's own
-/// write refuses them: that record is the operator's rather than theirs, so the name on it is the operator's to set.
-/// What comes back names who to ask instead.
+/// A person whose mail accounts a configuration source supplies is refused, for the reason the record's own write
+/// refuses them: that record is the operator's rather than theirs, so the name on it is the operator's to set. Nothing
+/// reaches that refusal in this release, no configuration source declaring a mailbox any longer, and
+/// <see href="https://github.com/Krzysztof318/MailFathom/issues/1829">issue 1829</see> retires it.
 /// </para>
 /// </remarks>
 [SuppressMessage(
@@ -45,7 +46,7 @@ internal sealed class OwnDisplayName(
     AccessAuthorization authorization,
     IMailUserDirectory directory,
     IMailUserProvisioning provisioning,
-    ServedMailUsers servedUsers)
+    ConfiguredUserSettings configured)
 {
     /// <summary>Reads the name this deployment records the signed-in person under.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
@@ -87,7 +88,7 @@ internal sealed class OwnDisplayName(
         // Ahead of the bound, exactly as the record's own gate is checked ahead of the version it was composed over:
         // a person a file still supplies is refused whatever name they wrote, and telling them to shorten one first
         // would send them back to a field that was never going to be accepted.
-        if (servedUsers.SourceFor(user) != MailUserAccountSource.UserDocument)
+        if (configured.DeclaredByAConfigurationSource(user))
         {
             return OwnDisplayNameChange.Refused(DeclaredElsewhere);
         }
@@ -113,7 +114,7 @@ internal sealed class OwnDisplayName(
     /// </remarks>
     private bool WouldAcceptAWriteFor(MailUserId user) =>
         authorization.Permits(MailFathomPermission.MailAccountsWrite)
-        && servedUsers.SourceFor(user) == MailUserAccountSource.UserDocument;
+        && !configured.DeclaredByAConfigurationSource(user);
 
     /// <summary>Says why a stated name is not one this deployment would record, or nothing where it is.</summary>
     /// <remarks>
@@ -143,8 +144,8 @@ internal sealed class OwnDisplayName(
 
     /// <summary>The sentence a person whose mail accounts a configuration source declares is refused with.</summary>
     /// <remarks>
-    /// It names what the person can act on rather than the key behind it: the deployment's own mail section is the
-    /// operator's file, and nothing the person could reach changes what it supplies.
+    /// It names what the person can act on rather than the key behind it: a configuration source is the operator's
+    /// file, and nothing the person could reach changes what it supplies.
     /// </remarks>
     private const string DeclaredElsewhere =
         "This deployment's own configuration supplies your mail accounts, so your record is the operator's rather than yours and the name on it is theirs to set. Ask whoever administers this deployment to change it.";

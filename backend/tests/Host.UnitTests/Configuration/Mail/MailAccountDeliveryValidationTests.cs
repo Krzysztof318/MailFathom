@@ -5,6 +5,7 @@
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using Xunit;
@@ -234,24 +235,29 @@ public sealed class MailAccountDeliveryValidationTests
     }
 
     /// <summary>
-    /// A deployment that reads no mailbox and only sends from one is an ordinary shape, and it is what the composed
-    /// host in the integration-test topology configures: synchronization off, no reading endpoint, and a submission
-    /// endpoint carrying its own login and credential.
+    /// A deployment whose synchronization is switched off still sends from the mailboxes its users recorded, which is
+    /// what the composed host in the integration-test topology is: the switch is off and a submission endpoint carries
+    /// its own login and credential.
     /// </summary>
     /// <remarks>
-    /// The delivery credentials are validated exactly when synchronization is off, because that is when the account's
-    /// own reading block is not there to supply one. So this is the shape where a missing submission credential is
-    /// caught at startup, and the one a topology gets wrong by configuring an endpoint without the login it needs.
+    /// A recorded mailbox is judged as one that will be synchronized whatever the deployment-wide switch says, so the
+    /// record names its reading endpoint as well as its submission one. What is proven here is that the switch takes
+    /// nothing away: the account is accepted and its sender identity is still published.
     /// </remarks>
     [Fact]
-    public void Validate_SendingOnlyAccountWithSynchronizationOff_ReportsNoError()
+    public void Validate_ARecordedAccountWithSynchronizationOff_ReportsNoErrorAndKeepsItsSenderIdentity()
     {
         // Arrange
         var account = new MailSynchronizationAccountOptions
         {
             AccountId = "primary",
             DisplayName = "The primary mailbox",
+            Host = "imap.example.test",
             UserName = "mailfathom@example.test",
+            Secrets = new MailAccountSecretOptions
+            {
+                Password = new ConfiguredSecret { SecretReference = "plaintext:imap-password" },
+            },
             Delivery = new MailAccountDeliveryOptions
             {
                 Host = "smtp.example.test",
@@ -262,7 +268,7 @@ public sealed class MailAccountDeliveryValidationTests
                 },
             },
         };
-        var options = new MailSynchronizationOptions { Enabled = false, Accounts = [account] };
+        var options = new MailSynchronizationOptions { Enabled = false }.Serving(account);
 
         // Act
         var results = ConfiguredMailAccounts.Validate(options);

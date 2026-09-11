@@ -15,7 +15,7 @@ budget or the coordinator loop itself are marked *restart* below.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `MailSynchronization:Enabled` | bool | `false` | Enabled requires at least one account, here or in [a user's own record](configuration-sources.md#which-source-reaches-a-user) | restart |
+| `MailSynchronization:Enabled` | bool | `false` | Enabled with nobody recording a mailbox synchronizes nothing, which is reported at startup rather than refused: a deployment starts before its first mailbox is declared | restart |
 | `MailSynchronization:Interval` | TimeSpan | `00:05:00` | 10 s – 1 day; measured end-of-run to start-of-run | restart |
 | `MailSynchronization:MaxFailureBackoff` | TimeSpan | `00:30:00` | 10 s – 1 day, and never below `Interval` | reload |
 | `MailSynchronization:MaxConcurrentAccounts` | int | `4` | 1 – 100 | restart |
@@ -45,15 +45,26 @@ budget or the coordinator loop itself are marked *restart* below.
 | `MailSynchronization:VerifyDkimLocally` | bool | `true` | Whether extraction verifies a message's own DKIM signatures where no trusted `Authentication-Results` header was found. A fallback and never a supplement: an account whose server writes the header verifies nothing locally. It is the only path that makes an outbound DNS query | reload; the next extraction verifies against it |
 | `MailSynchronization:AssessMachineAuthorship` | bool | `true` | Whether extraction reads how much each message's own text reads as machine written. What the reading weighs is the project's and is not configurable; this decides only whether it runs | reload; the next extraction reads against it |
 
-### One account — `MailSynchronization:Accounts:<n>`
+### One account — a mailbox in a user's record
+
+This deployment declares no mail account of its own. Every account belongs to the user whose record holds it, so the
+keys below are read from one entry of that record's `MailAccounts` collection rather than from a configuration source —
+`mfctl user account add --from-file` carries exactly this object, and
+[the users a deployment serves](configuration-sources.md#the-users-a-deployment-serves) is where a record is read from
+and written. *Change* below therefore means what the next run adopts once the record commits, which is what a committed
+record does without a restart.
+
+A recorded mailbox is judged as one that will be synchronized, whatever `MailSynchronization:Enabled` says: the server,
+the login, and the credential are required, and an account that names none is refused when the record is written rather
+than met later by a run.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `…:AccountId` | string | — | Required; unique within the user declaring it, after normalization and without regard to case | reload |
 | `…:DisplayName` | string | — | Required, with no default; at most 128 characters, no control characters, and it may not be another account's identifier or display name compared without regard to case | reload |
-| `…:Host` | string | — | Required when synchronization is enabled | reload |
+| `…:Host` | string | — | Required | reload |
 | `…:Port` | int | `993` | 1 – 65535 | reload |
-| `…:UserName` | string | — | Required when synchronization is enabled; an identifier, not a secret | reload |
+| `…:UserName` | string | — | Required; an identifier, not a secret | reload |
 | `…:Secrets:Password` | secret block | unset | Required when the permitted mechanisms include any password mechanism; must resolve at startup | reload; material per connection |
 | `…:Mode` | enum | `Polling` | `Polling`, `Push`; push holds one connection open per account on a server supporting `NOTIFY`, and one per folder on a server offering only `IDLE` | reload; the next run adopts it |
 | `…:EarliestEmailReceivedDate` | date | unset (everything) | Not in the future (compared in UTC) | reload |
@@ -600,7 +611,7 @@ use — every fact, every function, every operator — and this section document
 | `MailRules:HistoryRetention` | TimeSpan | `30.00:00:00` | At most 3650 days; how long a recorded rule execution is kept. Zero or less keeps one for exactly as long as the message it names. A pass records one execution per rule it reached per message, so this is the bound on a record that would otherwise grow with the mailbox | reload; the next account run erases against the new window |
 | `MailRules:Rules` | list | empty | At most 200 rules, evaluated in the order they are written | reload |
 | `MailRules:Rules:0:Name` | string | required | 1 – 64 characters of letters, digits, spaces, and `.`, `_`, `-`; unique across the section, ignoring case | reload |
-| `MailRules:Rules:0:Accounts` | list | empty | The accounts the rule applies to, each naming a declared `MailSynchronization:Accounts:<n>:AccountId` exactly; empty applies the rule to every account | reload |
+| `MailRules:Rules:0:Accounts` | list | empty | The accounts the rule applies to, each naming exactly an `AccountId` some served user's record declares; empty applies the rule to every account | reload |
 | `MailRules:Rules:0:Condition` | string | required | One expression producing a boolean, within the two limits above | reload |
 | `MailRules:Rules:0:StopWhenMatched` | bool | `false` | A match ends the pass and the rules below it are not reached | reload |
 | `MailRules:Rules:0:Enabled` | bool | `true` | A rule switched off is left out of the set entirely | reload |

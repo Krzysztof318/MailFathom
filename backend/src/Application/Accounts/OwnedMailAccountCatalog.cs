@@ -15,10 +15,9 @@ namespace MailFathom.Application.Accounts;
 /// read model that reached the deployment's catalog instead names a member this port does not publish.
 /// </para>
 /// <para>
-/// What decides the answer is the user each served account already carries. The deployment's own
-/// <c>MailSynchronization:Accounts</c> section names nobody, so the roster is what attributes its accounts, and a
-/// user's own declared section or record arrives with the user attached; either way the attribution is settled before
-/// this reads it, and a caller owns exactly the accounts attributed to the user they were admitted for. Nothing here
+/// What decides the answer is the user each served account already carries. Every mailbox is one user's record, so the
+/// account arrives with the user attached; the attribution is settled before this reads it, and a caller owns exactly
+/// the accounts attributed to the user they were admitted for. Nothing here
 /// compares against a sole user the deployment holds, because a deployment whose user-facing surfaces authenticate
 /// every caller as a person serves several — which is the arrangement the roster exists for, and one where asking for a
 /// sole user has no answer to give.

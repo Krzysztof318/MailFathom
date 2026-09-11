@@ -369,23 +369,32 @@ public sealed class OrchestrationContractTests
     }
 
     [Fact]
-    public void DevelopmentHostEnvironment_NormalTopology_EnablesTheLocalSurfacesAndMailbox()
+    public void DevelopmentHostEnvironment_NormalTopology_EnablesTheLocalSurfacesAndConfiguresNoMailbox()
     {
         // Act
         var environment = OrchestrationContract.DevelopmentHostEnvironment;
 
         // Assert
-        Assert.Equal(10, environment.Count);
+        Assert.Equal(7, environment.Count);
         Assert.Equal("true", environment["MailSynchronization__Enabled"]);
-        Assert.Equal("local", environment["MailSynchronization__Accounts__0__AccountId"]);
-        Assert.Equal("Local mailbox", environment["MailSynchronization__Accounts__0__DisplayName"]);
-        Assert.Equal("local-mail-password", environment["MailSynchronization__Accounts__0__Secrets__Password__Name"]);
+        Assert.DoesNotContain(
+            environment.Keys,
+            key => key.StartsWith("MailSynchronization__Accounts", StringComparison.Ordinal));
         Assert.Equal("true", environment["McpEndpoint__Enabled"]);
         Assert.Equal(OrchestrationContract.DeveloperLoopbackAddress, environment["McpEndpoint__BindAddress"]);
         Assert.Equal("true", environment["AdminEndpoint__Enabled"]);
         Assert.Equal(OrchestrationContract.DeveloperLoopbackAddress, environment["AdminEndpoint__BindAddress"]);
         Assert.Equal("true", environment["ClientEndpoint__Enabled"]);
         Assert.Equal("password", environment["ClientEndpoint__Authentication__0__Method"]);
+    }
+
+    [Fact]
+    public void DevelopmentMailAccount_NormalTopology_NamesTheAccountTheRecordedMailboxIsDeclaredUnder()
+    {
+        // Assert
+        Assert.Equal("local", OrchestrationContract.DevelopmentMailAccountId);
+        Assert.Equal("Local mailbox", OrchestrationContract.DevelopmentMailAccountDisplayName);
+        Assert.Equal("local-mail-password", OrchestrationContract.DevelopmentMailAccountPasswordName);
     }
 
     [Fact]

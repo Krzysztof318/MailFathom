@@ -11,10 +11,10 @@
 // The database is configured by compose.yaml through the environment block, which outranks this file, so it is
 // deliberately absent here.
 {
-  // Uncomment this block when an account below authenticates with OAuth rather than with a password. MailFathom seals
+  // Uncomment this block when a recorded account authenticates with OAuth rather than with a password. MailFathom seals
   // the refresh token that account's authorization server rotates, and the key it seals under is provisioned like any
-  // other credential — a file in ./secrets/mailfathom/, named by a reference. The mailbox configured below uses a
-  // password, so a deployment copied from this file seals nothing and needs no key at all: an absent section is a valid
+  // other credential — a file in ./secrets/mailfathom/, named by a reference. The mailbox this file's own comments show
+  // uses a password, so a deployment copied from it seals nothing and needs no key at all: an absent section is a valid
   // configuration rather than an omission, and MailFathom starts without one. An OAuth account without a key still
   // authenticates from its configured reference; what needs the key is the moment its authorization server rotates the
   // refresh token, and without one that rotation is logged as an error instead of being stored.
@@ -37,29 +37,48 @@
   //   ]
   // },
 
+  // The synchronization worker's own settings. The mailboxes are not among them: a deployment declares no mail account
+  // in its own configuration, because every account belongs to the user whose record holds it. So a deployment copied
+  // from this file starts holding nobody's mailbox, reports itself started, and serves the first one recorded against
+  // it without a restart:
+  //
+  //   mfctl user account add --from-file mailbox.json
+  //
+  // What goes in `mailbox.json` is the object this section used to carry, references and all — the credential stays a
+  // reference to material this deployment already holds, exactly as every reference in this file is:
+  //
+  //   {
+  //     "AccountId": "primary",
+  //     "DisplayName": "Personal mail",
+  //     "Host": "imap.example.test",
+  //     "Port": 993,
+  //     "UserName": "you@example.test",
+  //     "Secrets": {
+  //       "Password": {
+  //         "Name": "imap-primary-password",
+  //         "SecretReference": "file:/etc/mailfathom/secrets/imap-primary-password"
+  //       }
+  //     },
+  //     "TransportSecurity": { "ConnectionSecurity": "TlsOnConnect" },
+  //     "Folders": [ { "Alias": "inbox", "SpecialUse": "Inbox" } ]
+  //   }
+  //
+  // `mfctl user add` records a second person, and `--user` then says whose mailbox is being declared. A file still
+  // carrying an `Accounts` collection here stops the start, naming those two commands.
   "MailSynchronization": {
     "Enabled": true,
-    "Interval": "00:05:00",
-    "Accounts": [
-      {
-        "AccountId": "primary",
-        "DisplayName": "Personal mail",
-        "Host": "imap.example.test",
-        "Port": 993,
-        "UserName": "you@example.test",
-        "Secrets": {
-          "Password": {
-            "Name": "imap-primary-password",
-            "SecretReference": "file:/etc/mailfathom/secrets/imap-primary-password"
-          }
-        },
-        "TransportSecurity": {
-          "ConnectionSecurity": "TlsOnConnect"
-        },
-        "Folders": [
-          { "Alias": "inbox", "SpecialUse": "Inbox" }
-        ]
-      }
+    "Interval": "00:05:00"
+  },
+  // The administrative endpoint, which is how the mailbox above is recorded: `mfctl user account add` is a client of
+  // this surface, and nothing else writes a user's record. It is on for that reason rather than as an extra. Its own
+  // default port is 8080, which is the socket the endpoints below are served on, so it states 8090 — the port
+  // compose.yaml publishes for it, on loopback. The key is a reference like every credential here: write a long random
+  // value into ./secrets/mailfathom/admin-api-key before the first start, and give it to `mfctl login` when it asks.
+  "AdminEndpoint": {
+    "Enabled": true,
+    "Port": 8090,
+    "Authentication": [
+      { "ApiKey": { "Name": "admin", "SecretReference": "file:/etc/mailfathom/secrets/admin-api-key" } }
     ]
   },
   // The surface MailFathom's own client calls, and the listeners its page is served from. It shares the container's
@@ -76,7 +95,8 @@
   // says so at every startup.
   //
   // It is commented out, like everything else here that costs anything: serving a mailbox to a browser is always
-  // something an operator turned on, so a file copied verbatim serves the MCP endpoint and nothing else. Uncomment it
+  // something an operator turned on, so a file copied verbatim serves no browser — only the MCP endpoint and the
+  // administrative one. Uncomment it
   // beside MAILFATHOM_CLIENT=true in .env, and provision a credential to sign in with; scripts/quick-start-compose.sh
   // writes the first two. It provisions no credential, because the page it prepares reads its own sample data and
   // calls nothing yet. The empty origin list is the same posture as the endpoint below and for the same reason: the

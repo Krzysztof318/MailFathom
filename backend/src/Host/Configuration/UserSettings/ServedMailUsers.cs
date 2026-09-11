@@ -92,43 +92,9 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
     /// <summary>Lets the next user-document write validate against the roster this one published.</summary>
     internal void ReleaseRosterPublication() => this.rosterPublication.Release();
 
-    /// <summary>Reads where one user's mail accounts come from, which is their own record for a user the roster does not hold.</summary>
-    /// <param name="user">The user asked about.</param>
-    /// <returns>The source their accounts are read from.</returns>
-    /// <remarks>
-    /// A user not yet published to this process, and one the deployment holds and no source declares, have no
-    /// configuration section a write into their record could be replacing. Both are ordinary users here, which keeps
-    /// the narrow interval between provisioning the row and publishing the runtime roster writable.
-    /// <para>
-    /// It is here rather than beside either caller because two gates read it and neither may come to a different
-    /// answer than the other: what refuses a change to a user's record is what refuses a change to the label on the
-    /// envelope beside it.
-    /// </para>
-    /// </remarks>
-    internal MailUserAccountSource SourceFor(MailUserId user) =>
-        this.Users.FirstOrDefault(served => served.User == user)?.Source
-        ?? MailUserAccountSource.UserDocument;
-
-    /// <summary>Gets whether any served user's mail accounts are their own rather than the deployment's section.</summary>
-    /// <returns><see langword="true" /> when at least one user is served from their own declaration or their own document.</returns>
-    /// <remarks>
-    /// It answers rather than refusing before the gate because its caller judges a reloaded candidate, and a deployment
-    /// whose roster is not settled yet has nothing for a candidate to conflict with. The question is about the source
-    /// rather than about the count, because the deployment's own section belongs to whichever sole user a deployment
-    /// holds and is legitimately populated for that one.
-    /// </remarks>
-    public bool ServesAnyUserFromTheirOwnAccounts()
-    {
-        lock (this.mutex)
-        {
-            return (this.resolvedUsers ?? [])
-                .Any(user => user.Source != MailUserAccountSource.DeploymentSection);
-        }
-    }
-
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException">Thrown when the startup gate has not yet run.</exception>
-    /// <exception cref="DeploymentMailUserUnresolvedException">Thrown when this deployment serves more than one user and there is therefore no sole user to name.</exception>
+    /// <exception cref="DeploymentMailUserUnresolvedException">Thrown when this deployment serves nobody, or serves more than one user, and there is therefore no sole user to name.</exception>
     /// <remarks>
     /// <para>
     /// The sole user is what a surface with no credential to read a user off acts for, so a deployment serving
@@ -136,26 +102,30 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
     /// user came first is how one person is handed another person's mail.
     /// </para>
     /// <para>
-    /// The two absences are different failures and are raised as different types. A roster that has not been settled is
+    /// The absences are different failures and are raised as different types. A roster that has not been settled is
     /// this process asking a question before the gate that answers it, which is a defect in the host's own ordering and
-    /// nothing an operator or a caller did. A roster of several is a deployment an operator composed and a start
-    /// admitted, reached by a request that names no user — so it carries a code and a sentence naming what would have
-    /// been answered, rather than arriving at a caller as an unclassified fault.
+    /// nothing an operator or a caller did. A roster of none and a roster of several are deployments a start admitted,
+    /// reached by a request that names no user — so each carries a code and a sentence naming its own remedy, recording
+    /// somebody where there is nobody and a credential naming the user where there are several, rather than arriving at
+    /// a caller as an unclassified fault.
     /// </para>
     /// </remarks>
     public MailUserId User =>
-        this.Users is [var soleUser]
-            ? soleUser.User
-            : throw DeploymentMailUserUnresolvedException.NoSoleUserToActFor();
+        this.Users switch
+        {
+            [var soleUser] => soleUser.User,
+            [] => throw DeploymentMailUserUnresolvedException.NoUserToActFor(),
+            _ => throw DeploymentMailUserUnresolvedException.NoSoleUserToActFor(),
+        };
 
     /// <summary>Finds the user a mail account belongs to and the declaration this roster holds for it.</summary>
     /// <param name="accountId">The identifier the account is named by.</param>
     /// <returns>The user and their declaration, or <see langword="null" /> when no user of this roster holds one under that identifier.</returns>
     /// <remarks>
-    /// It answers only about the users whose declarations this record holds — a user declared in their own section
-    /// of the file, and one whose accounts their own record holds. An account of the deployment's own section is not
-    /// here, because that section is the reloadable mail snapshot's. The lookup that calls this checks a published user
-    /// document first, so a record takes effect before the declaration it outranks is removed for the next start.
+    /// It answers about every user this roster serves, each from their own record, which is the one place a mail
+    /// account is declared. An identifier two users record answers with the one recorded first, which is the collision
+    /// the startup gate reports until <see href="https://github.com/Krzysztof318/MailFathom/issues/1325">issue 1325</see>
+    /// keys this lookup by the user as well.
     /// </remarks>
     public (MailUserId User, MailSynchronizationAccountOptions Account)? FindAccount(MailAccountId accountId) =>
         this.Users
@@ -167,17 +137,17 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
             .FirstOrDefault();
 
     /// <summary>States the roster the startup gate established.</summary>
-    /// <param name="users">Every user this deployment serves, each with the source their accounts are read from.</param>
+    /// <param name="users">Every user this deployment serves, each composed from their own record.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="users" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when the roster is empty, which is a deployment serving nobody rather than a roster.</exception>
+    /// <remarks>
+    /// An empty roster is a state a start admits rather than refuses: a fresh database is seeded with one user, but an
+    /// administrator may erase every user a deployment holds, and a deployment left that way starts and serves nobody
+    /// until one is recorded. What absence still means is *the gate has not run*, which is why that is a null field
+    /// rather than an empty list.
+    /// </remarks>
     internal void Resolved(IReadOnlyList<ServedMailUser> users)
     {
         ArgumentNullException.ThrowIfNull(users);
-
-        if (users.Count == 0)
-        {
-            throw new ArgumentException("A deployment serves at least one user.", nameof(users));
-        }
 
         lock (this.mutex)
         {
@@ -229,7 +199,6 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
                 var published = new ServedMailUser(
                     user,
                     displayName,
-                    MailUserAccountSource.UserDocument,
                     [.. record.MailAccounts],
                     record.SpamClassification,
                     record.SensitiveContent);

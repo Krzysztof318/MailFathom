@@ -638,9 +638,9 @@ The use case resolves the accounts the caller owns and refuses anything outside 
 entrypoint cannot reach the query without the same check. That resolution runs through the `ICallerMailAccountCatalog`
 application port, and every caller a mail-serving surface admits is admitted to act for one named user; the
 deployment-wide catalog beside it is what the workers and the administrative operations read, and no tool can reach it.
-A deployment holds one user while its accounts come from `MailSynchronization:Accounts`, so on such a deployment every
-admitted caller resolves every configured account — what has moved is where that answer comes from, not yet what it
-says. OAuth 2.1 decides *who*
+On a deployment serving one person every admitted caller resolves that person's whole account set, which is what makes
+the difference invisible there; on one serving several it is the user each account is recorded against that decides.
+OAuth 2.1 decides *who*
 reaches a tool at all, a token having to name a subject the deployment authorized, and leaves that port unchanged.
 
 A name no served account answers to is refused with `53001` rather than answered with an empty page; "no such account"

@@ -60,7 +60,7 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// </remarks>
     internal MailSynchronizationSettingsReaders Readers => this.readers.Value;
 
-    /// <summary>Gets or sets the users this deployment serves, which is where a declaration outside this section lives.</summary>
+    /// <summary>Gets or sets the users this deployment serves, which is where every mailbox declaration lives.</summary>
     /// <remarks>
     /// <para>
     /// Not bound from anything: the roster is established against the database while the host starts, so it is put onto
@@ -484,16 +484,11 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
         ? MachineAuthorshipProfile.Standard
         : MachineAuthorshipProfile.Disabled;
 
-    /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>
-    public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];
-
-    /// <summary>Gets every mailbox this deployment holds, from both of the two places one may be declared.</summary>
+    /// <summary>Gets every mailbox this deployment holds, which is every mailbox its users' records declare.</summary>
     /// <remarks>
-    /// A deployment serving users from their own records is refused a non-empty <see cref="Accounts" />, so exactly one
-    /// of the two halves is ever populated — and a per-account reader walking only the first answers nothing at all on
-    /// such a deployment, which reads as a mailbox configured with no folders, no trusted senders, and no contact
-    /// collection rather than as a reader that never looked. Every reader of the whole set therefore asks here, so
-    /// *which mailboxes exist* is one answer rather than one per reader.
+    /// A mailbox is one user's, so the whole set is the roster's rather than a section's, and a snapshot nobody serves
+    /// from holds none. Every reader of the whole set asks here, so *which mailboxes exist* is one answer rather than
+    /// one per reader.
     /// </remarks>
     internal IEnumerable<MailSynchronizationAccountOptions> DeclaredAccounts =>
         this.DeclaredAccountsByOwner.SelectMany(static owned => owned);
@@ -503,24 +498,10 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// What a reader derives from an account's <em>neighbours</em> is asked through here rather than through
     /// <see cref="DeclaredAccounts" />, because the two questions have different answers on a deployment serving more
     /// than one user: this account's own mail domains and this account's own mailbox addresses are that user's, and
-    /// reading them across the flat set would recognize one user's correspondents inside another user's mailbox. The
-    /// deployment's own section is one group because the sole user such a deployment serves owns all of it.
+    /// reading them across the flat set would recognize one user's correspondents inside another user's mailbox.
     /// </remarks>
-    internal IEnumerable<IReadOnlyList<MailSynchronizationAccountOptions>> DeclaredAccountsByOwner
-    {
-        get
-        {
-            if (this.Accounts is { Count: > 0 })
-            {
-                yield return this.Accounts;
-            }
-
-            foreach (var user in this.ServedUsers ?? [])
-            {
-                yield return user.MailAccounts;
-            }
-        }
-    }
+    internal IEnumerable<IReadOnlyList<MailSynchronizationAccountOptions>> DeclaredAccountsByOwner =>
+        (this.ServedUsers ?? []).Select(static user => user.MailAccounts);
 
     /// <summary>Reads the two keys a convergence pass is bounded by.</summary>
     /// <returns>The bounds the pass runs under.</returns>
@@ -630,18 +611,6 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
             material);
     }
 
-    /// <summary>Finds every configured earliest received date that could not mean anything on the supplied date.</summary>
-    /// <param name="today">The current date the configured bounds are read against.</param>
-    /// <returns>One result per account whose bound lies in the future, empty when every bound is usable.</returns>
-    /// <remarks>
-    /// The rule lives here with the other configuration rules while its clock stays outside, because the current date
-    /// is not something a bound options graph or a data annotation can reach. Nothing gates it on
-    /// <see cref="Enabled" />: a date an operator wrote is a date they intend to synchronize from, and discovering that
-    /// it excludes the whole mailbox at the moment synchronization is switched on is worse than discovering it now.
-    /// </remarks>
-    internal IEnumerable<ValidationResult> FindSynchronizationWindowErrors(DateOnly today) =>
-        this.Accounts?.SelectMany(account => account.ValidateSynchronizationWindow(today)) ?? [];
-
     internal IEnumerable<ValidationResult> ValidateForSynchronization()
     {
         if (this.MaxFailureBackoff < this.Interval)
@@ -682,30 +651,6 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
                 $"The in-flight content budget of {this.MaxInFlightRawMimeBytes} bytes is below the {this.MaxRawMimeBytes} bytes one message may occupy, so a work unit fetching a message of that size would wait for room that can never exist.",
                 [nameof(this.MaxInFlightRawMimeBytes)]);
         }
-
-        if (this.Accounts is null)
-        {
-            yield return new ValidationResult("Account configuration must be a list.", [nameof(this.Accounts)]);
-            yield break;
-        }
-
-        // Whether anything is declared at all is deliberately not asked here. This section is one of two places a
-        // mailbox is declared — the other being each user's own record — and a deployment that recorded its mailboxes
-        // against their users has emptied this one on purpose. The rule is stated once, over the roster this start
-        // would serve, in ServedMailUsersStartupGate.
-        //
-        // Every account this section declares belongs to the one user such a deployment serves, which is why the whole
-        // section is one naming space here. A second user's account of the same name is not a collision and never
-        // reaches this, because their accounts are in their own record rather than in this list.
-        foreach (var result in MailAccountNamingSpace.FindCollisions(this.Accounts, nameof(this.Accounts)))
-        {
-            yield return result;
-        }
-
-        foreach (var result in this.Accounts.SelectMany(account => account.ValidateForSynchronization(this.Enabled)))
-        {
-            yield return result;
-        }
     }
 
     /// <inheritdoc />
@@ -721,25 +666,18 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// Every other reader wants the account it was handed to exist, and keeps failing when it does not.
     /// </para>
     /// <para>
-    /// The roster is searched first because a committed record publishes the user's document without touching a file
-    /// that still declares accounts beside it. A later start refuses that stale deployment section, but the running
-    /// process must follow the commit now. What makes the identifier enough to search either source is the deployment-wide bound on mail-account names
-    /// that <c>ServedMailUsersStartupGate</c> holds over the roster.
+    /// The roster is the whole of what is searched, because every mailbox is one user's record and no configuration
+    /// source declares one. What makes the identifier enough to reach the declaration that belongs to it is that this
+    /// release resolves an account's settings by that identifier alone, across the users a deployment serves.
     /// </para>
     /// </remarks>
     internal MailSynchronizationAccountOptions? FindConfiguredAccount(MailAccountId accountId) =>
-        this.ServedUsers?
-            .SelectMany(static user => user.MailAccounts)
-            .SingleOrDefault(
+        this.DeclaredAccounts
+            .FirstOrDefault(
                 candidate => !string.IsNullOrWhiteSpace(candidate.AccountId)
                     && StringComparer.Ordinal.Equals(
                         MailAccountId.Create(candidate.AccountId).Value,
-                        accountId.Value))
-        ?? (this.Accounts ?? []).SingleOrDefault(
-            candidate => !string.IsNullOrWhiteSpace(candidate.AccountId)
-                && StringComparer.Ordinal.Equals(
-                    MailAccountId.Create(candidate.AccountId).Value,
-                    accountId.Value));
+                        accountId.Value));
 
     /// <summary>Finds the account a reader was handed, failing when this snapshot does not name it.</summary>
     /// <param name="accountId">The local account identifier.</param>
@@ -780,24 +718,6 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
         ArgumentNullException.ThrowIfNull(configuration);
 
         return configuration.GetValue($"{SectionName}:{nameof(Enabled)}", defaultValue: false);
-    }
-
-    /// <summary>Gets the mail accounts this section declares, which belong to whichever sole user the deployment holds.</summary>
-    /// <param name="configuration">The configuration to read.</param>
-    /// <returns>The declarations, empty when the section declares none.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
-    /// <remarks>
-    /// Read here rather than off the roster, because a user served from this section carries no accounts of their own:
-    /// the declarations stay in the reloadable snapshot so a reload can reach them, which leaves this the one place a
-    /// rule about the whole deployment's mailboxes can see them before that snapshot exists.
-    /// </remarks>
-    internal static List<MailSynchronizationAccountOptions> AccountsDeclaredIn(IConfiguration configuration)
-    {
-        ArgumentNullException.ThrowIfNull(configuration);
-
-        return configuration.GetSection($"{SectionName}:{nameof(Accounts)}")
-            .Get<List<MailSynchronizationAccountOptions>>()
-            ?? [];
     }
 }
 

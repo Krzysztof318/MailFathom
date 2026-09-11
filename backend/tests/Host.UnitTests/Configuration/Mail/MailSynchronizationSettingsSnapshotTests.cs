@@ -43,7 +43,7 @@ public sealed class MailSynchronizationSettingsSnapshotTests
     }
 
     private static ServedMailUser Serving(params MailSynchronizationAccountOptions[] accounts) =>
-        new(User, "user", MailUserAccountSource.UserDocument, accounts);
+        new(User, "user", accounts);
 
     private static MailSynchronizationAccountOptions Account(string accountId) => new() { AccountId = accountId };
 }

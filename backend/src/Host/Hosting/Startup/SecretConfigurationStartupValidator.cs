@@ -6,7 +6,6 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.DataEncryption;
 using MailFathom.Host.Configuration.Endpoints;
-using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using Microsoft.Extensions.Options;
@@ -32,7 +31,6 @@ namespace MailFathom.Host.Hosting.Startup;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
 internal sealed partial class SecretConfigurationStartupValidator : IHostedLifecycleService
 {
-    private readonly ISettingsSnapshot<MailSynchronizationOptions> mailSynchronizationSettings;
     private readonly ISettingsSnapshot<PersistenceOptions> persistenceSettings;
     private readonly ISettingsSnapshot<DataEncryptionOptions> dataEncryptionSettings;
     private readonly McpEndpointOptions mcpEndpointSettings;
@@ -48,7 +46,6 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
     /// <exception cref="ArgumentNullException">Thrown when an endpoint settings argument or <paramref name="startupGates" /> is <see langword="null" />.</exception>
     /// <remarks>Every endpoint's settings arrive as the composed value rather than as a snapshot, because each section is read once while the host is built and takes a restart to change.</remarks>
     public SecretConfigurationStartupValidator(
-        ISettingsSnapshot<MailSynchronizationOptions> mailSynchronizationSettings,
         ISettingsSnapshot<PersistenceOptions> persistenceSettings,
         ISettingsSnapshot<DataEncryptionOptions> dataEncryptionSettings,
         IOptions<McpEndpointOptions> mcpEndpointSettings,
@@ -66,7 +63,6 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         ArgumentNullException.ThrowIfNull(contentStorageSettings);
         ArgumentNullException.ThrowIfNull(startupGates);
 
-        this.mailSynchronizationSettings = mailSynchronizationSettings;
         this.persistenceSettings = persistenceSettings;
         this.dataEncryptionSettings = dataEncryptionSettings;
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
@@ -85,12 +81,9 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
     {
         this.LogActiveInterpretation(this.resolutionOptions.Interpretation);
 
+        // The mail section is absent: every mailbox is one user's own record, and the secrets it names are judged per
+        // user by ServedMailUsersStartupGate, which is the first thing to hold both the roster and those records.
         var failures = new List<string>(
-            await this.validator.FindMailConfigurationErrorsAsync(
-                this.mailSynchronizationSettings.Current,
-                cancellationToken));
-
-        failures.AddRange(
             await this.validator.FindPersistenceConfigurationErrorsAsync(
                 this.persistenceSettings.Current,
                 cancellationToken));

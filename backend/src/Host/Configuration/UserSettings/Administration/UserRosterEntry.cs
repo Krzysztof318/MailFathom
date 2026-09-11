@@ -11,7 +11,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <param name="DisplayName">The label an operator tells this user apart by, which nothing resolves them by.</param>
 /// <param name="RecordIsTheirOwn">Whether their mail accounts come from their own record rather than from a configuration source.</param>
 /// <param name="Served">Whether this process is serving them, which every user it holds is.</param>
-/// <param name="DeclaredInConfiguration">Whether the deployment's own mail section supplies this user's mailboxes, so an erasure of them is refused rather than performed — a start would only record them again.</param>
+/// <param name="DeclaredInConfiguration">Whether a configuration source supplies this user, which is what refuses erasing them; no source supplies one any more, and <see href="https://github.com/Krzysztof318/MailFathom/issues/1829">issue 1829</see> retires the marker.</param>
 /// <remarks>
 /// <para>
 /// The label is here because a column of generated identifiers is not a roster anybody can read. Nothing resolves a
@@ -21,9 +21,9 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <para>
 /// The last three are separate facts and a reader needs all of them. Every user this deployment holds is served, so
 /// <c>Served</c> answers whether this process has settled its roster rather than whether anybody was left out of it; a
-/// user the deployment's own mail section supplies has an empty record, which is what makes a write to it something to
-/// refuse rather than apply; and a start records a user for that section wherever it holds none, so an erasure there
-/// would be followed by the person being recreated and their mail downloaded again.
+/// user a configuration source supplies has an empty record, which is what makes a write to it something to refuse
+/// rather than apply; and erasing that user is refused as well — two states nothing reaches in this release, which
+/// <see href="https://github.com/Krzysztof318/MailFathom/issues/1829">issue 1829</see> retires with their marker.
 /// </para>
 /// </remarks>
 internal sealed record UserRosterEntry(

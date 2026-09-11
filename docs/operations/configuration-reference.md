@@ -28,7 +28,7 @@ written, and what a caller the grant does not admit is told.
 ## How to read the tables
 
 **Keys.** Written in configuration-section form. As an environment variable, `:` becomes `__` and a list index is a
-numbered segment: `MailSynchronization:Accounts:0:Host` is `MailSynchronization__Accounts__0__Host`. Where the
+numbered segment: `DataEncryption:Keys:0:KeyId` is `DataEncryption__Keys__0__KeyId`. Where the
 configuration comes from, and which source wins, is [configuration sources](configuration-sources.md).
 
 **Types.** A `TimeSpan` binds from `hh:mm:ss` (`"00:05:00"` is five minutes; a leading `d.` adds days). A date binds

@@ -39,9 +39,15 @@ internal static class MailRuleDeclarationRules
     /// <summary>Reports everything an operator must fix before a declared rule set can be used.</summary>
     /// <param name="candidate">The bound declaration, or <see langword="null" /> when the deployment wrote no section.</param>
     /// <param name="compiler">Reads each condition against the fact surface.</param>
-    /// <param name="declaredAccounts">The accounts the deployment declares, which a rule's scope, destinations, and actions are judged against.</param>
+    /// <param name="declaredAccounts">
+    /// The mailboxes this deployment serves, which a rule's scope, destinations, and actions are judged against, or
+    /// <see langword="null" /> where the caller cannot yet know them. Every mailbox belongs to a user's own record, so
+    /// a reading taken before the roster is established — the composition of the host, and the judgement of a
+    /// configuration write — has no way to name one, and passing an empty set there would refuse every rule scoped to
+    /// a mailbox that does exist. What that reading skips is judged once against the roster, behind the startup gate.
+    /// </param>
     /// <returns>One message per rule the declaration breaks, empty when it is usable.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="compiler" /> or <paramref name="declaredAccounts" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="compiler" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// An absent section is a supported deployment rather than a failure: it applies no rules, which is what every
     /// deployment did before anybody wrote one.
@@ -49,10 +55,9 @@ internal static class MailRuleDeclarationRules
     public static IReadOnlyList<string> FindDeclarationErrors(
         MailRulesOptions? candidate,
         IMailRuleConditionCompiler compiler,
-        IReadOnlyCollection<DeclaredMailAccount> declaredAccounts)
+        IReadOnlyCollection<DeclaredMailAccount>? declaredAccounts)
     {
         ArgumentNullException.ThrowIfNull(compiler);
-        ArgumentNullException.ThrowIfNull(declaredAccounts);
 
         if (candidate is null)
         {
@@ -84,7 +89,7 @@ internal static class MailRuleDeclarationRules
     private static IReadOnlyList<string> FindDeclaredRuleErrors(
         MailRuleOptions rule,
         int position,
-        IReadOnlyCollection<DeclaredMailAccount> declaredAccounts) =>
+        IReadOnlyCollection<DeclaredMailAccount>? declaredAccounts) =>
     [
         .. FindRuleErrors(rule, position),
         .. FindScopeErrors(rule, position, declaredAccounts),
@@ -132,20 +137,19 @@ internal static class MailRuleDeclarationRules
                 $"{MailRulesOptions.SectionName}:{nameof(MailRulesOptions.Rules)}:{position}:{member} — carries a separator character that a rule set's identity is derived with, so two different rule sets could be named the same revision.");
     }
 
-    /// <summary>Judges one rule's account scope, which no attribute can reach because it is a claim about another section.</summary>
+    /// <summary>Judges one rule's account scope, which no attribute can reach because it is a claim about somebody's record.</summary>
     /// <remarks>
     /// An unknown account is refused rather than ignored, for the reason the whole section is bound strictly: a rule
-    /// scoped to an account nobody declared reaches no mail, and does so in silence. Ordinal comparison, because the
-    /// synchronization section already tells two identifiers apart that way, so accepting a differently-cased spelling
-    /// here would scope a rule to an account that is not the one the operator named.
+    /// scoped to an account nobody records reaches no mail, and does so in silence. Ordinal comparison, because a
+    /// user's record already tells two identifiers apart that way, so accepting a differently-cased spelling here
+    /// would scope a rule to an account that is not the one the operator named. A caller that cannot yet name the
+    /// mailboxes leaves that half unjudged rather than refusing every scope.
     /// </remarks>
     private static IEnumerable<string> FindScopeErrors(
         MailRuleOptions rule,
         int position,
-        IReadOnlyCollection<DeclaredMailAccount> declaredAccounts)
+        IReadOnlyCollection<DeclaredMailAccount>? declaredAccounts)
     {
-        var declaredIdentifiers = declaredAccounts.Select(account => account.AccountId).ToArray();
-
         var opening =
             $"{MailRulesOptions.SectionName}:{nameof(MailRulesOptions.Rules)}:{position}:{nameof(MailRuleOptions.Accounts)}";
         var scope = rule.Accounts.Select(account => account?.Trim() ?? string.Empty).ToArray();
@@ -166,10 +170,17 @@ internal static class MailRuleDeclarationRules
             yield return $"{opening} — the account '{repeated.Key}' is named more than once.";
         }
 
+        if (declaredAccounts is null)
+        {
+            yield break;
+        }
+
+        var declaredIdentifiers = declaredAccounts.Select(account => account.AccountId).ToArray();
+
         foreach (var unknown in scope.Where(account => !declaredIdentifiers.Contains(account, StringComparer.Ordinal)))
         {
             yield return
-                $"{opening} — no account named '{unknown}' is declared under MailSynchronization:Accounts, so this rule would reach no mail.";
+                $"{opening} — no user this deployment serves records a mail account named '{unknown}', so this rule would reach no mail.";
         }
     }
 
@@ -273,7 +284,7 @@ internal static class MailRuleDeclarationRules
     private static IEnumerable<string> FindActionErrors(
         MailRuleOptions rule,
         int position,
-        IReadOnlyCollection<DeclaredMailAccount> declaredAccounts)
+        IReadOnlyCollection<DeclaredMailAccount>? declaredAccounts)
     {
         var opening =
             $"{MailRulesOptions.SectionName}:{nameof(MailRulesOptions.Rules)}:{position}:{nameof(MailRuleOptions.Actions)}";
@@ -311,7 +322,7 @@ internal static class MailRuleDeclarationRules
             yield return $"{opening} — {refusal}";
         }
 
-        foreach (var account in AccountsTheRuleReaches(rule, declaredAccounts))
+        foreach (var account in AccountsTheRuleReaches(rule, declaredAccounts ?? []))
         {
             foreach (var refusal in FindAccountActionErrors(ruleName, actions, account))
             {
@@ -377,14 +388,14 @@ internal static class MailRuleDeclarationRules
         foreach (var action in actions.Where(action => !account.PermittedRuleActions.Permits(action.Mutation)))
         {
             yield return
-                $"Rule '{ruleName}' declares '{action.Mutation.Name}', which account '{account.AccountId}' does not permit a rule to do. Permit it under MailSynchronization:Accounts:<n>:RuleActions or narrow the rule's scope.";
+                $"Rule '{ruleName}' declares '{action.Mutation.Name}', which account '{account.AccountId}' does not permit a rule to do. Permit it on that account with 'mfctl user edit' or narrow the rule's scope.";
         }
 
         foreach (var action in actions.Where(action =>
             action.Destination is { } destination && !account.Maps(destination)))
         {
             yield return
-                $"Rule '{ruleName}' files into '{action.Destination}', which account '{account.AccountId}' maps no folder for. Map it under MailSynchronization:Accounts:<n>:Folders; mapping the folder is what makes it reachable, and 'Synchronize': false on that mapping still leaves it a destination.";
+                $"Rule '{ruleName}' files into '{action.Destination}', which account '{account.AccountId}' maps no folder for. Map it on that account with 'mfctl user edit'; mapping the folder is what makes it reachable, and 'Synchronize': false on that mapping still leaves it a destination.";
         }
     }
 

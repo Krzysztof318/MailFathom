@@ -111,10 +111,8 @@ public sealed class MailSynchronizationSettingsReadersTests
             ConfiguredMailAccounts.CatalogOver(scope.Current).ServedAccounts.Select(static account => account.Id));
     }
 
-    private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) => new()
-    {
-        Accounts = [.. accounts],
-    };
+    private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) =>
+        new MailSynchronizationOptions().Serving(accounts);
 
     private static MailSynchronizationAccountOptions AccountAt(string accountId, string userName) => new()
     {

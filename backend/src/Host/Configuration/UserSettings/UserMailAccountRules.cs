@@ -7,12 +7,12 @@ using MailFathom.Host.Configuration.Mail;
 
 namespace MailFathom.Host.Configuration.UserSettings;
 
-/// <summary>Judges one user's mail-account declarations, wherever the declarations came from.</summary>
+/// <summary>Judges one user's mail-account declarations.</summary>
 /// <remarks>
-/// Three readers ask this and they must not answer differently: the record a <c>settings_accounts</c> row holds, the
-/// deployment's own <c>MailSynchronization:Accounts</c> that the sole user of such a deployment reads, and whatever a
-/// candidate document would put in either. A rule that held for one of them would be a naming space that changed shape
-/// as mailboxes moved between the section and the row, and the ambiguity it exists to refuse would arrive with the move.
+/// Two readers ask this and they must not answer differently: the record a <c>settings_accounts</c> row holds, and the
+/// candidate document a write would replace it with. A rule that held for one of them would let a document be accepted
+/// as a candidate and then refused as a record, which is a deployment that cannot be changed rather than one that
+/// refused a change.
 /// </remarks>
 internal static class UserMailAccountRules
 {

@@ -2,17 +2,20 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Users;
+using MailFathom.Infrastructure.Rules;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,102 +29,150 @@ using Xunit;
 namespace MailFathom.Host.UnitTests.Hosting.Startup;
 
 /// <summary>
-/// Covers how a start settles who this deployment serves: the rows the database holds, which source reaches each of
-/// them, and the refusals a roster it could not serve is stopped by.
+/// Covers how a start settles who this deployment serves: the rows the database holds, the record each of them is
+/// composed from, and the refusals a roster it could not serve is stopped by. No configuration source declares a user
+/// or a mailbox any more, so every case here is a row and the document beside it.
 /// </summary>
 public sealed class ServedMailUsersStartupGateTests
 {
     private static readonly Guid RecordedIdentifier = new("33333333-3333-3333-3333-333333333333");
 
+    /// <summary>
+    /// The state a deployment whose every user was erased is in — a fresh database is seeded with one — and one a start
+    /// admits: it starts, completes its gate, serves nobody, and says so. Refusing here would leave that deployment
+    /// with no start to record a user from.
+    /// </summary>
     [Fact]
-    public async Task StartAsync_OneRowHeldReadingNoRecord_ServesThatUserFromTheDeploymentSection()
+    public async Task StartAsync_NoUserHeld_ServesNobodyAndCompletesTheGate()
+    {
+        // Arrange
+        var roster = new ServedMailUsers();
+        var startupGates = new HostStartupGates(HostStartupGate.ServedMailUsers);
+        var startupLog = new RecordingLogger<ServedMailUsersStartupGate>();
+
+        // Act
+        await CreateGate([], servedUsers: roster, startupGates: startupGates, startupLog: startupLog)
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(roster.Users);
+        Assert.True(startupGates.Completed);
+        Assert.Contains(
+            startupLog.Messages,
+            message => message.Contains("holds no user", StringComparison.Ordinal)
+                && message.Contains("mfctl user add", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A switch left on with nothing to synchronize is what every deployment looks like between its first start and
+    /// its first recorded mailbox, so it is reported and the deployment runs. It refused a start until this release,
+    /// which made the empty deployment unstartable for the one setting an operator turns on first.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_SynchronizationOnAndNobodyRecordingAMailbox_ReportsItRatherThanRefusing()
+    {
+        // Arrange
+        var roster = new ServedMailUsers();
+        var startupLog = new RecordingLogger<ServedMailUsersStartupGate>();
+
+        // Act
+        await CreateGate(
+                [Held(SyntheticMailUser.Deployment, "alex")],
+                SynchronizationSwitchedOn(),
+                servedUsers: roster,
+                documents: RecordsHolding((SyntheticMailUser.Deployment, "{}")),
+                startupLog: startupLog)
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Single(roster.Users);
+        Assert.Contains(
+            startupLog.Messages,
+            message => message.Contains("nothing to synchronize", StringComparison.Ordinal));
+    }
+
+    /// <summary>The ordinary deployment: one row, and the mailbox that user's own record names.</summary>
+    [Fact]
+    public async Task StartAsync_AUserWhoseRecordNamesAMailbox_ServesThemFromIt()
+    {
+        // Arrange
+        var user = MailUserId.Create(RecordedIdentifier);
+        var roster = new ServedMailUsers();
+
+        // Act
+        await CreateGate(
+                [Held(user, "alex")],
+                servedUsers: roster,
+                documents: RecordsHolding((user, RecordDeclaring("work", "alex@example.test"))))
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var served = Assert.Single(roster.Users);
+        Assert.Equal(user, served.User);
+        Assert.Equal("alex", served.DisplayName);
+        Assert.Equal(["work"], served.MailAccounts.Select(account => account.AccountId));
+    }
+
+    /// <summary>Every held row is served, because a row this deployment held and did not serve would be somebody whose mail it stores and never synchronizes.</summary>
+    [Fact]
+    public async Task StartAsync_SeveralUsersHeld_ServesEachOfThemFromTheirOwnRecord()
     {
         // Arrange
         var roster = new ServedMailUsers();
 
         // Act
-        await CreateGate([Held(SyntheticMailUser.Deployment, "user")], servedUsers: roster)
-            .StartAsync(CancellationToken.None);
+        await CreateGate(TwoRecordedUsers(), servedUsers: roster, documents: RecordsOfTwoUsers())
+            .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        var served = Assert.Single(roster.Users);
-        Assert.Equal(SyntheticMailUser.Deployment, served.User);
-        Assert.Equal(MailUserAccountSource.DeploymentSection, served.Source);
-        Assert.Equal(SyntheticMailUser.Deployment, roster.User);
+        Assert.Equal(
+            [(MailUserId.Create(RecordedIdentifier), "alex-work"), (SyntheticMailUser.Another, "sam-work")],
+            roster.Users.Select(user => (user.User, Assert.Single(user.MailAccounts).AccountId)));
     }
 
     /// <summary>
-    /// The release's own migration provisions that row, so reaching this means the row is not there at all. Generating
-    /// one is what keeps the deployment's configured mailboxes belonging to somebody rather than failing the start.
+    /// The alternative to failing is a deployment reporting itself started while synchronizing none of the mailboxes
+    /// that user's record names, because the record it was to read them from says nothing usable.
     /// </summary>
     [Fact]
-    public async Task StartAsync_NoRowHeld_RecordsOneUnderAGeneratedVersionFourIdentifier()
+    public async Task StartAsync_AUserWhoseRecordWillNotBind_FailsStartupNamingTheUser()
     {
         // Arrange
-        var provisioning = ProvisioningThatRecords();
-        var roster = new ServedMailUsers();
+        var user = MailUserId.Create(RecordedIdentifier);
 
-        // Act
-        await CreateGate([], provisioning: provisioning, servedUsers: roster).StartAsync(CancellationToken.None);
-
-        // Assert
-        var served = Assert.Single(roster.Users);
-        Assert.Equal(4, served.User.Value.Version);
-        await provisioning.Received(1).ProvisionAsync(served.User, "user", Arg.Any<CancellationToken>());
-    }
-
-    /// <summary>
-    /// Another replica of this deployment recorded the sole user between this one reading an empty directory and its
-    /// own insert reaching the table. Serving the identifier this process minted would hang every mail account, stored
-    /// message, and job on a row that is not there.
-    /// </summary>
-    [Fact]
-    public async Task StartAsync_TheSoleUserAnotherReplicaRecordedFirst_ServesTheRowTheDeploymentHolds()
-    {
-        // Arrange
-        var roster = new ServedMailUsers();
-        var winner = Held(SyntheticMailUser.Another, "user");
-
-        var directory = Substitute.For<IMailUserDirectory>();
-        directory.ReadUsersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(
-            Task.FromResult<IReadOnlyList<MailUserRecord>>([]),
-            Task.FromResult<IReadOnlyList<MailUserRecord>>([winner]));
-
-        var provisioning = Substitute.For<IMailUserProvisioning>();
-        provisioning
-            .ProvisionAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(false));
-
-        // Act
-        await CreateGate(directory, provisioning: provisioning, servedUsers: roster)
-            .StartAsync(CancellationToken.None);
-
-        // Assert
-        var served = Assert.Single(roster.Users);
-        Assert.Equal(SyntheticMailUser.Another, served.User);
-        Assert.Equal("user", served.DisplayName);
-        Assert.Equal(MailUserAccountSource.DeploymentSection, served.Source);
-    }
-
-    /// <summary>
-    /// Several rows still reading the deployment's own section is a deployment for which nothing could say which of
-    /// them a configured account is for. **It is the count of those rows that decides it**, which is why this
-    /// arrangement configures no <c>MailSynchronization:Accounts</c> at all and is refused anyway: the state an
-    /// operator reaches by upgrading with two provisioned rows is this one, and a refusal that waited for the section
-    /// to state a mailbox would let that deployment start with no sole user for a later edit of it to belong to.
-    /// </summary>
-    [Fact]
-    public async Task StartAsync_SeveralRowsHeldAndNoneRecordingTheirOwnMailboxes_FailsStartupNamingWhatToRun()
-    {
         // Act
         var refusal = await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
-            CreateGate([Held(SyntheticMailUser.Deployment, "user"), Held(SyntheticMailUser.Another, "second")])
-                .StartAsync(CancellationToken.None));
+            CreateGate(
+                    [Held(user, "alex")],
+                    documents: RecordsHolding(
+                        (user, """{"MailAccounts":[{"AccountId":"work","Nonsense":"no property binds this"}]}""")))
+                .StartAsync(TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.DeploymentMailUserUnresolved, refusal.ErrorCode);
-        Assert.Contains("still reads MailSynchronization:Accounts", refusal.Message, StringComparison.Ordinal);
-        Assert.Contains("mfctl user account add", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("'alex'", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A mailbox is a user's record rather than a configuration key, so no reading of the files walks the secrets it
+    /// names. Without this the deployment would start clean and fail one mailbox connection at a time.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_AUserWhoseMailboxNamesASecretNoSchemeResolves_FailsStartupNamingTheUser()
+    {
+        // Arrange
+        var user = MailUserId.Create(RecordedIdentifier);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
+            CreateGate(
+                    [Held(user, "alex")],
+                    documents: RecordsHolding(
+                        (user, RecordDeclaring("work", "alex@example.test", "no-such-scheme:imap-password"))))
+                .StartAsync(TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Contains("'alex'", refusal.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -138,7 +189,7 @@ public sealed class ServedMailUsersStartupGateTests
                     TwoRecordedUsers(),
                     documents: RecordsOfTwoUsers(),
                     mcpEndpointSettings: new McpEndpointOptions { Enabled = true })
-                .StartAsync(CancellationToken.None));
+                .StartAsync(TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Contains("requires no authentication", refusal.Message, StringComparison.Ordinal);
@@ -157,17 +208,44 @@ public sealed class ServedMailUsersStartupGateTests
                     TwoRecordedUsers(),
                     documents: RecordsOfTwoUsers(),
                     clientEndpointSettings: new ClientEndpointOptions { Enabled = true })
-                .StartAsync(CancellationToken.None));
+                .StartAsync(TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Contains("requires no authentication", refusal.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
+    /// The refusal above counts users rather than forbidding the posture, so a deployment serving one person or nobody
+    /// keeps an unauthenticated surface — which is what lets a first run reach a client with no credential and record
+    /// the person it is for.
+    /// </summary>
+    /// <param name="held">Whether the deployment holds its first user yet.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task StartAsync_AtMostOneUserOnAnUnauthenticatedUserFacingSurface_IsServedAnyway(bool held)
+    {
+        // Arrange
+        var user = MailUserId.Create(RecordedIdentifier);
+        var roster = new ServedMailUsers();
+
+        // Act
+        await CreateGate(
+                held ? [Held(user, "alex")] : [],
+                servedUsers: roster,
+                documents: RecordsHolding((user, "{}")),
+                mcpEndpointSettings: new McpEndpointOptions { Enabled = true },
+                clientEndpointSettings: new ClientEndpointOptions { Enabled = true })
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(held ? 1 : 0, roster.Users.Count);
+    }
+
+    /// <summary>
     /// An administrator acts for the deployment rather than for a person, so every user-scoped act of theirs names the
     /// user it is for and none of them has to be resolved from the roster. The administrative surface is therefore not
-    /// among the ones this refusal reads, whatever it is configured with — which is what makes recording a second user
-    /// reachable at all — so a deployment serving nobody a user-facing surface serves several people.
+    /// among the ones this refusal reads, which is what makes recording a second user reachable at all.
     /// </summary>
     [Fact]
     public async Task StartAsync_SeveralUsersServedWithNoUserFacingSurfaceEnabled_ServesEveryRecordedUser()
@@ -216,363 +294,104 @@ public sealed class ServedMailUsersStartupGateTests
     }
 
     /// <summary>
-    /// A worker switched on with no work is the deployment's own defect, and the roster is the first place both sources
-    /// of a mailbox are together: the deployment's own section and a user's own record.
+    /// A rule's scope is a claim about somebody's mailbox, and the roster can lose that mailbox after the rule was
+    /// accepted — its user is erased, or their record stops declaring it. A start refusing then could be undone only
+    /// through the host it refused, so it starts and names the rule rather than letting it reach no mail in silence.
     /// </summary>
     [Fact]
-    public async Task StartAsync_SynchronizationOnAndNoServedUserHoldingAMailbox_FailsStartupNamingWhereToDeclareOne()
-    {
-        // Arrange
-        var declared = Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
-        {
-            [$"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Enabled)}"] = "true",
-        });
-
-        // Act
-        var refusal = await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
-            CreateGate([], declared, servedUsers: new ServedMailUsers()).StartAsync(CancellationToken.None));
-
-        // Assert
-        Assert.Contains("no user this deployment serves has a mail account", refusal.Message, StringComparison.Ordinal);
-        Assert.Contains("mfctl user account add", refusal.Message, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// The case reading the file alone would refuse: the deployment's own section is empty and the mailbox this
-    /// deployment exists to synchronize is in the one place a file never carries, which is the user's own record.
-    /// </summary>
-    [Fact]
-    public async Task StartAsync_SynchronizationOnAndTheOnlyMailboxDeclaredInAUsersRecord_ServesThem()
-    {
-        // Arrange
-        var user = MailUserId.Create(RecordedIdentifier);
-        var roster = new ServedMailUsers();
-        var documents = Substitute.For<IUserSettingsDocumentReader>();
-
-        DocumentOf(documents, user, "recorded", "alex@example.test");
-
-        var declared = Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
-        {
-            [$"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Enabled)}"] = "true",
-        });
-
-        // Act
-        await CreateGate([Adopted(user, "alex")], declared, servedUsers: roster, documents: documents)
-            .StartAsync(CancellationToken.None);
-
-        // Assert
-        var served = Assert.Single(roster.Users);
-
-        Assert.Equal(["recorded"], served.MailAccounts.Select(account => account.AccountId));
-    }
-
-    /// <summary>A deployment that asked for nothing to be refreshed is served whatever its users hold, including nothing.</summary>
-    [Fact]
-    public async Task StartAsync_SynchronizationOffAndNoMailboxAnywhere_ServesTheUserAnyway()
+    public async Task StartAsync_ARuleScopedToAMailboxNobodyRecords_StartsAndReportsTheRule()
     {
         // Arrange
         var roster = new ServedMailUsers();
+        var startupLog = new RecordingLogger<ServedMailUsersStartupGate>();
 
         // Act
-        await CreateGate([], servedUsers: roster).StartAsync(CancellationToken.None);
+        await CreateGate(
+                [Held(SyntheticMailUser.Deployment, "alex")],
+                RuleScopedTo("nobody-records-this"),
+                servedUsers: roster,
+                documents: RecordsHolding(
+                    (SyntheticMailUser.Deployment, RecordDeclaring("work", "alex@example.test"))),
+                startupLog: startupLog)
+            .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Single(roster.Users);
+        Assert.Contains(
+            startupLog.Messages,
+            message => message.Contains("a mail account named 'nobody-records-this'", StringComparison.Ordinal));
+    }
+
+    /// <summary>The control for the report above: a rule scoped to a mailbox a served user's record names is reported by nothing.</summary>
+    [Fact]
+    public async Task StartAsync_ARuleScopedToAMailboxAServedUserRecords_ReportsNothingAboutTheRule()
+    {
+        // Arrange
+        var startupLog = new RecordingLogger<ServedMailUsersStartupGate>();
+
+        // Act
+        await CreateGate(
+                [Held(SyntheticMailUser.Deployment, "alex")],
+                RuleScopedTo("work"),
+                documents: RecordsHolding(
+                    (SyntheticMailUser.Deployment, RecordDeclaring("work", "alex@example.test"))),
+                startupLog: startupLog)
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.DoesNotContain(
+            startupLog.Messages,
+            message => message.Contains(MailRulesOptions.SectionName, StringComparison.Ordinal));
     }
 
     /// <summary>
-    /// The marker is what a committed record sets, and from then on that user's mailboxes are the document's rather
-    /// than any file's — permanently, and for that user alone.
+    /// Two users naming one mailbox identifier no longer stops a start. The deployment-wide naming rule went with the
+    /// section that made it deployment-wide, and what is left is a per-account settings lookup keyed by the identifier
+    /// alone, which resolves such a name to whichever record it meets first —
+    /// <see href="https://github.com/Krzysztof318/MailFathom/issues/1325">issue 1325</see> is what keys it by the user
+    /// beside the identifier and ends the ambiguity.
     /// </summary>
     [Fact]
-    public async Task StartAsync_AUserWhoseDocumentWasWrittenAtRuntime_ServesThemFromIt()
+    public async Task StartAsync_TwoUsersWhoseRecordsNameOneMailboxIdentifier_StartsTheDeployment()
+    {
+        // Arrange
+        var roster = new ServedMailUsers();
+
+        // Act
+        await CreateGate(
+                [Held(SyntheticMailUser.Deployment, "alex"), Held(SyntheticMailUser.Another, "sam")],
+                servedUsers: roster,
+                documents: RecordsHolding(
+                    (SyntheticMailUser.Deployment, RecordDeclaring("work", "alex@example.test")),
+                    (SyntheticMailUser.Another, RecordDeclaring("work", "sam@example.test"))))
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, roster.Users.Count);
+    }
+
+    /// <summary>The scanning posture a user asked for in their own record reaches the roster beside their mailboxes.</summary>
+    [Fact]
+    public async Task StartAsync_AUserWhoseRecordAsksForAScanner_PublishesWhatTheyAskedFor()
     {
         // Arrange
         var user = MailUserId.Create(RecordedIdentifier);
         var roster = new ServedMailUsers();
-        var documents = DocumentsHolding(
-            user,
-            """
-            {"MailAccounts":[{"AccountId":"adopted","DisplayName":"Adopted at work","Host":"imap.example.test",
-            "UserName":"alex@example.test",
-            "Secrets":{"Password":{"Name":"imap-adopted-password","SecretReference":"systemd-credential:imap-adopted-password"}}}]}
-            """);
 
         // Act
-        await CreateGate([Adopted(user, "alex")], servedUsers: roster, documents: documents)
-            .StartAsync(CancellationToken.None);
+        await CreateGate(
+                [Held(user, "alex")],
+                servedUsers: roster,
+                documents: RecordsHolding((
+                    user,
+                    """{"MailAccounts":[],"SensitiveContent":{"Secrets":{"Enabled":true},"ScreenOutgoingMailFor":["Secrets"]}}""")))
+            .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
         var served = Assert.Single(roster.Users);
-        Assert.Equal(MailUserAccountSource.UserDocument, served.Source);
-        Assert.False(served.ReadFromConfiguration);
-        Assert.Equal(["adopted"], served.MailAccounts.Select(account => account.AccountId));
-    }
 
-    /// <summary>
-    /// The alternative to failing is a deployment quietly synchronizing the mailboxes an adoption was meant to replace,
-    /// because the user's declared section has stopped being read and their document says nothing usable.
-    /// </summary>
-    [Fact]
-    public async Task StartAsync_AnAdoptedUserWhoseDocumentWillNotBind_FailsStartupNamingTheUser()
-    {
-        // Arrange
-        var user = MailUserId.Create(RecordedIdentifier);
-        var documents = DocumentsHolding(user, """{"MailAccounts":[{"AccountId":"adopted","Nonsense":"no property binds this"}]}""");
-
-        // Act
-        var refusal = await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
-            CreateGate([Adopted(user, "alex")], documents: documents).StartAsync(CancellationToken.None));
-
-        // Assert
-        Assert.Contains("'alex'", refusal.Message, StringComparison.Ordinal);
-        Assert.Contains("served from it rather than from configuration", refusal.Message, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// A user an administrator recorded is declared in no file, so nothing that reads the declarations reaches them.
-    /// Leaving them unserved would be a deployment holding a row whose mail it never synchronizes and whose caller it
-    /// could not compose, which is what every provisioned user would be until somebody edited a file.
-    /// </summary>
-    [Fact]
-    public async Task StartAsync_AUserRecordedAtRuntimeThatNoFileDeclares_ServesThemFromTheirOwnRecord()
-    {
-        // Arrange
-        var provisioned = SyntheticMailUser.Another;
-        var roster = new ServedMailUsers();
-        var documents = DocumentsHolding(
-            provisioned,
-            """
-            {"MailAccounts":[{"AccountId":"recorded","DisplayName":"Recorded at work","Host":"imap.example.test",
-            "UserName":"sam@example.test",
-            "Secrets":{"Password":{"Name":"imap-recorded-password","SecretReference":"systemd-credential:imap-recorded-password"}}}]}
-            """);
-
-        // Act
-        await CreateGate(
-                [Held(SyntheticMailUser.Deployment, "user"), Adopted(provisioned, "sam")],
-                servedUsers: roster,
-                documents: documents)
-            .StartAsync(CancellationToken.None);
-
-        // Assert
-        var served = Assert.Single(roster.Users, user => user.User == provisioned);
-        Assert.Equal(MailUserAccountSource.UserDocument, served.Source);
-        Assert.Equal(["recorded"], served.MailAccounts.Select(account => account.AccountId));
-    }
-
-    /// <summary>
-    /// The deployment's own mail section is the one part of the roster a file still decides, and a user outside it has
-    /// no place in that order to take — so a recorded user is served after the user that section belongs to.
-    /// </summary>
-    [Fact]
-    public async Task StartAsync_AUserRecordedAtRuntimeBesideTheDeploymentSectionsOwn_ServesThemAfterIt()
-    {
-        // Arrange
-        var sectionUser = MailUserId.Create(RecordedIdentifier);
-        var roster = new ServedMailUsers();
-
-        // Act
-        await CreateGate(
-                [Adopted(SyntheticMailUser.Another, "sam"), Held(sectionUser, "alex")],
-                servedUsers: roster,
-                documents: DocumentsHolding(SyntheticMailUser.Another, "{}"))
-            .StartAsync(CancellationToken.None);
-
-        // Assert
-        Assert.Equal([sectionUser, SyntheticMailUser.Another], roster.Users.Select(user => user.User));
-    }
-
-    /// <summary>
-    /// The deployment-wide naming rule a file is already held to, asked of the roster a start would serve — which is
-    /// where a collision two users wrote into their own records while a process ran first becomes visible. A write is
-    /// judged against the roster this process settled, so two such writes in one run are each judged against a roster
-    /// the other had not moved; this start is the first moment both records are in one place, and an account name
-    /// reaching two users resolves to whichever of them the lookup met first.
-    /// </summary>
-    [Fact]
-    public async Task StartAsync_TwoUsersWhoseOwnRecordsNameOneMailAccount_FailsStartupNamingTheAccount()
-    {
-        // Arrange
-        var documents = Substitute.For<IUserSettingsDocumentReader>();
-
-        DocumentOf(documents, SyntheticMailUser.Deployment, "work", "alex@example.test");
-        DocumentOf(documents, SyntheticMailUser.Another, "work", "sam@example.test");
-
-        // Act
-        var refusal = await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
-            CreateGate(
-                    [Adopted(SyntheticMailUser.Deployment, "alex"), Adopted(SyntheticMailUser.Another, "sam")],
-                    servedUsers: new ServedMailUsers(),
-                    documents: documents)
-                .StartAsync(CancellationToken.None));
-
-        // Assert
-        Assert.Contains("work", refusal.Message, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// A user served from the deployment's own section carries no accounts on their roster entry, so a check reading
-    /// that entry alone would never see <c>MailSynchronization:Accounts</c> — and the one collision the write-time
-    /// reading cannot catch, a record naming an account the section already declares, would start clean and resolve one
-    /// person's mailbox for another's.
-    /// </summary>
-    [Fact]
-    public async Task StartAsync_ARecordNamingAnAccountTheDeploymentSectionDeclares_FailsStartupNamingTheAccount()
-    {
-        // Arrange
-        var documents = Substitute.For<IUserSettingsDocumentReader>();
-
-        DocumentOf(documents, SyntheticMailUser.Another, "work", "sam@example.test");
-
-        // Act
-        var refusal = await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
-            CreateGate(
-                    [Held(SyntheticMailUser.Deployment, "user"), Adopted(SyntheticMailUser.Another, "sam")],
-                    declared: DeploymentSectionDeclaring("work"),
-                    servedUsers: new ServedMailUsers(),
-                    documents: documents)
-                .StartAsync(CancellationToken.None));
-
-        // Assert
-        Assert.Contains("work", refusal.Message, StringComparison.Ordinal);
-    }
-
-    /// <summary>The same two mailboxes named apart is the ordinary case, and it starts.</summary>
-    [Fact]
-    public async Task StartAsync_ARecordNamingAnAccountTheDeploymentSectionDoesNot_ServesBothUsers()
-    {
-        // Arrange
-        var roster = new ServedMailUsers();
-        var documents = Substitute.For<IUserSettingsDocumentReader>();
-
-        DocumentOf(documents, SyntheticMailUser.Another, "sam-work", "sam@example.test");
-
-        // Act
-        await CreateGate(
-                [Held(SyntheticMailUser.Deployment, "user"), Adopted(SyntheticMailUser.Another, "sam")],
-                declared: DeploymentSectionDeclaring("alex-work"),
-                servedUsers: roster,
-                documents: documents)
-            .StartAsync(CancellationToken.None);
-
-        // Assert
-        Assert.Equal(2, roster.Users.Count);
-    }
-
-    /// <summary>
-    /// What an adoption leaves on a deployment that declares no users: the accounts are copied into the record and
-    /// the section they were copied from is still bound. Nothing serves it any more, and the per-account lookup still
-    /// searches it before any record — so a start that accepted this would synchronize each mailbox under the file the
-    /// operator was told had stopped being read.
-    /// </summary>
-    [Fact]
-    public async Task StartAsync_ADeploymentSectionNoServedUserReads_FailsStartupNamingTheSectionToClear()
-    {
-        // Arrange
-        var documents = Substitute.For<IUserSettingsDocumentReader>();
-
-        DocumentOf(documents, SyntheticMailUser.Deployment, "work", "alex@example.test");
-
-        // Act
-        var refusal = await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
-            CreateGate(
-                    [Adopted(SyntheticMailUser.Deployment, "alex")],
-                    declared: DeploymentSectionDeclaring("work"),
-                    servedUsers: new ServedMailUsers(),
-                    documents: documents)
-                .StartAsync(CancellationToken.None));
-
-        // Assert
-        Assert.Contains("MailSynchronization:Accounts", refusal.Message, StringComparison.Ordinal);
-        Assert.Contains("no user this deployment serves reads that section", refusal.Message, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// The refusal above is about which declaration a mailbox's settings are read from, and every per-account read
-    /// resolves that whether or not a synchronization run is what asked. Switching synchronization off therefore
-    /// changes nothing about it, which is what keeps the abandoned section from being a rule only a worker enforces.
-    /// </summary>
-    [Fact]
-    public async Task StartAsync_ADeploymentSectionNoServedUserReadsWithSynchronizationOff_IsRefusedJustTheSame()
-    {
-        // Arrange
-        var documents = Substitute.For<IUserSettingsDocumentReader>();
-        var keys = DeploymentSectionKeys("work");
-
-        DocumentOf(documents, SyntheticMailUser.Deployment, "work", "alex@example.test");
-        keys[$"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Enabled)}"] = "false";
-
-        // Act
-        var refusal = await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
-            CreateGate(
-                    [Adopted(SyntheticMailUser.Deployment, "alex")],
-                    declared: Configuration(keys),
-                    servedUsers: new ServedMailUsers(),
-                    documents: documents)
-                .StartAsync(CancellationToken.None));
-
-        // Assert
-        Assert.Contains("MailSynchronization:Accounts", refusal.Message, StringComparison.Ordinal);
-    }
-
-    /// <summary>The same two users naming their mailboxes apart is the ordinary case, and it starts.</summary>
-    [Fact]
-    public async Task StartAsync_TwoUsersWhoseOwnRecordsNameTheirMailAccountsApart_ServesBothOfThem()
-    {
-        // Arrange
-        var roster = new ServedMailUsers();
-        var documents = Substitute.For<IUserSettingsDocumentReader>();
-
-        DocumentOf(documents, SyntheticMailUser.Deployment, "alex-work", "alex@example.test");
-        DocumentOf(documents, SyntheticMailUser.Another, "sam-work", "sam@example.test");
-
-        // Act
-        await CreateGate(
-                [Adopted(SyntheticMailUser.Deployment, "alex"), Adopted(SyntheticMailUser.Another, "sam")],
-                servedUsers: roster,
-                documents: documents)
-            .StartAsync(CancellationToken.None);
-
-        // Assert
-        Assert.Equal(2, roster.Users.Count);
-    }
-
-    /// <summary>
-    /// Only a user still reading the deployment's own section contends for it, so a deployment whose every user has
-    /// adopted has no sole user to serve — and minting one would record a person nobody asked for on every start.
-    /// </summary>
-    [Fact]
-    public async Task StartAsync_EveryHeldUserReadingTheirOwnRecord_RecordsNobodyNew()
-    {
-        // Arrange
-        var provisioning = ProvisioningThatRecords();
-        var roster = new ServedMailUsers();
-
-        // Act
-        await CreateGate(
-                [Adopted(SyntheticMailUser.Deployment, "user")],
-                provisioning: provisioning,
-                servedUsers: roster,
-                documents: DocumentsHolding(SyntheticMailUser.Deployment, "{}"))
-            .StartAsync(CancellationToken.None);
-
-        // Assert
-        Assert.Equal(SyntheticMailUser.Deployment, Assert.Single(roster.Users).User);
-        await provisioning.DidNotReceiveWithAnyArgs().ProvisionAsync(default, default!, CancellationToken.None);
-    }
-
-    /// <summary>
-    /// Two users reading one section is a deployment with no answer to whose mailboxes those are, and picking either
-    /// would hang one person's mail on the other's row.
-    /// </summary>
-    [Fact]
-    public async Task StartAsync_TwoHeldUsersStillReadingTheSection_FailsStartup()
-    {
-        // Act & Assert
-        await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
-            CreateGate([Held(SyntheticMailUser.Deployment, "user"), Held(SyntheticMailUser.Another, "sam")])
-                .StartAsync(CancellationToken.None));
+        Assert.True(served.SensitiveContent!.Secrets.Enabled);
+        Assert.Equal(["Secrets"], served.SensitiveContent!.ScreenOutgoingMailFor!);
     }
 
     [Fact]
@@ -582,8 +401,11 @@ public sealed class ServedMailUsersStartupGateTests
         var startupGates = new HostStartupGates(HostStartupGate.ServedMailUsers);
 
         // Act
-        await CreateGate([Held(SyntheticMailUser.Deployment, "user")], startupGates: startupGates)
-            .StartAsync(CancellationToken.None);
+        await CreateGate(
+                [Held(SyntheticMailUser.Deployment, "alex")],
+                startupGates: startupGates,
+                documents: RecordsHolding((SyntheticMailUser.Deployment, "{}")))
+            .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(startupGates.Completed);
@@ -599,9 +421,10 @@ public sealed class ServedMailUsersStartupGateTests
         // Act
         await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
             CreateGate(
-                    [Held(SyntheticMailUser.Deployment, "user"), Held(SyntheticMailUser.Another, "second")],
-                    startupGates: startupGates)
-                .StartAsync(CancellationToken.None));
+                    [Held(SyntheticMailUser.Deployment, "alex")],
+                    startupGates: startupGates,
+                    documents: Substitute.For<IUserSettingsDocumentReader>())
+                .StartAsync(TestContext.Current.CancellationToken));
 
         // Assert
         Assert.False(startupGates.Completed);
@@ -609,13 +432,33 @@ public sealed class ServedMailUsersStartupGateTests
 
     /// <summary>Reading one row more than a deployment may hold is what makes a roster past the bound observable rather than silently truncated.</summary>
     [Fact]
+    public async Task StartAsync_ARosterPastTheBound_FailsStartupNamingWhatADeploymentMayHold()
+    {
+        // Arrange
+        var held = Enumerable
+            .Range(0, ServedMailUsers.MaximumUsers + 1)
+            .Select(position => Held(MailUserId.Create(Guid.NewGuid()), $"user-{position}"))
+            .ToArray();
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
+            CreateGate(held).StartAsync(TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Contains(
+            ServedMailUsers.MaximumUsers.ToString(CultureInfo.InvariantCulture),
+            refusal.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StartAsync_AlwaysGiven_ReadsOneUserMoreThanADeploymentMayHold()
     {
         // Arrange
-        var directory = DirectoryOf([Held(SyntheticMailUser.Deployment, "user")]);
+        var directory = DirectoryOf([]);
 
         // Act
-        await CreateGate(directory).StartAsync(CancellationToken.None);
+        await CreateGate(directory).StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
         await directory.Received(1)
@@ -626,7 +469,7 @@ public sealed class ServedMailUsersStartupGateTests
     public async Task StartAsync_TheCallersToken_PropagatesItToTheDirectory()
     {
         // Arrange
-        var directory = DirectoryOf([Held(SyntheticMailUser.Deployment, "user")]);
+        var directory = DirectoryOf([]);
         using var cancellation = new CancellationTokenSource();
 
         // Act
@@ -636,117 +479,105 @@ public sealed class ServedMailUsersStartupGateTests
         await directory.Received(1).ReadUsersAsync(Arg.Any<int>(), cancellation.Token);
     }
 
-    private static MailUserRecord Held(MailUserId user, string displayName) =>
-        new(user, displayName, DocumentWrittenAtRuntime: false);
+    /// <summary>
+    /// Two people may each call a mailbox <c>work</c>, and nothing refuses it — but the catalogue of served accounts
+    /// still keys by the name alone and keeps the first, so a start says so, naming the name and both people.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_TwoUsersRecordingOneMailAccountName_ReportsTheNameAndBothUsers()
+    {
+        // Arrange
+        var startupLog = new RecordingLogger<ServedMailUsersStartupGate>();
 
-    /// <summary>A user whose document an adoption has written, which is what makes it the source their mailboxes come from.</summary>
-    private static MailUserRecord Adopted(MailUserId user, string displayName) =>
+        // Act
+        await CreateGate(
+                TwoRecordedUsers(),
+                documents: RecordsHolding(
+                    (MailUserId.Create(RecordedIdentifier), RecordDeclaring("work", "alex@example.test")),
+                    (SyntheticMailUser.Another, RecordDeclaring("work", "sam@example.test"))),
+                startupLog: startupLog)
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains(
+            startupLog.Messages,
+            message => message.Contains("'work'", StringComparison.Ordinal)
+                && message.Contains("'alex'", StringComparison.Ordinal)
+                && message.Contains("'sam'", StringComparison.Ordinal));
+    }
+
+    private static MailUserRecord Held(MailUserId user, string displayName) =>
         new(user, displayName, DocumentWrittenAtRuntime: true);
 
-    private static IUserSettingsDocumentReader DocumentsHolding(MailUserId user, string json)
+    /// <summary>A record declaring one mailbox, which is the shape every one of these tests states a mailbox in.</summary>
+    private static string RecordDeclaring(
+        string accountId,
+        string userName,
+        string secretReference = "systemd-credential:imap-password") =>
+        $$"""
+          {
+            "MailAccounts": [
+              {
+                "AccountId": "{{accountId}}",
+                "DisplayName": "{{accountId}}",
+                "Host": "imap.example.test",
+                "UserName": "{{userName}}",
+                "Secrets": { "Password": { "Name": "imap-password", "SecretReference": "{{secretReference}}" } }
+              }
+            ]
+          }
+          """;
+
+    /// <summary>The reader answering each named user with the record beside them, and nobody else with anything.</summary>
+    private static IUserSettingsDocumentReader RecordsHolding(params (MailUserId User, string Json)[] records)
     {
         var documents = Substitute.For<IUserSettingsDocumentReader>();
 
-        documents.ReadAsync(user, Arg.Any<CancellationToken>()).Returns(
-            Task.FromResult<UserSettingsDocument?>(
-                new UserSettingsDocument(user, "alex", json, Version: 2, WrittenAtRuntime: true)));
+        foreach (var record in records)
+        {
+            documents.ReadAsync(record.User, Arg.Any<CancellationToken>()).Returns(
+                Task.FromResult<UserSettingsDocument?>(new UserSettingsDocument(
+                    record.User,
+                    $"user-{record.User.Value:D}",
+                    record.Json,
+                    Version: 2,
+                    WrittenAtRuntime: true)));
+        }
 
         return documents;
     }
-
-    /// <summary>The same for the other source a served user's settings come from, which is their own record.</summary>
-    [Fact]
-    public async Task StartAsync_AnAdoptedUserWhoseRecordAsksForAScanner_PublishesWhatTheyAskedFor()
-    {
-        // Arrange
-        var user = MailUserId.Create(RecordedIdentifier);
-        var roster = new ServedMailUsers();
-        var documents = Substitute.For<IUserSettingsDocumentReader>();
-
-        ScanningDocumentOf(documents, user);
-
-        // Act
-        await CreateGate([Adopted(user, "alex")], servedUsers: roster, documents: documents)
-            .StartAsync(CancellationToken.None);
-
-        // Assert
-        var served = Assert.Single(roster.Users);
-
-        Assert.True(served.SensitiveContent!.Secrets.Enabled);
-        Assert.Equal(["Secrets"], served.SensitiveContent!.ScreenOutgoingMailFor!);
-    }
-
-    /// <summary>A user's record declaring one scanner and no mailbox at all, which is what the block alone looks like.</summary>
-    private static void ScanningDocumentOf(IUserSettingsDocumentReader documents, MailUserId user) =>
-        documents.ReadAsync(user, Arg.Any<CancellationToken>()).Returns(
-            Task.FromResult<UserSettingsDocument?>(new UserSettingsDocument(
-                user,
-                $"user-{user.Value:D}",
-                """{"MailAccounts":[],"SensitiveContent":{"Secrets":{"Enabled":true},"ScreenOutgoingMailFor":["Secrets"]}}""",
-                Version: 2,
-                WrittenAtRuntime: true)));
-
-    private static void DocumentOf(
-        IUserSettingsDocumentReader documents,
-        MailUserId user,
-        string accountId,
-        string userName) =>
-        documents.ReadAsync(user, Arg.Any<CancellationToken>()).Returns(
-            Task.FromResult<UserSettingsDocument?>(new UserSettingsDocument(
-                user,
-                $"user-{user.Value:D}",
-                $$"""
-                  {
-                    "MailAccounts": [
-                      {
-                        "AccountId": "{{accountId}}",
-                        "DisplayName": "{{accountId}}",
-                        "Host": "imap.example.test",
-                        "UserName": "{{userName}}",
-                        "Secrets": { "Password": { "Name": "imap-password", "SecretReference": "systemd-credential:imap-password" } }
-                      }
-                    ]
-                  }
-                  """,
-                Version: 2,
-                WrittenAtRuntime: true)));
 
     private static IConfiguration Configuration(Dictionary<string, string?> keys) =>
         new ConfigurationBuilder().AddInMemoryCollection(keys).Build();
 
-    /// <summary>The deployment's own mail section, declaring one account under the identifier a test names.</summary>
-    private static IConfiguration DeploymentSectionDeclaring(string accountId) =>
-        Configuration(DeploymentSectionKeys(accountId));
-
-    /// <summary>The same section as keys, for a test that states one more setting beside it.</summary>
-    private static Dictionary<string, string?> DeploymentSectionKeys(string accountId) =>
-        new(StringComparer.Ordinal)
+    /// <summary>The one switch a deployment with no mailbox recorded yet is most likely to have turned on.</summary>
+    private static IConfiguration SynchronizationSwitchedOn() =>
+        Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
         {
-            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:AccountId"] = accountId,
-            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:DisplayName"] = accountId,
-            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:Host"] = "imap.example.test",
-            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:UserName"] = "alex@example.test",
-            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:Secrets:Password:Name"] = "imap-password",
-            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:Secrets:Password:SecretReference"] = "systemd-credential:imap-password",
-        };
+            [$"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Enabled)}"] = "true",
+        });
 
-    /// <summary>Two users whose records are their own, which is the only roster of more than one this deployment holds.</summary>
+    /// <summary>One declared rule, scoped to the mailbox identifier a test names.</summary>
+    private static IConfiguration RuleScopedTo(string accountId) =>
+        Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            [$"{MailRulesOptions.SectionName}:{nameof(MailRulesOptions.Rules)}:0:Name"] = "file-invoices",
+            [$"{MailRulesOptions.SectionName}:{nameof(MailRulesOptions.Rules)}:0:Condition"] = "isSeen",
+            [$"{MailRulesOptions.SectionName}:{nameof(MailRulesOptions.Rules)}:0:Accounts:0"] = accountId,
+        });
+
+    /// <summary>Two users, each holding a record of their own.</summary>
     private static MailUserRecord[] TwoRecordedUsers() =>
     [
-        Adopted(MailUserId.Create(RecordedIdentifier), "alex"),
-        Adopted(SyntheticMailUser.Another, "sam"),
+        Held(MailUserId.Create(RecordedIdentifier), "alex"),
+        Held(SyntheticMailUser.Another, "sam"),
     ];
 
     /// <summary>The records those two users are served from, each naming a mailbox of their own.</summary>
-    private static IUserSettingsDocumentReader RecordsOfTwoUsers()
-    {
-        var documents = Substitute.For<IUserSettingsDocumentReader>();
-
-        DocumentOf(documents, MailUserId.Create(RecordedIdentifier), "alex-work", "alex@example.test");
-        DocumentOf(documents, SyntheticMailUser.Another, "sam-work", "sam@example.test");
-
-        return documents;
-    }
+    private static IUserSettingsDocumentReader RecordsOfTwoUsers() =>
+        RecordsHolding(
+            (MailUserId.Create(RecordedIdentifier), RecordDeclaring("alex-work", "alex@example.test")),
+            (SyntheticMailUser.Another, RecordDeclaring("sam-work", "sam@example.test")));
 
     private static IMailUserDirectory DirectoryOf(IReadOnlyList<MailUserRecord> held)
     {
@@ -760,7 +591,6 @@ public sealed class ServedMailUsersStartupGateTests
     private static ServedMailUsersStartupGate CreateGate(
         IReadOnlyList<MailUserRecord> held,
         IConfiguration? declared = null,
-        IMailUserProvisioning? provisioning = null,
         ServedMailUsers? servedUsers = null,
         HostStartupGates? startupGates = null,
         McpEndpointOptions? mcpEndpointSettings = null,
@@ -770,7 +600,6 @@ public sealed class ServedMailUsersStartupGateTests
         CreateGate(
             DirectoryOf(held),
             declared,
-            provisioning,
             servedUsers,
             startupGates,
             mcpEndpointSettings,
@@ -781,7 +610,6 @@ public sealed class ServedMailUsersStartupGateTests
     private static ServedMailUsersStartupGate CreateGate(
         IMailUserDirectory directory,
         IConfiguration? declared = null,
-        IMailUserProvisioning? provisioning = null,
         ServedMailUsers? servedUsers = null,
         HostStartupGates? startupGates = null,
         McpEndpointOptions? mcpEndpointSettings = null,
@@ -792,17 +620,17 @@ public sealed class ServedMailUsersStartupGateTests
         var services = new ServiceCollection();
 
         services.AddScoped(_ => directory);
-        services.AddScoped(_ => provisioning ?? ProvisioningThatRecords());
         services.AddScoped(_ => documents ?? Substitute.For<IUserSettingsDocumentReader>());
         services.AddSingleton(new UserAccountDocumentBinder(
             new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
             new FakeTimeProvider(),
             Options.Create(new SensitiveContentOptions())));
-        services.AddSingleton(SecretValidator());
+        services.AddSingleton(SecretValidation.OverRegisteredSchemes());
 
         return new ServedMailUsersStartupGate(
             services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             declared ?? new ConfigurationBuilder().Build(),
+            new NCalcMailRuleConditionCompiler(),
             servedUsers ?? new ServedMailUsers(),
             startupGates ?? new HostStartupGates(HostStartupGate.ServedMailUsers),
             new SeveralUserAdmission(
@@ -810,31 +638,4 @@ public sealed class ServedMailUsersStartupGateTests
                 Options.Create(clientEndpointSettings ?? new ClientEndpointOptions())),
             startupLog ?? NullLogger<ServedMailUsersStartupGate>.Instance);
     }
-
-    /// <summary>A provisioning that reports the row as recorded, which is what every case but the contested label is.</summary>
-    private static IMailUserProvisioning ProvisioningThatRecords() => ProvisioningThatAccepts();
-
-    /// <summary>
-    /// A provisioning standing for a database that accepts what it is given. Both of its writes are conditional and
-    /// report what the row carries afterwards, so the default a substitute returns — false — is the contested label
-    /// rather than the ordinary case, and a test arranging neither would be arranging a race it did not mean to.
-    /// </summary>
-    private static IMailUserProvisioning ProvisioningThatAccepts()
-    {
-        var provisioning = Substitute.For<IMailUserProvisioning>();
-
-        provisioning
-            .ProvisionAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(true));
-
-        provisioning
-            .RelabelAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(true));
-
-        return provisioning;
-    }
-
-    /// <summary>Resolves a reference under any scheme a deployment registers, which is what a user's secrets are proven through here.</summary>
-    /// <remarks>Composed where the record administration's tests compose it too, because the same validator judges a user's mail accounts at a start and at a write.</remarks>
-    private static SecretConfigurationValidator SecretValidator() => SecretValidation.OverRegisteredSchemes();
 }

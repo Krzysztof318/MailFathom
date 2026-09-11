@@ -51,13 +51,14 @@ public sealed class ConfigurationStorageCatalogTests
     }
 
     /// <summary>
-    /// The mail-synchronization accounts are mailbox declarations rather than users, and they carry the same word. The
-    /// route is the top-level collection alone, so this one stays an ordinary deployment setting.
+    /// The withdrawn mail-account section carries the same word and is not the routed collection. It is refused where
+    /// every unbound key is — the binding a write is judged by — rather than routed into a record store it was never
+    /// the shape of, so the catalog answers for it exactly as it answers for any other root-document path.
     /// </summary>
     [Theory]
     [InlineData("MailSynchronization:Accounts")]
     [InlineData("MailSynchronization:Accounts:0:Alias")]
-    public void ResolveWriteTarget_MailSynchronizationAccounts_IsPersistedInTheRootDocument(string configurationPath)
+    public void ResolveWriteTarget_TheWithdrawnMailAccountSection_IsNotRoutedToTheRecordStore(string configurationPath)
     {
         // Act
         var target = ConfigurationStorageCatalog.ResolveWriteTarget(configurationPath);

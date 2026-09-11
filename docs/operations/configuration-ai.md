@@ -167,8 +167,8 @@ described below.
 | --- | --- | --- | --- | --- |
 | `SpamClassification:Enabled` | bool | `false` | | reload |
 | `SpamClassification:UseScanner` | bool | `false` | Asking for a scanner while `Enabled` is false fails startup, because a scanner is only consulted where classification runs | restart |
-| `SpamClassification:ScannedFolders:<n>` | string | unset | A usable folder alias; an absent list is every account's inbox mapping, and an explicitly empty list is no folder at all | reload |
-| `SpamClassification:ScannerThreshold` | double | unset | 0.1 – 1000; unset keeps the threshold the scanner itself answered with | reload |
+| `SpamClassification:ScannedFolders:<n>` | string | unset | Read by no classification: the scope is each user's own, stated in their record | — |
+| `SpamClassification:ScannerThreshold` | double | unset | Read by no classification: the threshold is each user's own, stated in their record, and this range is what a record is judged against | — |
 | `SpamClassification:ClassificationWait` | TimeSpan | `00:15:00` | 1 s – 7 days; how long a stored message may wait for a verdict before it is derived from anyway | reload |
 | `SpamClassification:RunBatchSize` | int | `50` | 1 – 10 000 | reload |
 | `SpamClassification:MaxRunBatchesPerPass` | int | `4` | 1 – 1 000 | reload |
@@ -177,10 +177,10 @@ described below.
 | `SpamClassification:Scanner:ScanTimeoutSeconds` | int | `30` | 1 – 120 | restart |
 | `SpamClassification:Scanner:MaximumMessageBytes` | int | `512000` | 32 000 – 33 554 432 | restart |
 | `SpamClassification:Scanner:MaximumConcurrentScans` | int | `5` | 1 – 64 | restart |
-| `SpamClassification:Actions:MoveToJunkFolder` | bool | `false` | Asking for it while `Enabled` is false fails startup, and so does an account that maps no destination to file into | reload |
-| `SpamClassification:Actions:MarkAsRead` | bool | `false` | Asking for it while `Enabled` is false fails startup | reload |
-| `SpamClassification:Actions:JunkFolder` | string | `role:Junk` | A folder alias, or a role written as `role:<name>`; every configured account has to map it once filing is on | reload |
-| `SpamClassification:Actions:Threshold` | double | unset | 0.1 – 1000; unset acts on every spam verdict, and a value judges what a scanner scored | reload |
+| `SpamClassification:Actions:MoveToJunkFolder` | bool | `false` | Read by no classification: what a verdict does is each user's own, stated in their record | — |
+| `SpamClassification:Actions:MarkAsRead` | bool | `false` | Read by no classification, for the reason above | — |
+| `SpamClassification:Actions:JunkFolder` | string | `role:Junk` | Read by no classification, for the reason above | — |
+| `SpamClassification:Actions:Threshold` | double | unset | Read by no classification: this range is what a record's own value is judged against | — |
 
 **Eight of those keys are one user's decision and the rest are the deployment's.** `Enabled`, `UseScanner`,
 `ScannedFolders`, `ScannerThreshold`, and the four settings under `Actions` are what a user decides about their own
@@ -221,9 +221,9 @@ sidecar itself — [Kubernetes](deployment-kubernetes.md#spam-scanning),
 
 The default scope follows the folder **role** rather than the text `INBOX`: it is whichever alias each of that user's
 own accounts maps to `Inbox`, so a server presenting the inbox under another name is classified without the scope being
-restated here. For the sole user this deployment's own section supplies those accounts are
-[`MailSynchronization:Accounts`](configuration-mail.md#one-account--mailsynchronizationaccountsn); for a user read from
-their own record they are that user's own `MailAccounts`. The two shapes of an unset list are deliberately
+restated here. Those accounts are the ones
+[that user's own record](configuration-mail.md#one-account--a-mailbox-in-a-users-record) declares, which is the only
+place a mailbox is declared at all. The two shapes of an unset list are deliberately
 distinguishable — writing no key asks for that default, and writing an empty list asks for no folder, which switches the
 work off without switching the section off.
 
@@ -236,8 +236,8 @@ The section is read per classification rather than captured, so a reload takes e
 never does is revisit a message already classified: replacing a verdict is an explicit operation.
 
 Which folder is left out of `list_emails` and `search_emails` is not configured here. It is the folder mapped to the
-`Junk` special use in [`MailSynchronization`](configuration-mail.md#one-account--mailsynchronizationaccountsn), and it is withheld whether or
-not this section switches anything on.
+`Junk` special use in [the account's own declaration](configuration-mail.md#one-account--a-mailbox-in-a-users-record),
+and it is withheld whether or not this section switches anything on.
 
 The `Actions` block is the only part of this section that writes to a mailbox, and both of its switches are off. Each
 works alone: filing moves the message on the server, marking read sets its `\Seen` flag, and turning both on sets the

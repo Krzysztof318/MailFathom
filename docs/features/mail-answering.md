@@ -633,8 +633,8 @@ therefore keep a durable record of the runs answered from its mailbox, and it is
 
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
-| `MailSynchronization:Accounts:<n>:AnsweringAuditTrail:Enabled` | bool | `false` | Whether a finished run leaves an entry for this account |
-| `MailSynchronization:Accounts:<n>:AnsweringAuditTrail:Retention` | TimeSpan | `30.00:00:00` | 1 day – 3650 days; how long an entry is kept |
+| `MailAccounts:<n>:AnsweringAuditTrail:Enabled` | bool | `false` | Whether a finished run leaves an entry for this account |
+| `MailAccounts:<n>:AnsweringAuditTrail:Retention` | TimeSpan | `30.00:00:00` | 1 day – 3650 days; how long an entry is kept |
 
 It is a separate decision from the [mutation trail](imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default)
 beside it and deliberately not the same switch. One record says where a person's mail has been; this says what it was

@@ -7,7 +7,6 @@ using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Mail.Readers;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Mail.Readers;
@@ -25,21 +24,6 @@ public sealed class ConfiguredMailAccountCatalogTests
 
     private static readonly MailUserId Morgan =
         MailUserId.Create(new Guid("2b8f7c2d-3e4f-4a61-9b02-c3d4e5f6a712"));
-
-    [Fact]
-    public void ServedAccounts_ADeploymentDeclaringNoUser_PublishesItsOwnSectionUnderTheSoleUser()
-    {
-        // Arrange
-        var settings = Synchronizing(Mailbox("primary", "The primary mailbox"));
-        var catalog = new ConfiguredMailAccountCatalog(settings, ResolvedServedMailUsers.TheSoleUser());
-
-        // Act
-        var served = catalog.ServedAccounts;
-
-        // Assert
-        Assert.Equal([SyntheticMailUser.Deployment], served.Select(account => account.User));
-        Assert.Equal(["primary"], served.Select(account => account.Id.Value));
-    }
 
     [Fact]
     public void ServedAccounts_UsersDeclaringTheirOwnMailboxes_PublishesEachUnderTheUserWhoDeclaredIt()
@@ -84,16 +68,16 @@ public sealed class ConfiguredMailAccountCatalogTests
         Assert.Equal(["alpha", "beta", "zeta"], served.Select(account => account.Id.Value));
     }
 
-    /// <summary>The deployment's own section is refused once nobody reads it, so a user's own record is the only source here.</summary>
+    /// <summary>A user whose record holds no mailbox publishes none, rather than inheriting anybody else's.</summary>
     [Fact]
-    public void ServedAccounts_ADeploymentWhoseOwnSectionIsEmpty_PublishesNothingUnderTheDeploymentUser()
+    public void ServedAccounts_AUserRecordingNoMailbox_PublishesNothingUnderThem()
     {
         // Arrange
         var settings = Synchronizing();
         var catalog = new ConfiguredMailAccountCatalog(
             settings,
             ResolvedServedMailUsers.Serving(
-                new ServedMailUser(Alex, "alex", MailUserAccountSource.DeploymentSection, MailAccounts: []),
+                new ServedMailUser(Alex, "alex", MailAccounts: []),
                 Declaring(Morgan, "morgan", Mailbox("morgan-work", "Morgan at work"))));
 
         // Act
@@ -115,7 +99,6 @@ public sealed class ConfiguredMailAccountCatalogTests
                 new ServedMailUser(
                     Alex,
                     "alex",
-                    MailUserAccountSource.UserDocument,
                     [Mailbox("alex-adopted", "Alex, adopted")])));
 
         // Act
@@ -129,7 +112,7 @@ public sealed class ConfiguredMailAccountCatalogTests
         MailUserId user,
         string displayName,
         params MailSynchronizationAccountOptions[] mailAccounts) =>
-        new(user, displayName, MailUserAccountSource.UserDocument, mailAccounts);
+        new(user, displayName, mailAccounts);
 
     private static MailSynchronizationAccountOptions Mailbox(string accountId, string displayName) => new()
     {
@@ -137,9 +120,6 @@ public sealed class ConfiguredMailAccountCatalogTests
         DisplayName = displayName,
     };
 
-    private static MailSynchronizationOptions Synchronizing(params MailSynchronizationAccountOptions[] accounts) => new()
-    {
-        Enabled = true,
-        Accounts = [.. accounts],
-    };
+    private static MailSynchronizationOptions Synchronizing(params MailSynchronizationAccountOptions[] accounts) =>
+        new MailSynchronizationOptions { Enabled = true }.Serving(accounts);
 }

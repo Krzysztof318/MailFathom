@@ -4,6 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Secrets.Discovery;
@@ -212,13 +213,10 @@ public sealed class MailAccountOAuthValidationTests
     }
 
     private static IReadOnlyList<ValidationResult> Validate(MailSynchronizationOptions options) =>
-        [.. options.Validate(new ValidationContext(options))];
+        ConfiguredMailAccounts.Validate(options);
 
-    private static MailSynchronizationOptions CreateOptions(MailSynchronizationAccountOptions account) => new()
-    {
-        Enabled = true,
-        Accounts = [account],
-    };
+    private static MailSynchronizationOptions CreateOptions(MailSynchronizationAccountOptions account) =>
+        new MailSynchronizationOptions { Enabled = true }.Serving(account);
 
     private static MailSynchronizationAccountOptions CreateTokenAuthenticatedAccount()
     {

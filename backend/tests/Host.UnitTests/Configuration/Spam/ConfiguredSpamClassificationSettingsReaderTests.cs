@@ -26,7 +26,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
     {
         // Arrange
         var reader = ReaderFor(
-            new SpamClassificationOptions { Enabled = true },
+            new UserSpamClassificationOptions { Enabled = true },
             AccountMapping("primary-mail", "Inbox"));
 
         // Act
@@ -43,7 +43,8 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
     {
         // Arrange
         var reader = ReaderFor(
-            new SpamClassificationOptions { Enabled = true, ClassificationWait = TimeSpan.FromHours(2) },
+            new SpamClassificationOptions { ClassificationWait = TimeSpan.FromHours(2) },
+            new UserSpamClassificationOptions { Enabled = true },
             AccountMapping("inbox", "Inbox"));
 
         // Act
@@ -59,7 +60,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
     {
         // Arrange
         var reader = ReaderFor(
-            new SpamClassificationOptions { Enabled = true },
+            new UserSpamClassificationOptions { Enabled = true },
             AccountMapping("inbox", "Inbox"));
 
         // Act
@@ -77,7 +78,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
     {
         // Arrange
         var reader = ReaderFor(
-            new SpamClassificationOptions { Enabled = true, ScannedFolders = [] },
+            new UserSpamClassificationOptions { Enabled = true, ScannedFolders = [] },
             AccountMapping("inbox", "Inbox"));
 
         // Act
@@ -93,7 +94,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
     {
         // Arrange
         var reader = ReaderFor(
-            new SpamClassificationOptions
+            new UserSpamClassificationOptions
             {
                 Enabled = true,
                 UseScanner = true,
@@ -115,24 +116,30 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
 
     /// <summary>A section reloaded while the process runs takes effect on the next classification rather than at the next restart.</summary>
     [Fact]
-    public void SettingsFor_ASectionReloaded_IsReadAgainRatherThanCaptured()
+    public void ScopeInForce_ASectionReloaded_IsReadAgainRatherThanCaptured()
     {
         // Arrange
         var options = new TestOptionsMonitor<SpamClassificationOptions>(new SpamClassificationOptions());
         var reader = new ConfiguredSpamClassificationSettingsReader(
             options,
-            SynchronizationOptionsWith(AccountMapping("inbox", "Inbox")));
+            RosterOf(DocumentUser(
+                SyntheticMailUser.Deployment,
+                new UserSpamClassificationOptions { Enabled = true },
+                "primary",
+                AccountMapping("inbox", "Inbox"))));
 
         // Act
-        var beforeReload = reader.SettingsFor(SyntheticMailUser.Deployment);
+        var beforeReload = reader.ScopeInForce;
 
-        options.ReportReload(new SpamClassificationOptions { Enabled = true });
+        options.ReportReload(new SpamClassificationOptions { ClassificationWait = TimeSpan.FromHours(2) });
 
-        var afterReload = reader.SettingsFor(SyntheticMailUser.Deployment);
+        var afterReload = reader.ScopeInForce;
 
         // Assert
-        Assert.False(beforeReload.IsEnabled);
-        Assert.True(afterReload.IsEnabled);
+        Assert.Equal(
+            SpamClassificationScope.DefaultMaximumClassificationWait,
+            beforeReload.MaximumClassificationWait);
+        Assert.Equal(TimeSpan.FromHours(2), afterReload.MaximumClassificationWait);
     }
 
     /// <summary>Nobody is served a posture by default, so a user this deployment does not hold classifies nothing.</summary>
@@ -141,7 +148,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
     {
         // Arrange
         var reader = ReaderFor(
-            new SpamClassificationOptions { Enabled = true },
+            new UserSpamClassificationOptions { Enabled = true },
             AccountMapping("inbox", "Inbox"));
 
         // Act
@@ -156,7 +163,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
     public void SettingsFor_NoUser_Throws()
     {
         // Arrange
-        var reader = ReaderFor(new SpamClassificationOptions { Enabled = true }, AccountMapping("inbox", "Inbox"));
+        var reader = ReaderFor(new UserSpamClassificationOptions { Enabled = true }, AccountMapping("inbox", "Inbox"));
 
         // Act, Assert
         Assert.Throws<ArgumentException>(() => reader.SettingsFor(default));
@@ -284,29 +291,26 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
         Assert.Empty(scope.ClassifiedFolders);
     }
 
+    /// <summary>Builds a reader over one user whose own record carries the posture, which is the only place one lives.</summary>
     private static ConfiguredSpamClassificationSettingsReader ReaderFor(
-        SpamClassificationOptions options,
+        UserSpamClassificationOptions record,
+        params MailFolderMappingOptions[] folders) =>
+        ReaderFor(new SpamClassificationOptions(), record, folders);
+
+    /// <summary>Builds the same reader under a deployment section, which supplies the wait and nothing about whose mail is classified.</summary>
+    private static ConfiguredSpamClassificationSettingsReader ReaderFor(
+        SpamClassificationOptions deployment,
+        UserSpamClassificationOptions record,
         params MailFolderMappingOptions[] folders) =>
         new(
-            new TestOptionsMonitor<SpamClassificationOptions>(options),
-            SynchronizationOptionsWith(folders));
+            new TestOptionsMonitor<SpamClassificationOptions>(deployment),
+            RosterOf(DocumentUser(SyntheticMailUser.Deployment, record, "primary", folders)));
 
     private static MailFolderMappingOptions AccountMapping(string alias, string specialUse) => new()
     {
         Alias = alias,
         SpecialUse = specialUse,
     };
-
-    private static MailSynchronizationOptions SynchronizationOptionsWith(params MailFolderMappingOptions[] folders) =>
-        new MailSynchronizationOptions { Accounts = [Account("primary", folders)] }
-            .WithServedUsers(
-            [
-                new ServedMailUser(
-                    SyntheticMailUser.Deployment,
-                    "the deployment",
-                    MailUserAccountSource.DeploymentSection,
-                    []),
-            ]);
 
     private static MailSynchronizationOptions RosterOf(params ServedMailUser[] users) =>
         new MailSynchronizationOptions().WithServedUsers(users);
@@ -319,7 +323,6 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
         new(
             user,
             accountId,
-            MailUserAccountSource.UserDocument,
             [Account(accountId, folders)],
             classification);
 

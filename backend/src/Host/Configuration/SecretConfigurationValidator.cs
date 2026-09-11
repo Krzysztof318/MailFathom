@@ -244,6 +244,11 @@ internal sealed partial class SecretConfigurationValidator
 
     /// <summary>Finds everything an operator must fix before a mail synchronization snapshot can be used.</summary>
     /// <param name="candidate">The bound snapshot, which may be the startup one or a reloaded one.</param>
+    /// <remarks>
+    /// The mailboxes are not in this section and therefore not in this walk: they are each user's own record, and the
+    /// secrets and trust anchors they name are proven against the roster by the startup gate that establishes it.
+    /// What is left here is whatever secret-bearing value the deployment's own synchronization keys carry.
+    /// </remarks>
     /// <param name="cancellationToken">Cancels the resolution and the certificate loading.</param>
     /// <returns>One message per unusable setting, empty when the snapshot is usable.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidate" /> is <see langword="null" />.</exception>
@@ -253,15 +258,11 @@ internal sealed partial class SecretConfigurationValidator
     {
         ArgumentNullException.ThrowIfNull(candidate);
 
-        var errors = new List<string>(
-            await this.FindSecretReferenceErrorsAsync(MailSynchronizationConfigurationPath, candidate, null, cancellationToken));
-
-        errors.AddRange(await this.FindTrustAnchorErrorsAsync(
-            $"{MailSynchronizationConfigurationPath}:{nameof(MailSynchronizationOptions.Accounts)}",
-            candidate.Accounts,
-            cancellationToken));
-
-        return errors;
+        return await this.FindSecretReferenceErrorsAsync(
+            MailSynchronizationConfigurationPath,
+            candidate,
+            null,
+            cancellationToken);
     }
 
     /// <summary>Finds everything an operator must fix before one user's own mail accounts can be connected with.</summary>
@@ -272,10 +273,9 @@ internal sealed partial class SecretConfigurationValidator
     /// <exception cref="ArgumentException">Thrown when <paramref name="userConfigurationPath" /> is <see langword="null" />, empty, or white space.</exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="mailAccounts" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// A user's mailboxes are declared outside <c>MailSynchronization:Accounts</c> and therefore outside the graph
-    /// the mail check above walks, so without this they would start a host clean and fail per connection instead —
-    /// while the identical declaration in the deployment's own section fails the start. The whole user is put through
-    /// one walk rather than one per account, because a repeated secret name is a refusal within the section that
+    /// A user's mailboxes are a record rather than a configuration key, so no reading of the files walks them and
+    /// without this they would start a host clean and fail one connection at a time. The whole user is put through
+    /// one walk rather than one per account, because a repeated secret name is a refusal within the document that
     /// declares it and judging each account alone would stop seeing the repeat.
     /// </remarks>
     internal async Task<IReadOnlyList<string>> FindUserMailAccountErrorsAsync(

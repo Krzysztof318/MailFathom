@@ -8243,9 +8243,6 @@
           "readFromConfiguration": {
             "type": "boolean"
           },
-          "source": {
-            "type": "string"
-          },
           "user": {
             "format": "uuid",
             "type": "string"
@@ -8263,7 +8260,6 @@
           "user",
           "displayName",
           "version",
-          "source",
           "readFromConfiguration",
           "document"
         ],

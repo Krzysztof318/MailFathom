@@ -8,13 +8,10 @@ using MailFathom.Host.Configuration.UserSettings;
 
 namespace MailFathom.Host.Configuration.Mail.Readers;
 
-/// <summary>Publishes the accounts this deployment serves, each under the user the roster says it belongs to.</summary>
+/// <summary>Publishes the accounts this deployment serves, each under the user whose record declares it.</summary>
 /// <remarks>
-/// The user comes from the roster rather than from a declaration, because only one of the two places a mailbox is
-/// declared can say whose it is. A user's own section names them, so their accounts arrive with the user already
-/// attached; the deployment's own <c>MailSynchronization:Accounts</c> names nobody, so its accounts belong to the sole
-/// user such a deployment holds — which is a fact the start establishes against the database rather than one any file
-/// states.
+/// The user comes from the roster rather than from a declaration read off a file, because a mailbox is one user's
+/// record and the roster is what the start establishes against the database.
 /// </remarks>
 internal sealed class ConfiguredMailAccountCatalog(
     MailSynchronizationOptions settings,
@@ -26,7 +23,7 @@ internal sealed class ConfiguredMailAccountCatalog(
     /// <inheritdoc />
     /// <remarks>
     /// <para>
-    /// Configuration is what defines the set of accounts, so this answers from the same declarations every other
+    /// The users' records are what define the set of accounts, so this answers from the same declarations every other
     /// per-account reader does. It deliberately ignores <see cref="MailSynchronizationOptions.Enabled" />: that switch
     /// stops runs from fetching mail, and an operator who turned it off has not asked for the copy already stored to
     /// become unreadable. An account they removed is a different matter, and its absence here is what makes its stored
@@ -34,15 +31,15 @@ internal sealed class ConfiguredMailAccountCatalog(
     /// </para>
     /// <para>
     /// An account whose display name is missing or unusable is omitted rather than published under an invented one.
-    /// Startup validation refuses that configuration, so the omission is only reachable while a reload is being
-    /// rejected, and publishing an account under a name no operator chose is the one outcome worse than not publishing
-    /// it at all.
+    /// Both the record write and the startup gate refuse such a declaration, so the omission is only reachable while a
+    /// record is being rejected, and publishing an account under a name no operator chose is the one outcome worse
+    /// than not publishing it at all.
     /// </para>
     /// <para>
     /// The order is the ordinal order of the identifiers, across every user rather than within each, because a scope
     /// resolved from this set is the deployment's own and a continuation cursor issued for it has to stay valid while
-    /// the configuration does not change. Deduplication is by identifier for the same reason the lookup is: this
-    /// release bounds mail-account names across the users it serves.
+    /// the declarations do not change. Deduplication is by identifier for the same reason the lookup is keyed by one:
+    /// this release resolves an account's settings by its identifier alone across the users a deployment serves.
     /// </para>
     /// </remarks>
     public IReadOnlyList<ServedMailAccount> ServedAccounts =>
@@ -56,22 +53,6 @@ internal sealed class ConfiguredMailAccountCatalog(
     ];
 
     /// <summary>Pairs every declared mail account with the user it belongs to.</summary>
-    /// <remarks>
-    /// The deployment's own section is read for the users it can belong to, which is at most one: a deployment that
-    /// declares users has no sole user and its own section is refused as a place to declare a mailbox, so the two
-    /// halves are never both non-empty.
-    /// </remarks>
-    private IEnumerable<(MailUserId User, MailSynchronizationAccountOptions Account)> DeclaredAccounts()
-    {
-        var users = servedUsers.Users;
-
-        var deploymentAccounts = users
-            .Where(user => user.Source == MailUserAccountSource.DeploymentSection)
-            .SelectMany(user => (settings.Accounts ?? []).Select(account => (user.User, Account: account)));
-
-        var ownedAccounts = users
-            .SelectMany(user => user.MailAccounts.Select(account => (user.User, Account: account)));
-
-        return [.. deploymentAccounts, .. ownedAccounts];
-    }
+    private IEnumerable<(MailUserId User, MailSynchronizationAccountOptions Account)> DeclaredAccounts() =>
+        servedUsers.Users.SelectMany(user => user.MailAccounts.Select(account => (user.User, Account: account)));
 }

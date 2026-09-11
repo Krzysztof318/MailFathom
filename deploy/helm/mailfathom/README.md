@@ -66,7 +66,7 @@ secrets:
 config:
   files:
     10-mailfathom.json: |
-      { "MailSynchronization": { "Enabled": true, "Accounts": [ … ] } }
+      { "MailSynchronization": { "Enabled": true, "Interval": "00:05:00" } }
 ```
 
 [Deploying on Kubernetes](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html) carries the whole values document, both `kubectl create secret` commands, and what each key is for.

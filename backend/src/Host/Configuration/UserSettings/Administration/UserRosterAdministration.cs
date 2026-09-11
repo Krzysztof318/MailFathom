@@ -20,9 +20,10 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <para>
 /// Provisioning writes the envelope and then commits the empty record, which is two statements and one act. The second
 /// is what makes the user's mail accounts their own from the start, and it replaces nothing: no configuration source
-/// names a user, so there is no section for the record to be quietly superseding. The one user the deployment's own
-/// <c>MailSynchronization:Accounts</c> supplies stays served from it for as long as that section states anything,
-/// which is the refusal the record administration carries.
+/// names a user or declares a mailbox, so there is no section for the record to be quietly superseding. The refusal
+/// written for a user a source did supply is unreachable and stays until
+/// <see href="https://github.com/Krzysztof318/MailFathom/issues/1829">issue 1829</see> retires it with the marker it
+/// goes with.
 /// </para>
 /// <para>
 /// Every operation asks for its own permission with the transport absent, as every other permission-bearing use case in
@@ -173,8 +174,7 @@ internal sealed partial class UserRosterAdministration(
     /// <remarks>
     /// The label is what an administrator selects a user by and is keyed by nothing, so changing it moves no mail and
     /// invalidates no identifier — which is why this is the configuration grant rather than the erasing one. It reaches
-    /// every user this deployment holds, the one its own mail section belongs to included: a label lives on the row and
-    /// no configuration source states one.
+    /// every user this deployment holds: a label lives on the row and no configuration source states one.
     /// </remarks>
     internal async Task<UserRelabelOutcome> RelabelAsync(
         MailUserId user,
@@ -230,10 +230,10 @@ internal sealed partial class UserRosterAdministration(
     /// deployment the caller asked about rather than the roster the erasure left.
     /// </para>
     /// <para>
-    /// The user the deployment's own mail section belongs to is refused rather than erased. The next start records a
-    /// user for that section wherever it holds none, under an identifier it mints — so the erasure would run, the mail
-    /// would go, and the person would be recreated and their mailboxes downloaded again. A deletion request answered
-    /// that way is worse than one refused, so what comes back names the section to clear first.
+    /// A user a configuration source supplies is refused rather than erased — a refusal nothing reaches in this
+    /// release, no configuration source declaring a mailbox any longer, and one
+    /// <see href="https://github.com/Krzysztof318/MailFathom/issues/1829">issue 1829</see> retires with the marker it
+    /// reads.
     /// </para>
     /// </remarks>
     internal async Task<UserErasureOutcome> EraseAsync(MailUserId user, CancellationToken cancellationToken)
@@ -290,11 +290,12 @@ internal sealed partial class UserRosterAdministration(
 
     /// <summary>The sentence an erasure a start would undo is refused with.</summary>
     /// <remarks>
-    /// It names the section rather than the person, because what the operator has to act on is the file this
-    /// deployment reads its own mailboxes from.
+    /// It names the source rather than the person, because what the operator has to act on is whatever file still
+    /// supplies those mailboxes. Nothing reaches it in this release, no source declaring a mailbox any longer; it goes
+    /// with the marker <see href="https://github.com/Krzysztof318/MailFathom/issues/1829">issue 1829</see> retires.
     /// </remarks>
     private const string DeclaredElsewhere =
-        "This deployment's own MailSynchronization:Accounts supplies this user's mail accounts, and a start records a user for that section wherever it holds none — so erasing them here would destroy their mail and then recreate the person and download it again. Clear MailSynchronization:Accounts, and erase them once no configuration source reaches them.";
+        "A configuration source supplies this user's mail accounts, and a start records a user for it wherever it holds none — so erasing them here would destroy their mail and then recreate the person and download it again. Stop declaring them there, and erase them once no configuration source reaches them.";
 
     private static string LabelTaken(string label) =>
         $"Another user of this deployment is already recorded as '{label}'. A label is what an administrator selects a user by, so two users carrying one would leave nothing to select on: choose another.";

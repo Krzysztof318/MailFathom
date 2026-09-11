@@ -94,12 +94,8 @@ internal static class SynchronizationTestHost
     };
 
     /// <summary>Configures the accounts a run is scheduled from, on the defaults every bound the tests do not exercise takes.</summary>
-    internal static MailSynchronizationOptions CreateOptions(bool enabled, params MailSynchronizationAccountOptions[] accounts) => new()
-    {
-        Enabled = enabled,
-        Interval = TimeSpan.FromMinutes(5),
-        Accounts = [.. accounts],
-    };
+    internal static MailSynchronizationOptions CreateOptions(bool enabled, params MailSynchronizationAccountOptions[] accounts) =>
+        new MailSynchronizationOptions { Enabled = enabled, Interval = TimeSpan.FromMinutes(5) }.Serving(accounts);
 
     /// <summary>Configures the single account most tests need, named <c>primary</c>.</summary>
     internal static MailSynchronizationOptions CreateSingleAccountOptions(bool enabled, params string[] folders) =>
@@ -359,8 +355,8 @@ internal static class SynchronizationTestHost
         services.AddScoped<IRemotelyDeletedEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.RemotelyDeletedEmailDispositions);
         // Composed off the scoped snapshot rather than the container's own options, exactly as the composition root
         // composes it, so the account list a supervision pass reads is the one the latest reload published. The roster
-        // is supplied rather than configured, because a configured account block names no user.
-        services.AddSingleton(ResolvedServedMailUsers.TheSoleUser());
+        // is the one those options were published over, because a mailbox belongs to the user whose record holds it.
+        services.AddSingleton(ResolvedServedMailUsers.Serving([.. options.ServedUsers ?? []]));
         services.AddSingleton<IDeploymentMailUserSource>(provider => provider.GetRequiredService<ServedMailUsers>());
         services.AddScoped<IDeploymentMailAccountCatalog>(provider => new ConfiguredMailAccountCatalog(
             provider.GetRequiredService<MailSynchronizationOptions>(),
@@ -512,7 +508,7 @@ internal static class SynchronizationTestHost
         IReadOnlyCollection<string> unadvertisedAliases)
     {
         // A folder the supervisor itself cannot turn into a mapping is not one the modelled server can advertise either.
-        var pathsByAlias = options.Accounts
+        var pathsByAlias = options.DeclaredAccounts
             .SelectMany(account => account.EffectiveFolders)
             .Select(TryCreateMapping)
             .OfType<MailFolderMapping>()

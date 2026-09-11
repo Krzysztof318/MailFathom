@@ -16,7 +16,7 @@ public sealed class SettingRedactionTests
 {
     /// <summary>The last segment is the property name a setting binds to, and it is what announces a secret.</summary>
     [Theory]
-    [InlineData("MailSynchronization:Accounts:0:Secrets:Password:SecretReference")]
+    [InlineData("DataEncryption:Keys:0:Material:SecretReference")]
     [InlineData("Persistence:Password")]
     [InlineData("Ai:Providers:0:ApiKey")]
     public void Redacts_ASettingNamingASecret_ReportsTrue(string path) => Assert.True(SettingRedaction.Redacts(path));
@@ -43,8 +43,8 @@ public sealed class SettingRedactionTests
     /// </summary>
     [Theory]
     [InlineData("Ai:Providers:0:TokenEndpoint")]
-    [InlineData("MailSynchronization:Accounts:0:Secrets:Password:Name")]
-    [InlineData("MailSynchronization:Accounts:0:Secrets:Password:Lifetime")]
+    [InlineData("DataEncryption:Keys:0:Material:Name")]
+    [InlineData("DataEncryption:Keys:0:Material:Lifetime")]
     [InlineData("MailboxSearch:SnippetsPerEmail")]
     public void Redacts_ASettingHoldingNoSecret_ReportsFalse(string path) =>
         Assert.False(SettingRedaction.Redacts(path));

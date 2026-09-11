@@ -16,11 +16,11 @@
 // The database is configured by mailfathom.container through the environment block, which outranks this file, so it is
 // deliberately absent here.
 {
-  // Uncomment this block when an account below authenticates with OAuth rather than with a password, and uncomment the
-  // matching LoadCredentialEncrypted= line in mailfathom.container with it. MailFathom seals the refresh token that
+  // Uncomment this block when a recorded account authenticates with OAuth rather than with a password, and uncomment
+  // the matching LoadCredentialEncrypted= line in mailfathom.container with it. MailFathom seals the refresh token that
   // account's authorization server rotates, and the key it seals under is provisioned like any other credential. The
-  // mailbox configured below uses a password, so a deployment copied from this file seals nothing and needs no key at
-  // all: an absent section is a valid configuration rather than an omission, and MailFathom starts without one.
+  // mailbox this file's own comments show uses a password, so a deployment copied from it seals nothing and needs no
+  // key at all: an absent section is a valid configuration rather than an omission, and MailFathom starts without one.
   //
   // The material is base64 decoding to exactly 32 bytes — `openssl rand -base64 32`, never the `-base64 33` that
   // generates the database passwords. `KeyId` is written beside every value this key seals, so it is chosen once and
@@ -43,29 +43,48 @@
   //   ]
   // },
 
+  // The synchronization worker's own settings. The mailboxes are not among them: a deployment declares no mail account
+  // in its own configuration, because every account belongs to the user whose record holds it. So a deployment copied
+  // from this file starts holding nobody's mailbox, reports itself started, and serves the first one recorded against
+  // it without a restart:
+  //
+  //   mfctl user account add --from-file mailbox.json
+  //
+  // What goes in `mailbox.json` is the object this section used to carry, references and all — the credential stays a
+  // reference to material this deployment already holds, exactly as every reference in this file is:
+  //
+  //   {
+  //     "AccountId": "primary",
+  //     "DisplayName": "Personal mail",
+  //     "Host": "imap.example.test",
+  //     "Port": 993,
+  //     "UserName": "you@example.test",
+  //     "Secrets": {
+  //       "Password": {
+  //         "Name": "imap-primary-password",
+  //         "SecretReference": "systemd-credential:imap-primary-password"
+  //       }
+  //     },
+  //     "TransportSecurity": { "ConnectionSecurity": "TlsOnConnect" },
+  //     "Folders": [ { "Alias": "inbox", "SpecialUse": "Inbox" } ]
+  //   }
+  //
+  // `mfctl user add` records a second person, and `--user` then says whose mailbox is being declared. A file still
+  // carrying an `Accounts` collection here stops the start, naming those two commands.
   "MailSynchronization": {
     "Enabled": true,
-    "Interval": "00:05:00",
-    "Accounts": [
-      {
-        "AccountId": "primary",
-        "DisplayName": "Personal mail",
-        "Host": "imap.example.test",
-        "Port": 993,
-        "UserName": "you@example.test",
-        "Secrets": {
-          "Password": {
-            "Name": "imap-primary-password",
-            "SecretReference": "systemd-credential:imap-primary-password"
-          }
-        },
-        "TransportSecurity": {
-          "ConnectionSecurity": "TlsOnConnect"
-        },
-        "Folders": [
-          { "Alias": "inbox", "SpecialUse": "Inbox" }
-        ]
-      }
+    "Interval": "00:05:00"
+  },
+  // The administrative endpoint, which is how the mailbox above is recorded: `mfctl user account add` is a client of
+  // this surface, and nothing else writes a user's record. It is on for that reason rather than as an extra. Its own
+  // default port is 8080, which is the socket the MCP endpoint below is served on, so it states 8090 — the port
+  // mailfathom.container publishes for it, on loopback. The key is a systemd credential like every other one here,
+  // encrypted under the name `admin-api-key` and loaded by its own LoadCredentialEncrypted= line.
+  "AdminEndpoint": {
+    "Enabled": true,
+    "Port": 8090,
+    "Authentication": [
+      { "ApiKey": { "Name": "admin", "SecretReference": "systemd-credential:admin-api-key" } }
     ]
   },
   "McpEndpoint": {

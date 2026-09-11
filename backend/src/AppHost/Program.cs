@@ -365,64 +365,12 @@ if (runsIntegrationTests)
         // Stated here rather than left to appsettings.json, because the isolation above is a promise this app model
         // makes: a default edited elsewhere must not be able to turn the started host into a synchronizing one.
         .WithEnvironment("MailSynchronization__Enabled", "false")
-        // The one account this host serves, which is the account the suite stores its mail under. Configuration is what
-        // defines the served set, and it is read whether or not synchronization runs: an operator who switched
-        // synchronization off has not asked for the copy already stored to become unreadable. So this is what lets a
-        // tool call over the MCP endpoint answer from mail rather than from an empty scope. Nothing below reaches a
-        // server either — the reading endpoint is absent for that reason, and the delivery block further down is read
-        // for the address it declares rather than connected to.
-        .WithEnvironment(
-            "MailSynchronization__Accounts__0__AccountId",
-            OrchestrationContract.ServedMailAccountId)
-        // Required configuration, so the account carries it whether or not anything reads it back: a host missing it
-        // fails startup, and the topology would then be unreachable rather than merely unnamed.
-        .WithEnvironment(
-            "MailSynchronization__Accounts__0__DisplayName",
-            OrchestrationContract.ServedMailAccountDisplayName)
-        // The folder that account maps, which is what makes the mail stored in it readable through a tool. A readable
-        // scope is composed from mappings rather than from what the store holds, so an account with no folder answers a
-        // tool call with an empty window rather than with an unnarrowed one — and the remote path is stated because a
-        // mapping names a folder on a server, even under a host whose synchronization is switched off and which
-        // therefore never reaches one.
-        .WithEnvironment(
-            "MailSynchronization__Accounts__0__Folders__0__Alias",
-            OrchestrationContract.ComposedHostReadableFolderAlias)
-        .WithEnvironment(
-            "MailSynchronization__Accounts__0__Folders__0__RemotePath",
-            OrchestrationContract.ComposedHostReadableFolderAlias)
-        // The login the account is reached under, which the delivery block below authenticates as and which its
-        // validation requires. It is a mailbox address rather than a bare name, so the account states one identity
-        // whether a reader or a sender asks for it.
-        .WithEnvironment(
-            "MailSynchronization__Accounts__0__UserName",
-            OrchestrationContract.ComposedHostSendingAddress)
-        // The submission endpoint that makes this account able to send, which is what a tool queueing a reply or a
-        // forward is refused without. It names a host in the reserved testing domain rather than the orchestrated mail
-        // server: what a tool call produces is a durable record, and whether that record is then delivered is the
-        // outbox's own behaviour, proven against a real server by the delivery tests rather than through this host. So
-        // the delivery pass here finds a host that does not resolve, defers the send under its own bounded budget, and
-        // reaches no mail server at all. The port and the connection security are left at their defaults, which
-        // name implicit TLS on the submission port and therefore need no opt-in from the account's transport policy.
-        // Sending is off for every account until an operator turns it on, so a composed host that only declared a
-        // submission endpoint would refuse every sending tool with the coded refusal that says so — and, with no record
-        // ever written, would leave the tools over a queued send nothing to be asked about. Turning it on here is what
-        // makes those suites exercise the contract they are about rather than the switch in front of it.
-        .WithEnvironment("MailSynchronization__Accounts__0__Delivery__Enabled", "true")
-        .WithEnvironment(
-            "MailSynchronization__Accounts__0__Delivery__Host",
-            OrchestrationContract.ComposedHostSubmissionHost)
-        .WithEnvironment(
-            "MailSynchronization__Accounts__0__Delivery__FromAddress",
-            OrchestrationContract.ComposedHostSendingAddress)
-        // Required because a submission endpoint permitting a password mechanism is validated for one at startup, and
-        // spent by nothing: it is the mailbox password the ephemeral topology already declares, under the same
-        // restriction, for a server this host never opens a session with.
-        .WithEnvironment(
-            "MailSynchronization__Accounts__0__Delivery__Secrets__Password__Name",
-            OrchestrationContract.ComposedHostSubmissionPasswordName)
-        .WithEnvironment(
-            "MailSynchronization__Accounts__0__Delivery__Secrets__Password__SecretReference",
-            $"plaintext:{OrchestrationContract.MailServerAccountPassword}")
+        // No mailbox is configured here, because a deployment no longer reads one from its own file: every account it
+        // serves is one a user's record declares. The suite records the account it stores its mail under once the host
+        // is running, through the administrative surface below, which is what lets a tool call over the MCP endpoint
+        // answer from mail rather than from an empty scope. Recording it after the start is the point as much as the
+        // means: a deployment starts serving the one user a fresh database is seeded with and no mailbox, and a mailbox
+        // recorded at runtime is served without a restart.
         // The endpoint is served under the posture worth proving end to end — a credential is required, and the origins
         // are narrowed. Leaving the permissive origin default would let a suite pass while the check was never wired in.
         .WithEnvironment("McpEndpoint__Enabled", "true")
@@ -548,12 +496,10 @@ else
         mailFathomHost.WithEnvironment(setting.Key, setting.Value);
     }
 
+    // The three mailbox parameters configure nothing here. A deployment reads no mailbox from its own file any more,
+    // so what they compose is a record: the worker below declares the account in the served user's record once the host
+    // reports itself started, which is the same administrative surface an operator would have used.
     mailFathomHost
-        .WithEnvironment("MailSynchronization__Accounts__0__Host", mailAccountHost)
-        .WithEnvironment("MailSynchronization__Accounts__0__UserName", mailAccountUserName)
-        .WithEnvironment(
-            "MailSynchronization__Accounts__0__Secrets__Password__SecretReference",
-            ReferenceExpression.Create($"plaintext:{mailAccountPassword}"))
         // The MCP endpoint's own socket, stated to the app model and injected into the host's own configuration key, so
         // the number is written once rather than declared here and configured again beside it. Its scheme is tcp rather
         // than http, for the reason the probe endpoint's is: Aspire builds ASPNETCORE_URLS from the http and https
@@ -636,6 +582,9 @@ else
         provider.GetRequiredService<IHttpClientFactory>(),
         mailFathomHost.GetEndpoint("health"),
         mailFathomHost.GetEndpoint(OrchestrationContract.HostAdminEndpointName),
+        mailAccountHost.Resource,
+        mailAccountUserName.Resource,
+        mailAccountPassword.Resource,
         TimeProvider.System,
         provider.GetRequiredService<ILogger<DevelopmentCredentialProvisioningWorker>>()));
 

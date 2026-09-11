@@ -8,7 +8,6 @@ using MailFathom.Application.Configuration;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Administration;
-using MailFathom.Host.Configuration.Mail;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.References;
@@ -391,15 +390,14 @@ internal sealed class UserRecordAdministration(
             : await this.JudgeAndCommitAsync(user, opened.Record, candidate, UserRecordAuthority.User, cancellationToken);
     }
 
-    /// <summary>Reads one user's record, redacted, with the source their mail accounts come from beside it.</summary>
+    /// <summary>Reads one user's record, redacted.</summary>
     private async Task<UserRecordReading?> ReadAsync(MailUserId user, CancellationToken cancellationToken) =>
         await documents.ReadAsync(user, cancellationToken) is { } record
             ? new UserRecordReading(
                 user,
                 record.DisplayName,
                 SettingRedaction.ApplyToDocument(record.Json),
-                record.Version,
-                this.SourceOf(user))
+                record.Version)
             : null;
 
     /// <summary>Applies a saved record as the difference between what it says and what the row holds.</summary>
@@ -571,13 +569,13 @@ internal sealed class UserRecordAdministration(
             return null;
         }
 
-        if (this.SourceOf(user) != MailUserAccountSource.UserDocument)
+        if (configured.DeclaredByAConfigurationSource(user))
         {
             return new OpenedRecord(inForce, UserRecordWriteOutcome.Refused(
                 MailFathomErrorCode.UserRecordReadFromConfiguration,
                 inForce.Version,
                 [
-                    "This deployment's own MailSynchronization:Accounts supplies this user's mail accounts, so their record is empty and a change written into it would leave them served from less than that section supplies. Change them in that section; nothing moves what it states into a record.",
+                    "A configuration source supplies this user's mail accounts, so their record is empty and a change written into it would leave them served from less than that source supplies.",
                 ]));
         }
 
@@ -641,14 +639,6 @@ internal sealed class UserRecordAdministration(
 
         try
         {
-            if (this.FindNamesHeldByAnotherUser(user, bound.MailAccounts) is { Count: > 0 } taken)
-            {
-                return UserRecordWriteOutcome.Refused(
-                    MailFathomErrorCode.ConfigurationCandidateInvalid,
-                    inForce.Version,
-                    taken);
-            }
-
             if (await store.CommitAsync(user, candidateJson, inForce.Version, cancellationToken) is { } committed)
             {
                 servedUsers.UserDocumentPublished(user, inForce.DisplayName, bound, committed);
@@ -737,59 +727,6 @@ internal sealed class UserRecordAdministration(
 
     /// <summary>Reports whether a configuration path names a secret, which is decided by its last segment alone.</summary>
     private static bool NamesASecret(string path) => SecretPropertyNaming.NamesASecret(path.Split(':')[^1]);
-
-    /// <summary>Names every mail account of the candidate that another user this deployment serves already answers to.</summary>
-    /// <remarks>
-    /// <para>
-    /// The deployment-wide bound <c>ServedMailUsersStartupGate</c> holds over a roster, asked again at the write so
-    /// that the two cannot disagree: a mail account belongs to its user, but this release resolves its settings by its identifier
-    /// alone, so a name two users share would reach whichever of the two the lookup met first. It is asked of the
-    /// published runtime roster rather than of every record the deployment holds, because the roster is what those
-    /// lookups actually resolve through — and reading everybody's document per write would be a query about other
-    /// people's records on every change to one, which is the shape the reader beside this deliberately does not have.
-    /// </para>
-    /// <para>
-    /// Writes through this process are serialized from this check through publication, so each one sees the last one.
-    /// Two replicas can still commit conflicting user documents independently; <c>ServedMailUsersStartupGate</c>
-    /// holds the deployment-wide guarantee by composing every record together and refusing the next start.
-    /// </para>
-    /// </remarks>
-    private IReadOnlyList<string> FindNamesHeldByAnotherUser(
-        MailUserId user,
-        IReadOnlyList<MailSynchronizationAccountOptions> candidate)
-    {
-        var held = servedUsers.Users
-            .Where(served => served.User != user)
-            .SelectMany(served => served.Source == MailUserAccountSource.DeploymentSection
-                ? configured.DeclaredFor(served.User)
-                : served.MailAccounts)
-            .SelectMany(NamesOf)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var shared = candidate
-            .SelectMany(NamesOf)
-            .Where(held.Contains)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        return shared.Length == 0
-            ? []
-            :
-            [
-                $"Another user this deployment serves already names a mail account {string.Join(", ", shared)}. A mail account belongs to its user, but this release resolves an account's settings by its identifier alone, so a name two users share would reach whichever of the two the lookup met first. Choose a name no other user uses.",
-            ];
-    }
-
-    /// <summary>Names the strings one declaration makes a mail account answer to.</summary>
-    private static IEnumerable<string> NamesOf(MailSynchronizationAccountOptions account) => new[]
-        {
-            MailSynchronizationOptions.TryReadAccountId(account.AccountId),
-            string.IsNullOrWhiteSpace(account.DisplayName) ? null : account.DisplayName.Trim(),
-        }
-        .OfType<string>();
-
-    /// <summary>Reads where one user's mail accounts come from, which the roster answers for this gate and for the label's.</summary>
-    private MailUserAccountSource SourceOf(MailUserId user) => servedUsers.SourceFor(user);
 
     /// <summary>The path a refusal about a user's own record names, which is the record rather than a file.</summary>
     /// <remarks>The same word the startup gate uses for a user read from their own document, because an operator reading either one is being told there is no configuration key to go and correct.</remarks>

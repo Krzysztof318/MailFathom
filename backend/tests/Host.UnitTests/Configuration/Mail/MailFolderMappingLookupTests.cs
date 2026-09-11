@@ -5,10 +5,9 @@
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
-using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Mail;
@@ -165,43 +164,8 @@ public sealed class MailFolderMappingLookupTests
         Assert.NotNull(inbox);
     }
 
-    /// <summary>
-    /// A deployment serving users is refused a non-empty <c>MailSynchronization:Accounts</c>, so reading only that list
-    /// leaves every such folder with no mapping — which the client reads as an account labelling no archive and no
-    /// trash, and draws both acts disabled.
-    /// </summary>
-    [Fact]
-    public void FindFolderNamed_AnAccountDeclaredUnderAServedUser_AnswersWithTheRoleItWasConfiguredWith()
-    {
-        // Arrange
-        var options = UserDeclaring(CreateAccount(
-            new MailFolderMappingOptions { Alias = "inbox", SpecialUse = "Inbox" },
-            new MailFolderMappingOptions { Alias = "bin", RemotePath = "INBOX.Bin", SpecialUse = "Trash" }));
-
-        // Act
-        var named = options.Readers.FolderMappings.FindFolderNamed(Primary, MailFolderAlias.Create("bin"));
-        var playingRole = options.Readers.FolderMappings.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Trash);
-
-        // Assert
-        Assert.NotNull(named);
-        Assert.Equal(MailFolderSpecialUse.Trash, named.SpecialUse);
-        Assert.NotNull(playingRole);
-        Assert.Equal(MailFolderAlias.Create("bin"), playingRole.Alias);
-        Assert.Equal(2, options.Readers.FolderMappings.FoldersOf(Primary).Count);
-    }
-
     private static MailSynchronizationOptions OptionsFor(MailSynchronizationAccountOptions account) =>
-        new() { Accounts = [account] };
-
-    private static MailSynchronizationOptions UserDeclaring(MailSynchronizationAccountOptions account) =>
-        new MailSynchronizationOptions().WithServedUsers(
-        [
-            new ServedMailUser(
-                SyntheticMailUser.Deployment,
-                "the user this deployment serves",
-                MailUserAccountSource.UserDocument,
-                [account]),
-        ]);
+        new MailSynchronizationOptions().Serving(account);
 
     private static MailSynchronizationAccountOptions CreateAccount(params MailFolderMappingOptions[] folders) => new()
     {

@@ -66,13 +66,18 @@ matches it.
   that declined to match. It follows that a scoped rule cannot end another account's pass whatever `StopWhenMatched`
   says.
 
-An account is named exactly as `MailSynchronization:Accounts:<n>:AccountId` states it, and the comparison is
-case-sensitive, because two identifiers differing only in case are two accounts there. A deployment whose users all read
-their own records has no entries in that section at all — a start refuses a non-empty one nobody reads — and its
-mailboxes are named by the same key within each user's record, `MailAccounts:<m>:AccountId`; everything below holds of
-either. **An account nobody states is
-refused when the configuration is read**, naming the rule and the identifier: a rule scoped to a mistyped account would
-otherwise reach no mail and say nothing about why.
+An account is named exactly as `MailAccounts:<m>:AccountId` states it within the record of the user whose mailbox it is,
+and the comparison is case-sensitive, because two identifiers differing only in case are two accounts. **An account
+nobody records is refused by a configuration write and by a reload**, naming the rule and the identifier: a rule scoped
+to a mistyped account would otherwise reach no mail and say nothing about why. The judgement is made against the users
+this deployment serves rather than against a configuration key, so a rule naming a mailbox somebody records later is
+refused until they record it, and a reload that refuses keeps the rule set it last accepted.
+
+**A start reports it instead of refusing.** A mailbox can stop being recorded after the rule naming it was accepted —
+its user is erased, or their record stops declaring it — and a start refusing then could be undone only through the
+running host it refused. So a start logs a `Warning` for each rule that names a mailbox nobody records, or that
+reaches a mailbox which no longer maps its destination folder or permits its action, and the rule does nothing there
+until a record provides what it names or the rule is changed.
 
 The `account` fact stays available and is a different tool. The filter decides whether a rule runs; the fact lets one
 rule that does run say something about which account it is running for — `account == 'work' ? … : …` inside a condition
@@ -242,8 +247,8 @@ element whose value it cannot read — which would leave a rule quietly doing le
 **A rule that declares no action is not a defect.** It selects mail and changes nothing, which is what a rule ending the
 pass with `StopWhenMatched` does to keep the mail it names away from the rules below it.
 
-A destination is a **folder alias** — one an account states under `MailSynchronization:Accounts:<n>:Folders`, or
-under `MailAccounts:<m>:Folders` within the record whose mailbox it is — and never a path on the server. What that alias is bound to is resolved when the change is written down, so a rule goes on
+A destination is a **folder alias** — one an account states under `MailAccounts:<m>:Folders` within the record whose
+mailbox it is — and never a path on the server. What that alias is bound to is resolved when the change is written down, so a rule goes on
 working across a server that renames the folder underneath it, and a rule may name any folder the account maps —
 including one it deliberately does not mirror, which is how mail is filed somewhere MailFathom keeps no copy of.
 [Folder aliases and discovery](imap-synchronization.md#folder-aliases-and-discovery) states what a binding is
@@ -379,9 +384,8 @@ states the three answers.
 
 ### What an account permits a rule to do
 
-Each account states, under `MailSynchronization:Accounts:<n>:RuleActions` — or under
-`MailAccounts:<m>:RuleActions` within the record whose mailbox it is — which changes a rule may make to its
-mailbox:
+Each account states, under `MailAccounts:<m>:RuleActions` within the record whose mailbox it is, which changes a rule
+may make to its mailbox:
 
 | Key | Default | What it permits |
 | --- | --- | --- |
@@ -601,7 +605,10 @@ So is its `Actions` block, against the rule itself and against every account the
 Every defect in every rule is reported together, so a rule set with three mistakes is fixed once rather than three
 restarts running.
 
-**An invalid rule set fails startup**, because there is no previously valid set to fall back to.
+**An invalid rule set fails startup**, because there is no previously valid set to fall back to. What a rule claims
+about a mailbox is the exception: that an account it names is recorded, and that each account it reaches maps its
+destinations and permits its actions, are reported by a start rather than refused, for the reason
+[above](#which-accounts-a-rule-applies-to) gives. A configuration write and a reload still refuse them.
 
 ## Reload, and what a bad edit does
 
@@ -989,8 +996,8 @@ Taking a label off once the thing it stood for is over, and stating the whole se
 }
 ```
 
-Deleting mail nobody needs — which the account has to permit under
-`MailSynchronization:Accounts:<n>:RuleActions:Delete`, and which is refused at startup if it does not:
+Deleting mail nobody needs — which the account has to permit under `MailAccounts:<m>:RuleActions:Delete`, and which is
+refused at startup if it does not:
 
 ```json
 {

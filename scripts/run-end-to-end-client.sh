@@ -20,10 +20,11 @@ set -euo pipefail
 #   3. the database and the mail server, started from this repository's own app model
 #   4. the schema artifact applied to that database
 #   5. MailFathom published and started against both servers, serving the bundle from its client endpoint
-#   6. a client credential provisioned through the administrative API
-#   7. the corpus replayed into the mailbox over SMTP
-#   8. the account's synchronization run reporting no failed folder
-#   9. the end-to-end specs, in a real browser, against all of it
+#   6. the mailbox of the one user a fresh database holds, recorded through the administrative API
+#   7. a client credential provisioned through the same API
+#   8. the corpus replayed into the mailbox over SMTP
+#   9. the account's synchronization run reporting no failed folder
+#  10. the end-to-end specs, in a real browser, against all of it
 #
 # Everything it touches is fabricated and thrown away: the mailbox is a container, its mail is a corpus this repository
 # generated, and the credential exists for the length of one run. Nothing here reaches a real mailbox, and nothing it
@@ -281,10 +282,11 @@ dotnet publish backend/src/Host/Host.csproj \
 mkdir --parents "$host_directory/wwwroot"
 cp --recursive frontend/src/Client.App/dist/. "$host_directory/wwwroot"
 
-# The deployment's own configuration, and every value in it is one an operator writes. Three of them are opt-ins the
-# product refuses by default and this deployment states deliberately: the mail server beside it speaks no TLS, and the
-# page is served over a loopback socket in the clear. Stating them is the point rather than a shortcut — a deployment
-# that reaches a clear-text server has to say so, and this is what saying so looks like.
+# The deployment's own configuration, and every value in it is one an operator writes. Two of them are opt-ins the
+# product refuses by default and this deployment states deliberately: the page is served over a loopback socket in the
+# clear. Stating them is the point rather than a shortcut — a deployment that serves a page without TLS has to say so,
+# and this is what saying so looks like. The mailbox is not among them: a deployment declares no mail account in its own
+# file, so this one is recorded through the administrative API a few steps below, opt-ins and all.
 #
 # Started from the published directory, which is what the container does and what makes the web root resolve at all: the
 # host reads its content root from the process's working directory, so one started from the repository looks for the
@@ -296,16 +298,6 @@ env --chdir="$host_directory" \
   DataEncryption__Keys__0__Material__Name="$data_encryption_key_name" \
   DataEncryption__Keys__0__Material__SecretReference="plaintext:$data_encryption_key_material" \
   MailSynchronization__Enabled='true' \
-  MailSynchronization__Accounts__0__AccountId="$account_identifier" \
-  MailSynchronization__Accounts__0__DisplayName='End-to-end mailbox' \
-  MailSynchronization__Accounts__0__Host="$loopback" \
-  MailSynchronization__Accounts__0__Port="$imap_port" \
-  MailSynchronization__Accounts__0__UserName="$mailbox_login" \
-  MailSynchronization__Accounts__0__Secrets__Password__Name='end-to-end-mailbox-password' \
-  MailSynchronization__Accounts__0__Secrets__Password__SecretReference="plaintext:$mailbox_password" \
-  MailSynchronization__Accounts__0__TransportSecurity__ConnectionSecurity='None' \
-  MailSynchronization__Accounts__0__TransportSecurity__AllowInsecureConnection='true' \
-  MailSynchronization__Accounts__0__TransportSecurity__AllowClearTextAuthenticationOverUnencryptedConnection='true' \
   ClientEndpoint__Enabled='true' \
   ClientEndpoint__BindAddress="$loopback" \
   ClientEndpoint__Port="$client_endpoint_port" \
@@ -325,15 +317,74 @@ host_pid=$!
 
 wait_until 'MailFathom' 300 "$host_pid" curl --fail --silent "$health_origin/started"
 
-step 'provisioning the client credential'
+step 'recording the mailbox'
 
-# Through the administrative API rather than through the database, so the credential this run signs in with was created
-# by the same route an operator creates one — the same password policy, the same hashing, the same audit record.
+# The host started serving the one user a fresh database is seeded with, and no mailbox: no configuration source
+# declares one, because a mailbox is a row in that user's record, and it arrives here the way an operator writes it,
+# through the administrative API. That ordering is the point rather than a detour around a missing setting — the write
+# that commits the record publishes it to the running roster, so the mailbox is served without a restart.
 served_user="$(
   curl --fail --silent --header "Authorization: Bearer $admin_api_key" "$admin_origin/api/admin/users" \
     | jq --raw-output '[.users[] | select(.served)] | if length == 1 then .[0].id else ("expected one served user, found " + (length | tostring) | halt_error(1)) end'
 )"
 
+# The mailbox is a declaration in that user's record, written against the version the record stands at. The three
+# transport opt-ins are here rather than in the environment for one reason: the mail server beside this run speaks no
+# TLS, and a deployment reaching a clear-text server has to say so wherever the mailbox is declared.
+
+record_version="$(
+  curl --fail --silent --header "Authorization: Bearer $admin_api_key" \
+    "$admin_origin/api/admin/users/$served_user/record" \
+    | jq --raw-output '.version'
+)"
+
+# A refusal answers 200 with the reasons rather than a failing status, because every one of them is something the caller
+# composes the next attempt from. So the outcome is read rather than the status code.
+mailbox_declaration="$(
+  curl --fail --silent --show-error \
+    --header "Authorization: Bearer $admin_api_key" \
+    --header 'Content-Type: application/json' \
+    --data "$(
+      jq --null-input \
+        --argjson version "$record_version" \
+        --arg accountId "$account_identifier" \
+        --arg host "$loopback" \
+        --argjson port "$imap_port" \
+        --arg userName "$mailbox_login" \
+        --arg password "$mailbox_password" \
+        '{
+           version: $version,
+           account: ({
+             AccountId: $accountId,
+             DisplayName: "End-to-end mailbox",
+             Host: $host,
+             Port: $port,
+             UserName: $userName,
+             Secrets: {
+               Password: {
+                 Name: "end-to-end-mailbox-password",
+                 SecretReference: ("plaintext:" + $password)
+               }
+             },
+             TransportSecurity: {
+               ConnectionSecurity: "None",
+               AllowInsecureConnection: true,
+               AllowClearTextAuthenticationOverUnencryptedConnection: true
+             }
+           } | tojson)
+         }'
+    )" \
+    "$admin_origin/api/admin/users/$served_user/record/mail-accounts"
+)"
+
+printf '%s' "$mailbox_declaration" \
+  | jq --exit-status 'if .committed then true else (("the deployment refused the mailbox: " + (.messages | join(" "))) | halt_error(1)) end' \
+  > /dev/null
+
+step 'provisioning the client credential'
+
+# Through the administrative API rather than through the database, so the credential this run signs in with was created
+# by the same route an operator creates one — the same password policy, the same hashing, the same audit record.
 curl --fail --silent --show-error --output /dev/null \
   --header "Authorization: Bearer $admin_api_key" \
   --header 'Content-Type: application/json' \

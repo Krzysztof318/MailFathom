@@ -21,8 +21,8 @@ public sealed class SecretDeclarationTests
     {
         // Arrange
         var discovered = Discover(
-            ("MailSynchronization:Accounts:0:Secrets:Password", Named("primary-password")),
-            ("MailSynchronization:Accounts:1:Secrets:Password", Named("secondary-password")));
+            ("DataEncryption:Keys:0:Material", Named("primary-data-key")),
+            ("DataEncryption:Keys:1:Material", Named("secondary-data-key")));
 
         // Act
         var errors = discovered.FindDeclarationErrors();

@@ -9,12 +9,12 @@ using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Administration;
 using MailFathom.Host.Configuration.Provisioning;
 using MailFathom.Host.Configuration.RootSettings;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.CommandLine;
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.TestDoubles;
@@ -50,9 +50,6 @@ namespace MailFathom.Host.UnitTests.TestDoubles;
 /// </remarks>
 internal sealed class ComposedConfigurationDeployment : IDisposable
 {
-    /// <summary>The instant the candidate validators read, fixed because nothing here is about the passage of time.</summary>
-    private static readonly DateTimeOffset AnyInstant = new(2026, 8, 27, 12, 0, 0, TimeSpan.Zero);
-
     private const string DeploymentFileName = "10-deployment.json";
     private const string OperatorOverrideFileName = "secrets.json";
 
@@ -72,7 +69,7 @@ internal sealed class ComposedConfigurationDeployment : IDisposable
             row,
             row,
             new CandidateConfigurationComposer(configuration, layer),
-            new CandidateSettingsValidator(new FakeTimeProvider(AnyInstant), []),
+            new CandidateSettingsValidator([], new ServedMailUsers()),
             new RootSettingsReloader(layer.Provider, row, new RecordingLogger<RootSettingsReloader>()),
             new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
             new RecordingLogger<RootSettingsWriter>());

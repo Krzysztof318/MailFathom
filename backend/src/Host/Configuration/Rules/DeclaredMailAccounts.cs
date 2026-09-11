@@ -2,72 +2,41 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Rules.Actions;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
 
 namespace MailFathom.Host.Configuration.Rules;
 
-/// <summary>Reads the accounts a rule is judged against, from wherever the accounts are available.</summary>
+/// <summary>Reads the accounts a rule is judged against, out of the bound declarations that hold them.</summary>
 /// <remarks>
 /// <para>
-/// A rule's scope, its destination folders, and the actions it declares are all claims about another section, so judging
-/// them needs that section — and the two moments they are judged in reach it differently. Composition has configuration
-/// and no container, so it reads the keys; a reload has a container and the published synchronization snapshot, so it
-/// reads that. One type holds both, because what counts as a declared account has to be the same answer in both or a
-/// rule set startup accepted would be refused on the first reload that changed nothing.
+/// A rule's scope, its destination folders, and the actions it declares are all claims about somebody's mailboxes, so
+/// judging them needs those mailboxes — and every one of them is a user's own record rather than a configuration key.
+/// So both readings here start from bound declarations, which is what keeps a rule set the startup gate accepted one
+/// the first reload that changed nothing still accepts.
 /// </para>
 /// <para>
 /// Identifiers are trimmed and blanks are dropped, which is what <see cref="Domain.Accounts.MailAccountId" />
-/// does to the same text. A blank identifier is the synchronization section's own defect to report, and reporting it
-/// again here would name the wrong section.
+/// does to the same text. A blank identifier is the record's own defect to report, and reporting it again here would
+/// name the wrong document.
 /// </para>
 /// <para>
 /// A folder alias that is not a value this system issues is dropped for the same reason. Every mapped folder is read,
 /// including one the account does not mirror, because a mapping is the whole of what a destination needs: such a folder
-/// is resolved when a change first files into it rather than by a run of its own.
-/// </para>
-/// <para>
-/// Each folder is read with the role it plays beside its alias, because a rule may name its destination either way and
-/// judging the two against different readings of the same section is how a rule set startup accepted would be refused
-/// on a reload. A role this system does not support is read as no role at all: the synchronization section reports it
-/// against the key that wrote it, and naming it again here would blame the rule for somebody else's typo.
+/// is resolved when a change first files into it rather than by a run of its own. Each folder is read with the role it
+/// plays beside its alias, because a rule may name its destination either way.
 /// </para>
 /// </remarks>
 internal static class DeclaredMailAccounts
 {
-    /// <summary>Reads the declared accounts straight from configuration, before any binding has happened.</summary>
-    /// <param name="configuration">The configuration the host is composing itself from.</param>
-    /// <returns>The accounts, in the order they are declared.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
-    /// <remarks>
-    /// The deployment's own section is the only mailbox declaration a configuration source carries. Every other
-    /// mailbox is in its user's record, which no composition can reach: a rule whose scope names one of those is
-    /// judged at the moment the roster exists, through the overload below.
-    /// </remarks>
-    public static IReadOnlyCollection<DeclaredMailAccount> ReadFrom(IConfiguration configuration)
-    {
-        ArgumentNullException.ThrowIfNull(configuration);
-
-        return
-        [
-            .. configuration
-                .GetSection($"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Accounts)}")
-                .GetChildren()
-                .Select(ReadAccount)
-                .OfType<DeclaredMailAccount>(),
-        ];
-    }
-
     /// <summary>Reads the declared accounts from a bound synchronization configuration.</summary>
     /// <param name="settings">The synchronization configuration a reload published, or the one currently in force.</param>
     /// <returns>The accounts, in the order they are declared.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// The users' own declarations come off the roster the snapshot carries rather than out of a section, because
-    /// that is where a user's mailboxes are once the startup gate has resolved them — a user read from their own
-    /// document has no section at all. A reload runs behind that gate, so the roster is established by the time this
-    /// is asked.
+    /// The declarations come off the roster the snapshot carries rather than out of a section, because a user's
+    /// mailboxes are their own record and no configuration source states one. A reload runs behind the startup gate
+    /// that establishes the roster, so it is settled by the time this is asked.
     /// </remarks>
     public static IReadOnlyCollection<DeclaredMailAccount> ReadFrom(MailSynchronizationOptions settings)
     {
@@ -109,62 +78,6 @@ internal static class DeclaredMailAccounts
             .Select(folder => TryReadFolder(folder.Alias, folder.DeclaredRole))
             .OfType<DeclaredMailFolder>(),
     ];
-
-    /// <summary>Reads one account's keys, which is the shape available before anything has been bound.</summary>
-    /// <remarks>
-    /// No participation switch is read at all: none of the three decides anything about a destination, and reading one
-    /// here would refuse a rule for filing into a folder that is perfectly reachable. An account declaring no folder is
-    /// read as mapping the inbox, which is the mapping it is actually run with.
-    /// </remarks>
-    private static DeclaredMailAccount? ReadAccount(IConfigurationSection account)
-    {
-        var accountId = account[nameof(MailSynchronizationAccountOptions.AccountId)]?.Trim();
-
-        if (string.IsNullOrEmpty(accountId))
-        {
-            return null;
-        }
-
-        var folders = account
-            .GetSection(nameof(MailSynchronizationAccountOptions.Folders))
-            .GetChildren()
-            .ToArray();
-
-        var mappedFolders = folders.Length == 0
-            ? [TryReadFolder(nameof(MailFolderSpecialUse.Inbox), MailFolderSpecialUse.Inbox)]
-            : folders
-                .Select(folder => TryReadFolder(
-                    folder[nameof(MailFolderMappingOptions.Alias)],
-                    MailFolderMappingOptions.TryParseSpecialUse(folder[nameof(MailFolderMappingOptions.SpecialUse)], out var role)
-                        ? role
-                        : null))
-                .ToArray();
-
-        return new DeclaredMailAccount(
-            accountId,
-            [.. mappedFolders.OfType<DeclaredMailFolder>()],
-            ReadPermissions(account.GetSection(nameof(MailSynchronizationAccountOptions.RuleActions))));
-    }
-
-    /// <summary>Reads one account's rule-action permissions, with every key it did not write taking its default.</summary>
-    private static MailRuleActionPermissions ReadPermissions(IConfigurationSection ruleActions) =>
-        new(
-            !IsDeclaredFalse(ruleActions[nameof(MailRuleActionPermissionOptions.Move)]),
-            !IsDeclaredFalse(ruleActions[nameof(MailRuleActionPermissionOptions.Copy)]),
-            IsDeclaredTrue(ruleActions[nameof(MailRuleActionPermissionOptions.Delete)]),
-            !IsDeclaredFalse(ruleActions[nameof(MailRuleActionPermissionOptions.MarkAsRead)]),
-            !IsDeclaredFalse(ruleActions[nameof(MailRuleActionPermissionOptions.MarkAsFlagged)]),
-            !IsDeclaredFalse(ruleActions[nameof(MailRuleActionPermissionOptions.WriteKeywords)]));
-
-    /// <summary>Reads a switch an operator wrote, treating an unreadable value as unwritten.</summary>
-    /// <remarks>
-    /// The binder refuses a value that is neither, so a typo fails startup through the section's own validation rather
-    /// than through this reading. Both directions are answered from the written text so that the default of a key is
-    /// stated once, on the options type, and inherited here.
-    /// </remarks>
-    private static bool IsDeclaredFalse(string? value) => bool.TryParse(value, out var declared) && !declared;
-
-    private static bool IsDeclaredTrue(string? value) => bool.TryParse(value, out var declared) && declared;
 
     private static DeclaredMailFolder? TryReadFolder(string? alias, MailFolderSpecialUse? role) =>
         MailRuleActionOptions.TryReadAlias(alias, out var readAlias)

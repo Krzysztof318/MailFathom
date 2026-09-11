@@ -10,19 +10,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Users;
 
-/// <summary>Writes the envelope of a user a deployment declares, and nothing inside their document.</summary>
+/// <summary>Writes the envelope of a user an administrator records, and nothing inside their document.</summary>
 /// <remarks>
 /// <para>
 /// Both statements are single and conditional, which is what makes them safe against the race they actually meet: two
-/// replicas of one deployment start at the same moment and reconcile the same roster. An insert guarded by
-/// <c>ON CONFLICT</c> — over every unique constraint the row has rather than over the key alone — leaves the loser
-/// having written nothing rather than raising, and an update that names the label it is replacing writes no row when
-/// the label is already the one declared.
+/// administrators recording or relabelling users at the same moment. An insert guarded by <c>ON CONFLICT</c> — over
+/// every unique constraint the row has rather than over the key alone — leaves the loser having written nothing rather
+/// than raising, and an update guarded by the label's own index writes no row when the label is already theirs or is
+/// somebody else's.
 /// </para>
 /// <para>
-/// The document is provisioned as the empty object and is never written here. A user read from configuration is
-/// served from their declaration, so filling the column would stop the file reaching them — which is an administrative
-/// write rather than something a start does on their behalf.
+/// The document is provisioned as the empty object and is never written here. What a user's record holds is written by
+/// the record's own administrative write, which judges and versions it, rather than by the act that only names them.
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
@@ -41,9 +40,9 @@ internal sealed class PersistedMailUserProvisioning(MailFathomDbContext dbContex
         var provisionedAt = timeProvider.GetUtcNow();
 
         // The conflict clause names no target, so it covers the label's unique index as well as the primary key. Two
-        // replicas of a deployment holding no user at all each mint an identifier and provision it under the one
-        // label such a deployment uses, and a clause guarding the key alone would leave the loser raising the server's
-        // own unique-violation sentence out of its start. The read below is what turns the silence into an answer.
+        // administrators recording one label at once each mint an identifier and reach this insert, and a clause
+        // guarding the key alone would leave the loser raising the server's own unique-violation sentence instead of
+        // an answer. The read below is what turns the silence into one.
         await dbContext.Database.ExecuteSqlAsync(
             $"""
              INSERT INTO settings_accounts ("Id", "DisplayName", "Document", "Version", "CreatedAt", "UpdatedAt", "DocumentWrittenAtRuntime")

@@ -228,7 +228,7 @@ through, so nothing is queued and nothing waits for the mode to be turned off;
 [mail delivery](../features/mail-delivery.md#what-a-deployment-must-turn-on-before-it-can-send) states what a caller is
 told. What it reaches is sending, which is what leaves this installation for somebody else's mailbox; changes to a
 mailbox this deployment reads are governed by the account's own
-[rule action permissions](configuration-mail.md#one-account--mailsynchronizationaccountsn) and by the grant a caller holds.
+[rule action permissions](configuration-mail.md#one-account--a-mailbox-in-a-users-record) and by the grant a caller holds.
 
 
 ## `Jobs`

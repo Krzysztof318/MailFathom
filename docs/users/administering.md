@@ -639,18 +639,22 @@ people that account corresponds with as its mail is synchronized. Those records 
 about the whole thing, `mfctl contact delete-collected` erases everything it collected and keeps everything you entered
 — and switching collection off in configuration is the separate act that stops the book filling again.
 
-## Serving more than one person
+## The people this deployment serves
 
-A deployment that reads your own mail serves one person and needs nothing here: its `MailSynchronization:Accounts`
-supplies that person's mailboxes, and the row MailFathom keeps for them is recorded at the first start. When a second
-person is to be served — a household, a small team — `mfctl user` is where each of them is recorded and where what
-MailFathom reads for them is maintained. **Nothing is written into a file**: a user is recorded rather than declared,
-and there is no configuration section that names one.
+`mfctl user` is where every person this deployment serves is recorded and where what MailFathom reads for them is
+maintained — the one who reads their own mail on a deployment of their own, and each of a household or a small team
+alike. **Nothing is written into a file**: a user is recorded rather than declared, there is no configuration section
+that names one, and none that declares a mailbox either.
+
+A fresh deployment holds one user — the row its database is seeded with, labelled `user` until `mfctl user rename`
+changes it — and reads no mail until a mailbox is declared in their record. A deployment whose every user was erased
+starts and serves nobody, and says so at startup naming the commands that end it. A person recorded, and a mailbox
+declared, is served from that moment — no restart.
 
 ```console
 $ mfctl user list
 3f1d... (Alex)
-    mail accounts: this deployment's own MailSynchronization:Accounts, which is where they are changed
+    mail accounts: their own record, maintained with 'mfctl user account'
 7c02... (Sam)
     mail accounts: their own record, maintained with 'mfctl user account'
 
@@ -685,31 +689,23 @@ or restart.
 person may leave the MCP endpoint open, or hold it with a key, because there is only one answer to whose mail a caller
 is asking about. With two people there is no such answer, so give the MCP and client endpoints a username and password
 belonging to a person — `mfctl credential create` is that — or switch them off. The refusal says which of the two
-applies.
+applies. A deployment serving nobody is admissible on either surface for the same reason a deployment serving one is:
+there is no second person for an unauthenticated caller to be handed.
 
-**One person's mailboxes still come from your files, and nothing imports them.** That is the sole user
-`MailSynchronization:Accounts` belongs to — the section names nobody, so it can only be theirs — and they are read from
-it on every start, which is why changing their mailboxes with `mfctl user account` is refused: that section is where
-they are changed. Everyone else is read from their own record and reached by no configuration source at all.
-
-Moving that person into a record of their own is yours to perform rather than a command's. Clear
-`MailSynchronization:Accounts` — the whole section — restart so the next start stops serving them from it, then state
-their mailboxes with `mfctl user account add`, whose credentials are supplied afresh with each one. Whatever else that
-section decided about them is stated again the same way: the spam classification posture, and the
+**A deployment upgrading from a release that declared its own mailboxes does not start until the section is cleared.**
+`MailSynchronization:Accounts` is no longer read, and nothing imports what it declared, so a start that ignored it would
+leave you believing mail was being read that nothing was reading. The refusal names the section and the two commands
+that replace it: record the person with `mfctl user add`, state each of their mailboxes with `mfctl user account add`,
+credentials included, and remove the section. Whatever else that section decided about them is stated again the same
+way — the spam classification posture, and the
 [`SensitiveContent`](../features/sensitive-content-scanning.md) block if it stated one, both of which a record carries
-in blocks of its own. Nothing carries any of it across for you, and a person whose mailboxes still come from that
-section loses nothing by being left there.
+in blocks of its own.
 
 **Withdrawing a mailbox is not deleting mail, and removing a user is.** `mfctl user account remove` stops MailFathom
 synchronizing one mailbox without a restart and leaves everything already stored for it exactly where it is. A run
 already in flight drains against the document version it began with. `mfctl user remove` erases the person and every
 message, folder, attachment, and derived index the deployment holds for them; it shows what it is about to do and asks,
 and nothing puts it back.
-
-It refuses one person: the user `MailSynchronization:Accounts` supplies. A start records a user for that section
-wherever the deployment holds none, so the erasure would run, the mail would go, and a person would be recreated at the
-next restart with those mailboxes downloaded again. Clear the section first — and the refusal names it — then erase
-them once no configuration source reaches them.
 
 **A mailbox somebody declares from the client names a credential you provisioned for them.** A record carries a
 reference rather than a password, and a reference is a path into what the deployment can read, so a person declaring

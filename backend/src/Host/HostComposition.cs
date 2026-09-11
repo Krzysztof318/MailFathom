@@ -131,7 +131,7 @@ internal static class HostComposition
         AddPlatformDefaults(builder);
         AddPersistedConfiguration(builder);
         BoundSettings.AddTo(builder.Services, builder.Configuration);
-        RefuseTheWithdrawnUserCollection(builder);
+        RefuseTheWithdrawnUserAndMailboxSections(builder);
 
         AddSensitiveContentScanning(builder);
         var spamScannerIsConfigured = AddSpamClassification(builder);
@@ -154,17 +154,19 @@ internal static class HostComposition
         return AddNetworkSurfaces(builder);
     }
 
-    /// <summary>Refuses a configuration that still declares the users this deployment records.</summary>
+    /// <summary>Refuses a configuration that still declares the users or the mailboxes this deployment now records: the top-level user collection and the deployment mail section.</summary>
     /// <remarks>
     /// Judged first among the groups a start takes before its container exists, because who this deployment serves
-    /// decides what every other section is read for — and because a file carrying the withdrawn collection describes a
-    /// roster this host would not serve. Nothing here reaches the database: who is served is settled by the startup
-    /// gate that can read the rows.
+    /// decides what every other section is read for — and because a file carrying one of the withdrawn sections
+    /// describes a roster or a mailbox this host would not serve. It runs ahead of the options framework as well, so
+    /// that a section the strict binder no longer has a property for is answered by the sentence naming the commands
+    /// rather than by the binder's own report of an unknown key. Nothing here reaches the database: who is served is
+    /// settled by the startup gate that can read the rows.
     /// </remarks>
-    /// <exception cref="OptionsValidationException">Thrown when a configuration source still carries the withdrawn user collection.</exception>
-    private static void RefuseTheWithdrawnUserCollection(WebApplicationBuilder builder) =>
+    /// <exception cref="OptionsValidationException">Thrown when a configuration source still carries the withdrawn user collection or the withdrawn deployment mail section.</exception>
+    private static void RefuseTheWithdrawnUserAndMailboxSections(WebApplicationBuilder builder) =>
         ComposedSettings.RefuseFirstOf(
-            ComposedSettings.FindWithdrawnUserCollectionRefusals(builder.Configuration));
+            ComposedSettings.FindWithdrawnUserAndMailboxSectionRefusals(builder.Configuration));
 
     /// <summary>Registers the reading and writing sides of the deployment's persisted configuration, and the seam the layer is republished through.</summary>
     /// <remarks>
@@ -381,10 +383,18 @@ internal static class HostComposition
         // mail. A rule set that cannot be read is a startup failure, stated in ComposedSettings so that a configuration
         // write is refused by it as well, and one compiler serves composition, every reload, and every pass, because it
         // holds no state.
+        //
+        // What a rule claims about a mailbox is left unjudged here, because every mailbox is a user's own record and no
+        // reading of the files could tell a scope naming one that exists from a scope naming one that does not.
+        // ServedMailUsersStartupGate reports such a claim once it holds the roster; a reload and a configuration write
+        // refuse it.
         var mailRuleConditionCompiler = new NCalcMailRuleConditionCompiler();
 
         ComposedSettings.RefuseFirstOf(
-            ComposedSettings.FindMailRuleRefusals(builder.Configuration, mailRuleConditionCompiler));
+            ComposedSettings.FindMailRuleRefusals(
+                builder.Configuration,
+                mailRuleConditionCompiler,
+                declaredAccounts: null));
 
         builder.Services.AddSingleton<IMailRuleConditionCompiler>(mailRuleConditionCompiler);
         builder.Services.AddSingleton<MailRuleSetEvaluator>();
@@ -434,11 +444,10 @@ internal static class HostComposition
         // resolve is rejected and leaves the previous configuration active for new operations.
         builder.Services.AddSingleton<DatabaseConnectionSettingsMapper>();
         builder.Services.AddSingleton<SecretConfigurationValidator>();
-        builder.Services.AddSingleton<MailSettingsReloadValidator>();
         builder.Services.AddSingleton(provider => new ValidatedSettingsSnapshot<MailSynchronizationOptions>(
             provider.GetRequiredService<IOptionsMonitor<MailSynchronizationOptions>>(),
-            (candidate, cancellationToken) => provider.GetRequiredService<MailSettingsReloadValidator>()
-                .FindConfigurationErrorsAsync(candidate, cancellationToken),
+            (candidate, cancellationToken) => provider.GetRequiredService<SecretConfigurationValidator>()
+                .FindMailConfigurationErrorsAsync(candidate, cancellationToken),
             "MailSynchronization",
             provider.GetRequiredService<ILogger<ValidatedSettingsSnapshot<MailSynchronizationOptions>>>()));
         builder.Services.AddSingleton(provider => new ValidatedSettingsSnapshot<PersistenceOptions>(

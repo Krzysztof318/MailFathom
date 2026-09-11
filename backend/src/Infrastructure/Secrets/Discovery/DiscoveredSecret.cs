@@ -5,6 +5,6 @@
 namespace MailFathom.Infrastructure.Secrets.Discovery;
 
 /// <summary>One secret-bearing setting found in a bound options graph, with the configuration path that reached it.</summary>
-/// <param name="ConfigurationPath">The colon-separated path an operator edits, for example <c>MailSynchronization:Accounts:0:Secrets:Password</c>.</param>
+/// <param name="ConfigurationPath">The colon-separated path an operator edits, for example <c>Persistence:Password</c>.</param>
 /// <param name="Secret">The bound block. Discovery never reads its value, so nothing in the walk can reach a diagnostic.</param>
 public sealed record DiscoveredSecret(string ConfigurationPath, ConfiguredSecret Secret);

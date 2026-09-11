@@ -1724,10 +1724,9 @@ nothing resolves anybody by. A client reading the record alone would still have 
 why this is a route of its own rather than a key in that document.
 
 **The read says whether the write would be accepted, so the client never has to find out by trying.** `changeable` is
-false for somebody whose credential was not granted `mailfathom.mail.accounts.write`, and false for the sole user whose
-mail accounts this deployment's own `MailSynchronization:Accounts` supplies. It does not say which of the two: a client draws the same read-only
-field either way, and naming the grant a credential lacks would report a deployment's own entries back to a page
-holding a token.
+false for somebody whose credential was not granted `mailfathom.mail.accounts.write`. It reports the answer rather than
+the reason: a client draws the same read-only field however the write would be refused, and naming the grant a
+credential lacks would report a deployment's own decisions back to a page holding a token.
 
 **The person that section supplies is refused, and told who to ask.** Their record is the operator's rather than
 theirs — the deployment states their mailboxes and MailFathom keeps the row — so the name on it is the operator's to
