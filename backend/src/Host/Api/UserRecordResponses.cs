@@ -25,21 +25,11 @@ internal sealed record UserRosterResponse(IReadOnlyList<UserRosterEntryResponse>
 /// <summary>One user this deployment holds.</summary>
 /// <param name="Id">The identifier the user was minted under, which every other act names them by.</param>
 /// <param name="DisplayName">The label an administrator tells them apart by, which may change and is never the identity.</param>
-/// <param name="RecordIsTheirOwn">Whether this user's mail accounts come from their own record rather than from a configuration source.</param>
-/// <param name="Served">Whether the running process is serving them, which every user it holds is.</param>
-/// <param name="DeclaredInConfiguration">Whether the deployment's own mail section supplies this user's mailboxes, so an erasure of them is refused rather than performed.</param>
-/// <remarks>
-/// The last three are reported apart because they answer different questions and an operator acts on each differently.
-/// A user whose record is not yet their own is one whose mail accounts are changed in the deployment's own section
-/// rather than in their record; a user the process is not serving is one whose mail is neither read nor refreshed;
-/// a user that section supplies is one whose erasure is refused until the section naming their mailboxes is cleared.
-/// </remarks>
+/// <param name="Served">Whether the running process is serving them, which every user it holds is; a user it is not serving is one whose mail is neither read nor refreshed.</param>
 internal sealed record UserRosterEntryResponse(
     Guid Id,
     string DisplayName,
-    bool RecordIsTheirOwn,
-    bool Served,
-    bool DeclaredInConfiguration)
+    bool Served)
 {
     /// <summary>Describes one user.</summary>
     /// <param name="entry">The user as the roster reported them.</param>
@@ -49,12 +39,7 @@ internal sealed record UserRosterEntryResponse(
     {
         ArgumentNullException.ThrowIfNull(entry);
 
-        return new UserRosterEntryResponse(
-            entry.User.Value,
-            entry.DisplayName,
-            entry.RecordIsTheirOwn,
-            entry.Served,
-            entry.DeclaredInConfiguration);
+        return new UserRosterEntryResponse(entry.User.Value, entry.DisplayName, entry.Served);
     }
 }
 
@@ -82,13 +67,11 @@ internal sealed record UserErasureResponse(bool Erased, bool WasServed);
 /// <param name="User">The user the record belongs to.</param>
 /// <param name="DisplayName">The label the user is recorded under.</param>
 /// <param name="Version">The version the record was read at, which the commit that follows is accepted against.</param>
-/// <param name="ReadFromConfiguration">Whether a configuration source still supplies this user's mail accounts, which is what would make every write into the record refused.</param>
 /// <param name="Document">The record, with every secret-bearing value replaced by the redaction marker.</param>
 internal sealed record UserRecordResponse(
     Guid User,
     string DisplayName,
     long Version,
-    bool ReadFromConfiguration,
     string Document)
 {
     /// <summary>Describes a record reading.</summary>
@@ -103,7 +86,6 @@ internal sealed record UserRecordResponse(
             record.User.Value,
             record.DisplayName,
             record.Version,
-            record.ReadFromConfiguration,
             record.Json);
     }
 }

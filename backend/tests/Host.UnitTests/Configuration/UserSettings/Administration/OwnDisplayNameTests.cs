@@ -4,7 +4,6 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
-using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Configuration.UserSettings.Administration;
 using MailFathom.TestSupport;
 using NSubstitute;
@@ -243,8 +242,7 @@ public sealed class OwnDisplayNameTests
             this.Names = new OwnDisplayName(
                 AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment, granted),
                 this.Directory,
-                this.Provisioning,
-                new ConfiguredUserSettings());
+                this.Provisioning);
         }
 
         internal OwnDisplayName Names { get; }
@@ -257,6 +255,6 @@ public sealed class OwnDisplayNameTests
         internal void Recording(string displayName) =>
             this.Directory
                 .ReadUserAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>())
-                .Returns(new MailUserRecord(SyntheticMailUser.Deployment, displayName, DocumentWrittenAtRuntime: true));
+                .Returns(new MailUserRecord(SyntheticMailUser.Deployment, displayName));
     }
 }

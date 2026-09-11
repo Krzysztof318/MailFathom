@@ -24,9 +24,7 @@ namespace MailFathom.Application.Accounts;
 /// <para>
 /// The user is here so that a write which has resolved an account has already resolved whose it is. Every row that
 /// references an account carries the user beside it, and a store filling that column from this record is filling it
-/// from the resolution it already performed rather than from a second read of the account table. While accounts are
-/// declared in configuration the value is the deployment's one user; when they become rows it comes off the account
-/// row, and this is the one place that changes.
+/// from the resolution it already performed rather than from a second read of the account table.
 /// </para>
 /// <para>
 /// The mode states the operator's request rather than what a folder actually got. Whether push is served is decided per

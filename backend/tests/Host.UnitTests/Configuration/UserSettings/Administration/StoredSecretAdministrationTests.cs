@@ -27,7 +27,7 @@ public sealed class StoredSecretAdministrationTests
             new Guid("019925df-96f4-7c6d-8f91-b9f6cf27f5b2"));
         var users = Substitute.For<IUserSettingsDocumentReader>();
         users.ReadAsync(user, Arg.Any<CancellationToken>()).Returns(
-            new UserSettingsDocument(user, "user", "{}", 1, WrittenAtRuntime: true));
+            new UserSettingsDocument(user, "user", "{}", 1));
         var store = Substitute.For<IStoredSecretStore>();
         store.CanStore.Returns(true);
         store.StoreAsync(

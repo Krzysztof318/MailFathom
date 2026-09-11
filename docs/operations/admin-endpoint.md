@@ -1249,8 +1249,7 @@ an account set this deployment briefly read. The editing session is one change i
 version, opened in `$VISUAL` or `$EDITOR`, and committed against that version. An emptied buffer abandons the session
 and a buffer saved unchanged writes nothing, both reported as what they are rather than as a failure; a graphical editor
 needs the flag that makes it wait, such as `VISUAL="code --wait"`, because the command reads the file back when the
-editor exits. A record a configuration source still supplies is refused before the editor opens rather than after the
-commit, naming the adoption below.
+editor exits.
 
 **A record is committed whole or not at all, over the version it was read at.** A candidate is bound strictly against
 the same rules a configuration file is, checked for two mail accounts declared under one identifier, checked that every

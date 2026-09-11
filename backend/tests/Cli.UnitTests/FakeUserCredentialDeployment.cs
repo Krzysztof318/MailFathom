@@ -167,9 +167,9 @@ internal static class FakeUserCredentialDeployment
 
     private static string Written(string? value) => value is null ? "null" : $"\"{value}\"";
 
-    /// <summary>States one user the way the roster route publishes them, with the label and the two states beside the identifier.</summary>
+    /// <summary>States one user the way the roster route publishes them, with the label and whether they are served beside the identifier.</summary>
     private static string Roster(Guid user) =>
-        $$"""{"id":"{{user:D}}","displayName":"user-{{user:D}}","recordIsTheirOwn":true,"served":true}""";
+        $$"""{"id":"{{user:D}}","displayName":"user-{{user:D}}","served":true}""";
 
     private static HttpResponseMessage Written(HttpStatusCode status, string detail, string body) =>
         status == HttpStatusCode.OK

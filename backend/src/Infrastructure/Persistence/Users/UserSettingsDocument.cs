@@ -11,7 +11,6 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// <param name="DisplayName">The label the deployment tells this user apart by, which nothing resolves them by.</param>
 /// <param name="Json">The user's configurable record, as the JSON object the row holds.</param>
 /// <param name="Version">The version the document was read at, which a writer states and is refused against.</param>
-/// <param name="WrittenAtRuntime">Whether anything has written the document, which is what tells an unfilled row from an emptied one.</param>
 /// <remarks>
 /// The envelope travels with the document because the two answer different halves of one question and a caller that
 /// read one would immediately ask for the other: the document says what this user configured, and the version beside
@@ -22,8 +21,7 @@ public sealed record UserSettingsDocument(
     MailUserId User,
     string DisplayName,
     string Json,
-    long Version,
-    bool WrittenAtRuntime)
+    long Version)
 {
     /// <summary>The largest user document this build binds, and therefore the largest one it will persist.</summary>
     /// <remarks>

@@ -8240,9 +8240,6 @@
           "document": {
             "type": "string"
           },
-          "readFromConfiguration": {
-            "type": "boolean"
-          },
           "user": {
             "format": "uuid",
             "type": "string"
@@ -8260,7 +8257,6 @@
           "user",
           "displayName",
           "version",
-          "readFromConfiguration",
           "document"
         ],
         "type": "object"
@@ -8341,18 +8337,12 @@
       },
       "UserRosterEntryResponse": {
         "properties": {
-          "declaredInConfiguration": {
-            "type": "boolean"
-          },
           "displayName": {
             "type": "string"
           },
           "id": {
             "format": "uuid",
             "type": "string"
-          },
-          "recordIsTheirOwn": {
-            "type": "boolean"
           },
           "served": {
             "type": "boolean"
@@ -8361,9 +8351,7 @@
         "required": [
           "id",
           "displayName",
-          "recordIsTheirOwn",
-          "served",
-          "declaredInConfiguration"
+          "served"
         ],
         "type": "object"
       },

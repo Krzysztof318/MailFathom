@@ -14,8 +14,7 @@ namespace MailFathom.Cli.UnitTests;
 /// <remarks>
 /// Every user command settles which user it acts for before doing anything else, so the roster is answered by every
 /// shape here rather than only by the tests about it. What each shape varies is the one thing the command under test
-/// reads: where the user's mail accounts come from, what a write answers with, and whether the deployment holds the
-/// user at all.
+/// reads: the record, what a write answers with, and whether the deployment holds the user at all.
 /// </remarks>
 internal static class FakeUserRecordDeployment
 {
@@ -25,11 +24,11 @@ internal static class FakeUserRecordDeployment
     /// <summary>The record a deployment answers with where a suite says nothing about one.</summary>
     private const string EmptyRecord = "{}";
 
-    /// <summary>Builds a deployment whose users read their mail accounts from their own records.</summary>
+    /// <summary>Builds a deployment holding the users stated, each with an empty record.</summary>
     /// <param name="users">The users the roster reports, in the order it serves them.</param>
     /// <returns>The deployment.</returns>
     internal static FakeHttpMessageHandler Holding(params Guid[] users) =>
-        Answering(users, readFromConfiguration: false, WriteCommitted, records: [EmptyRecord]);
+        Answering(users, WriteCommitted, records: [EmptyRecord]);
 
     /// <summary>Builds a deployment whose one user's record is the document stated.</summary>
     /// <param name="user">The user the roster reports.</param>
@@ -40,13 +39,7 @@ internal static class FakeUserRecordDeployment
     /// over the first, and the reading that reports what moved meets the next.
     /// </remarks>
     internal static FakeHttpMessageHandler HoldingRecords(Guid user, params string[] records) =>
-        Answering([user], readFromConfiguration: false, WriteCommitted, records);
-
-    /// <summary>Builds a deployment one of whose users is still supplied by a configuration source.</summary>
-    /// <param name="user">The user the configuration supplies.</param>
-    /// <returns>The deployment.</returns>
-    internal static FakeHttpMessageHandler SupplyingFromConfiguration(Guid user) =>
-        Answering([user], readFromConfiguration: true, WriteCommitted, records: [EmptyRecord]);
+        Answering([user], WriteCommitted, records);
 
     /// <summary>Builds a deployment that refuses every write to a record, with the code and the sentence it names.</summary>
     /// <param name="user">The user the roster reports.</param>
@@ -61,7 +54,6 @@ internal static class FakeUserRecordDeployment
         params string[] records) =>
         Answering(
             [user],
-            readFromConfiguration: false,
             string.Create(
                 CultureInfo.InvariantCulture,
                 $$"""{"committed":false,"version":{{RecordVersion}},"code":{{code}},"messages":["{{message}}"]}"""),
@@ -70,7 +62,7 @@ internal static class FakeUserRecordDeployment
     /// <summary>Builds a deployment holding no user at all.</summary>
     /// <returns>The deployment.</returns>
     internal static FakeHttpMessageHandler HoldingNobody() =>
-        Answering([], readFromConfiguration: false, WriteCommitted, records: [EmptyRecord]);
+        Answering([], WriteCommitted, records: [EmptyRecord]);
 
     /// <summary>Reports the requests the command sent to one path under one method.</summary>
     /// <param name="deployment">The deployment the command was pointed at.</param>
@@ -100,7 +92,6 @@ internal static class FakeUserRecordDeployment
     /// <remarks>The count of record reads is the deployment's own rather than a parameter, so a suite arranging several records states them and nothing else.</remarks>
     private static FakeHttpMessageHandler Answering(
         IReadOnlyList<Guid> users,
-        bool readFromConfiguration,
         string writeAnswer,
         string[] records)
     {
@@ -110,14 +101,12 @@ internal static class FakeUserRecordDeployment
         // reading of the record meets rather than whatever the command happened to ask for next.
         string NextRecord() => records[Math.Min(reads++, records.Length - 1)];
 
-        return new((request, _) => Task.FromResult(
-            Answer(request, users, readFromConfiguration, writeAnswer, NextRecord)));
+        return new((request, _) => Task.FromResult(Answer(request, users, writeAnswer, NextRecord)));
     }
 
     private static HttpResponseMessage Answer(
         HttpRequestMessage request,
         IReadOnlyList<Guid> users,
-        bool readFromConfiguration,
         string writeAnswer,
         Func<string> nextRecord)
     {
@@ -128,7 +117,7 @@ internal static class FakeUserRecordDeployment
             return request.Method == HttpMethod.Get
                 ? FakeAdminEndpoint.Json(
                     HttpStatusCode.OK,
-                    $$"""{"users":[{{string.Join(',', users.Select(user => Roster(user, readFromConfiguration)))}}]}""")
+                    $$"""{"users":[{{string.Join(',', users.Select(Roster))}}]}""")
                 : FakeAdminEndpoint.Json(
                     HttpStatusCode.OK,
                     $$"""{"id":"{{ProvisionedUser:D}}"}""");
@@ -153,7 +142,7 @@ internal static class FakeUserRecordDeployment
         if (path.EndsWith("/record", StringComparison.Ordinal))
         {
             return request.Method == HttpMethod.Get
-                ? FakeAdminEndpoint.Json(HttpStatusCode.OK, Record(users, readFromConfiguration, nextRecord()))
+                ? FakeAdminEndpoint.Json(HttpStatusCode.OK, Record(users, nextRecord()))
                 : FakeAdminEndpoint.Json(HttpStatusCode.OK, writeAnswer);
         }
 
@@ -164,17 +153,13 @@ internal static class FakeUserRecordDeployment
     /// <summary>The identifier a provisioning reports, which is the one thing a script cannot reconstruct from what it typed.</summary>
     private static Guid ProvisionedUser { get; } = new("55555555-5555-5555-5555-555555555555");
 
-    private static string Roster(Guid user, bool readFromConfiguration) => string.Create(
-        CultureInfo.InvariantCulture,
-        $$"""{"id":"{{user:D}}","displayName":"user-{{user:D}}","recordIsTheirOwn":{{Flag(!readFromConfiguration)}},"declaredInConfiguration":{{Flag(readFromConfiguration)}},"served":true}""");
+    private static string Roster(Guid user) =>
+        $$"""{"id":"{{user:D}}","displayName":"user-{{user:D}}","served":true}""";
 
-    private static string Record(IReadOnlyList<Guid> users, bool readFromConfiguration, string document) => string.Create(
+    private static string Record(IReadOnlyList<Guid> users, string document) => string.Create(
         CultureInfo.InvariantCulture,
         $$"""
           {"user":"{{(users.Count > 0 ? users[0] : Guid.Empty):D}}","displayName":"user-{{(users.Count > 0 ? users[0] : Guid.Empty):D}}",
-          "version":{{RecordVersion}},"source":"{{(readFromConfiguration ? "DeploymentSection" : "UserDocument")}}",
-          "readFromConfiguration":{{Flag(readFromConfiguration)}},"document":{{JsonSerializer.Serialize(document)}}}
+          "version":{{RecordVersion}},"document":{{JsonSerializer.Serialize(document)}}}
           """);
-
-    private static string Flag(bool value) => value ? "true" : "false";
 }

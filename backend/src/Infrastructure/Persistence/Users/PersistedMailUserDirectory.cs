@@ -38,18 +38,11 @@ internal sealed class PersistedMailUserDirectory(MailFathomDbContext dbContext) 
             {
                 user.Id,
                 user.DisplayName,
-                user.DocumentWrittenAtRuntime,
             })
             .Take(limit)
             .ToArrayAsync(cancellationToken);
 
-        return
-        [
-            .. users.Select(user => new MailUserRecord(
-                MailUserId.Create(user.Id),
-                user.DisplayName,
-                user.DocumentWrittenAtRuntime)),
-        ];
+        return [.. users.Select(user => new MailUserRecord(MailUserId.Create(user.Id), user.DisplayName))];
     }
 
     /// <inheritdoc />
@@ -64,18 +57,12 @@ internal sealed class PersistedMailUserDirectory(MailFathomDbContext dbContext) 
 
         // The same projection the roster read makes, on the primary key: the document beside the envelope is the
         // user's own record and nothing asking what this deployment records about a person materializes one.
-        var held = await dbContext.UserAccounts
+        var displayName = await dbContext.UserAccounts
             .AsNoTracking()
             .Where(record => record.Id == userId)
-            .Select(record => new
-            {
-                record.DisplayName,
-                record.DocumentWrittenAtRuntime,
-            })
+            .Select(record => record.DisplayName)
             .SingleOrDefaultAsync(cancellationToken);
 
-        return held is null
-            ? null
-            : new MailUserRecord(user, held.DisplayName, held.DocumentWrittenAtRuntime);
+        return displayName is null ? null : new MailUserRecord(user, displayName);
     }
 }

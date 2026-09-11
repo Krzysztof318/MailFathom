@@ -9,18 +9,11 @@ namespace MailFathom.Application.Access;
 /// <summary>The relational envelope of one user this deployment holds a record for.</summary>
 /// <param name="User">The identity every mail account and every stored message of theirs hangs on.</param>
 /// <param name="DisplayName">The label an operator tells this user apart by, which is unique across the deployment.</param>
-/// <param name="DocumentWrittenAtRuntime">Whether anything has written this user's document while the deployment was running.</param>
 /// <remarks>
-/// The document itself is deliberately absent. What a start decides about a user — whether they are served, which
-/// source supplies their mail accounts, and whether a declaration may still reach them — is decided from the envelope
-/// alone, so establishing the roster never materializes one person's record, let alone everybody's.
-/// <para>
-/// The marker is what tells a user whose document is empty because nothing has filled it from one whose user emptied
-/// it on purpose. The first is read from configuration and the second from their own document, and the two are
-/// indistinguishable in the column beside it.
-/// </para>
+/// The document itself is deliberately absent. Who this deployment holds is decided from the envelope alone, so
+/// establishing the roster never materializes one person's record, let alone everybody's.
 /// </remarks>
-public sealed record MailUserRecord(MailUserId User, string DisplayName, bool DocumentWrittenAtRuntime)
+public sealed record MailUserRecord(MailUserId User, string DisplayName)
 {
     /// <summary>The longest label a user is told apart by.</summary>
     /// <remarks>

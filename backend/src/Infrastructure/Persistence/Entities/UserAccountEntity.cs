@@ -65,14 +65,4 @@ internal sealed class UserAccountEntity
 
     /// <summary>When the document last changed, which is the provisioning instant until one does.</summary>
     public DateTimeOffset UpdatedAt { get; set; }
-
-    /// <summary>Whether anything has written this user's document while the deployment was running.</summary>
-    /// <remarks>
-    /// A user a deployment declares in configuration carries the envelope alone, so the mail graph's foreign key
-    /// resolves while the document column stays the empty object it was provisioned with. A user whose document was
-    /// written and then emptied carries the same octets and is not the same fact: the first is a row waiting for the
-    /// import that fills it, the second a record its user emptied on purpose. This is what tells the two apart, so
-    /// nothing has to read a deployment's files to find out which of them a row is.
-    /// </remarks>
-    public bool DocumentWrittenAtRuntime { get; set; }
 }

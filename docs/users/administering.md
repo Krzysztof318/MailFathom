@@ -654,9 +654,7 @@ declared, is served from that moment — no restart.
 ```console
 $ mfctl user list
 3f1d... (Alex)
-    mail accounts: their own record, maintained with 'mfctl user account'
 7c02... (Sam)
-    mail accounts: their own record, maintained with 'mfctl user account'
 
 $ mfctl user add --display-name Morgan
 Recorded Morgan as 9b41....

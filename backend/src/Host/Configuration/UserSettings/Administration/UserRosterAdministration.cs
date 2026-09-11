@@ -19,11 +19,8 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// </para>
 /// <para>
 /// Provisioning writes the envelope and then commits the empty record, which is two statements and one act. The second
-/// is what makes the user's mail accounts their own from the start, and it replaces nothing: no configuration source
-/// names a user or declares a mailbox, so there is no section for the record to be quietly superseding. The refusal
-/// written for a user a source did supply is unreachable and stays until
-/// <see href="https://github.com/Krzysztof318/MailFathom/issues/1829">issue 1829</see> retires it with the marker it
-/// goes with.
+/// is what proves the row still stands once the first has run, and it yields the version the record this process
+/// publishes for the user is composed over.
 /// </para>
 /// <para>
 /// Every operation asks for its own permission with the transport absent, as every other permission-bearing use case in
@@ -44,7 +41,6 @@ internal sealed partial class UserRosterAdministration(
     IUserSettingsDocumentWriter documents,
     ServedMailUsers servedUsers,
     SeveralUserAdmission admission,
-    ConfiguredUserSettings configured,
     ILogger<UserRosterAdministration> logger)
 {
     /// <summary>The record a user is provisioned with, which is the empty one until they declare something.</summary>
@@ -67,18 +63,12 @@ internal sealed partial class UserRosterAdministration(
 
         var held = await directory.ReadUsersAsync(ServedMailUsers.MaximumUsers + 1, cancellationToken);
 
-        // Read once rather than per entry: the declarations are a reflection bind of the whole collection, and this
-        // route is read unconditionally by six of the commands `mfctl user` publishes.
-        var declaredInConfiguration = configured.UsersAConfigurationSourceDeclares();
-
         return
         [
             .. held.Select(record => new UserRosterEntry(
                 record.User,
                 record.DisplayName,
-                record.DocumentWrittenAtRuntime,
-                Served: servedUsers.Users.Any(served => served.User == record.User),
-                DeclaredInConfiguration: declaredInConfiguration.Contains(record.User))),
+                Served: servedUsers.Users.Any(served => served.User == record.User))),
         ];
     }
 
@@ -87,7 +77,7 @@ internal sealed partial class UserRosterAdministration(
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The identifier the user was minted under, or the sentence naming what has to change first.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
-    /// <exception cref="UserSettingsUnwritableException">Thrown when the record's first commit did not complete, which leaves the envelope written and the marker unset.</exception>
+    /// <exception cref="UserSettingsUnwritableException">Thrown when the record's first commit did not complete, which leaves the envelope written and nothing published for it.</exception>
     /// <remarks>
     /// The identifier is minted here rather than supplied, and it is a version 4 value for the reason the column is:
     /// a user identifier reaches administrative APIs, audit records, and logs, and a time-ordered one would publish
@@ -135,17 +125,12 @@ internal sealed partial class UserRosterAdministration(
                 return UserProvisioningOutcome.Refused(LabelTaken(label));
             }
 
-            // The record rather than only the envelope, because a user nothing declares is served from their own record
-            // or from nothing at all. It is the empty object the envelope already carries, so what the commit changes is
-            // the marker beside it — which is what the next start reads to decide that this user is not waiting on a
-            // configuration section that does not exist.
+            // Committed rather than published from the insert alone, because the commit is what proves the row still
+            // stands and it answers the version the published record is composed over.
             if (await documents.CommitAsync(user, EmptyRecord, ProvisionedVersion, cancellationToken) is not { } committed)
             {
                 // The envelope was written and the row is gone again, which is another administrator erasing this user
-                // between the two statements. Reporting the user as recorded would hand back an identifier nothing holds;
-                // reporting it as provisioned without the marker would leave the next start reading their mail accounts
-                // out of a configuration section that was never written for them, and refusing to start over the second
-                // such row it met.
+                // between the two statements. Reporting the user as recorded would hand back an identifier nothing holds.
                 return UserProvisioningOutcome.Refused(
                     "The user was recorded and then removed before their record could be written, so this deployment holds nobody under that label. Record them again.");
             }
@@ -173,8 +158,7 @@ internal sealed partial class UserRosterAdministration(
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
     /// <remarks>
     /// The label is what an administrator selects a user by and is keyed by nothing, so changing it moves no mail and
-    /// invalidates no identifier — which is why this is the configuration grant rather than the erasing one. It reaches
-    /// every user this deployment holds: a label lives on the row and no configuration source states one.
+    /// invalidates no identifier — which is why this is the configuration grant rather than the erasing one.
     /// </remarks>
     internal async Task<UserRelabelOutcome> RelabelAsync(
         MailUserId user,
@@ -225,16 +209,8 @@ internal sealed partial class UserRosterAdministration(
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminErase" />.</exception>
     /// <remarks>
-    /// <para>
     /// Whether the user was served is read before the erasure rather than after, because the answer must describe the
     /// deployment the caller asked about rather than the roster the erasure left.
-    /// </para>
-    /// <para>
-    /// A user a configuration source supplies is refused rather than erased — a refusal nothing reaches in this
-    /// release, no configuration source declaring a mailbox any longer, and one
-    /// <see href="https://github.com/Krzysztof318/MailFathom/issues/1829">issue 1829</see> retires with the marker it
-    /// reads.
-    /// </para>
     /// </remarks>
     internal async Task<UserErasureOutcome> EraseAsync(MailUserId user, CancellationToken cancellationToken)
     {
@@ -244,12 +220,6 @@ internal sealed partial class UserRosterAdministration(
         }
 
         authorization.RequirePermission(MailFathomPermission.AdminErase);
-
-        if (configured.DeclaredByAConfigurationSource(user))
-        {
-            var served = servedUsers.Users.Any(candidate => candidate.User == user);
-            return new UserErasureOutcome(UserErased: false, served, DeclaredElsewhere);
-        }
 
         await servedUsers.WaitForRosterPublicationAsync(cancellationToken);
 
@@ -287,15 +257,6 @@ internal sealed partial class UserRosterAdministration(
             ? $"The label is {label.Length} characters, past the {MailUserRecord.MaximumDisplayNameLength} a user's label is stored as. Shorten it."
             : null;
     }
-
-    /// <summary>The sentence an erasure a start would undo is refused with.</summary>
-    /// <remarks>
-    /// It names the source rather than the person, because what the operator has to act on is whatever file still
-    /// supplies those mailboxes. Nothing reaches it in this release, no source declaring a mailbox any longer; it goes
-    /// with the marker <see href="https://github.com/Krzysztof318/MailFathom/issues/1829">issue 1829</see> retires.
-    /// </remarks>
-    private const string DeclaredElsewhere =
-        "A configuration source supplies this user's mail accounts, and a start records a user for it wherever it holds none — so erasing them here would destroy their mail and then recreate the person and download it again. Stop declaring them there, and erase them once no configuration source reaches them.";
 
     private static string LabelTaken(string label) =>
         $"Another user of this deployment is already recorded as '{label}'. A label is what an administrator selects a user by, so two users carrying one would leave nothing to select on: choose another.";

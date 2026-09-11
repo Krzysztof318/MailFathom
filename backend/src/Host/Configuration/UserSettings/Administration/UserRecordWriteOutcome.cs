@@ -11,7 +11,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <para>
 /// A refusal is a result rather than an exception, for the reason the deployment's own configuration write states: each
 /// of them is something whoever asked for the write acts on directly — a record that will not bind, an account name
-/// another user already answers to, a record somebody else moved on, a user a configuration source still supplies.
+/// another user already answers to, a record somebody else moved on.
 /// None is a failure of the machinery underneath, and each carries the code a surface reports and the sentences a
 /// person reads.
 /// </para>

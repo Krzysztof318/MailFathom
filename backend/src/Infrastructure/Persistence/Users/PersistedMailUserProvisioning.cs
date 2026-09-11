@@ -45,8 +45,8 @@ internal sealed class PersistedMailUserProvisioning(MailFathomDbContext dbContex
         // an answer. The read below is what turns the silence into one.
         await dbContext.Database.ExecuteSqlAsync(
             $"""
-             INSERT INTO settings_accounts ("Id", "DisplayName", "Document", "Version", "CreatedAt", "UpdatedAt", "DocumentWrittenAtRuntime")
-             VALUES ({userId}, {displayName}, CAST({EmptyDocument} AS jsonb), 1, {provisionedAt}, {provisionedAt}, FALSE)
+             INSERT INTO settings_accounts ("Id", "DisplayName", "Document", "Version", "CreatedAt", "UpdatedAt")
+             VALUES ({userId}, {displayName}, CAST({EmptyDocument} AS jsonb), 1, {provisionedAt}, {provisionedAt})
              ON CONFLICT DO NOTHING
              """,
             cancellationToken);

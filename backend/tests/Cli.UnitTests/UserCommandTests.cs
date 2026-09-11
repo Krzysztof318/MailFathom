@@ -20,9 +20,6 @@ public sealed class UserCommandTests : IDisposable
 {
     private const string Endpoint = CliCommandHarness.Endpoint;
 
-    /// <summary>The code a deployment refuses a write to a configuration-served user with.</summary>
-    private const int RecordReadFromConfiguration = 12015;
-
     /// <summary>The code a deployment refuses a record composed over a version another writer moved past with.</summary>
     private const int VersionSuperseded = 12008;
 
@@ -107,16 +104,12 @@ public sealed class UserCommandTests : IDisposable
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("alexandra", StringComparison.Ordinal));
     }
 
-    /// <summary>
-    /// No configuration source names a user, so no start puts a label back and a rename lasts for every user a
-    /// deployment serves — including the one its own mail section supplies, which is the case that used to be
-    /// qualified. Nothing may report the label as one the deployment undoes.
-    /// </summary>
+    /// <summary>No start puts a label back, so nothing may report a rename as one the deployment undoes.</summary>
     [Fact]
-    public async Task Rename_TheUserTheDeploymentsOwnMailSectionSupplies_ReportsTheLabelWithNothingQualifyingIt()
+    public async Task Rename_AUserTheDeploymentHolds_ReportsTheLabelWithNothingQualifyingIt()
     {
         // Arrange
-        using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User);
+        using var deployment = FakeUserRecordDeployment.Holding(User);
 
         // Act
         var exitCode = await this.RunAsync(
@@ -158,38 +151,6 @@ public sealed class UserCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Single(deployment.UserRequestsTo(HttpMethod.Put, AdminEndpointRoutes.UserDisplayNamePath(User)));
-    }
-
-    /// <summary>The listing is where the two states that decide what to do next are read.</summary>
-    [Fact]
-    public async Task List_TheUserTheDeploymentsOwnMailSectionSupplies_SaysThatSectionIsWhereTheyAreChanged()
-    {
-        // Arrange
-        using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User);
-
-        // Act
-        var exitCode = await this.RunAsync(deployment, "user", "list", "--endpoint", Endpoint);
-
-        // Assert
-        Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(
-            this.harness.Console.Lines,
-            line => line.Contains("a configuration source, which is where they are changed", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task List_AUserReadingTheirOwnRecord_SaysWhereTheirMailAccountsAreMaintained()
-    {
-        // Arrange
-        using var deployment = FakeUserRecordDeployment.Holding(User);
-
-        // Act
-        await this.RunAsync(deployment, "user", "list", "--endpoint", Endpoint);
-
-        // Assert
-        Assert.Contains(
-            this.harness.Console.Lines,
-            line => line.Contains("their own record", StringComparison.Ordinal));
     }
 
     /// <summary>An empty roster is a deployment whose users have all been removed, which is worth saying rather than printing nothing.</summary>
@@ -237,22 +198,6 @@ public sealed class UserCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Empty(deployment.UserRequestsTo(HttpMethod.Get, AdminEndpointRoutes.UserRecordPath(User)));
-    }
-
-    /// <summary>A record whose mailboxes are in a file is empty, and reading that without being told why looks like a user with no mailboxes.</summary>
-    [Fact]
-    public async Task Show_AUserServedFromConfiguration_SaysWhyTheRecordIsEmpty()
-    {
-        // Arrange
-        using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User);
-
-        // Act
-        await this.RunAsync(deployment, "user", "show", "--user", $"{User:D}", "--endpoint", Endpoint);
-
-        // Assert
-        Assert.Contains(
-            this.harness.Console.Lines.Concat(this.harness.Console.Errors),
-            line => line.Contains("Change them where they are declared", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -332,36 +277,6 @@ public sealed class UserCommandTests : IDisposable
         Assert.Contains(
             this.harness.Console.Errors,
             line => line.Contains("declares no mail account", StringComparison.Ordinal));
-    }
-
-    /// <summary>The one refusal a command can repair names the repair, which is the configuration source the mailboxes are declared in.</summary>
-    [Fact]
-    public async Task AccountAdd_TheUserTheDeploymentsOwnMailSectionSupplies_NamesThatSectionAsTheRepair()
-    {
-        // Arrange
-        using var deployment = FakeUserRecordDeployment.RefusingTheWrite(
-            User,
-            RecordReadFromConfiguration,
-            "This user's mail accounts are supplied by a configuration source.");
-
-        var declaration = await this.WriteDeclarationAsync("""{"AccountId":"archive"}""");
-
-        // Act
-        var exitCode = await this.RunAsync(
-            deployment,
-            "user",
-            "account",
-            "add",
-            "--from-file",
-            declaration,
-            "--endpoint",
-            Endpoint);
-
-        // Assert
-        Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.Contains(
-            this.harness.Console.Lines.Concat(this.harness.Console.Errors),
-            line => line.Contains("A configuration source supplies this user's mail accounts", StringComparison.Ordinal));
     }
 
     /// <summary>No configuration change takes somebody's mail away, so a withdrawal says what it did not do.</summary>
@@ -648,33 +563,6 @@ public sealed class UserCommandTests : IDisposable
         Assert.Contains(
             this.harness.Console.Errors,
             line => line.Contains("MailAccounts:1:AccountId", StringComparison.Ordinal));
-    }
-
-    /// <summary>A record a file still supplies is refused before the editor opens, because the write was never going to be accepted and the operator's session would be spent on it.</summary>
-    [Fact]
-    public async Task Edit_ARecordAConfigurationSourceSupplies_RefusesWithoutOpeningTheEditor()
-    {
-        // Arrange
-        using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User);
-
-        var openedTheEditor = false;
-        this.harness.OpensTheBufferWith((_, _) =>
-        {
-            openedTheEditor = true;
-
-            return true;
-        });
-
-        // Act
-        var exitCode = await this.RunAsync(deployment, "user", "edit", "--user", $"{User:D}", "--endpoint", Endpoint);
-
-        // Assert
-        Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.False(openedTheEditor);
-        Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserRecordPath(User)));
-        Assert.Contains(
-            this.harness.Console.Errors,
-            line => line.Contains("Change them where they are declared", StringComparison.Ordinal));
     }
 
     public void Dispose()

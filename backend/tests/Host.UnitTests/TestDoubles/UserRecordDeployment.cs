@@ -87,7 +87,6 @@ internal sealed class UserRecordDeployment
 
         var authorization = new AccessAuthorization(principals);
         var settings = new ConfigurationBuilder().Build();
-        var configured = new ConfiguredUserSettings();
         var admission = new SeveralUserAdmission(
             Options.Create(new McpEndpointOptions()),
             Options.Create(new ClientEndpointOptions()));
@@ -100,7 +99,6 @@ internal sealed class UserRecordDeployment
             this.Store,
             this.servedUsers,
             admission,
-            configured,
             NullLogger<UserRosterAdministration>.Instance);
 
         this.Records = new UserRecordAdministration(
@@ -112,8 +110,7 @@ internal sealed class UserRecordDeployment
                 new FakeTimeProvider(Today),
                 Options.Create(new SensitiveContentOptions())),
             SecretValidation.OverRegisteredSchemes(),
-            this.servedUsers,
-            configured);
+            this.servedUsers);
 
         this.StoredSecrets = Substitute.For<IStoredSecretStore>();
         this.StoredSecrets.CanStore.Returns(true);
@@ -172,7 +169,7 @@ internal sealed class UserRecordDeployment
     /// <param name="version">The version the row stands at.</param>
     internal void Holding(MailUserId user, string json, long version) =>
         this.Documents.ReadAsync(user, Arg.Any<CancellationToken>())
-            .Returns(new UserSettingsDocument(user, $"user-{user.Value:D}", json, version, WrittenAtRuntime: true));
+            .Returns(new UserSettingsDocument(user, $"user-{user.Value:D}", json, version));
 
     /// <summary>States the users this deployment holds, whether or not this process serves them.</summary>
     /// <param name="held">The users.</param>

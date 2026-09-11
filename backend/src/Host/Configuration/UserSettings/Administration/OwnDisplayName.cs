@@ -14,9 +14,9 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <para>
 /// The name is the envelope rather than the document — the column an operator tells one user from another by, unique
 /// across the deployment and keyed by nothing — which is why this stands beside
-/// <see cref="UserRecordAdministration" /> instead of inside it. What it shares with that service is the gate: the
-/// envelope is written under the record's own grant and refused for the same user, because both are what this
-/// deployment holds about a person rather than what that person set about their client.
+/// <see cref="UserRecordAdministration" /> instead of inside it. What it shares with that service is the grant: the
+/// envelope is written under the record's own, because both are what this deployment holds about a person rather than
+/// what that person set about their client.
 /// </para>
 /// <para>
 /// <b>Neither act names a user.</b> The person is the one the credential authenticated, resolved from the principal
@@ -31,12 +31,6 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// the read says whether a write would be accepted, so a client draws the name as text rather than discovering the
 /// refusal by submitting one.
 /// </para>
-/// <para>
-/// A person whose mail accounts a configuration source supplies is refused, for the reason the record's own write
-/// refuses them: that record is the operator's rather than theirs, so the name on it is the operator's to set. Nothing
-/// reaches that refusal in this release, no configuration source declaring a mailbox any longer, and
-/// <see href="https://github.com/Krzysztof318/MailFathom/issues/1829">issue 1829</see> retires it.
-/// </para>
 /// </remarks>
 [SuppressMessage(
     "Performance",
@@ -45,8 +39,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 internal sealed class OwnDisplayName(
     AccessAuthorization authorization,
     IMailUserDirectory directory,
-    IMailUserProvisioning provisioning,
-    ConfiguredUserSettings configured)
+    IMailUserProvisioning provisioning)
 {
     /// <summary>Reads the name this deployment records the signed-in person under.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
@@ -59,7 +52,9 @@ internal sealed class OwnDisplayName(
         var user = authorization.RequireUser();
 
         return await directory.ReadUserAsync(user, cancellationToken) is { } held
-            ? new OwnDisplayNameReading(held.DisplayName, this.WouldAcceptAWriteFor(user))
+            ? new OwnDisplayNameReading(
+                held.DisplayName,
+                authorization.Permits(MailFathomPermission.MailAccountsWrite))
             : null;
     }
 
@@ -85,14 +80,6 @@ internal sealed class OwnDisplayName(
             return OwnDisplayNameChange.NoSuchUser;
         }
 
-        // Ahead of the bound, exactly as the record's own gate is checked ahead of the version it was composed over:
-        // a person a file still supplies is refused whatever name they wrote, and telling them to shorten one first
-        // would send them back to a field that was never going to be accepted.
-        if (configured.DeclaredByAConfigurationSource(user))
-        {
-            return OwnDisplayNameChange.Refused(DeclaredElsewhere);
-        }
-
         if (FindNameRefusal(displayName) is { } unusable)
         {
             return OwnDisplayNameChange.Refused(unusable);
@@ -104,17 +91,6 @@ internal sealed class OwnDisplayName(
             ? OwnDisplayNameChange.Recording(name)
             : OwnDisplayNameChange.Refused(NameTaken);
     }
-
-    /// <summary>Reports whether this caller could change the name of the user they act for.</summary>
-    /// <remarks>
-    /// Both halves of the write's own gate, asked without attempting one: the grant the credential carries, and the
-    /// source this deployment reads the person's mail accounts from. A caller holding one and not the other is
-    /// answered the same as one holding neither, because what a client does about either is the same — draw the name
-    /// and offer nothing to change it with.
-    /// </remarks>
-    private bool WouldAcceptAWriteFor(MailUserId user) =>
-        authorization.Permits(MailFathomPermission.MailAccountsWrite)
-        && !configured.DeclaredByAConfigurationSource(user);
 
     /// <summary>Says why a stated name is not one this deployment would record, or nothing where it is.</summary>
     /// <remarks>
@@ -141,12 +117,4 @@ internal sealed class OwnDisplayName(
     /// <remarks>It names no one: that the name is taken is what the person has to act on, and who took it is somebody else's record.</remarks>
     private const string NameTaken =
         "Somebody else on this deployment is already recorded under that name, and a name is unique across it. Choose another.";
-
-    /// <summary>The sentence a person whose mail accounts a configuration source declares is refused with.</summary>
-    /// <remarks>
-    /// It names what the person can act on rather than the key behind it: a configuration source is the operator's
-    /// file, and nothing the person could reach changes what it supplies.
-    /// </remarks>
-    private const string DeclaredElsewhere =
-        "This deployment's own configuration supplies your mail accounts, so your record is the operator's rather than yours and the name on it is theirs to set. Ask whoever administers this deployment to change it.";
 }

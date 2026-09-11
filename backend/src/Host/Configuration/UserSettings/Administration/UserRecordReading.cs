@@ -15,14 +15,4 @@ internal sealed record UserRecordReading(
     MailUserId User,
     string DisplayName,
     string Json,
-    long Version)
-{
-    /// <summary>Gets whether a configuration source still supplies this user's mail accounts.</summary>
-    /// <remarks>
-    /// Always false: no configuration source declares a mailbox any more, so a caller's edit is never refused for
-    /// that reason. It is answered rather than withdrawn because the field is on the administrative and client
-    /// contracts, and retiring it there goes with the refusal it describes, in
-    /// <see href="https://github.com/Krzysztof318/MailFathom/issues/1829">issue 1829</see>.
-    /// </remarks>
-    public bool ReadFromConfiguration => false;
-}
+    long Version);

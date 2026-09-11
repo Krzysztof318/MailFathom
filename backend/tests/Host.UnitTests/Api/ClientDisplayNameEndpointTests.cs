@@ -6,7 +6,6 @@ using System.Text.Json;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
-using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Configuration.UserSettings.Administration;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
@@ -183,8 +182,7 @@ public sealed class ClientDisplayNameEndpointTests
             this.Names = new OwnDisplayName(
                 AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment, granted),
                 this.directory,
-                provisioning,
-                new ConfiguredUserSettings());
+                provisioning);
         }
 
         internal OwnDisplayName Names { get; }
@@ -193,6 +191,6 @@ public sealed class ClientDisplayNameEndpointTests
         internal void Recording(string displayName) =>
             this.directory
                 .ReadUserAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>())
-                .Returns(new MailUserRecord(SyntheticMailUser.Deployment, displayName, DocumentWrittenAtRuntime: true));
+                .Returns(new MailUserRecord(SyntheticMailUser.Deployment, displayName));
     }
 }

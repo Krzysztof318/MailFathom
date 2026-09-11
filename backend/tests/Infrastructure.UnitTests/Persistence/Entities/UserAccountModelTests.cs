@@ -104,26 +104,6 @@ public sealed class UserAccountModelTests
         Assert.Equal(PersistenceConstraintNames.UserAccountDisplayNameUniqueIndexName, index.GetDatabaseName());
     }
 
-    /// <summary>
-    /// Whether the document has ever been written is a column rather than a reading of the document, because the two
-    /// states it separates hold the same octets: a row waiting for what configuration declares, and a record its user
-    /// emptied on purpose.
-    /// </summary>
-    [Fact]
-    public void UserAccountModel_DocumentWrittenAtRuntime_IsARequiredMarkerBesideTheDocument()
-    {
-        // Arrange
-        using var context = CreateContext();
-
-        // Act
-        var marker = EntityTypeOf<UserAccountEntity>(context).FindProperty("DocumentWrittenAtRuntime");
-
-        // Assert
-        Assert.NotNull(marker);
-        Assert.Equal(typeof(bool), marker.ClrType);
-        Assert.False(marker.IsNullable);
-    }
-
     /// <summary>The user's configurable record is one document, and the schema says nothing about what is in it.</summary>
     [Fact]
     public void UserAccountModel_Document_IsARequiredJsonbDocument()

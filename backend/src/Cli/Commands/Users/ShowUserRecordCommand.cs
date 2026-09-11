@@ -68,11 +68,6 @@ internal static class ShowUserRecordCommand
         context.Console.WriteLine($"  version: {record.Version.ToString(CultureInfo.InvariantCulture)}");
         context.Console.WriteLine(record.Document ?? "{}");
 
-        if (record.ReadFromConfiguration)
-        {
-            context.Console.WriteNotice(UserOutput.RecordSuppliedByAConfigurationSource);
-        }
-
         return CliExitCode.Success;
     }
 }
