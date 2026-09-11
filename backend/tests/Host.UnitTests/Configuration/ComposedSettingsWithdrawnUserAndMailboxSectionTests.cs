@@ -10,14 +10,15 @@ using Xunit;
 namespace MailFathom.Host.UnitTests.Configuration;
 
 /// <summary>
-/// Proves that a deployment upgrading over the collection it used to declare its users in is stopped and told what to
-/// run. Nothing binds the section any more, so a start that read past it would serve one user while its operator read a
-/// file describing several — which is the failure this refusal exists to make impossible.
+/// Proves that a deployment upgrading over a section it used to declare its users or its mailboxes in is stopped and
+/// told what to run. Nothing binds either section any more, so a start that read past one would serve a roster and read
+/// mailboxes other than the ones its operator reads in the file — which is the failure this refusal exists to make
+/// impossible.
 /// </summary>
-public sealed class ComposedSettingsWithdrawnUserCollectionTests
+public sealed class ComposedSettingsWithdrawnUserAndMailboxSectionTests
 {
     [Fact]
-    public void FindWithdrawnUserCollectionRefusals_AConfigurationStillDeclaringUsers_IsRefusedNamingTheCommandsToRun()
+    public void FindWithdrawnUserAndMailboxSectionRefusals_AConfigurationStillDeclaringUsers_IsRefusedNamingTheCommandsToRun()
     {
         // Arrange
         var configuration = Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
@@ -27,7 +28,7 @@ public sealed class ComposedSettingsWithdrawnUserCollectionTests
         });
 
         // Act
-        var refusals = ComposedSettings.FindWithdrawnUserCollectionRefusals(configuration);
+        var refusals = ComposedSettings.FindWithdrawnUserAndMailboxSectionRefusals(configuration);
 
         // Assert
         var refusal = Assert.Single(refusals);
@@ -40,7 +41,7 @@ public sealed class ComposedSettingsWithdrawnUserCollectionTests
 
     /// <summary>The deployment's own mail section is withdrawn beside the roster, and says so in its own sentence.</summary>
     [Fact]
-    public void FindWithdrawnUserCollectionRefusals_ADeploymentStillDeclaringItsOwnMailAccounts_IsRefusedNamingTheCommandsToRun()
+    public void FindWithdrawnUserAndMailboxSectionRefusals_ADeploymentStillDeclaringItsOwnMailAccounts_IsRefusedNamingTheCommandsToRun()
     {
         // Arrange
         var configuration = Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
@@ -49,7 +50,7 @@ public sealed class ComposedSettingsWithdrawnUserCollectionTests
         });
 
         // Act
-        var refusals = ComposedSettings.FindWithdrawnUserCollectionRefusals(configuration);
+        var refusals = ComposedSettings.FindWithdrawnUserAndMailboxSectionRefusals(configuration);
 
         // Assert
         var refusal = Assert.Single(refusals);
@@ -65,7 +66,7 @@ public sealed class ComposedSettingsWithdrawnUserCollectionTests
     /// read from JSON because an empty array is a shape only a file can state.
     /// </summary>
     [Fact]
-    public void FindWithdrawnUserCollectionRefusals_AMailSectionCarryingAnEmptyAccountList_IsNotRefused()
+    public void FindWithdrawnUserAndMailboxSectionRefusals_AMailSectionCarryingAnEmptyAccountList_IsNotRefused()
     {
         // Arrange
         var configuration = new ConfigurationBuilder()
@@ -74,7 +75,7 @@ public sealed class ComposedSettingsWithdrawnUserCollectionTests
             .Build();
 
         // Act
-        var refusals = ComposedSettings.FindWithdrawnUserCollectionRefusals(configuration);
+        var refusals = ComposedSettings.FindWithdrawnUserAndMailboxSectionRefusals(configuration);
 
         // Assert
         Assert.Empty(refusals);
@@ -85,7 +86,7 @@ public sealed class ComposedSettingsWithdrawnUserCollectionTests
     /// nothing left to correct. What the refusal is about is a roster an operator still believes is being served.
     /// </summary>
     [Fact]
-    public void FindWithdrawnUserCollectionRefusals_ASectionLeftBehindWithNoUserInIt_IsNotRefused()
+    public void FindWithdrawnUserAndMailboxSectionRefusals_ASectionLeftBehindWithNoUserInIt_IsNotRefused()
     {
         // Arrange
         var configuration = new ConfigurationBuilder()
@@ -93,7 +94,7 @@ public sealed class ComposedSettingsWithdrawnUserCollectionTests
             .Build();
 
         // Act
-        var refusals = ComposedSettings.FindWithdrawnUserCollectionRefusals(configuration);
+        var refusals = ComposedSettings.FindWithdrawnUserAndMailboxSectionRefusals(configuration);
 
         // Assert
         Assert.Empty(refusals);

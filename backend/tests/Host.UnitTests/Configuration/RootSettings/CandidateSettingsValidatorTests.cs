@@ -257,37 +257,66 @@ public sealed class CandidateSettingsValidatorTests
     }
 
     /// <summary>
-    /// A rule scoped to a mailbox nobody records is refused by the write rather than committed, because the start that
-    /// would refuse it is one the operator could no longer reach the persisted layer from to take the write back.
+    /// A rule scoped to a mailbox nobody records is refused by the write rather than committed as a rule set the
+    /// reload would then refuse to apply, which is what judging it against the running roster buys.
     /// </summary>
     [Fact]
     public void FindErrors_ARuleScopedToAMailboxNoServedUserRecords_NamesTheMailbox()
     {
         // Arrange
-        var roster = new ServedMailUsers();
-        roster.Resolved(
-        [
-            new ServedMailUser(
-                SyntheticMailUser.Deployment,
-                "alex",
-                [new MailSynchronizationAccountOptions { AccountId = "alex-work" }]),
-        ]);
-        var validator = new CandidateSettingsValidator([], roster);
+        var validator = new CandidateSettingsValidator([], RosterRecording("alex-work"));
 
         // Act
-        var errors = validator.FindErrors(Compose(new()
-        {
-            ["MailRules:Rules:0:Name"] = "file-invoices",
-            ["MailRules:Rules:0:Condition"] = "isSeen",
-            ["MailRules:Rules:0:Accounts:0"] = "work",
-        }));
+        var errors = validator.FindErrors(RuleScopedTo("work"));
 
         // Assert
         Assert.Contains(errors, error => error.Contains("mail account named 'work'", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The control for the refusal above: a rule scoped to a mailbox the running roster records is written, so the
+    /// roster's mailboxes reach the judgement rather than an empty set that would refuse every scoped rule.
+    /// </summary>
+    [Fact]
+    public void FindErrors_ARuleScopedToAMailboxAServedUserRecords_FindsNothingAboutTheMailbox()
+    {
+        // Arrange
+        var validator = new CandidateSettingsValidator([], RosterRecording("work"));
+
+        // Act
+        var errors = validator.FindErrors(RuleScopedTo("work"));
+
+        // Assert
+        Assert.DoesNotContain(errors, error => error.Contains("'work'", StringComparison.Ordinal));
+    }
+
     private static CandidateSettingsValidator Validator(params ISensitiveContentCatalog[] catalogs) =>
         new(catalogs, new ServedMailUsers());
+
+    /// <summary>A settled roster of one user recording one mailbox under the identifier a test names.</summary>
+    private static ServedMailUsers RosterRecording(string accountId)
+    {
+        var roster = new ServedMailUsers();
+
+        roster.Resolved(
+        [
+            new ServedMailUser(
+                SyntheticMailUser.Deployment,
+                "alex",
+                [new MailSynchronizationAccountOptions { AccountId = accountId }]),
+        ]);
+
+        return roster;
+    }
+
+    /// <summary>A candidate declaring one rule, scoped to the mailbox identifier a test names.</summary>
+    private static IConfiguration RuleScopedTo(string accountId) =>
+        Compose(new()
+        {
+            ["MailRules:Rules:0:Name"] = "file-invoices",
+            ["MailRules:Rules:0:Condition"] = "isSeen",
+            ["MailRules:Rules:0:Accounts:0"] = accountId,
+        });
 
     private static IConfiguration Compose(Dictionary<string, string?> settings) =>
         new ConfigurationBuilder().AddInMemoryCollection(settings).Build();

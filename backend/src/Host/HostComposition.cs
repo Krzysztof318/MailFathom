@@ -131,7 +131,7 @@ internal static class HostComposition
         AddPlatformDefaults(builder);
         AddPersistedConfiguration(builder);
         BoundSettings.AddTo(builder.Services, builder.Configuration);
-        RefuseTheWithdrawnUserCollection(builder);
+        RefuseTheWithdrawnUserAndMailboxSections(builder);
 
         AddSensitiveContentScanning(builder);
         var spamScannerIsConfigured = AddSpamClassification(builder);
@@ -154,7 +154,7 @@ internal static class HostComposition
         return AddNetworkSurfaces(builder);
     }
 
-    /// <summary>Refuses a configuration that still declares the users this deployment records.</summary>
+    /// <summary>Refuses a configuration that still declares the users or the mailboxes this deployment now records: the top-level user collection and the deployment mail section.</summary>
     /// <remarks>
     /// Judged first among the groups a start takes before its container exists, because who this deployment serves
     /// decides what every other section is read for — and because a file carrying one of the withdrawn sections
@@ -164,9 +164,9 @@ internal static class HostComposition
     /// settled by the startup gate that can read the rows.
     /// </remarks>
     /// <exception cref="OptionsValidationException">Thrown when a configuration source still carries the withdrawn user collection or the withdrawn deployment mail section.</exception>
-    private static void RefuseTheWithdrawnUserCollection(WebApplicationBuilder builder) =>
+    private static void RefuseTheWithdrawnUserAndMailboxSections(WebApplicationBuilder builder) =>
         ComposedSettings.RefuseFirstOf(
-            ComposedSettings.FindWithdrawnUserCollectionRefusals(builder.Configuration));
+            ComposedSettings.FindWithdrawnUserAndMailboxSectionRefusals(builder.Configuration));
 
     /// <summary>Registers the reading and writing sides of the deployment's persisted configuration, and the seam the layer is republished through.</summary>
     /// <remarks>

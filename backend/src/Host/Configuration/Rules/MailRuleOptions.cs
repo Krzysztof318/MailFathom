@@ -33,9 +33,10 @@ internal sealed class MailRuleOptions
     /// <remarks>
     /// One rule reaches one or more accounts, named as the users' records name them. Declaring none
     /// is how a rule is written for every account, which is what a single-account deployment writes and what a rule
-    /// about a sender rather than about a mailbox usually wants. Every identifier here has to name an account the
-    /// deployment declares, because a rule scoped to a mistyped account would otherwise reach no mail at all and say
-    /// nothing about why.
+    /// about a sender rather than about a mailbox usually wants. A configuration write and a reload refuse an
+    /// identifier no served user's record names, because a rule scoped to a mistyped account would otherwise reach no
+    /// mail at all and say nothing about why. A start reports one instead and leaves the rule reaching nothing, because
+    /// a mailbox can stop being recorded after the rule naming it was accepted.
     /// </remarks>
     public IList<string> Accounts { get; set; } = [];
 

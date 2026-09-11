@@ -68,7 +68,7 @@ internal static class ComposedSettings
         // `AddMailRules`, which runs before `AddPersistenceAndProviders`, which runs before the surfaces are mapped. An
         // operator whose candidate carries a mistake in two of them is shown the same one first by a write and by a
         // start, which is what the summary promises and the only thing that makes the promise worth anything.
-        List<SettingsRefusal> refusals = [.. FindWithdrawnUserCollectionRefusals(configuration)];
+        List<SettingsRefusal> refusals = [.. FindWithdrawnUserAndMailboxSectionRefusals(configuration)];
 
         // A group that will not bind at all raises rather than returning, and a start meeting an earlier refusal never
         // reaches it — so what is already held is what a start would have reported, and discarding it for the binder's
@@ -101,7 +101,7 @@ internal static class ComposedSettings
     /// nobody. Starting on one silently is what this refuses, because the alternative is a deployment that serves
     /// nobody while its operator reads a file describing a mailbox they expect to be synchronized.
     /// </remarks>
-    public static IReadOnlyList<SettingsRefusal> FindWithdrawnUserCollectionRefusals(IConfiguration configuration)
+    public static IReadOnlyList<SettingsRefusal> FindWithdrawnUserAndMailboxSectionRefusals(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
