@@ -430,6 +430,13 @@ RESP endpoint is usually reached with a password, and a password written into a 
 whatever the operator's configuration is backed by. A section naming no connection string is refused at startup, as is
 one whose channel prefix was written empty.
 
+**The material is read once and then kept for the life of the process**, which is the one place this section departs
+from every other credential here. It is resolved when a connection is first wanted rather than while the host is
+composed — that is what lets a replica whose endpoint is down finish starting — and the endpoint parsed from it,
+password included, is what every later reconnection uses. So a credential rotated behind an unchanged reference takes
+effect at the next start rather than on the next attempt, and
+[rotating it](secret-rotation.md#rotating-the-signal-backplanes-connection-string) is a restart to schedule.
+
 **The default prefix separates one MailFathom from something else, never one MailFathom from another.** `mailfathom`
 is the same literal in every deployment that writes no prefix, so two of them pointed at one RESP server publish and
 subscribe under the same channels: each one's statements reach the other's client connections, carrying an account

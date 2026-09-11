@@ -196,6 +196,21 @@ loaded once while the host starts, because the decision is a synchronous callbac
 nowhere to await a secret from. Replacing the material behind the reference changes nothing until the process is
 restarted, and a reference that no longer loads fails that restart naming the key.
 
+## Rotating the signal backplane's connection string
+
+**This one is a restart.** `SignalBackplane:ConnectionString` is resolved when a connection to the RESP endpoint is
+first wanted rather than while the host is composed — which is what lets a replica whose endpoint is down finish
+starting — and the endpoint parsed from it, password included, is then kept for the life of the process: the hub's
+lifetime manager holds the connection the factory handed it and asks for another only after an attempt that failed
+outright. So replacing the material behind an unchanged reference changes nothing until the process is restarted, and
+a password rotated at the server before that restart leaves every replica's backplane down.
+
+Rotate it in that order: provision the new credential, keep the old one accepted at the RESP server, restart the
+replicas, then revoke the old one. A replica whose backplane is down still serves every screen correctly — a signal it
+raises reaches the clients it holds itself and no others, and a screen on another replica catches up on its own
+refresh — which is what makes this a restart to schedule rather than an outage, and
+[the signal backplane](telemetry.md#the-signal-backplane) is what says it happened.
+
 ## Watching a reload
 
 A rejected candidate is logged at `Error` with the configuration path and a stable failure identity, and the previous configuration stays active:

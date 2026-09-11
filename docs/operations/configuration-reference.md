@@ -52,8 +52,10 @@ a secret block, for protected PKCS#12 bundles.
   Kubernetes — see [configuration sources](configuration-sources.md#reload).
 
 Whatever the classification, the **material behind a secret reference is read per use**: rotating a password, key, or
-certificate behind an unchanged reference needs no restart and no reload. [Secret rotation](secret-rotation.md) walks
-each case.
+certificate behind an unchanged reference needs no restart and no reload. Three references are read once and then kept
+for the life of the process, and each says so where it is documented — the HTTPS server certificate, the object
+storage endpoint's trust anchor, and the signal backplane's connection string. [Secret rotation](secret-rotation.md)
+walks each case, those three included.
 
 **Validation.** Every MailFathom section on those pages is bound strictly: a key the section does not define fails
 startup naming it, so a typo cannot silently leave a default in force. Values are validated on start, and a violated

@@ -161,6 +161,8 @@ internal sealed class SignalBackplaneConnection : IConfigureOptions<RedisOptions
     /// <param name="connectionString">What the declared reference resolved to.</param>
     /// <param name="settings">The section the channel prefix is read from.</param>
     /// <returns>The endpoint a connection is opened against.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the material is not a connection string this client reads, named without any of it being quoted back.</exception>
     /// <remarks>
     /// Separate from the resolution around it so both overrides are reachable without dialling anything. Each of them
     /// is a decision a connection string may contradict and neither is the operator's to take: the prefix is what
@@ -171,7 +173,22 @@ internal sealed class SignalBackplaneConnection : IConfigureOptions<RedisOptions
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        var endpoint = ConfigurationOptions.Parse(connectionString);
+        ConfigurationOptions endpoint;
+
+        try
+        {
+            endpoint = ConfigurationOptions.Parse(connectionString);
+        }
+        catch (Exception exception) when (exception is ArgumentException or FormatException)
+        {
+            // The client quotes the value it could not read back into its own message, so letting one escape would
+            // print a piece of the resolved connection string wherever this failure is logged — the lifetime manager's
+            // logger, and every publish that asks for a connection afterwards. Which piece is not something this can
+            // know, and in a deployment that needs a credential the material is one. The persistence path refuses the
+            // same shape for the same reason.
+            throw new InvalidOperationException(
+                $"The material behind {SignalBackplaneOptions.SectionName}:{nameof(SignalBackplaneOptions.ConnectionString)} is not a valid StackExchange.Redis connection string.");
+        }
 
         // Set after the parse rather than before it, so a connection string carrying either is corrected rather than
         // obeyed.

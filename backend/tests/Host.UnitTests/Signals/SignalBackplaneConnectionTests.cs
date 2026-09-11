@@ -50,6 +50,28 @@ public sealed class SignalBackplaneConnectionTests
         Assert.False(endpoint.AbortOnConnectFail);
     }
 
+    /// <summary>
+    /// The refusal carries the setting and none of the material. The client quotes the value it could not read back
+    /// into its own message, and this material is a password in every deployment that needs one — from there it would
+    /// reach the lifetime manager's logger and every publish that asks for a connection afterwards.
+    /// </summary>
+    [Fact]
+    public void ComposeEndpoint_MaterialThisClientCannotRead_IsRefusedWithoutQuotingAnyOfIt()
+    {
+        // Arrange
+        var settings = new SignalBackplaneOptions();
+
+        // Act
+        var refusal = Assert.Throws<InvalidOperationException>(() => SignalBackplaneConnection.ComposeEndpoint(
+            "backplane.example.test:6379,syncTimeout=hunter2",
+            settings));
+
+        // Assert
+        Assert.Contains("SignalBackplane:ConnectionString", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("hunter2", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("backplane.example.test", refusal.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>Everything else the operator wrote is theirs, which is what makes the two above overrides rather than a rewritten endpoint.</summary>
     [Fact]
     public void ComposeEndpoint_TheRestOfTheConnectionString_IsLeftAsTheOperatorWroteIt()
