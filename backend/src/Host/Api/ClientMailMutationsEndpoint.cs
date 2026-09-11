@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json;
+using MailFathom.Application.Access;
 using MailFathom.Application.Mail.Mutations.Authoring;
 using MailFathom.Application.Mail.Mutations.Authoring.Failures;
 using MailFathom.Application.Preferences;
@@ -537,10 +538,11 @@ internal static class ClientMailMutationsEndpoint
 
     /// <summary>Reads how long a delete this person authored waits before anything is asked of the mail server.</summary>
     /// <remarks>
-    /// A preferences row nothing can read is answered with the unset notification time rather than with a refusal, and
-    /// deliberately: the person asked for mail to be deleted, and refusing that because a preference could not be read
-    /// would be a screen failing over a setting nobody had touched. What the fallback costs is the wrong window, and
-    /// the unset one is the window every client had before the preference existed.
+    /// A preferences row this caller cannot read is answered with the unset notification time rather than with a
+    /// refusal, whether the row is not a document or the grant does not carry the read: the person asked for mail to be
+    /// deleted, and refusing that because a preference could not be read would be a screen failing over a setting
+    /// nobody had touched. What the fallback costs is the wrong window, and the unset one is the window every client had
+    /// before the preference existed.
     /// </remarks>
     private static async Task<TimeSpan> WithdrawalWindowAsync(
         OwnClientPreferences preferences,
@@ -556,6 +558,11 @@ internal static class ClientMailMutationsEndpoint
         {
             // The read route reports this as a row to repair, which is where somebody can act on it. Here it decides
             // only how long a window is, so it is answered rather than reported twice.
+        }
+        catch (PrincipalNotAuthorizedException)
+        {
+            // A grant carrying the delete and not the read is one this route serves, since no permission implies
+            // another: what that caller may not read is a setting, and the delete it may make is not refused over it.
         }
 
         return TimeSpan.FromSeconds(seconds) + DeleteWithdrawalGrace;

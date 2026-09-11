@@ -402,6 +402,37 @@ public sealed class ClientMailMutationsEndpointTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// A grant carrying the delete and not the read is one the route serves, since no permission implies another: the
+    /// setting is what that caller may not read, so the delete is recorded and held for the unset notification time
+    /// rather than refused over a preference.
+    /// </summary>
+    [Fact]
+    public async Task SubmitDeletesAsync_ACallerThatMayDeleteButNotRead_IsRecordedAndHeldForTheUnsetNotificationTime()
+    {
+        // Arrange
+        this.RecordEveryRequest();
+
+        // Act
+        var result = await ClientMailMutationsEndpoint.SubmitDeletesAsync(
+            new ClientMailDeletesRequest("call-1", [new ClientMailDeleteRequest(Message)]),
+            this.DeletionRecorder(TargetInInbox()),
+            Preferences(ClientPreferences.Unset with { NotificationSeconds = 8 }, MailFathomPermission.MailDelete),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var deleted = Assert.Single(Assert.IsType<Ok<ClientMailDeletesResponse>>(result.Result).Value!.Results);
+
+        Assert.Equal(ClientMailChangeOutcomes.Recorded, deleted.Outcome);
+        await this.records.Received(1).OpenAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailboxMutationRequest>(),
+            RecordedAt
+                + TimeSpan.FromSeconds(ClientPreferences.Unset.NotificationSeconds)
+                + ClientMailMutationsEndpoint.DeleteWithdrawalGrace,
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A message the use case cannot find is that message's own result, because a batch carries on past one that has gone.</summary>
     [Fact]
     public async Task SubmitDeletesAsync_AMessageTheUseCaseCannotFind_PublishesTheUseCasesOwnAnswer()
@@ -665,13 +696,16 @@ public sealed class ClientMailMutationsEndpointTests
 
     /// <summary>Builds the preferences the delete route reads the withdrawal window from.</summary>
     /// <param name="stored">What the person set, defaulting to none, which is the unset answer every deployment starts from.</param>
-    private static OwnClientPreferences Preferences(ClientPreferences? stored = null)
+    /// <param name="granted">What the caller's grant carries, defaulting to the read the preferences are published under.</param>
+    private static OwnClientPreferences Preferences(
+        ClientPreferences? stored = null,
+        MailFathomPermission? granted = null)
     {
         var preferences = Substitute.For<IClientPreferencesStore>();
         preferences.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(stored));
 
         return new OwnClientPreferences(
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead),
+            AccessAuthorizations.ForCallerGranted(granted ?? MailFathomPermission.MailRead),
             preferences);
     }
 

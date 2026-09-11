@@ -838,6 +838,9 @@ export function MessageList({
                 </div>
             )}
 
+            {/* A folder whose every drawn row has been asked to leave is empty from where the reader stands, and says so
+                rather than waiting to: nothing reads it again once the act lands, so a state kept for "not yet" would be
+                one no act ever ends. A refusal brings the rows back, exactly as it brings one back. */}
             {rowCount === 0 ? (
                 <Note>{translate(emptyReason(accounts, scope, listing))}</Note>
             ) : (

@@ -426,6 +426,24 @@ describe('MessageList', () => {
         expect(await screen.findByText('There is no mail in this folder.')).toBeDefined();
     });
 
+    // A folder every row of which was asked to leave is empty from where the reader stands, and the act landing changes
+    // nothing the list holds — the read it would take to see it is not asked again — so it says so now rather than
+    // standing in a state no act ends.
+    it('says a folder is empty once every message drawn in it has been asked to leave', async () => {
+        renderList(answering(pageOf([message(0), message(1)])), {
+            acts: {
+                ...nothingActed,
+                asked: new Map([
+                    ['message-0', { act: 'archive', from: 'INBOX', leaves: true }],
+                    ['message-1', { act: 'archive', from: 'INBOX', leaves: true }],
+                ]),
+            },
+        });
+
+        expect(await screen.findByText('There is no mail in this folder.')).toBeDefined();
+        expect(screen.queryByRole('listbox', { name: 'Messages' })).toBeNull();
+    });
+
     it('tells a folder nothing has been taken into yet apart from an empty one', async () => {
         renderList(answering(pageOf([])), { accounts: [{ ...work, synchronizationState: 'NeverSynchronized' }] });
 
