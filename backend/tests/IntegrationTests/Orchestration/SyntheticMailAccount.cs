@@ -144,6 +144,7 @@ internal sealed class SyntheticMailAccount(
         "shared-account-name",
         "spam-scan",
         "stale-derived-data",
+        "stored-content-move-hold",
         "synchronized",
         "timeline-and-search",
         "timeline-read-model",

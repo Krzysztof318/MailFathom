@@ -136,9 +136,11 @@ whose other contents it cannot reach.
 ### Moving stored content into the object backend
 
 Selecting the backend leaves everything already stored where it is, so carrying it across is an operator's act through
-the administrative endpoint rather than a setting. What these three settle is what that move costs the deployment
+the administrative endpoint rather than a setting. What the first three settle is what that move costs the deployment
 *while it runs*: one bounded pass per interval, ending on whichever of the two ceilings it reaches first, so most of
-every interval is left for synchronization, delivery, and the reads a caller is waiting on.
+every interval is left for synchronization, delivery, and the reads a caller is waiting on. The interval is the
+deployment's, not each replica's. The two lease settings decide how the move passes between replicas, as
+[which replica carries the move](moving-stored-content.md#which-replica-carries-the-move) describes.
 [Moving stored content into the bucket](moving-stored-content.md) is the operation.
 
 They are judged only where `ContentStorage:Backend` is `ObjectStorage`, because a deployment holding its content in the
@@ -150,6 +152,8 @@ what stops it from starting.
 | `ContentStorage:Move:Interval` | TimeSpan | `00:00:10` | 1 s – 1 h. Below a second the move stops being background work and becomes a second workload beside the deployment's own | restart |
 | `ContentStorage:Move:PayloadsPerPass` | int | `20` | Positive. A pass that carries no payload would leave the move running forever without moving anything | restart |
 | `ContentStorage:Move:MaxBytesPerPass` | long | `67108864` | Positive, in bytes. A pass ends on whichever ceiling it reaches first, so a ceiling of nothing would end every pass before its first payload | restart |
+| `ContentStorage:Move:LeaseDuration` | TimeSpan | `00:02:00` | 10 s – 1 h; how long a replica holds the move from each claim or renewal of its lease, and so the longest a move waits for another replica after its holder crashed. Must be longer than `LeaseRenewalInterval` | restart |
+| `ContentStorage:Move:LeaseRenewalInterval` | TimeSpan | `00:00:30` | 1 s – 30 min; how long after the last confirmed claim or renewal the move's lease is renewed. Must be shorter than `LeaseDuration` | restart |
 
 A single payload larger than `MailSynchronization:MaxInFlightRawMimeBytes` is refused rather than carried, because the
 move reads under the same process-wide budget synchronization reads under. It is counted, reported, and stepped past;

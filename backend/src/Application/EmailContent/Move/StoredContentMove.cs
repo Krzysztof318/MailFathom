@@ -93,6 +93,22 @@ public sealed class StoredContentMove
         this.authorization = authorization;
     }
 
+    /// <summary>Reports whether the deployment has a move for a pass to carry.</summary>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns><see langword="true" /> while a move is running; <see langword="false" /> when it is paused, finished, or was never asked for.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when anything but this deployment's own process reached the use case.</exception>
+    /// <remarks>
+    /// The one read a replica makes before it asks for the move's lease, so a deployment that never moves its content pays
+    /// a single-row read per interval and holds nothing. <see cref="RunAsync" /> reads the move again rather than trusting
+    /// this answer, because an operator may pause it in between.
+    /// </remarks>
+    public async Task<bool> HasMoveToCarryAsync(CancellationToken cancellationToken)
+    {
+        this.authorization.RequireProcessIdentity();
+
+        return await this.runStore.FindAsync(cancellationToken) is { State: StoredContentMoveState.Running };
+    }
+
     /// <summary>Runs one bounded pass of the move, if the deployment has one to carry.</summary>
     /// <param name="cancellationToken">Cancels the pass between payloads.</param>
     /// <returns>What this pass carried, and whether the database still holds payloads behind it.</returns>

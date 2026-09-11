@@ -1,6 +1,6 @@
 # Moving the content already in the database into the bucket
 
-<!-- describes: backend/src/Application/EmailContent/Move/**, backend/src/Application/EmailContent/Release/**, backend/src/Host/Api/Content*.cs, backend/src/Host/Configuration/Persistence/ContentMoveOptions.cs, backend/src/Host/Configuration/Persistence/ContentReleaseOptions.cs, backend/src/Host/Hosting/Workers/StoredContentMoveWorker.cs, backend/src/Infrastructure/Persistence/Emails/StoredContentMove*.cs, backend/src/Infrastructure/Persistence/Emails/RetainedContentReleaseStore.cs, backend/src/Cli/Commands/Content/** -->
+<!-- describes: backend/src/Application/EmailContent/Move/**, backend/src/Application/EmailContent/Release/**, backend/src/Host/Api/Content*.cs, backend/src/Host/Configuration/Persistence/ContentMoveOptions.cs, backend/src/Host/Configuration/Persistence/ContentReleaseOptions.cs, backend/src/Host/Hosting/Workers/StoredContentMoveWorker.cs, backend/src/Host/Hosting/Workers/WorkLeaseHold.cs, backend/src/Infrastructure/Persistence/Emails/StoredContentMove*.cs, backend/src/Infrastructure/Persistence/Emails/RetainedContentReleaseStore.cs, backend/src/Cli/Commands/Content/** -->
 
 Selecting `ContentStorage:ObjectStorage` decides where the **next** payload is written and says nothing about the mail
 already stored — which for a deployment that has been synchronizing a mailbox for a year is all of it.
@@ -29,7 +29,8 @@ there until somebody says otherwise.
 
 ## What one pass of the copy does
 
-The deployment carries the copy in bounded background passes, one per `ContentStorage:Move:Interval`. A pass walks the
+The deployment carries the copy in bounded background passes, one per `ContentStorage:Move:Interval` however many
+replicas it runs — [which replica carries the move](#which-replica-carries-the-move) says how. A pass walks the
 four tables that hold raw MIME in turn — incoming messages, outgoing messages, drafts, and the drafts a repeated send is
 composed from — and for each payload it reaches:
 
@@ -109,6 +110,44 @@ than from the beginning.
 the identity it reached are committed with the counts at the end of every pass. A deployment restarted mid-move resumes
 where it was and does not re-copy what it verified.
 
+## Which replica carries the move
+
+A deployment running several replicas carries its move on one of them at a time. Every replica reads whether a move is
+running once per `ContentStorage:Move:Interval` — a single-row read, which is all a replica pays while no move is
+running — and only the replica that takes the move's lease carries a pass. The lease is the scope `stored-content-move`
+in the table
+[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
+decides. A replica that finds it held asks again on its next interval, and neither fails nor reports anything: the
+move is being carried, just not there.
+
+The holder takes the lease for one pass, keeps it through the interval that follows, and then gives it back. Keeping
+the interval is what makes it the deployment's pace rather than each replica's: no replica can start the next pass until
+it has elapsed, so three replicas move a mailbox exactly as fast as one would. Giving it back is what keeps the move
+from belonging to the replica that started it. The next pass goes to whichever replica asks first, which is usually the
+one that carried the last.
+
+What an operator sees when the holder stops:
+
+- **A replica that stops gracefully** — a rolling upgrade, a scale-down — stops the pass it is carrying, records where
+  it got to, and gives the lease back at once. The next interval of another replica carries on from that position, and
+  nobody has to resume anything. The one payload the stopped pass was in the middle of is carried again from the
+  beginning.
+- **A replica that crashes**, or is cut off from the database, frees the lease only once
+  `ContentStorage:Move:LeaseDuration` has passed since its last renewal — two minutes by default. Until then the move
+  waits: `mfctl content move-status` still reports it running and its counts stand still.
+- **A holder whose renewal is refused, fails, or goes unanswered** for half the margin between
+  `ContentStorage:Move:LeaseRenewalInterval` and `ContentStorage:Move:LeaseDuration` stops its pass there and then, and
+  records where it got to within the other half — before another replica could take the lease and start a pass of its
+  own.
+
+A pass stopped any of these ways leaves nothing half done, for the reason every pass is safe to interrupt: a row is
+pointed at its object only while it is still database-backed, and only after that object was read back and vouched
+for. What the lease promises is one writer rather than one runner, so a holder cut off from the database may still be
+putting an object when another replica reaches the same payload. The row then points at whichever object was verified
+first, the payload is counted once, and the other object is one nothing points at, which the reclamation sweep
+removes as it removes every other orphan. Which replica holds the move is on the `mailfathom.work_leases.held` gauge, as
+[holding work that must not run twice](telemetry.md#holding-work-that-must-not-run-twice) describes.
+
 ## Releasing the copies the database is holding
 
 `mfctl content release` is the last step and the only one that takes anything away. It reports what is still duplicated,
@@ -159,6 +198,8 @@ keys and their ranges.
 | `ContentStorage:Move:Interval` | 10 seconds | How long the deployment waits between two passes |
 | `ContentStorage:Move:PayloadsPerPass` | 20 | How many payloads one pass reaches |
 | `ContentStorage:Move:MaxBytesPerPass` | 64 MiB | How much raw MIME one pass reads, whatever the count says |
+| `ContentStorage:Move:LeaseDuration` | 2 minutes | How long a crashed holder keeps the move from every other replica |
+| `ContentStorage:Move:LeaseRenewalInterval` | 30 seconds | How often the holder writes its renewal while a pass or its interval runs |
 | `ContentStorage:Release:SafetyInterval` | `00:00:00` | How long a copy is held after its object was verified, up to a year |
 | `ContentStorage:Release:PayloadsPerBatch` | 200 | How many copies one release request frees |
 
