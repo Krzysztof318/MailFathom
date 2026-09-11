@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 import type { MailDocumentBlock, MailDocumentLink, MailInlineRun } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { MessageBlocks } from './MessageBlocks';
-import { readableRunColour } from './senderColour';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
 
 // Written as attacks rather than as examples, because a message is written by a stranger: what is asserted below is
@@ -137,6 +136,63 @@ describe('MessageBlocks', () => {
 
         expect(screen.getByRole('columnheader', { name: 'Item' })).toBeDefined();
         expect(screen.getByRole('cell', { name: 'A kettle' })).toBeDefined();
+    });
+
+    // A cell the sender filled keeps that it was filled — a total row still stands out from the rows above it — and
+    // loses the colour they filled it with, for the reason a coloured run does: a value picked against a white page is
+    // a cell nobody can read on the dark theme, and one fill this client states reads on both.
+    it('draws a cell the sender filled in this client own fill rather than in the colour they wrote', () => {
+        const { container } = drawing([
+            {
+                type: 'table',
+                columns: [{ widthShare: null }],
+                rows: [
+                    {
+                        isHeader: false,
+                        cells: [
+                            {
+                                columnSpan: 1,
+                                rowSpan: 1,
+                                alignment: 'Start',
+                                background: '#0028a0',
+                                blocks: [{ type: 'paragraph', content: [run('Total')], alignment: 'Start' }],
+                            },
+                        ],
+                    },
+                ],
+            },
+        ]);
+
+        const cell = screen.getByRole('cell', { name: 'Total' });
+
+        expect(cell.getAttribute('style')).toBeNull();
+        expect(cell.className).toContain('bg-sunken');
+        expect(container.querySelector('[style]')).toBeNull();
+    });
+
+    it('draws a cell the sender left alone without a fill, so the table is the rows rather than a block of colour', () => {
+        drawing([
+            {
+                type: 'table',
+                columns: [{ widthShare: null }],
+                rows: [
+                    {
+                        isHeader: false,
+                        cells: [
+                            {
+                                columnSpan: 1,
+                                rowSpan: 1,
+                                alignment: 'Start',
+                                background: null,
+                                blocks: [{ type: 'paragraph', content: [run('A kettle')], alignment: 'Start' }],
+                            },
+                        ],
+                    },
+                ],
+            },
+        ]);
+
+        expect(screen.getByRole('cell', { name: 'A kettle' }).className).not.toContain('bg-sunken');
     });
 
     it('draws a list as a list, so it is announced and navigated as one', () => {
@@ -283,42 +339,60 @@ describe('MessageBlocks', () => {
 });
 
 describe('MessageBlocks, a run in a colour the sender chose', () => {
-    // The reduced view is drawn on this client's own panel rather than on the white page the sender's composer drew,
-    // so what is asserted here is that the run carries a reading for each of the two panels and that the stylesheet
-    // has something to choose between — never that a particular theme is in force, which no component may ask.
+    // A reading surface is drawn in the reader's own theme, so what is asserted here is that no colour the sender wrote
+    // reaches the document: the only thing their colour decides is whether the run is small print, and both answers are
+    // class names the stylesheet states for both panels. Nothing here asks which theme is in force, which no component
+    // may, and nothing carries an inline colour, which is what made every message a different one.
     function colouredRun(foreground: string): HTMLElement {
         const { container } = drawing([
             { type: 'paragraph', content: [run('Regards', { foreground })], alignment: 'Inherited' },
         ]);
 
-        const drawn = container.querySelector('[data-sender-colour]');
-
-        expect(drawn).not.toBeNull();
-
-        return drawn as HTMLElement;
+        return container.firstElementChild as HTMLElement;
     }
 
-    it('carries the colour as it stands on each of the two panels, which is what the stylesheet picks between', () => {
-        const readable = readableRunColour('#333333');
+    // No element carries a style attribute at all, which is the assertion rather than a search for the one value: the
+    // sender's colour is the only thing this component ever wrote one for.
+    it('writes no colour of the sender own onto the document, whatever they wrote', () => {
+        const drawn = colouredRun('#0048e0');
 
-        expect(readable).not.toBeNull();
-
-        const drawn = colouredRun('#333333');
-
-        expect(drawn.style.getPropertyValue('--sender-colour-light')).toBe(readable?.onLight);
-        expect(drawn.style.getPropertyValue('--sender-colour-dark')).toBe(readable?.onDark);
+        expect(drawn.querySelector('[style]')).toBeNull();
+        expect(drawn.getAttribute('style')).toBeNull();
     });
 
-    it('lifts a colour that would be unreadable on one panel away from it, and leaves the other as written', () => {
-        const drawn = colouredRun('#333333');
+    it('draws the grey a sender steps back with as this client own small print', () => {
+        const drawn = colouredRun('#999999');
 
-        expect(drawn.style.getPropertyValue('--sender-colour-dark')).not.toBe('#333333');
-        expect(drawn.style.getPropertyValue('--sender-colour-light')).toBe('#333333');
+        expect(drawn.querySelector('.text-muted')).not.toBeNull();
+    });
+
+    it('draws a colour a sender decorated with as the message own words', () => {
+        const drawn = colouredRun('#0048e0');
+
+        expect(drawn.querySelector('.text-muted')).toBeNull();
+    });
+
+    it('keeps the emphasis a sender wrote beside the colour, which is what their formatting meant', () => {
+        const { container } = drawing([
+            {
+                type: 'paragraph',
+                content: [
+                    run('Overdue', {
+                        foreground: '#ff0000',
+                        emphasis: { ...noEmphasis, bold: true },
+                    }),
+                ],
+                alignment: 'Inherited',
+            },
+        ]);
+
+        expect(container.querySelector('strong')?.textContent).toBe('Overdue');
     });
 
     it('draws a run the service gave no colour without one of its own, so the panel colour underneath stands', () => {
         const { container } = drawing([{ type: 'paragraph', content: [run('Regards')], alignment: 'Inherited' }]);
 
-        expect(container.querySelector('[data-sender-colour]')).toBeNull();
+        expect(container.querySelector('.text-muted')).toBeNull();
+        expect(container.querySelector('[style]')).toBeNull();
     });
 });

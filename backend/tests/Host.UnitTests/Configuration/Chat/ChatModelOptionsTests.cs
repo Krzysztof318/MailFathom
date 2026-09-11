@@ -49,6 +49,7 @@ public sealed class ChatModelOptionsTests
     [InlineData("reasoning-effort")]
     [InlineData("api")]
     [InlineData("enrichment")]
+    [InlineData("body-cleanup-model")]
     public void Validate_SettingsWithNoAlias_AreRefusedRatherThanIgnored(string writtenSetting)
     {
         // Arrange
@@ -371,6 +372,10 @@ public sealed class ChatModelOptionsTests
         "reasoning-effort" => new ChatModelOptions { ReasoningEffort = "low" },
         "api" => new ChatModelOptions { Api = ChatProviderApi.Responses },
         "enrichment" => new ChatModelOptions { Enrichment = new EmailEnrichmentOptions { Enabled = true } },
+        "body-cleanup-model" => new ChatModelOptions
+        {
+            BodyCleanup = new BodyCleanupOptions { Model = "a-small-fast-model" },
+        },
         _ => new ChatModelOptions
         {
             EntraCredential = new ProviderEntraCredentialOptions

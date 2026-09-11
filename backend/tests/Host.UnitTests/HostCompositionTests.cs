@@ -260,6 +260,11 @@ public sealed class HostCompositionTests
                 .. ChatEndpoint,
                 new("Chat:ThreadState:Enabled", "true"),
             ],
+            ["bodies cleaned on a model of their own"] =
+            [
+                .. ChatEndpoint,
+                new("Chat:BodyCleanup:Model", "a-small-fast-model"),
+            ],
             ["replies drafted from a conversation"] =
             [
                 .. ChatEndpoint,

@@ -190,6 +190,10 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
     /// <remarks>Present rather than nullable for the reason the blocks above are: its own <c>Enabled</c> is what says whether a drafting runs, and on is the default for the reason the block beneath it is on — the block itself says why, and what turning it off leaves is the composer somebody writes in themselves.</remarks>
     public ReplyDraftingOptions ReplyDrafting { get; set; } = new();
 
+    /// <summary>Gets or sets which model the cleaned rendering of a message body is decided by.</summary>
+    /// <remarks>Present rather than nullable for the reason the blocks above are, and the one of them that carries no switch at all — the block itself says why, and what decides whether a body is cleaned is the reader's own preference.</remarks>
+    public BodyCleanupOptions BodyCleanup { get; set; } = new();
+
     /// <summary>Gets or sets whether a sentence typed into the search field is read into the filters it describes.</summary>
     /// <remarks>Present rather than nullable for the reason the three blocks above are, and on by default as the block above it is — the block itself says why, and what turning it off leaves is the word search every deployment serves.</remarks>
     public MailSearchPhrasingOptions SearchPhrasing { get; set; } = new();
@@ -221,7 +225,8 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
                 || this.Unauthenticated
                 || this.RelevanceFilter.Enabled
                 || this.Enrichment.Enabled
-                || this.ThreadState.Enabled)
+                || this.ThreadState.Enabled
+                || this.BodyCleanup.Model.Trim().Length > 0)
             {
                 yield return new ValidationResult(
                     "The Chat section declares settings but no Alias, so no chat provider is configured and nothing in it is read. Give the endpoint an alias, or remove the section.",

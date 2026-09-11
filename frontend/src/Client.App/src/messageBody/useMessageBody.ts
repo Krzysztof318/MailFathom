@@ -4,13 +4,15 @@
 
 import { useEffect, useState } from 'react';
 import {
+    readCleanedMailBody,
     readMailBody,
+    type CleanedMailBody,
     type ClientResult,
     type ClientSession,
     type MailBody,
     type MailFathomTransport,
 } from '@mailfathom/client-backend';
-import { useEmbeddedHtmlMessages } from '../preferences/messageView';
+import { useMessageView } from '../preferences/messageView';
 
 // Reading one message's body: the read itself, the reader's own ask for pictures from the sender, and which of the
 // answers this client is holding may actually be drawn. What is done with it is `messageBody/Message.tsx`'s.
@@ -31,10 +33,16 @@ import { useEmbeddedHtmlMessages } from '../preferences/messageView';
 // Asking for pictures re-reads that one message with the ask in the query, and nothing beneath this writes the answer
 // down: leaving the message and coming back asks again, which is the whole of what ADR 0024 permits to be remembered.
 //
-// **Which of the two reading surfaces a message is drawn on is asked here rather than passed in**, because this is
+// **Which of the three reading surfaces a message is drawn on is asked here rather than passed in**, because this is
 // where the read is composed: the sender's own markup is a second thing the body route answers, so the setting is part
 // of what is being asked for rather than something the drawing decides afterwards. That is also what keeps the
 // representation off every other read — a client in the reduced view never asks for it.
+//
+// **The cleaned rendering is a second read rather than a third ask on the first**, and that is what makes the pane able
+// to wait without ever being empty: the reduced document arrives from the body route and is drawable while the model is
+// still deciding what of it to keep. It carries the same ask for the sender's pictures the body read carries, because a
+// cleaning composed out of a different read would disagree with what is on the screen about what the message fetched.
+// Nothing here writes the answer down, so leaving the message and coming back asks the deployment to derive it again.
 
 /** What is being read: which message, under which asks, and which attempt at it. A change to any of them may read. */
 interface Read {
@@ -50,6 +58,23 @@ interface Read {
 interface Answered {
     readonly read: Read;
     readonly result: ClientResult<MailBody>;
+}
+
+/**
+ * What a cleaning was derived for: which message, under which ask for the sender's pictures, and which attempt at it.
+ *
+ * It carries no markup, because the cleaning is the reduced document with blocks dropped and a reader in the embedded
+ * view is being shown the sender's own markup instead — there is nothing for a cleaning to stand in front of there.
+ */
+interface Cleaning {
+    readonly storedEmailId: string;
+    readonly remotePictures: boolean;
+    readonly attempt: number;
+}
+
+interface Derived {
+    readonly ask: Cleaning;
+    readonly result: ClientResult<CleanedMailBody>;
 }
 
 /** One message's body as this client is holding it: what may be drawn, what is still being read, and the ways on. */
@@ -68,6 +93,17 @@ export interface MessageBodyRead {
 
     /** Whether what is drawn may be shown as the sender's own markup: the view in force, and the ask it was read under. */
     readonly embeddedHtml: boolean;
+
+    /**
+     * The cleaning the deployment derived for what is drawn, or `null` where the view in force asks for none.
+     *
+     * A failure is a value here as everywhere: a derivation that did not arrive is a sentence over the reduced document
+     * rather than a pane with nothing in it, so the caller draws the reason and the document it already has.
+     */
+    readonly cleaned: ClientResult<CleanedMailBody> | null;
+
+    /** Whether a cleaning is being derived now, which the pane says over the reduced document while it waits. */
+    readonly cleaning: boolean;
 
     readonly readAgain: () => void;
     readonly showRemotePictures: () => void;
@@ -142,7 +178,8 @@ export function useMessageBody(
     wanted: boolean,
     carried: MailBody | null = null,
 ): MessageBodyRead {
-    const embeddedHtml = useEmbeddedHtmlMessages();
+    const view = useMessageView();
+    const embeddedHtml = view === 'embeddedHtml';
     const [read, setRead] = useState<Read>(() => opening(storedEmailId, embeddedHtml));
 
     // The answer carries the read it came from, so whether one is still in flight is computed rather than kept beside
@@ -199,6 +236,47 @@ export function useMessageBody(
         };
     }, [session, transport, outstanding]);
 
+    // The cleaning asked for, whose answer is held beside the body's rather than inside it: the two are separate reads
+    // of the same message and either may be in flight while the other is drawn, which is what lets the pane draw the
+    // reduced document while the model is still deciding what of it to keep.
+    const [derived, setDerived] = useState<Derived | null>(null);
+
+    const wantsCleaning = wanted && view === 'cleaned';
+
+    // Whether what is held answers the ask in force. Read off the three things the derivation depends on rather than
+    // off an object built per render, so that the effect below depends on values rather than on an identity.
+    const settled =
+        derived !== null &&
+        derived.ask.storedEmailId === storedEmailId &&
+        derived.ask.remotePictures === read.remotePictures &&
+        derived.ask.attempt === read.attempt;
+
+    // Whether a derivation still has to be asked for, and what it would be asked under. The effect depends on the three
+    // values rather than on an object built out of them, which the body's own read can afford because what it asks for
+    // *is* its state: an ask composed per render would be a new dependency on every render and would ask forever.
+    const deriving = wantsCleaning && !settled;
+    const derivingPictures = read.remotePictures;
+    const derivingAttempt = read.attempt;
+
+    useEffect(() => {
+        if (!deriving) {
+            return;
+        }
+
+        let listening = true;
+        const ask: Cleaning = { storedEmailId, remotePictures: derivingPictures, attempt: derivingAttempt };
+
+        void readCleanedMailBody(session, transport, storedEmailId, derivingPictures).then((answered) => {
+            if (listening) {
+                setDerived({ ask, result: answered });
+            }
+        });
+
+        return () => {
+            listening = false;
+        };
+    }, [session, transport, storedEmailId, derivingPictures, derivingAttempt, deriving]);
+
     const held = drawableUnder(answer, read);
 
     return {
@@ -212,6 +290,12 @@ export function useMessageBody(
         askingForPictures: outstanding !== null && outstanding.remotePictures && !held?.read.remotePictures,
 
         askedForPictures: read.remotePictures,
+
+        // Held to the same two halves the markup is: the view has to be the one in force, and the answer has to be the
+        // one derived for the ask on the screen. A cleaning derived for an earlier ask is no more drawable than a
+        // document read under one.
+        cleaned: wantsCleaning && settled ? derived.result : null,
+        cleaning: deriving,
 
         // Both halves rather than the setting alone: the view has to be the one in force *and* the answer on the
         // screen has to be one that was read under it, so a message drawn from an earlier answer stays the reduced

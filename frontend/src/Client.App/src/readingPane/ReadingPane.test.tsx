@@ -10,7 +10,7 @@ import { AttachmentExchangeContext, type AttachmentExchange } from '../deploymen
 import { OpenAttachmentContext, type OpenedAttachment } from '../workspace/openAttachment';
 import { LocalizationProvider } from '../localization/Localization';
 import { ToastsProvider } from '../toasts/Toasts';
-import { EmbeddedHtmlMessagesContext } from '../preferences/messageView';
+import { MessageViewContext } from '../preferences/messageView';
 import {
     ReadMarkingContext,
     nothingMarkedRead,
@@ -535,7 +535,7 @@ function drawingOfferingMarkup(
         <LocalizationProvider>
             <ToastsProvider>
                 <WorkspaceProvider>
-                    <EmbeddedHtmlMessagesContext value={embedded}>
+                    <MessageViewContext value={embedded ? 'embeddedHtml' : 'reduced'}>
                         <LinkOpenerContext value={() => Promise.resolve()}>
                             <AttachmentExchangeContext value={deliversNothing}>
                                 <OpenAttachmentContext value={() => undefined}>
@@ -551,7 +551,7 @@ function drawingOfferingMarkup(
                                 </OpenAttachmentContext>
                             </AttachmentExchangeContext>
                         </LinkOpenerContext>
-                    </EmbeddedHtmlMessagesContext>
+                    </MessageViewContext>
                 </WorkspaceProvider>
             </ToastsProvider>
         </LocalizationProvider>,

@@ -2,103 +2,73 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-// A sender picks their colours against the page their mail composer drew, which is white, and says nothing about the
-// one the reduced view actually draws them on. So a dark theme turns a perfectly ordinary `#333333` signature into text
-// nobody can read, and the reader has no control that would fix it — which is an accessibility failure rather than a
-// preference, and it is answered by lifting the colour rather than by dropping it: the sender meant something by it.
+// What the reduced view does with a colour the sender wrote, which is to normalise it rather than to reproduce it.
 //
-// Both answers are computed here, because no component asks which theme is in force — `theme/Theme.tsx` states that
-// rule — so the run carries the colour it takes on each surface and the stylesheet picks between them.
+// **The reading surfaces are for reading, so they are drawn in this client's own colours.** A sender picks theirs
+// against the white page their composer drew, with no idea of the panel a reader's theme paints, and they pick them to
+// decorate a newsletter rather than to tell a reader anything — so a pane that honoured them would be a pane whose
+// every message is a different colour, each of them legible by luck. Formatting is what carries the sender's meaning
+// here: bold, italic, underline, monospace and a strikethrough are kept exactly as they arrived, because each of them
+// says something a colour does not.
+//
+// **One distinction survives, because losing it makes a message harder to read rather than more uniform.** A sender who
+// greyed a disclaimer, a postal address, or the small print under a signature was saying *this is not the message*, and
+// a pane that drew it in the body colour would put the small print in competition with the words it sits under. So a
+// colour that recedes from the body text is drawn in the client's own receding token, and every other colour is drawn
+// in the body text colour — two answers, the same two for every message in the mailbox.
+//
+// Both are tokens rather than values, which is what makes the dark theme free: the stylesheet already states each of
+// them for both panels, so nothing here computes a contrast and nothing asks which theme is in force.
+//
+// The sender's own markup is the surface that still shows their colours, and that is what that surface is for. This
+// governs the reduced document and the cleaned rendering drawn from it, those being one tree.
 
 /** The one notation `Client.Backend` lets a run's colour through as. */
 const sixDigitHex = /^#[0-9a-f]{6}$/iu;
 
-/** WCAG 1.4.3's bar for ordinary body text, which is what a run is. */
-const requiredContrast = 4.5;
+/**
+ * How far from grey a colour may be and still read as one the sender chose to recede rather than to decorate with.
+ *
+ * A saturated colour is a decoration whatever its lightness — a pale pink heading is not small print — so it takes the
+ * body colour like every other decoration.
+ */
+const greyestSaturation = 0.25;
 
 /**
- * What the reduced view draws a message on under each theme: `--color-panel` in `styles.css`, resolved to sRGB. They
- * are written here rather than read from the document because this is a pure function a test can hold to a number, and
- * because a run is rendered before any layout has measured anything.
+ * How light a near-grey has to be before it reads as receding rather than as the message's own text.
+ *
+ * Senders write body text anywhere from `#000000` to about `#333333`, which is a third of the way up, and write their
+ * small print from about `#666666` upward. The line falls between the two.
  */
-const panels = { light: 0xffffff, dark: 0x1d2128 };
+const recedingLightness = 0.35;
 
-export interface ReadableRunColour {
-    /** What the sender's colour becomes on the light theme's panel. */
-    readonly onLight: string;
+/** What the pane draws a run in, given the colour the sender wrote. */
+export type SenderColourRole =
+    /** The sender's colour stepped back from their own body text, so this client's does too. */
+    | 'receding'
 
-    /** The same colour on the dark theme's panel, lifted until a reader can actually read it. */
-    readonly onDark: string;
-}
+    /** Everything else, which is the body text colour: a decoration the reading surface does not reproduce. */
+    | 'ordinary';
 
 /**
- * Answers the sender's colour as the two a reader can read, or `null` where the value is not a colour this client
- * understands — in which case the run is drawn in the theme's own text colour, which is readable by construction.
+ * Answers which of this client's own two colours a run the sender coloured is drawn in.
+ *
+ * @param foreground The colour as the document carries it, which is `#rrggbb` or nothing this client understands.
+ * @returns The role, with a colour in any other notation answered as `ordinary` — an unreadable value decides nothing,
+ * and the body text colour is readable by construction.
  */
-export function readableRunColour(foreground: string): ReadableRunColour | null {
+export function senderColourRole(foreground: string): SenderColourRole {
     if (!sixDigitHex.test(foreground)) {
-        return null;
+        return 'ordinary';
     }
 
-    const written = Number.parseInt(foreground.slice(1), 16);
+    const [saturation, lightness] = greyness(Number.parseInt(foreground.slice(1), 16));
 
-    return {
-        onLight: liftAgainst(written, panels.light),
-        onDark: liftAgainst(written, panels.dark),
-    };
+    return saturation <= greyestSaturation && lightness >= recedingLightness ? 'receding' : 'ordinary';
 }
 
-/**
- * Moves the colour away from the surface, keeping its hue and its saturation, until it clears the contrast bar or runs
- * out of room. Only lightness moves: a colour pulled toward grey would answer the contrast question while losing the
- * one thing the sender chose it for.
- */
-function liftAgainst(colour: number, surface: number): string {
-    if (contrast(colour, surface) >= requiredContrast) {
-        return hexOf(colour);
-    }
-
-    // Away from the surface, so a dark panel lifts the run toward white and a light one takes it toward black.
-    const toward = luminance(surface) > 0.5 ? 0 : 1;
-    const [hue, saturation, lightness] = toHsl(colour);
-
-    // Sixty-four steps over the room that is left, which is finer than any colour a display can tell apart and cheap
-    // enough to run per run: the walk stops at the first one that clears the bar, so the colour stays as close to what
-    // the sender wrote as the surface allows.
-    for (let step = 1; step <= 64; step += 1) {
-        const moved = fromHsl(hue, saturation, lightness + ((toward - lightness) * step) / 64);
-
-        if (contrast(moved, surface) >= requiredContrast) {
-            return hexOf(moved);
-        }
-    }
-
-    // Nothing on that line clears it, which happens for a saturated hue against a mid surface. The far end is what is
-    // left, and it is still the most readable version of the colour the sender wrote.
-    return hexOf(fromHsl(hue, saturation, toward));
-}
-
-function contrast(one: number, other: number): number {
-    const [lighter, darker] = [luminance(one), luminance(other)].sort((first, second) => second - first);
-
-    return ((lighter ?? 0) + 0.05) / ((darker ?? 0) + 0.05);
-}
-
-function luminance(colour: number): number {
-    const channel = (value: number) => {
-        const scaled = value / 255;
-
-        return scaled <= 0.04045 ? scaled / 12.92 : ((scaled + 0.055) / 1.055) ** 2.4;
-    };
-
-    return (
-        0.2126 * channel((colour >> 16) & 0xff) +
-        0.7152 * channel((colour >> 8) & 0xff) +
-        0.0722 * channel(colour & 0xff)
-    );
-}
-
-function toHsl(colour: number): [number, number, number] {
+/** How far from grey the colour is and how light it is, which is the HSL pair the two bounds above are read against. */
+function greyness(colour: number): [number, number] {
     const red = ((colour >> 16) & 0xff) / 255;
     const green = ((colour >> 8) & 0xff) / 255;
     const blue = (colour & 0xff) / 255;
@@ -108,36 +78,5 @@ function toHsl(colour: number): [number, number, number] {
     const spread = highest - lowest;
     const lightness = (highest + lowest) / 2;
 
-    if (spread === 0) {
-        return [0, 0, lightness];
-    }
-
-    const saturation = spread / (1 - Math.abs(2 * lightness - 1));
-    const hue =
-        highest === red
-            ? ((green - blue) / spread + (green < blue ? 6 : 0)) / 6
-            : highest === green
-              ? ((blue - red) / spread + 2) / 6
-              : ((red - green) / spread + 4) / 6;
-
-    return [hue, saturation, lightness];
-}
-
-function fromHsl(hue: number, saturation: number, lightness: number): number {
-    const held = Math.min(1, Math.max(0, lightness));
-    const reach = saturation * Math.min(held, 1 - held);
-
-    // CSS Color 4's own conversion, with the hue in turns rather than in degrees: each channel is the same wave read a
-    // third of the circle apart, which is what keeps the hue exactly where the sender put it as the lightness moves.
-    const at = (channel: number) => {
-        const position = (channel + hue * 12) % 12;
-
-        return Math.round((held - reach * Math.max(-1, Math.min(position - 3, 9 - position, 1))) * 255);
-    };
-
-    return (at(0) << 16) | (at(8) << 8) | at(4);
-}
-
-function hexOf(colour: number): string {
-    return `#${colour.toString(16).padStart(6, '0')}`;
+    return spread === 0 ? [0, lightness] : [spread / (1 - Math.abs(2 * lightness - 1)), lightness];
 }

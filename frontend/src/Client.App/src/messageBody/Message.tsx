@@ -176,6 +176,8 @@ export function Message({ body, storedEmailId, quotedHistoryOnRequest = false, o
             body={body.drawn.value}
             asking={body.askingForPictures}
             embeddedHtml={body.embeddedHtml}
+            cleaned={body.cleaned}
+            cleaning={body.cleaning}
             quotedHistoryOnRequest={quotedHistoryOnRequest}
             onShowRemotePictures={body.showRemotePictures}
         />

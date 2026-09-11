@@ -4,9 +4,9 @@
 
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { ClientSession, MailBody, MailMessage } from '@mailfathom/client-backend';
+import type { ClientMessageView, ClientSession, MailBody, MailMessage } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
-import { EmbeddedHtmlMessagesContext } from '../preferences/messageView';
+import { MessageViewContext } from '../preferences/messageView';
 import { ReadMarkingContext, nothingMarkedRead, type ReadMarking } from '../readMarking/useReadMarking';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
 import { WorkspaceProvider } from '../workspace/Workspace';
@@ -64,6 +64,8 @@ const read: MessageBodyRead = {
     askingForPictures: false,
     askedForPictures: false,
     embeddedHtml: false,
+    cleaned: null,
+    cleaning: false,
     readAgain: () => undefined,
     showRemotePictures: () => undefined,
     showWithoutRemotePictures: () => undefined,
@@ -73,14 +75,14 @@ function drawing(
     message: MailMessage = described,
     body: MessageBodyRead = read,
     marking: ReadMarking = nothingMarkedRead,
-    embeddedHtml = false,
+    view: ClientMessageView = 'reduced',
     onShowFullHtml: () => void = () => undefined,
 ): void {
     render(
         <LocalizationProvider>
             <WorkspaceProvider>
                 <LinkOpenerContext value={() => Promise.resolve()}>
-                    <EmbeddedHtmlMessagesContext value={embeddedHtml}>
+                    <MessageViewContext value={view}>
                         <ReadMarkingContext value={marking}>
                             <OpenedMessage
                                 session={session}
@@ -89,7 +91,7 @@ function drawing(
                                 onShowFullHtml={onShowFullHtml}
                             />
                         </ReadMarkingContext>
-                    </EmbeddedHtmlMessagesContext>
+                    </MessageViewContext>
                 </LinkOpenerContext>
             </WorkspaceProvider>
         </LocalizationProvider>,
@@ -127,7 +129,7 @@ describe('OpenedMessage', () => {
     it('offers the sender own markup, which is the ask a reader makes about one message', () => {
         const onShowFullHtml = vi.fn();
 
-        drawing(described, read, nothingMarkedRead, false, onShowFullHtml);
+        drawing(described, read, nothingMarkedRead, 'reduced', onShowFullHtml);
         fireEvent.click(screen.getByRole('button', { name: 'Show the original message' }));
         fireEvent.click(screen.getByRole('button', { name: 'Show the original' }));
 
@@ -137,9 +139,17 @@ describe('OpenedMessage', () => {
     // With the embedded view chosen the markup is already under this line, so a control offering to open it would open
     // a second copy of what is being read.
     it('offers no way to the markup where the reader is already reading it', () => {
-        drawing(described, read, nothingMarkedRead, true);
+        drawing(described, read, nothingMarkedRead, 'embeddedHtml');
 
         expect(screen.queryByRole('button', { name: 'Show the original message' })).toBeNull();
+    });
+
+    // The cleaned rendering is the reduced tree with blocks dropped, so the sender's own version is still somewhere the
+    // reader has not been: the control turns on the embedded view alone rather than on "not the reduced one".
+    it('offers the way to the markup to a reader on the cleaned rendering', () => {
+        drawing(described, read, nothingMarkedRead, 'cleaned');
+
+        expect(screen.getByRole('button', { name: 'Show the original message' })).toBeDefined();
     });
 
     // The screen's own head is the caller's: a conversation says its subject once above every message in it, and a

@@ -13,7 +13,7 @@ import { sizeOf } from '../localization/octets';
 import { useLocalization } from '../localization/useLocalization';
 import { Message } from '../messageBody/Message';
 import type { MessageBodyRead } from '../messageBody/useMessageBody';
-import { useEmbeddedHtmlMessages } from '../preferences/messageView';
+import { useMessageView } from '../preferences/messageView';
 import { useReadMarking } from '../readMarking/useReadMarking';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { Attachments } from './Attachments';
@@ -59,7 +59,7 @@ export function OpenedMessage({
     readonly onShowFullHtml: () => void;
 }) {
     const { locale, translate } = useLocalization();
-    const embeddedHtml = useEmbeddedHtmlMessages();
+    const embeddedHtml = useMessageView() === 'embeddedHtml';
     const { revise } = useWorkspace();
     const { markRead } = useReadMarking();
     const words = useRef<HTMLDivElement>(null);

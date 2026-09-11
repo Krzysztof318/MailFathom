@@ -983,6 +983,23 @@ internal static class HostComposition
         builder.Services.AddThreadStateAgent(
             declaredChat?.IsConfigured is true && declaredChat.ThreadState.Enabled);
 
+        // And again for the cleaned rendering a reading pane offers as its third, where what turns it on is the chat
+        // endpoint alone: which readers want it is their own preference rather than a key an operator writes. The plan is
+        // registered beside the pass rather than resolved from the shared one, because this is the one pass that may route
+        // to a model of its own — scoped so an operator editing that model is obeyed by the next open rather than by the
+        // next restart.
+        var cleansBodies = declaredChat?.IsConfigured is true;
+
+        if (cleansBodies)
+        {
+            builder.Services.AddScoped(provider => MailBodyCleanupPlanMapper.Map(
+                provider.GetRequiredService<ISettingsSnapshot<ChatModelOptions>>().Current)
+                ?? throw new InvalidOperationException(
+                    "A chat endpoint was declared at registration and is absent from the configuration in force."));
+        }
+
+        builder.Services.AddMailBodyCleanupAgent(cleansBodies);
+
         builder.Services.AddInfrastructure(
             provider => provider.GetRequiredService<DatabaseConnectionSettingsMapper>()
                 .Map(provider.GetRequiredService<ISettingsSnapshot<PersistenceOptions>>().Current),

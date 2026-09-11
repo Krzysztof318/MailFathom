@@ -30,14 +30,14 @@ function stored(preferences: {
     markReadOnOpen?: boolean;
     expandWholeThread?: boolean;
     aiFiltersShown?: boolean;
-    embeddedHtmlMessages?: boolean;
+    messageView?: string;
     notificationSeconds?: number;
 }): string {
     return JSON.stringify({
         markReadOnOpen: true,
         expandWholeThread: false,
         aiFiltersShown: true,
-        embeddedHtmlMessages: false,
+        messageView: 'reduced',
         notificationSeconds: 5,
         ...preferences,
     });
@@ -107,21 +107,35 @@ describe('useClientPreferences', () => {
         });
     });
 
-    it('answers the message view as the reduced text before anything has been read', () => {
+    it('answers the message view as the reduced document before anything has been read', () => {
         const { transport } = recording(stored({ telemetryEnabled: true, theme: 'dark', openMailInTabs: true }));
         const { result } = reading(transport);
 
-        expect(result.current.preferences.embeddedHtmlMessages).toBe(false);
+        expect(result.current.preferences.messageView).toBe('reduced');
     });
 
     it('answers the message view as the sender’s own markup once the person has chosen it', async () => {
         const { transport } = recording(
-            stored({ telemetryEnabled: true, theme: 'system', openMailInTabs: false, embeddedHtmlMessages: true }),
+            stored({ telemetryEnabled: true, theme: 'system', openMailInTabs: false, messageView: 'embeddedHtml' }),
         );
         const { result } = reading(transport);
 
         await waitFor(() => {
-            expect(result.current.preferences.embeddedHtmlMessages).toBe(true);
+            expect(result.current.preferences.messageView).toBe('embeddedHtml');
+        });
+    });
+
+    // The third of the three is the one this change added, and it travels as itself rather than as the absence of the
+    // other two: a client reading it as anything else would draw the reduced document for somebody who asked for a
+    // cleaning and report the setting as having had no effect.
+    it('answers the message view as the cleaned rendering once the person has chosen it', async () => {
+        const { transport } = recording(
+            stored({ telemetryEnabled: true, theme: 'system', openMailInTabs: false, messageView: 'cleaned' }),
+        );
+        const { result } = reading(transport);
+
+        await waitFor(() => {
+            expect(result.current.preferences.messageView).toBe('cleaned');
         });
     });
 
@@ -190,7 +204,7 @@ describe('useClientPreferences', () => {
             markReadOnOpen: true,
             expandWholeThread: false,
             aiFiltersShown: true,
-            embeddedHtmlMessages: false,
+            messageView: 'reduced',
             notificationSeconds: 5,
         });
     });
@@ -238,7 +252,7 @@ describe('useClientPreferences', () => {
             markReadOnOpen: true,
             expandWholeThread: false,
             aiFiltersShown: false,
-            embeddedHtmlMessages: false,
+            messageView: 'reduced',
             notificationSeconds: 5,
         });
     });
@@ -268,7 +282,7 @@ describe('useClientPreferences', () => {
             markReadOnOpen: true,
             expandWholeThread: false,
             aiFiltersShown: true,
-            embeddedHtmlMessages: false,
+            messageView: 'reduced',
             notificationSeconds: 12,
         });
     });
@@ -325,7 +339,7 @@ describe('useClientPreferences', () => {
                 markReadOnOpen: true,
                 expandWholeThread: false,
                 aiFiltersShown: true,
-                embeddedHtmlMessages: false,
+                messageView: 'reduced',
                 notificationSeconds: 5,
             });
         });
@@ -382,7 +396,7 @@ describe('useClientPreferences', () => {
             markReadOnOpen: true,
             expandWholeThread: false,
             aiFiltersShown: true,
-            embeddedHtmlMessages: false,
+            messageView: 'reduced',
             notificationSeconds: 5,
         });
     });
@@ -451,7 +465,7 @@ describe('useClientPreferences', () => {
             markReadOnOpen: true,
             expandWholeThread: false,
             aiFiltersShown: true,
-            embeddedHtmlMessages: false,
+            messageView: 'reduced',
             notificationSeconds: 5,
         });
     });
@@ -485,7 +499,7 @@ describe('useClientPreferences', () => {
             markReadOnOpen: true,
             expandWholeThread: false,
             aiFiltersShown: true,
-            embeddedHtmlMessages: false,
+            messageView: 'reduced',
             notificationSeconds: 5,
         });
         expect(window.localStorage.getItem(telemetryKey(anna))).toBe('false');

@@ -37,6 +37,35 @@ export function mailBodyRoute(storedEmailId: string, ask: MailBodyAsk): string {
     return `/messages/${encodeURIComponent(storedEmailId)}/body${query}`;
 }
 
+/** The route one message's cleaned body is served at, relative to the client prefix. */
+export function cleanedMailBodyRoute(storedEmailId: string, remoteImages: boolean): string {
+    const query = remoteImages ? '?remoteImages=true' : '';
+
+    return `/messages/${encodeURIComponent(storedEmailId)}/body/cleaned${query}`;
+}
+
+/**
+ * What came of one cleaning, as the service names it.
+ *
+ * Five of the six say the cleaning did not happen, and each is a different sentence on the screen: a deployment that
+ * never turned it on, a period whose allowance is spent, an endpoint that did not answer, an answer the service could
+ * not use, and a message with no document to clean at all. The reduced document comes back beside every one of them.
+ */
+export type MailBodyCleaning =
+    'Cleaned' | 'NothingToClean' | 'NotActivated' | 'AllowanceExhausted' | 'ProviderUnavailable' | 'AnswerRejected';
+
+/**
+ * One message's body as the third rendering, or the reduced one beside the reason the cleaning did not happen.
+ *
+ * It carries no words, because a screen asking for this has already read the body: what it replaces is the document the
+ * pane was drawing, block for block, with the blocks a cleaning dropped absent.
+ */
+export interface CleanedMailBody {
+    readonly storedEmailId: string;
+    readonly cleaning: MailBodyCleaning;
+    readonly document: MailDocument | null;
+}
+
 /** Whether the body could be read at all, or why the deployment holds nothing to draw. */
 export type MailBodyAvailability =
     'Readable' | 'EncryptedNotReadableLocally' | 'NotStoredExceededSizeLimit' | 'NotStoredAwaitingStorageHeadroom';
@@ -284,6 +313,15 @@ const truncations: readonly MailBodyTruncation[] = [
 
 const refusals: readonly MailDocumentRefusal[] = ['None', 'NoHtmlPart', 'ReductionFailed', 'NothingRenderable'];
 
+const cleanings: readonly MailBodyCleaning[] = [
+    'Cleaned',
+    'NothingToClean',
+    'NotActivated',
+    'AllowanceExhausted',
+    'ProviderUnavailable',
+    'AnswerRejected',
+];
+
 const alignments: readonly MailBlockAlignment[] = ['Inherited', 'Start', 'Center', 'End', 'Justify'];
 
 const deceptions: readonly MailLinkDeception[] = ['NotApplicable', 'None', 'DisplayedHostDiffers'];
@@ -349,6 +387,85 @@ export function readMailBody(
 
         return body === null ? failed('unreadable', response.status) : read(body);
     });
+}
+
+/**
+ * Reads one message's body as the third rendering, answering an expected failure as a value rather than by throwing.
+ *
+ * The reader's ask for remote pictures travels here as well as on the body read, because a cleaned document composed out
+ * of a different read would disagree with what is on the screen about what the message asked to fetch. It is a second
+ * read rather than a widened first one for the same reason the service serves it from a route of its own: the reduced
+ * body is drawable while this one is still in flight, which is what lets a pane wait without ever being empty.
+ */
+export function readCleanedMailBody(
+    session: ClientSession,
+    transport: MailFathomTransport,
+    storedEmailId: string,
+    remoteImages: boolean,
+): Promise<ClientResult<CleanedMailBody>> {
+    return spanned('GET /messages/{storedEmailId}/body/cleaned', async () => {
+        const response = await send(transport, {
+            method: 'GET',
+            path: routeFor(session, cleanedMailBodyRoute(storedEmailId, remoteImages)),
+            headers: headersFor(session),
+            longestAnswer: longestBodyAnswer,
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status !== 200) {
+            return failed(failureReasonForStatus(response.status), response.status);
+        }
+
+        const cleaned = parseCleanedMailBody(parsed(response.body), remoteImages);
+
+        return cleaned === null ? failed('unreadable', response.status) : read(cleaned);
+    });
+}
+
+/**
+ * Reads one cleaned body out of an answer that already carries it as a value.
+ *
+ * The document is held to the same walk and the same bounds the body read holds one to, so the blocks a pane draws after
+ * a cleaning are admitted by the one parser rather than by a second one written to the same contract.
+ *
+ * @param value The answer as it arrived, in whatever shape it arrived in.
+ * @param remoteImages Whether the read asked this message's remote references to be resolved.
+ * @returns The cleaned body, or `null` where what arrived is not one.
+ */
+export function parseCleanedMailBody(value: unknown, remoteImages: boolean): CleanedMailBody | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const storedEmailId = record['storedEmailId'];
+    const cleaning = record['cleaning'];
+
+    if (typeof storedEmailId !== 'string' || !isOneOf(cleaning, cleanings)) {
+        return null;
+    }
+
+    const carried = record['document'] ?? null;
+    if (carried !== null && !isRecord(carried)) {
+        return null;
+    }
+
+    const document = carried === null ? null : parseDocument(carried, remoteImages);
+    if (carried !== null && document === null) {
+        return null;
+    }
+
+    // A cleaning that happened and dropped every block is an answer the service does not compose, so one arriving here
+    // is an answer this client cannot draw: the pane is never empty, and refusing it is what keeps that true from the
+    // parser down rather than from each screen's own check.
+    if (cleaning === 'Cleaned' && (document === null || document.blocks.length === 0)) {
+        return null;
+    }
+
+    return { storedEmailId, cleaning, document };
 }
 
 // How much of the document's own budget the walk has left. One object threaded through the walk rather than counters

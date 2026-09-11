@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.BodyCleanup;
 using MailFathom.AI.Chat;
 using MailFathom.AI.Descriptions;
 using MailFathom.AI.Embeddings;
@@ -15,6 +16,7 @@ using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Runs;
+using MailFathom.Application.EmailContent.Cleaning;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Enrichment;
@@ -344,6 +346,65 @@ public sealed class AiServiceCollectionExtensionsTests
         // Act, Assert
         Assert.Throws<ArgumentNullException>(
             () => AiServiceCollectionExtensions.AddThreadStateAgent(null!, isActivated: false));
+    }
+
+    /// <summary>
+    /// The reading pane needs a reason it can draw, so a deployment that turned the third rendering off resolves the
+    /// cleaner that proposes nothing rather than meeting a service nobody registered.
+    /// </summary>
+    [Fact]
+    public void AddMailBodyCleanupAgent_NotActivated_ResolvesTheCleanerThatSendsNothing()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddMailBodyCleanupAgent(isActivated: false);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+
+        Assert.IsType<InactiveMailBodyCleaner>(provider.GetRequiredService<IMailBodyCleaner>());
+    }
+
+    /// <summary>Scoped where it is active, because each proposal opens its own credential, transport, and client.</summary>
+    [Fact]
+    public void AddMailBodyCleanupAgent_Activated_ResolvesTheAgentOncePerScope()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped(_ => new MailBodyCleanupPlan(ChatDeclarations.Plan()));
+        services.AddScoped(_ => MailAnsweringRunBounds.Default);
+        services.AddScoped(_ => Substitute.For<IMailAnsweringSpendLedger>());
+        services.AddScoped(_ => Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddScoped(_ => Substitute.For<IHttpClientFactory>());
+        services.AddScoped(_ => Substitute.For<IOutboundOperationRunner>());
+        services.AddScoped(_ => Substitute.For<IAiProviderHealthRecorder>());
+        services.AddScoped(_ => SensitiveContentEgressGuards.Inactive());
+
+        // Act
+        services.AddMailBodyCleanupAgent(isActivated: true);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var cleaner = scope.ServiceProvider.GetRequiredService<IMailBodyCleaner>();
+
+        Assert.IsType<MailBodyCleanupAgent>(cleaner);
+        Assert.Same(cleaner, scope.ServiceProvider.GetRequiredService<IMailBodyCleaner>());
+
+        using var second = provider.CreateScope();
+
+        Assert.NotSame(cleaner, second.ServiceProvider.GetRequiredService<IMailBodyCleaner>());
+    }
+
+    [Fact]
+    public void AddMailBodyCleanupAgent_WithoutAServiceCollection_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(
+            () => AiServiceCollectionExtensions.AddMailBodyCleanupAgent(null!, isActivated: false));
     }
 
     /// <summary>A ceiling that admits no image would refuse every one of them while reading as a bound somebody chose.</summary>

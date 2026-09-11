@@ -32,7 +32,7 @@ const settings: ClientPreferencesInForce = {
     telemetryEnabled: true,
     expandWholeThread: false,
     aiFiltersShown: true,
-    embeddedHtmlMessages: false,
+    messageView: 'reduced',
     notificationSeconds: 5,
     notStated: false,
     chooseTheme: () => undefined,

@@ -5,10 +5,10 @@
 import { StrictMode, type ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
+import type { ClientMessageView, ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
-import { EmbeddedHtmlMessagesContext } from '../preferences/messageView';
+import { MessageViewContext } from '../preferences/messageView';
 import { Message } from './Message';
 import { useMessageBody } from './useMessageBody';
 
@@ -139,15 +139,46 @@ function readingReported(onBodyDrawn: () => void, storedEmailId = 'stub-message'
     );
 }
 
-/** The same message read by somebody whose messages are the sender's own markup, or the reduced text. */
-function readingUnder(embeddedHtmlMessages: boolean) {
+/** The same message read under whichever of the three renderings a reader chose. */
+function readingUnder(view: ClientMessageView) {
     return (
         <Screen>
-            <EmbeddedHtmlMessagesContext value={embeddedHtmlMessages}>
+            <MessageViewContext value={view}>
                 <ReadMessage storedEmailId="stub-message" />
-            </EmbeddedHtmlMessagesContext>
+            </MessageViewContext>
         </Screen>
     );
+}
+
+/** The cleaned rendering of the same message: the one block worth reading, with the sender's wrapper dropped. */
+const cleanedDocument = {
+    ...readableBody.document,
+    blocks: [
+        {
+            type: 'paragraph',
+            version: 1,
+            content: [{ text: 'Only the part worth reading.', emphasis: 'None', foreground: null, link: null }],
+            alignment: 'Inherited',
+        },
+    ],
+};
+
+// A deployment that answers the cleaned route with one outcome and the body route with the ordinary reduced document.
+// The two are separate reads of the same message, which is what lets the pane draw the second while the first is still
+// out — so a double that answered one of them for both would prove nothing about the wait.
+function answeringCleaning(cleaning: string, document: unknown = cleanedDocument): void {
+    answer = (path) =>
+        Promise.resolve(
+            path.includes('/body/cleaned')
+                ? { status: 200, body: JSON.stringify({ storedEmailId: 'stub-message', cleaning, document }) }
+                : bodyAnswering(false),
+        );
+}
+
+/** The same deployment with the derivation still running, which is the wait the pane has to say out loud. */
+function answeringCleaningNotYet(): void {
+    answer = (path) =>
+        path.includes('/body/cleaned') ? new Promise<Answer>(() => undefined) : Promise.resolve(bodyAnswering(false));
 }
 
 // A deployment that serves the sender's own markup to a read that asked for it, and the reduced tree alone to one that
@@ -436,7 +467,7 @@ describe('Message and the view a reader chose', () => {
     });
 
     it('asks for nothing but the reduced tree for a reader who chose it', async () => {
-        render(readingUnder(false));
+        render(readingUnder('reduced'));
 
         await screen.findByText('A drawn message.');
 
@@ -446,7 +477,7 @@ describe('Message and the view a reader chose', () => {
     it('asks for the sender’s own markup only for a reader who chose it', async () => {
         answeringWithMarkupWhenAsked();
 
-        render(readingUnder(true));
+        render(readingUnder('embeddedHtml'));
 
         await screen.findByTitle("The sender's own markup, drawn in isolation");
 
@@ -456,10 +487,10 @@ describe('Message and the view a reader chose', () => {
     it('reads the message again when a reader changes to the view the answer in hand cannot draw', async () => {
         answeringWithMarkupWhenAsked();
 
-        const opened = render(readingUnder(false));
+        const opened = render(readingUnder('reduced'));
         await screen.findByText('A drawn message.');
 
-        opened.rerender(readingUnder(true));
+        opened.rerender(readingUnder('embeddedHtml'));
         await screen.findByTitle("The sender's own markup, drawn in isolation");
 
         expect(readsAsked()).toStrictEqual([
@@ -471,7 +502,7 @@ describe('Message and the view a reader chose', () => {
     // What the wait is reported as belongs to the read that started it. The pictures are the one ask with a surface of
     // its own — the button, with the wait beneath it — so a read begun by changing the view must not borrow it.
     it('says the pictures are loading while the ask for them is in flight', async () => {
-        render(readingUnder(false));
+        render(readingUnder('reduced'));
         await screen.findByText('A drawn message.');
 
         answer = () => new Promise<Answer>(() => undefined);
@@ -483,11 +514,11 @@ describe('Message and the view a reader chose', () => {
     it('says nothing about the pictures while the read a changed view started is in flight', async () => {
         answeringWithMarkupWhenAsked();
 
-        const opened = render(readingUnder(false));
+        const opened = render(readingUnder('reduced'));
         await screen.findByText('A drawn message.');
 
         answer = () => new Promise<Answer>(() => undefined);
-        opened.rerender(readingUnder(true));
+        opened.rerender(readingUnder('embeddedHtml'));
 
         expect(screen.getByRole('button', { name: 'Load pictures from the sender' })).toBeDefined();
         expect(screen.queryByText('Loading them…')).toBeNull();
@@ -496,12 +527,138 @@ describe('Message and the view a reader chose', () => {
     it('draws the reduced tree from the answer it already holds rather than reading the message again', async () => {
         answeringWithMarkupWhenAsked();
 
-        const opened = render(readingUnder(true));
+        const opened = render(readingUnder('embeddedHtml'));
         await screen.findByTitle("The sender's own markup, drawn in isolation");
 
-        opened.rerender(readingUnder(false));
+        opened.rerender(readingUnder('reduced'));
         await screen.findByText('A drawn message.');
 
         expect(readsAsked()).toStrictEqual([`${baseAddress}/api/client/messages/stub-message/body?fullHtml=true`]);
+    });
+});
+
+// The third rendering is a read of its own, so what it owes a reader is the pair the other two never needed: a wait said
+// out loud over a document already on the screen, and a sentence wherever the cleaning did not happen. A pane that is
+// empty, or silent, while a model decides is the failure these are about.
+describe('Message and the cleaned rendering', () => {
+    beforeEach(() => {
+        answering(bodyAnswering(false));
+        asked = [];
+    });
+
+    it('draws the cleaned document for a reader who chose it', async () => {
+        answeringCleaning('Cleaned');
+
+        render(readingUnder('cleaned'));
+
+        expect(await screen.findByText('Only the part worth reading.')).toBeDefined();
+    });
+
+    it('asks the cleaned route beside the body rather than instead of it', async () => {
+        answeringCleaning('Cleaned');
+
+        render(readingUnder('cleaned'));
+        await screen.findByText('Only the part worth reading.');
+
+        expect(readsAsked()).toStrictEqual([
+            `${baseAddress}/api/client/messages/stub-message/body`,
+            `${baseAddress}/api/client/messages/stub-message/body/cleaned`,
+        ]);
+    });
+
+    it('asks for no cleaning at all for a reader on the reduced document', async () => {
+        render(readingUnder('reduced'));
+        await screen.findByText('A drawn message.');
+
+        expect(readsAsked()).toStrictEqual([`${baseAddress}/api/client/messages/stub-message/body`]);
+    });
+
+    it('asks for no cleaning for a reader being shown the sender’s own markup', async () => {
+        answeringWithMarkupWhenAsked();
+
+        render(readingUnder('embeddedHtml'));
+        await screen.findByTitle("The sender's own markup, drawn in isolation");
+
+        expect(readsAsked()).toStrictEqual([`${baseAddress}/api/client/messages/stub-message/body?fullHtml=true`]);
+    });
+
+    it('says it is deciding what to keep, over the document already on the screen', async () => {
+        answeringCleaningNotYet();
+
+        render(readingUnder('cleaned'));
+
+        expect(await screen.findByText('Deciding what of this message to keep…')).toBeDefined();
+        expect(screen.getByText('A drawn message.')).toBeDefined();
+    });
+
+    it('says nothing about the cleaning once one has been drawn', async () => {
+        answeringCleaning('Cleaned');
+
+        render(readingUnder('cleaned'));
+        await screen.findByText('Only the part worth reading.');
+
+        expect(screen.queryByText('Deciding what of this message to keep…')).toBeNull();
+    });
+
+    // A cleaning that found nothing to drop has already drawn the document it would have composed, so a sentence there
+    // would report a failure to somebody who is reading exactly what they asked for.
+    it('says nothing where there was nothing to clean, and draws the reduced document', async () => {
+        answeringCleaning('NothingToClean', null);
+
+        render(readingUnder('cleaned'));
+
+        expect(await screen.findByText('A drawn message.')).toBeDefined();
+        expect(screen.queryByText(/simplified version is shown/u)).toBeNull();
+    });
+
+    it.each([
+        [
+            'NotActivated',
+            'This deployment does not simplify messages with a model, so the simplified version is shown.',
+        ],
+        [
+            'AllowanceExhausted',
+            "This deployment's allowance for the period is spent, so the simplified version is shown.",
+        ],
+        ['ProviderUnavailable', 'The model this deployment asks did not answer, so the simplified version is shown.'],
+        ['AnswerRejected', 'The answer the model gave could not be used, so the simplified version is shown.'],
+    ])('states %s over the reduced document rather than leaving the pane empty', async (cleaning, said) => {
+        answeringCleaning(cleaning, null);
+
+        render(readingUnder('cleaned'));
+
+        expect(await screen.findByText(said)).toBeDefined();
+        expect(screen.getByText('A drawn message.')).toBeDefined();
+    });
+
+    it('states a cleaning that could not be read at all, and draws the reduced document', async () => {
+        answer = (path) =>
+            Promise.resolve(path.includes('/body/cleaned') ? { status: 503, body: '' } : bodyAnswering(false));
+
+        render(readingUnder('cleaned'));
+
+        expect(
+            await screen.findByText(
+                'This message could not be simplified by a model, so the simplified version is shown.',
+            ),
+        ).toBeDefined();
+        expect(screen.getByText('A drawn message.')).toBeDefined();
+    });
+
+    // Nothing is written down, which is what the issue asking for this rendering requires: a second open asks the
+    // deployment to decide again rather than reading back what it decided the first time.
+    it('asks again when a reader changes to the cleaned rendering over a message already drawn', async () => {
+        answeringCleaning('Cleaned');
+
+        const opened = render(readingUnder('reduced'));
+        await screen.findByText('A drawn message.');
+
+        opened.rerender(readingUnder('cleaned'));
+        await screen.findByText('Only the part worth reading.');
+
+        expect(readsAsked()).toStrictEqual([
+            `${baseAddress}/api/client/messages/stub-message/body`,
+            `${baseAddress}/api/client/messages/stub-message/body/cleaned`,
+        ]);
     });
 });

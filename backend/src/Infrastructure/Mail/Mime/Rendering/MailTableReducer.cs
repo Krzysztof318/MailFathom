@@ -26,9 +26,14 @@ namespace MailFathom.Infrastructure.Mail.Mime.Rendering;
 internal static class MailTableReducer
 {
     /// <summary>The elements whose presence in a cell makes the cell a box around content rather than a cell of words.</summary>
+    /// <remarks>
+    /// <c>center</c> is among them although nothing else here is a presentational element, because it is what a whole
+    /// family of notifications opens its outermost wrapper cell with: the element centres a block and is therefore a box
+    /// in exactly the sense this list is about, and leaving it out left those messages' frames unrecognized as frames.
+    /// </remarks>
     private static readonly string[] BlockElementNames =
     [
-        "table", "div", "p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "blockquote", "pre", "hr",
+        "table", "div", "center", "p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "blockquote", "pre", "hr",
     ];
 
     /// <summary>Answers whether this table lays a message out rather than holding a table of anything.</summary>
@@ -52,6 +57,13 @@ internal static class MailTableReducer
     /// failure this admits is a layout table still drawn as a table, which is the direction that costs the less of the
     /// two.
     /// </para>
+    /// <para>
+    /// <b>One cell is counted as the cells that hold something rather than as the cells a row declares.</b> Mail does not
+    /// write a single-column wrapper: it writes a row of three whose outer two are empty gutters, and a row of five where
+    /// four are spacers. Counting declarations left the whole of that family drawn as a grid of bordered cells, which is
+    /// measurably most of what the reduced view was wrong about. What a row of genuinely filled cells is remains a table,
+    /// so the narrowness above is unchanged.
+    /// </para>
     /// </remarks>
     internal static bool IsLayout(IElement element)
     {
@@ -72,7 +84,7 @@ internal static class MailTableReducer
         var rows = RowsOf(element, reducer: null).ToArray();
 
         return rows.Length > 0
-            && rows.All(row => row.Children.Count(IsCell) <= 1)
+            && rows.All(row => row.Children.Where(IsCell).Count(HoldsAnything) <= 1)
             && rows.All(row => !row.Children.Any(child => IsNamed(child, "th")))
             && (element.ParentElement?.Closest("table") is not null
                 || rows.SelectMany(row => row.Children.Where(IsCell)).Any(HoldsBlocks));
@@ -86,6 +98,18 @@ internal static class MailTableReducer
     /// </remarks>
     private static bool HoldsBlocks(IElement cell) =>
         cell.Children.Any(child => BlockElementNames.Any(name => IsNamed(child, name)));
+
+    /// <summary>Answers whether a cell carries anything a reader would see, rather than holding a row's width open.</summary>
+    /// <remarks>
+    /// A gutter is a cell of nothing, of a non-breaking space, or of a transparent spacer sized in a style attribute, and
+    /// the first two are what <see cref="string.Trim()" /> already reads as nothing — it trims the non-breaking space
+    /// along with every other character the runtime calls whitespace. A picture counts as content rather than being
+    /// measured, because a spacer and a logo are the same element and only the sender knows which they wrote; that
+    /// admits a spacer-framed wrapper going on being drawn as a table, which is the direction this reduction already
+    /// errs in everywhere else.
+    /// </remarks>
+    private static bool HoldsAnything(IElement cell) =>
+        cell.TextContent.Trim().Length > 0 || cell.QuerySelector("img") is not null;
 
     /// <summary>Reduces a layout table to the blocks its cells hold, in the order the message wrote them.</summary>
     /// <param name="element">The table as the message wrote it.</param>
@@ -177,6 +201,13 @@ internal static class MailTableReducer
     /// <param name="reducer">The reduction the cells' own content is produced by.</param>
     /// <returns>The table, or <see langword="null" /> where it held nothing to draw.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Nothing to draw is a table no cell of which produced a block, not only a table with no row at all. The shape that
+    /// distinction exists for is the row of pictures: a newsletter draws one from remote references, every one of them is
+    /// removed while the tree is built, and what survived as a table of empty cells reached the reader as a row of empty
+    /// bordered boxes. A cell is still kept where its siblings held something, so a data table with one blank cell keeps
+    /// its columns lined up.
+    /// </remarks>
     internal static MailDocumentBlock? Reduce(
         IElement element,
         MailReductionContext context,
@@ -205,7 +236,11 @@ internal static class MailTableReducer
             }
         }
 
-        return rows.Count == 0 ? null : new MailTableBlock(ColumnsOf(element, rows, reducer), rows);
+        var holdsSomething = rows.Any(row => row.Cells.Any(cell => cell.Blocks.Count > 0));
+
+        return rows.Count == 0 || !holdsSomething
+            ? null
+            : new MailTableBlock(ColumnsOf(element, rows, reducer), rows);
     }
 
     /// <summary>Names the rows that belong to this table rather than to one nested inside it.</summary>

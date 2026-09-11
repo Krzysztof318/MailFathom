@@ -647,7 +647,10 @@ settings that decide which services this deployment registered at all: whether `
 `Chat:RelevanceFilter:Enabled` turns the second pass on, whether `Chat:Enrichment:Enabled` turns the arrival
 derivation on, whether `Chat:ThreadState:Enabled` turns the conversation derivation on, whether
 `Chat:SearchPhrasing:Enabled` turns the reading of a typed sentence on, and whether
-`Chat:ReplyDrafting:Enabled` turns the drafting of a reply on. `Chat:ReplyDrafting:StyleFromSentMail` is a restart for
+`Chat:ReplyDrafting:Enabled` turns the drafting of a reply on. The third rendering of a message body is not among them
+because it has no switch of its own: a declared `Chat:Alias` is the whole of what registers it, and which readers want
+it is their own preference rather than a key an operator writes. `Chat:BodyCleanup:Model` reloads, because it names a
+model rather than a service: the pass is already registered and what a reload moves is where its next call is routed. `Chat:ReplyDrafting:StyleFromSentMail` is a restart for
 a reason of its own: it decides nothing about which services exist and is instead read once as the drafting is
 registered, so a reload that changed it would go on reading the mail the composed deployment reads rather than the mail
 the operator has just said it may. Renaming a declared alias
@@ -790,6 +793,43 @@ the reader's own calendar day, with no tool and no mail, so a search costs the s
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Chat:SearchPhrasing:Enabled` | bool | `true` | reading a sentence requires a declared `Chat:Alias`; written off, or with no alias declared, the client is told this deployment reads none | restart |
+
+### Cleaning a message body — `Chat:BodyCleanup`
+
+Deciding which blocks of a message are what the sender wrote and which are the frame they wrapped it in, so that a
+reading pane can draw a third rendering: the same reduced document with the navigation, the legal footer, the tracking
+row and the repeated header absent. A block inside `Chat` for the reason the blocks above are: it decides with that
+endpoint and has nowhere to send an outline without one.
+
+**It carries no switch, which is what separates it from every block above.** A declared `Chat:Alias` is the whole of
+what turns this on, because whether a body is cleaned is the reader's own preference — an answer the client already holds
+per person and this deployment already serves — and a key beside it would be an operator's copy of a decision that is not
+theirs. A deployment that declares no chat endpoint cleans nothing, and a reader who chose the rendering there is shown
+the ordinary reduced document with a sentence saying so.
+
+What an operator is left deciding is the spend, and it is of a shape none of the blocks above has — **the derivation
+runs per open rather than per message**. Nothing is derived when mail arrives, nothing is stored, and opening the same
+message twice asks twice; a reader scrolling a folder therefore spends one call per message they actually open, and
+none at all for the ones they pass over.
+
+**The model is never sent the message.** What leaves the deployment is an outline of the document — each block's kind,
+how many links it carries, and the opening of its text — beside the envelope sender and the subject, and the answer comes
+back as block indices rather than as text. That is what makes the rendering incapable of rewriting a word: the blocks a
+reader sees are the ones the reduction already produced, and the model decided only which of them to leave out. An
+answer whose ranges overlap, leave a gap, reach past the last block, or carry any message text at all is refused, asked
+for once more, and on a second refusal the reader is served the ordinary reduced document with a sentence saying the
+cleaning did not happen.
+
+**It competes with questions for one allowance**, exactly as the blocks above do: each cleaning is admitted against and
+charged to the same `MailAnswering` period ceilings a question is. A period the readers of a deployment exhausted serves
+the ordinary reduced document rather than failing the read, because somebody is in front of a message.
+
+**Every outline passes the egress guard the arrival derivation's prompt passes**, under the posture of the person whose
+message it is, so a deployment that scans what leaves it for secrets scans this too.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Chat:BodyCleanup:Model` | string | *(empty)* | what this pass alone is routed to, on the same endpoint, under the same credential, and over the same transport as everything else `Chat` declares. Empty routes it to `Chat:Model`. It is the first per-feature model override under `Chat`, and it exists because this is the one pass a reader waits for in front of a message: an operator can put the decision on a small fast model without moving the one that answers questions | reload |
 
 ## `MailAnswering`
 

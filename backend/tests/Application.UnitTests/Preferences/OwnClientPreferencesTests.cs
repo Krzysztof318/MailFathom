@@ -20,7 +20,7 @@ namespace MailFathom.Application.UnitTests.Preferences;
 public sealed class OwnClientPreferencesTests
 {
     private static readonly ClientPreferences Chosen =
-        new(false, ClientThemeChoice.Dark, true, false, true, true, false, 12);
+        new(false, ClientThemeChoice.Dark, true, false, true, ClientMessageView.Cleaned, false, 12);
 
     [Fact]
     public async Task ReadAsync_APersonWhoHasSetSomething_AnswersWhatTheySet()

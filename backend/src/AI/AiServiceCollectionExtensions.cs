@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.BodyCleanup;
 using MailFathom.AI.Chat;
 using MailFathom.AI.Chunking;
 using MailFathom.AI.Descriptions;
@@ -20,6 +21,7 @@ using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Runs;
+using MailFathom.Application.EmailContent.Cleaning;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Enrichment;
@@ -318,6 +320,46 @@ public static class AiServiceCollectionExtensions
         services.TryAddSingleton<OpenAiCompatibleClientFactory>();
         services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
         services.AddScoped<IThreadStateDeriver, ThreadStateAgent>();
+
+        return services;
+    }
+
+    /// <summary>Registers the one way a reduced body becomes the cleaned rendering, in whichever of its two states the deployment is in.</summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <param name="isActivated">Whether the deployment declared a chat endpoint, which is the whole of what this pass needs: which readers want the rendering is their own preference rather than an operator's key.</param>
+    /// <returns>The same service collection, so registration reads as one expression.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Registered on the same terms as enrichment and a conversation's state: the port answers with a reason rather than
+    /// with an absence, so the reading pane draws the uncleaned message and says why instead of drawing an empty pane.
+    /// </para>
+    /// <para>
+    /// Which of the two is registered is decided once, at composition, so an instance that did not ask for this never
+    /// resolves a chat client and never composes a turn out of somebody's mail. The use case is registered in both states
+    /// rather than only the active one, because the route answers the same shape either way.
+    /// </para>
+    /// <para>
+    /// Scoped when it is active, because one open is one proposal: the ledger the call is charged to, the credential it
+    /// resolves, and the transport it opens all belong to that request. The inactive one is a singleton holding nothing.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddMailBodyCleanupAgent(this IServiceCollection services, bool isActivated)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddScoped<MailBodyCleaning>();
+
+        if (!isActivated)
+        {
+            services.AddSingleton<IMailBodyCleaner>(InactiveMailBodyCleaner.Instance);
+
+            return services;
+        }
+
+        services.TryAddSingleton<OpenAiCompatibleClientFactory>();
+        services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
+        services.AddScoped<IMailBodyCleaner, MailBodyCleanupAgent>();
 
         return services;
     }

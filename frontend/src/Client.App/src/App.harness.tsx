@@ -217,7 +217,7 @@ export function preferencesAnswering(telemetryEnabled: boolean, aiFiltersShown =
             expandWholeThread: false,
             aiFiltersShown,
             notificationSeconds: 5,
-            embeddedHtmlMessages: false,
+            messageView: 'reduced',
         }),
     };
 }
@@ -385,7 +385,7 @@ export function deploymentWorkingInTabs(): DeploymentTransport {
                     expandWholeThread: false,
                     aiFiltersShown: true,
                     notificationSeconds: 5,
-                    embeddedHtmlMessages: false,
+                    messageView: 'reduced',
                 }),
             }),
         );
