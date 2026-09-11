@@ -141,8 +141,8 @@
             </div>
           </div>
         </sc-if>
-        <div onClick="{{ demoRefresh }}" title="Demo: new mail, an update and a removal" style="{{ demoBtnStyle }}" style-hover="cursor:pointer;border-color:var(--accent-line);background:var(--accent-soft);color:var(--accent-d)">
-          <span style="{{ demoIconStyle }}">refresh</span>
+        <div onClick="{{ refreshAll }}" title="Refresh" style="{{ refreshBtnStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)">
+          <span style="{{ refreshIconStyle }}">refresh</span>
         </div>
         <div onClick="{{ toggleNotifCenter }}" title="Notifications" style="{{ railBellStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)">
           <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:25px;line-height:1">{{ railBellIcon }}</span>
@@ -199,8 +199,8 @@
   </sc-if>
 
   <sc-if value="{{ isPhone }}" hint-placeholder-val="{{ false }}">
-    <div onClick="{{ demoRefresh }}" title="Demo refresh" style="{{ demoFabStyle }}" style-hover="cursor:pointer">
-      <span style="{{ demoIconStyle }}">refresh</span>
+    <div onClick="{{ refreshAll }}" title="Refresh" style="{{ refreshFabStyle }}" style-hover="cursor:pointer">
+      <span style="{{ refreshIconStyle }}">refresh</span>
     </div>
   </sc-if>
 
@@ -488,13 +488,13 @@
           <div style="display:flex;align-items:flex-start;gap:11px">
             <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:22px;line-height:1;color:var(--warn)">gpp_maybe</span>
             <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
-              <div style="font-size:14.5px;font-weight:600">Show the full HTML?</div>
-              <div style="font-size:12.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">The original HTML may contain tracking pixels, layouts impersonating known brands and phishing links. We block scripts and remote resources, but the sender may still be able to tell the message was opened.</div>
+              <div style="font-size:14.5px;font-weight:600">Show the original message?</div>
+              <div style="font-size:12.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">The original message may contain tracking pixels, layouts impersonating known brands and phishing links. We block scripts and remote resources, but the sender may still be able to tell the message was opened.</div>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
             <div onClick="{{ cancelHtmlAsk }}" style="font-size:13px;color:var(--text2);border-radius:9px;padding:9px 13px" style-hover="cursor:pointer;background:var(--hover)">Stay in simplified</div>
-            <div onClick="{{ confirmHtmlAsk }}" style="font-size:13px;font-weight:600;color:var(--onaccent);background:var(--accent);border-radius:9px;padding:9px 16px" style-hover="cursor:pointer;opacity:0.9">Show HTML</div>
+            <div onClick="{{ confirmHtmlAsk }}" style="font-size:13px;font-weight:600;color:var(--onaccent);background:var(--accent);border-radius:9px;padding:9px 16px" style-hover="cursor:pointer;opacity:0.9">Show the original</div>
           </div>
         </div>
       </div>
@@ -866,9 +866,14 @@
           </sc-if>
           <sc-if value="{{ showThreadStateBar }}" hint-placeholder-val="{{ true }}">
           <div style="{{ threadStateStyle }}">
-            <sc-if value="{{ isMobileState }}" hint-placeholder-val="{{ false }}">
+            <sc-if value="{{ mobileStateLine }}" hint-placeholder-val="{{ false }}">
               <span style="flex:0 0 auto;font-family:'Instrument Sans',system-ui,sans-serif;font-size:10px;color:var(--muted);border:1px solid var(--border2);border-radius:4px;padding:2px 6px">AI</span>
               <span style="flex:1;min-width:0;font-size:13px;line-height:1.35;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ threadAiLine }}</span>
+            </sc-if>
+            <sc-if value="{{ stateStale }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:1;min-width:0;font-size:13px;line-height:1.45;color:var(--muted);text-wrap:pretty">This conversation has changed since where it stands was last derived, so that reading is held back until it is derived again.</div>
+            </sc-if>
+            <sc-if value="{{ isMobileState }}" hint-placeholder-val="{{ false }}">
               <div onClick="{{ openThreadSheet }}" title="Thread state and ready-made questions" style="{{ askSheetAltStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">insights</span>{{ askSheetLabel }}</div>
               <div onClick="{{ askAgentThread }}" title="Go to the agent with the thread as context" style="{{ askSheetBtnStyle }}" style-hover="cursor:pointer;opacity:0.9"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">auto_awesome</span>Ask</div>
             </sc-if>
@@ -888,6 +893,9 @@
           </div>
           </sc-if>
           <div onScroll="{{ onThreadScroll }}" onTouchStart="{{ threadTouchStart }}" onTouchEnd="{{ threadTouchEnd }}" style="{{ threadBodyStyle }}">
+            <sc-if value="{{ staleInBody }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:0 0 auto;background:var(--sub);border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:12.5px;line-height:1.45;color:var(--muted);text-wrap:pretty">This conversation has changed since where it stands was last derived, so that reading is held back until it is derived again.</div>
+            </sc-if>
             <sc-if value="{{ stateInBody }}" hint-placeholder-val="{{ false }}">
               <div style="{{ stateBodyRowStyle }}">
                 <sc-for list="{{ stateChips }}" as="sc" hint-placeholder-count="3">
@@ -1043,6 +1051,10 @@
           <div onClick="{{ stopProp }}" style="display:flex;flex-direction:column;gap:12px;max-height:82vh;overflow:auto;background:var(--panel);border-top-left-radius:18px;border-top-right-radius:18px;padding:10px 16px 20px 16px">
             <div style="align-self:center;width:38px;height:4px;border-radius:2px;background:var(--border2);margin:2px 0 4px 0"></div>
             <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;letter-spacing:0.1em;color:var(--muted)">THREAD STATE</div>
+            <sc-if value="{{ stateStale }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:14px;line-height:1.45;color:var(--muted);text-wrap:pretty">This conversation has changed since where it stands was last derived, so that reading is held back until it is derived again.</div>
+            </sc-if>
+            <sc-if value="{{ stateFresh }}" hint-placeholder-val="{{ true }}">
             <div style="display:flex;flex-direction:column;gap:8px">
               <sc-for list="{{ activeState }}" as="s" hint-placeholder-count="3">
                 <div style="display:flex;flex-direction:column;gap:3px;background:var(--sub);border:1px solid var(--line);border-radius:10px;padding:11px 13px">
@@ -1054,6 +1066,7 @@
                 </div>
               </sc-for>
             </div>
+            </sc-if>
             <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;letter-spacing:0.1em;color:var(--muted);padding-top:4px">ASK ABOUT THIS THREAD</div>
             <div style="display:flex;flex-direction:column;gap:8px">
               <sc-for list="{{ threadSheetAsks }}" as="q" hint-placeholder-count="3">
@@ -3183,8 +3196,8 @@ const initialsOf = (n) => (n || "?").split(/\s+/).filter(Boolean).slice(0, 2).ma
 const lowerFirst = (s) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 const M = (from, when, paras, atts, html) => ({ from, when, initials: initialsOf(from), mine: from === ME, paras, atts: atts || [], html: html || "" });
 
-/* Full HTML versions of messages — what actually arrives from the server; the thread window shows simplified text
-   and the full HTML opens on demand (the "code" icon) in a separate tab / preview. */
+/* The original messages as their senders wrote them — what actually arrives from the server; the thread window
+   shows cleaned-up text and the original opens on demand (the "code" icon) in a separate tab / preview. */
 const HTML_SHELL = (title, body) => '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + title + '</title></head>' +
   '<body style="margin:0;padding:0;background:#eef1f5;font-family:Georgia,\'Times New Roman\',serif;color:#1f2933">' + body + '</body></html>';
 
@@ -4390,11 +4403,11 @@ class Component extends DCLogic {
     if (dx < 0) {
       this.setState({ swipeId: null, swipeDx: 0, threadId: id, mailPane: "thread", threadOpen: true, compose: true, composeMin: false });
     } else {
-      this.setState(s2 => ({
-        swipeId: null, swipeDx: 0,
+      this.setState({ swipeId: null, swipeDx: 0 });
+      this.animateRowsOut([id], () => this.setState(s2 => ({
         archived: (s2.archived || []).concat([id]),
         lastArchived: id,
-      }));
+      })));
     }
   };
 
@@ -4482,7 +4495,9 @@ class Component extends DCLogic {
 
   archiveThreads = (ids) => {
     const t = this.opTargets(ids);
-    this.setState(s => ({ archived: (s.archived || []).concat(t), lastOp: { kind: "archive", ids: t }, sel: [], mailPane: "list" }));
+    const op = { kind: "archive", ids: t };
+    this.setState({ lastOp: op, sel: [], mailPane: "list" });
+    this.animateRowsOut(t, () => { if (op.undone) return; this.setState(s => ({ archived: (s.archived || []).concat(t) })); });
     this.notify("Archived " + this.countWord(t.length), true);
   };
 
@@ -4609,12 +4624,15 @@ class Component extends DCLogic {
   };
 
   purgeThreads = (t) => {
-    this.setState(s => ({ deleted: (s.deleted || []).concat(t), lastOp: null, sel: [], mailPane: "list" }));
+    this.setState({ lastOp: null, sel: [], mailPane: "list" });
+    this.animateRowsOut(t, () => this.setState(s => ({ deleted: (s.deleted || []).concat(t) })));
     this.notify("Permanently deleted — " + this.countWord(t.length), false);
   };
 
   doDeleteThreads = (t) => {
-    this.setState(s => ({ deleted: (s.deleted || []).concat(t), lastOp: { kind: "delete", ids: t }, sel: [], mailPane: "list" }));
+    const op = { kind: "delete", ids: t };
+    this.setState({ lastOp: op, sel: [], mailPane: "list" });
+    this.animateRowsOut(t, () => { if (op.undone) return; this.setState(s => ({ deleted: (s.deleted || []).concat(t) })); });
     this.notify("Moved to trash — " + this.countWord(t.length), true);
   };
 
@@ -4791,6 +4809,7 @@ class Component extends DCLogic {
     const op = this.state.lastOp;
     this.hideToast();
     if (!op) return;
+    op.undone = true; /* an undo fired inside the leave animation must cancel the pending removal */
     const gone = (list) => (list || []).filter(x => op.ids.indexOf(x) < 0);
     if (op.kind === "archive") this.setState(s => ({ archived: gone(s.archived), lastOp: null }));
     else if (op.kind === "delete") this.setState(s => ({ deleted: gone(s.deleted), lastOp: null }));
@@ -5288,15 +5307,28 @@ class Component extends DCLogic {
     this.timers.push(t);
   };
 
+  /* "out" is the feedback for a removal the person performed — archive, delete, purge. The row
+     collapses under the gesture that removed it, then the state change lands. A row that goes
+     because the mailbox was re-read never plays it: that arrives as a new list, not as an act. */
+  animateRowsOut = (ids, commit) => {
+    const list = (ids || []).filter(Boolean);
+    if (!list.length) { commit(); return; }
+    list.forEach(id => this.setRowAnim(id, "out", 440));
+    this.timers.push(setTimeout(commit, 380));
+  };
+
   markUnread = (id) => this.setState(s => ({ unread: Object.assign({}, s.unread || DEFAULT_UNREAD, { [id]: true }) }));
 
-  demoRefresh = () => {
-    if (this.state.demoBusy) return;
+  /* The global refresh — re-reads the mail in front of the reader and the notification centre.
+     Waiting is a pulse, never a spinner. What a re-read turns up in the prototype is the staged
+     batch: a message that arrived, one that changed, one that is no longer where it was. */
+  refreshAll = () => {
+    if (this.state.refreshBusy) return;
     const step = (this._demoStep = (this._demoStep || 0));
     this._demoStep = step + 1;
     const b = DEMO_BATCHES[step % DEMO_BATCHES.length];
     const prev = this._demoLastId;
-    this.setState({ demoBusy: true });
+    this.setState({ refreshBusy: true });
 
     /* 1 · a new message lands at the top of the list and in the notification centre */
     const id = "demo" + (step + 1);
@@ -5311,7 +5343,8 @@ class Component extends DCLogic {
     const t2 = setTimeout(() => {
       const th = THREADS.find(x => x.id === b.edit.id);
       if (th && (this.state.deleted || []).indexOf(th.id) < 0) {
-        Object.assign(th, b.edit.patch);
+        /* the reply joins the conversation after its state was derived — the reading is now behind */
+        Object.assign(th, b.edit.patch, { stateStale: true });
         this.markUnread(th.id);
         this.setRowAnim(th.id, "edit", 1700);
         this.pushNotif({ kind: "mail", title: b.editNotif.title, body: b.editNotif.body,
@@ -5319,15 +5352,14 @@ class Component extends DCLogic {
       }
     }, 1000);
 
-    /* 3 · one message is withdrawn — its tile collapses and leaves the list */
+    /* 3 · one message is no longer where it was — the re-read simply returns a list without it,
+       so no leaving animation plays: "out" belongs to removals the person performed. */
     const t3 = setTimeout(() => {
       const done = (this.state.deleted || []);
       const gone = prev && done.indexOf(prev) < 0 ? prev : (done.indexOf(b.fallbackRemove) < 0 ? b.fallbackRemove : null);
-      if (!gone) { this.setState({ demoBusy: false }); return; }
-      this.setRowAnim(gone, "out", 480);
+      if (!gone) { this.setState({ refreshBusy: false, lastSync: Date.now() }); return; }
       this.notify(b.removeNote, false);
-      const t4 = setTimeout(() => this.setState(s => ({ deleted: (s.deleted || []).concat([gone]), demoBusy: false })), 440);
-      this.timers.push(t4);
+      this.setState(s => ({ deleted: (s.deleted || []).concat([gone]), refreshBusy: false, lastSync: Date.now() }));
     }, 2050);
     this.timers.push(t2, t3);
   };
@@ -5866,7 +5898,7 @@ class Component extends DCLogic {
         htmlEmbedSrc: htmlViewMode ? embedHtml(m.html || htmlFallback(m, thread.subject), "fit:" + thread.id + ":" + i) : "",
         htmlFrameRef: this.htmlFrameRef,
         htmlRich: !!m.html,
-        htmlTitle: m.html ? "Show the full HTML version (rich content)" : "Show the full HTML version",
+        htmlTitle: m.html ? "Show the original message (rich content)" : "Show the original message",
         openHtml: () => {
           const doc = { title: thread.subject, from: m.from, when: m.when, rich: !!m.html, src: m.html || htmlFallback(m, thread.subject) };
           this.setState({ htmlAsk: { key: "html:" + thread.id + ":" + i, doc } });
@@ -7533,7 +7565,7 @@ class Component extends DCLogic {
       delFolderName: st.delFolder ? st.delFolder.path.split("/").pop() : "",
       delFolderText: st.delFolder
         ? "The folder" + (((st.extraFolders || {})[st.delFolder.key] || []).some(p => p.indexOf(st.delFolder.path + "/") === 0) ? " and everything nested inside it" : "") +
-          " will be removed from " + st.delFolder.label + ". Messages it holds go back to Inbox."
+          " will be removed from " + st.delFolder.label + ". The mail already stored from it stays here, and the folder stays on your mail server."
         : "",
       closeDeleteFolder: this.closeDeleteFolder,
       confirmDeleteFolder: this.confirmDeleteFolder,
@@ -7553,14 +7585,16 @@ class Component extends DCLogic {
           ? "color:var(--onaccent);background:var(--accent);border:1px solid var(--accent);"
           : "color:var(--faint);background:var(--rail);border:1px solid var(--line);"),
       nfCreateHover: (st.nfName || "").trim() ? "cursor:pointer;opacity:0.9" : "cursor:not-allowed",
-      demoRefresh: this.demoRefresh,
-      demoIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:" + (tablet ? 18 : 20) + "px;line-height:1;display:block" +
-        (st.demoBusy ? ";animation:mfspin 900ms linear infinite" : ""),
-      demoBtnStyle: "position:relative;flex:0 0 auto;width:" + (tablet ? 30 : 34) + "px;height:" + (tablet ? 30 : 34) + "px;display:flex;align-items:center;justify-content:center;border-radius:12px;border:1px dashed " +
-        (st.demoBusy ? "var(--accent-line);background:var(--accent-soft);color:var(--accent-d);" : "var(--border2);background:var(--panel);color:var(--muted);") +
+      /* The one refresh: it re-reads the mail in front of the reader and the notification centre.
+         Solid border, no spinner — waiting is the pulse the prototype uses for work in progress. */
+      refreshAll: this.refreshAll,
+      refreshIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:" + (tablet ? 18 : 20) + "px;line-height:1;display:block" +
+        (st.refreshBusy ? ";animation:mfpulse 1s ease-in-out infinite" : ""),
+      refreshBtnStyle: "position:relative;flex:0 0 auto;width:" + (tablet ? 30 : 34) + "px;height:" + (tablet ? 30 : 34) + "px;display:flex;align-items:center;justify-content:center;border-radius:12px;border:1px solid " +
+        (st.refreshBusy ? "var(--accent-line);background:var(--accent-soft);color:var(--accent-d);" : "var(--line);background:var(--panel);color:var(--text2);") +
         "transition:background 140ms ease,color 140ms ease,border-color 140ms ease",
-      demoFabStyle: "position:fixed;left:12px;bottom:82px;z-index:70;width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:14px;border:1px dashed " +
-        (st.demoBusy ? "var(--accent-line);background:var(--accent-soft);color:var(--accent-d);" : "var(--border2);background:var(--panel);color:var(--muted);") +
+      refreshFabStyle: "position:fixed;left:12px;bottom:82px;z-index:70;width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:14px;border:1px solid " +
+        (st.refreshBusy ? "var(--accent-line);background:var(--accent-soft);color:var(--accent-d);" : "var(--line);background:var(--panel);color:var(--text2);") +
         "box-shadow:0 2px 8px var(--sh-2)",
       railBellStyle: "position:relative;flex:0 0 auto;width:" + (tablet ? 40 : 46) + "px;height:" + (tablet ? 40 : 46) + "px;display:flex;align-items:center;justify-content:center;border-radius:14px;border:1px solid " +
         (st.notifCenter ? "var(--accent-line);background:var(--accent-soft);color:var(--accent-d);" : "var(--line);background:var(--panel);color:var(--text2);box-shadow:0 1px 2px var(--sh-1);"),
@@ -7685,7 +7719,12 @@ class Component extends DCLogic {
          mieszka w nim przycisk powrotu do listy. */
       showThreadHead: !st.stateBarOff || singlePane,
       showComposerBar: !st.stateBarOff,
-      stateInBody: tablet && !st.stateBarOff,
+      /* A reading that predates the conversation's newest message: a message joined or left after
+         the state was derived, so the reading is held back instead of being shown out of date. */
+      stateStale: !!thread.stateStale,
+      stateFresh: !thread.stateStale,
+      stateInBody: tablet && !st.stateBarOff && !thread.stateStale,
+      staleInBody: tablet && !st.stateBarOff && !!thread.stateStale,
       threadAiLine: thread.ai || (thread.state[0] ? thread.state[0].value : ""),
       threadSheetOpen: !!st.threadSheet,
       showAgentJump: !isMobile && !st.stateBarOff,
@@ -7737,7 +7776,8 @@ class Component extends DCLogic {
         style: "flex:1 1 190px;min-width:0;display:flex;flex-direction:column;gap:1px;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:6px 9px",
       })),
       isMobileState: singlePane,
-      showStateCards: !singlePane,
+      mobileStateLine: singlePane && !thread.stateStale,
+      showStateCards: !singlePane && !thread.stateStale,
       stateToggleStyle: singlePane
         ? "margin-left:auto;font-size:12px;color:var(--accent-d);background:var(--accent-soft);border-radius:14px;padding:3px 10px"
         : "display:none",
@@ -8040,8 +8080,8 @@ class Component extends DCLogic {
       viewSimpleStyle: "flex:1;text-align:center;padding:6px 8px;border-radius:7px;font-size:12.5px;" + (st.msgView === "html" ? "color:var(--muted)" : "background:var(--accent);color:var(--onaccent)"),
       viewHtmlStyle: "flex:1;text-align:center;padding:6px 8px;border-radius:7px;font-size:12.5px;" + (st.msgView === "html" ? "background:var(--accent);color:var(--onaccent)" : "color:var(--muted)"),
       viewHint: st.msgView === "html"
-        ? "Messages show embedded HTML content; the HTML toggle next to the message header disappears."
-        : "Messages show sanitised text; you open the full HTML with the icon next to the header.",
+        ? "Messages show the original as its sender wrote it, inline; the control on the message head goes."
+        : "Messages are shown as cleaned-up text; the original is one control away on the message head.",
       telemetryOptOut: !!st.telemetryOptOut,
       telemetrySwitchStyle: "flex:0 0 auto;margin-top:2px;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (st.telemetryOptOut ? "--accent" : "--border2") + ");justify-content:" + (st.telemetryOptOut ? "flex-end" : "flex-start"),
       toggleTelemetry: () => this.setState(s => ({ telemetryOptOut: !s.telemetryOptOut })),
