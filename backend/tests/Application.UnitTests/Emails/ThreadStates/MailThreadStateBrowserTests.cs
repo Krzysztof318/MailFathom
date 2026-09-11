@@ -46,6 +46,35 @@ public sealed class MailThreadStateBrowserTests
     }
 
     /// <summary>
+    /// A state recorded while three statements of an aspect were kept is read as the first of each aspect, which is the
+    /// one the derivation ranked most important, rather than derived again to arrive there.
+    /// </summary>
+    [Fact]
+    public async Task ReadStateAsync_AStoredStateHoldingThreeStatementsOfOneAspect_AnswersWithTheFirstOfEachAspect()
+    {
+        // Arrange
+        var question = ThreadStateEntry.Create(
+            ThreadStateAspect.OpenQuestion,
+            "Whether the yard can be spared on the ninth.",
+            [StoredEmailId.Create(Guid.CreateVersion7())]);
+        var stored = State(
+        [
+            Agreement("The response time stays at two hours."),
+            Agreement("The fixings are inside the figure."),
+            Agreement("Delivery is on the ninth."),
+            question,
+        ]);
+        var browser = CreateBrowser(ReaderReturning(stored));
+
+        // Act
+        var state = await browser.ReadStateAsync(Conversation, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(state);
+        Assert.Equal([stored.Entries[0], question], state.Entries);
+    }
+
+    /// <summary>
     /// A conversation this deployment has derived nothing about is an absence a screen draws, so the read answers with
     /// nothing rather than raising anything a caller would have to catch.
     /// </summary>
@@ -158,7 +187,8 @@ public sealed class MailThreadStateBrowserTests
             ThreadStateCoverage.WholeThread,
             entries,
             new ThreadStateRevision(2, new DateTimeOffset(2026, 9, 7, 16, 0, 0, TimeSpan.Zero)),
-            new DateTimeOffset(2026, 9, 8, 9, 0, 0, TimeSpan.Zero));
+            new DateTimeOffset(2026, 9, 8, 9, 0, 0, TimeSpan.Zero),
+            IsCurrent: true);
 
     private static ThreadStateEntry Agreement(string text) =>
         ThreadStateEntry.Create(

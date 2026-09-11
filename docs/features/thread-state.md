@@ -32,8 +32,10 @@ somebody scanning for what they still owe should not have to find it among what 
 supports, and no reader could tell them apart. The sources name messages in the same terms the Discover run's citations
 name them, so the same reader resolves both: following one is opening a message the mailbox already holds.
 
-At most three statements are kept per aspect. The block is a row of cards a reader glances at, and a fourth agreement
-is a paragraph nobody reads in the place a glance was promised.
+**One statement is kept per aspect**: the first, because the derivation is asked to put the most important first. The
+block is a row of cards a reader glances at, one line under each label, and a second agreement beside the first is a
+paragraph nobody reads in the place a glance was promised. A state recorded while more were kept is read as the first
+statement of each aspect rather than derived again, which is what it would have led with anyway.
 
 ## Nothing to say, and too much to read
 
@@ -159,7 +161,15 @@ A statement is a sentence derived from somebody's mail and inherits its classifi
 ## What a client reads
 
 `GET /api/client/threads/{threadId}/state` answers with the block: the conversation, the coverage, when it was derived,
-and the statements with their sources.
+whether it is current, and the statements with their sources.
+
+**A stale state is never published as current.** Between a reply arriving and the next pass reaching the conversation
+— which is indefinite while the answering allowance is spent — the stored record describes a conversation that no
+longer exists, and its newest message may have withdrawn exactly what the block says. So `current` is `false` whenever
+the conversation's shape no longer matches the one the state was derived from, and it is decided by the same selection
+and comparison the pass uses to find what is owed rather than by a second one: a read calls a state current exactly
+when the next pass would leave the conversation alone. A client draws no statement of a state that is not current, in
+any composition, and says in the block that the conversation has changed since.
 
 **Absence is a `404`, and it is a state rather than a failure.** A deployment that never turned the derivation on, one
 that has not reached this conversation yet, and a conversation this caller does not hold all answer the same way, and a

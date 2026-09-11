@@ -4,8 +4,11 @@
 
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.ThreadStates;
+using MailFathom.Application.Folders;
+using MailFathom.Application.Spam.Gating;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Emails.Threads;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -25,9 +28,18 @@ namespace MailFathom.Infrastructure.Persistence.ThreadStates;
 /// surface has no conversation for, so it has no state either. Answering otherwise would report a withheld folder's
 /// contents one derived sentence at a time.
 /// </para>
+/// <para>
+/// Whether the state still describes the conversation is asked of the mail as well, and in the derivation pass's own
+/// terms — see <see cref="OwedADerivation" />. A stored state is written against the shape the conversation had, and
+/// a reply that arrived since changes the conversation without changing the record, so the record alone cannot say.
+/// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class StoredThreadStateReader(MailFathomDbContext dbContext) : IStoredThreadStateReader
+internal sealed class StoredThreadStateReader(
+    MailFathomDbContext dbContext,
+    IMailFolderParticipationReader folderParticipation,
+    DerivedWorkGate derivedWorkGate)
+    : IStoredThreadStateReader
 {
     /// <inheritdoc />
     public async Task<EmailThreadState?> ReadStateAsync(
@@ -51,6 +63,8 @@ internal sealed class StoredThreadStateReader(MailFathomDbContext dbContext) : I
             .AsNoTracking()
             .Where(state => state.EmailThreadId == surviving)
             .Select(state => new StoredThreadStateRow(
+                state.EmailThread!.UserId,
+                state.EmailThread.MailboxAccountId,
                 state.Coverage,
                 state.DerivedAt,
                 state.DerivedFromMessageCount,
@@ -72,6 +86,16 @@ internal sealed class StoredThreadStateReader(MailFathomDbContext dbContext) : I
             return null;
         }
 
+        var owed = await OwedADerivation(
+                dbContext.StoredEmails.AsNoTracking(),
+                dbContext.EmailThreadStates.AsNoTracking(),
+                surviving,
+                stored.UserId,
+                stored.MailboxAccountId,
+                folderParticipation.FoldersGeneratingEmbeddings,
+                derivedWorkGate.ReadTerms())
+            .AnyAsync(cancellationToken);
+
         return new EmailThreadState(
             EmailThreadId.Create(surviving),
             stored.Coverage,
@@ -84,8 +108,41 @@ internal sealed class StoredThreadStateReader(MailFathomDbContext dbContext) : I
                     entry.DueAt)),
             ],
             new ThreadStateRevision(stored.DerivedFromMessageCount, stored.DerivedFromLatestArrival),
-            stored.DerivedAt);
+            stored.DerivedAt,
+            IsCurrent: !owed);
     }
+
+    /// <summary>Asks the derivation pass's own question of one conversation: whether it is owed a derivation now.</summary>
+    /// <param name="emails">The stored mail to count the conversation from.</param>
+    /// <param name="states">The states already stored.</param>
+    /// <param name="survivingThreadId">The conversation, as the surviving thread of any merge.</param>
+    /// <param name="userId">The user whose account the conversation belongs to.</param>
+    /// <param name="mailboxAccountId">The configured account the conversation belongs to.</param>
+    /// <param name="embeddedFolders">The folders a mapping admits to derived work.</param>
+    /// <param name="terms">The classification terms in force.</param>
+    /// <returns>One row where the stored state no longer describes the conversation, and none where it still does.</returns>
+    /// <remarks>
+    /// The selection and the comparison are the store's, composed rather than restated, so a read calls a state current
+    /// exactly when the next pass would leave the conversation alone. A second comparison written here would be a second
+    /// opinion about the same shape, and the day the two disagreed a reader would be shown as current a state the pass
+    /// had already queued to replace — or be told a state was stale that no pass would ever derive again.
+    /// </remarks>
+    internal static IQueryable<ThreadAwaitingStateRow> OwedADerivation(
+        IQueryable<StoredEmailEntity> emails,
+        IQueryable<EmailThreadStateEntity> states,
+        Guid survivingThreadId,
+        Guid userId,
+        string mailboxAccountId,
+        IReadOnlyList<MailFolderIdentity> embeddedFolders,
+        DerivedWorkAdmissionTerms terms) =>
+        StoredThreadStateStore.Awaiting(
+            StoredThreadStateStore.Selecting(
+                emails.Where(email => email.EmailThreadId == survivingThreadId),
+                userId,
+                mailboxAccountId,
+                embeddedFolders,
+                terms),
+            states.Where(state => state.EmailThreadId == survivingThreadId));
 
     /// <summary>Narrows one conversation's messages to the mail the scope admits.</summary>
     /// <remarks>
@@ -103,6 +160,8 @@ internal sealed class StoredThreadStateReader(MailFathomDbContext dbContext) : I
             scope);
 
     private sealed record StoredThreadStateRow(
+        Guid UserId,
+        string MailboxAccountId,
         ThreadStateCoverage Coverage,
         DateTimeOffset DerivedAt,
         int DerivedFromMessageCount,

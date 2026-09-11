@@ -59,7 +59,10 @@ public sealed class MailThreadStateBrowser
     /// <summary>Reads where one of the acting user's conversations stands.</summary>
     /// <param name="threadId">The conversation, as a message row published it.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>The state, or <see langword="null" /> where this deployment has none for that conversation.</returns>
+    /// <returns>
+    /// The state, holding only the leading statements of each aspect — see <see cref="EmailThreadState.Leading" /> — or
+    /// <see langword="null" /> where this deployment has none for that conversation.
+    /// </returns>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the state carries, which refuses it rather than serving it unscanned.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" />.</exception>
     public async Task<EmailThreadState?> ReadStateAsync(EmailThreadId threadId, CancellationToken cancellationToken)
@@ -77,7 +80,7 @@ public sealed class MailThreadStateBrowser
 
         var state = await this.stateReader.ReadStateAsync(threadId, scope, cancellationToken);
 
-        return state is null ? null : await this.GuardedAsync(state, cancellationToken);
+        return state is null ? null : await this.GuardedAsync(state.Leading(), cancellationToken);
     }
 
     /// <summary>Scans everything the block would publish, under the point this surface is read on.</summary>

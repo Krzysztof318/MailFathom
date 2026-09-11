@@ -30,15 +30,6 @@ namespace MailFathom.AI.ThreadStates;
 /// </remarks>
 internal static class ThreadStateReading
 {
-    /// <summary>The greatest number of statements one aspect keeps from one answer.</summary>
-    /// <remarks>
-    /// A block beside a conversation is read at a glance, and a model handed a long exchange will happily write one
-    /// agreement per message. The leading entries are kept, because a producer told to write the important ones first
-    /// does. Three rather than more because the block is a row of cards above the correspondence: four aspects at three
-    /// statements each is already the point where the row starts wrapping into the space the conversation needs.
-    /// </remarks>
-    internal const int MaximumEntriesPerAspect = 3;
-
     private const string JsonFence = "```";
 
     /// <summary>Reads the statements out of an agent's answer.</summary>
@@ -67,6 +58,10 @@ internal static class ThreadStateReading
     }
 
     /// <summary>Reads one array of written statements into the statements of one aspect.</summary>
+    /// <remarks>
+    /// A model handed a long exchange will happily write one agreement per message, so the leading entries that
+    /// survive are kept and the rest fall away: a producer told to write the most important first does.
+    /// </remarks>
     private static IEnumerable<ThreadStateEntry> Aspect(
         ThreadStateAspect aspect,
         IReadOnlyList<ThreadStateEntryDocument?>? written,
@@ -74,7 +69,7 @@ internal static class ThreadStateReading
         (written ?? [])
             .Select(entry => ToEntry(aspect, entry, messages))
             .OfType<ThreadStateEntry>()
-            .Take(MaximumEntriesPerAspect);
+            .Take(EmailThreadState.MaximumEntriesPerAspect);
 
     /// <summary>Turns one written statement into a statement, or into nothing where the conversation cannot back it.</summary>
     private static ThreadStateEntry? ToEntry(

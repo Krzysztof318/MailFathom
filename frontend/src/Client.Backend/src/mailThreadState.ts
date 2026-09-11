@@ -70,7 +70,13 @@ export interface MailThreadState {
     /** When the state was derived, which is what a screen says the block is as of. */
     readonly derivedAt: string;
 
-    /** The statements, in aspect order and within an aspect in the order the derivation put them. */
+    /**
+     * Whether the state was derived from the conversation as it stands now. `false` once a message has joined or left
+     * it since, and a screen never draws such a state as the conversation's current one.
+     */
+    readonly current: boolean;
+
+    /** The statements, at most one of each aspect, in aspect order. */
     readonly entries: readonly MailThreadStateEntry[];
 }
 
@@ -147,14 +153,15 @@ function parseState(body: string): MailThreadState | null {
     const threadId = record['threadId'];
     const coverage = record['coverage'];
     const derivedAt = record['derivedAt'];
+    const current = record['current'];
 
-    if (!isIdentity(threadId) || !isCoverage(coverage) || !isInstant(derivedAt)) {
+    if (!isIdentity(threadId) || !isCoverage(coverage) || !isInstant(derivedAt) || typeof current !== 'boolean') {
         return null;
     }
 
     const entries = parseEntries(record['entries']);
 
-    return entries === null ? null : { threadId, coverage, derivedAt, entries };
+    return entries === null ? null : { threadId, coverage, derivedAt, current, entries };
 }
 
 function parseEntries(value: unknown): readonly MailThreadStateEntry[] | null {

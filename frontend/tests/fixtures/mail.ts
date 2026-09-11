@@ -340,6 +340,7 @@ export const conversationState = {
     threadId: conversationId,
     coverage: 'WholeThread',
     derivedAt: '2026-08-31T08:20:00+00:00',
+    current: true,
     entries: [
         {
             aspect: 'Agreement',

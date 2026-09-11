@@ -841,6 +841,8 @@ export const pl: Catalogue = {
     'threadState.tooLarge':
         'Ta rozmowa jest dłuższa, niż obejmuje jedno wyprowadzenie stanu, więc żaden nie powstał — zamiast takiego, który opisywałby tylko jej część.',
     'threadState.none': 'Nie wyprowadzono jeszcze niczego o tym, na czym stanęła ta rozmowa.',
+    'threadState.stale':
+        'Ta rozmowa zmieniła się od ostatniego wyprowadzenia tego, na czym stanęła, więc tamten odczyt czeka na ponowne wyprowadzenie.',
     'threadState.offline':
         'Ta maszyna jest bez sieci, więc nie można odczytać, na czym stanęła ta rozmowa. Odczyta się, gdy sieć wróci.',
 

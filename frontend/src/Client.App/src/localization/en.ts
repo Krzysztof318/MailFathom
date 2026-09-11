@@ -836,6 +836,8 @@ export const en = {
     'threadState.tooLarge':
         'This conversation is longer than a state can be derived from in one go, so none was derived rather than one drawn from part of it.',
     'threadState.none': 'Nothing has been derived about where this conversation stands.',
+    'threadState.stale':
+        'This conversation has changed since where it stands was last derived, so that reading is held back until it is derived again.',
     'threadState.offline':
         'This machine is offline, so where this conversation stands cannot be read. It is read once the network comes back.',
 
