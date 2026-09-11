@@ -53,7 +53,7 @@ internal static class ComposedSettings
     /// <param name="declaredAccounts">
     /// The mailboxes the users this deployment serves record, or <see langword="null" /> before the startup gate has
     /// settled who that is. A configuration write passes the running roster, so a rule scoped to a mailbox nobody
-    /// records is refused before it commits rather than by the next start.
+    /// records is refused before it commits rather than committed as a rule set a reload would refuse to apply.
     /// </param>
     /// <returns>One refusal per section that would stop a start, empty when none would.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
@@ -180,9 +180,9 @@ internal static class ComposedSettings
     /// <param name="conditionCompiler">The compiler every condition is read through.</param>
     /// <param name="declaredAccounts">
     /// The mailboxes this deployment serves, or <see langword="null" /> where the caller cannot yet know them. A
-    /// mailbox is a user's own record, so composition passes nothing and leaves a rule's claims about mailboxes to the
-    /// startup gate, which is the first reading that has the roster; the gate, a reload, and a configuration write after
-    /// it pass the roster that gate settled.
+    /// mailbox is a user's own record, so composition passes nothing and leaves a rule's claims about mailboxes
+    /// unjudged. The startup gate passes the roster it settles and reports what comes back; a reload and a
+    /// configuration write after it pass that roster and are refused by it.
     /// </param>
     /// <returns>The refusal, or nothing when every declaration compiles against what the caller could see.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> or <paramref name="conditionCompiler" /> is <see langword="null" />.</exception>

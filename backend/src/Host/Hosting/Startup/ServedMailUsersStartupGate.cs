@@ -10,7 +10,6 @@ using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Persistence.Users;
-using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Hosting.Startup;
 
@@ -83,7 +82,6 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
 
     /// <inheritdoc />
     /// <exception cref="DeploymentMailUserUnresolvedException">Thrown when the roster this deployment holds is not a set of users it may serve.</exception>
-    /// <exception cref="OptionsValidationException">Thrown when the declared rule set makes a claim about a mailbox no user this deployment serves records.</exception>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         await using var scope = this.scopeFactory.CreateAsyncScope();
@@ -104,8 +102,6 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         this.RefuseSeveralUsersOnAUserFacingSurface(served);
 
         await this.RefuseUnusableMailAccountSecretsAsync(scope, served, cancellationToken);
-
-        this.RefuseARuleSetTheRosterCannotAnswerFor(served);
 
         this.servedUsers.Resolved(served);
 
@@ -236,22 +232,31 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         }
     }
 
-    /// <summary>Refuses a declared rule set whose claims about mailboxes no user this deployment serves can answer.</summary>
+    /// <summary>Reports every claim the declared rule set makes about a mailbox no user this deployment serves records.</summary>
     /// <remarks>
     /// A rule's scope and its per-account actions are claims about mailboxes, and every mailbox is somebody's record,
-    /// so composition cannot judge them: it has the files and no roster. This is the first moment both exist, which is
-    /// what makes it the place the claim is judged — and judging it against the roster rather than against
-    /// configuration keys is what keeps a rule set a start accepts one a reload accepts, since a reload reads the same
-    /// roster off the published snapshot. Everything a rule can be refused for without knowing the mailboxes was
-    /// already refused during composition; asking the whole reading again here costs one compilation of a handful of
-    /// conditions and keeps one entry point rather than two.
+    /// so composition cannot judge them: it has the files and no roster. This is the first moment both exist. It
+    /// reports rather than refuses, because the roster can lose a mailbox after the rule naming it was accepted — its
+    /// user is erased, or their record stops declaring it — and neither of those writes consults the rule set. A start
+    /// refusing then could be undone only through the running host it refused, the persisted layer outranking every
+    /// file and being writable only while the deployment runs. A configuration write and a reload still refuse such a
+    /// claim, because both are judged while the host is up and can be answered there. Everything a rule can be refused
+    /// for without knowing the mailboxes was already refused during composition, so what this finds is only what the
+    /// roster decides.
     /// </remarks>
-    private void RefuseARuleSetTheRosterCannotAnswerFor(IReadOnlyList<ServedMailUser> served)
+    private void ReportARuleSetTheRosterCannotAnswerFor(IReadOnlyList<ServedMailUser> served)
     {
-        ComposedSettings.RefuseFirstOf(ComposedSettings.FindMailRuleRefusals(
-            this.configuration,
-            this.ruleConditionCompiler,
-            DeclaredMailAccounts.ReadFrom(served.SelectMany(user => user.MailAccounts))));
+        var claims = ComposedSettings
+            .FindMailRuleRefusals(
+                this.configuration,
+                this.ruleConditionCompiler,
+                DeclaredMailAccounts.ReadFrom(served.SelectMany(user => user.MailAccounts)))
+            .SelectMany(refusal => refusal.Errors);
+
+        foreach (var claim in claims)
+        {
+            this.LogMailRuleClaimUnanswered(claim);
+        }
     }
 
     /// <summary>Reports who is served, and says outright when that is nobody.</summary>
@@ -260,7 +265,8 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// the command that ends it. A synchronization switch left on with nothing to synchronize is reported beside it and
     /// refuses nothing: it is what every deployment looks like between its first start, serving the one user a fresh
     /// database is seeded with, and its first recorded mailbox. A mailbox identifier several users record is reported
-    /// too, because nothing refuses it and it costs every one of them but the first that mailbox.
+    /// too, because nothing refuses it and it costs every one of them but the first that mailbox, and so is a rule
+    /// set's claim about a mailbox nobody records, for the reason its own method gives.
     /// </remarks>
     private void Report(IReadOnlyList<ServedMailUser> served)
     {
@@ -280,6 +286,8 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         }
 
         this.ReportMailAccountIdentifiersSharedAcrossUsers(served);
+
+        this.ReportARuleSetTheRosterCannotAnswerFor(served);
     }
 
     /// <summary>Reports every mail-account identifier more than one served user records.</summary>
@@ -332,4 +340,10 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         Level = LogLevel.Warning,
         Message = "The mail account '{MailAccountId}' is recorded by more than one user ({UserDisplayNames}). Only the one recorded first is served under that name, so the others' mailbox under it is not synchronized or read; give each of those mailboxes a name no other user records.")]
     private partial void LogMailAccountIdentifierShared(string mailAccountId, string userDisplayNames);
+
+    /// <remarks>The claim is the sentence a configuration write would have been refused with, which names the rule by its position and the mailbox, folder, or action by what the operator wrote.</remarks>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "A declared mail rule names something no record of a user this deployment serves provides, so the rule does nothing there until a record provides it or the rule is changed: {MailRuleClaim}")]
+    private partial void LogMailRuleClaimUnanswered(string mailRuleClaim);
 }

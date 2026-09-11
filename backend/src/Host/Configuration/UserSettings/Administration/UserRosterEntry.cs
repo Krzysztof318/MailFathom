@@ -11,7 +11,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <param name="DisplayName">The label an operator tells this user apart by, which nothing resolves them by.</param>
 /// <param name="RecordIsTheirOwn">Whether their mail accounts come from their own record rather than from a configuration source.</param>
 /// <param name="Served">Whether this process is serving them, which every user it holds is.</param>
-/// <param name="DeclaredInConfiguration">Whether the deployment's own mail section supplies this user's mailboxes, so an erasure of them is refused rather than performed — a start would only record them again.</param>
+/// <param name="DeclaredInConfiguration">Whether a configuration source supplies this user, which is what refuses erasing them; no source supplies one any more, and <see href="https://github.com/Krzysztof318/MailFathom/issues/1829">issue 1829</see> retires the marker.</param>
 /// <remarks>
 /// <para>
 /// The label is here because a column of generated identifiers is not a roster anybody can read. Nothing resolves a

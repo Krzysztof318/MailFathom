@@ -237,6 +237,12 @@ The mail account 'work' is recorded by more than one user ('alex', 'sam'). Only 
 
 Give each mailbox a name no other user records until [issue 1325](https://github.com/Krzysztof318/MailFathom/issues/1325) keys those reads by the user as well.
 
+**A mail rule naming a mailbox nobody records does not stop a start either.** A configuration write and a reload refuse one, but a mailbox can stop being recorded after the rule naming it was accepted — its user is erased, or their record stops declaring it — and a start that refused then could be undone only through the host it refused. A start reports each such claim at `Warning` instead, and the rule does nothing there until a record provides what it names or the rule is changed; [Mail rules](../features/mail-rules.md#which-accounts-a-rule-applies-to) has the rule itself:
+
+```
+A declared mail rule names something no record of a user this deployment serves provides, so the rule does nothing there until a record provides it or the rule is changed: MailRules:Rules:0:Accounts — no user this deployment serves records a mail account named 'work', so this rule would reach no mail.
+```
+
 ### What a start reports
 
 Every start records the roster, at `Information`:

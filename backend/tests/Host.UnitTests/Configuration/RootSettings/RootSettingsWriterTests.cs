@@ -11,7 +11,6 @@ using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Settings;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.RootSettings;
@@ -23,8 +22,6 @@ namespace MailFathom.Host.UnitTests.Configuration.RootSettings;
 /// </summary>
 public sealed class RootSettingsWriterTests
 {
-    private static readonly DateTimeOffset AnyInstant = new(2026, 8, 26, 12, 0, 0, TimeSpan.Zero);
-
     /// <summary>A change the composed configuration binds is committed, and the version it produced is reported.</summary>
     [Fact]
     public async Task WriteAsync_AChangeTheConfigurationBinds_Commits()
@@ -556,7 +553,7 @@ public sealed class RootSettingsWriterTests
                 row,
                 row,
                 new CandidateConfigurationComposer(configuration, layer),
-                new CandidateSettingsValidator(new FakeTimeProvider(AnyInstant), [], new ServedMailUsers()),
+                new CandidateSettingsValidator([], new ServedMailUsers()),
                 new RootSettingsReloader(layer.Provider, row, new RecordingLogger<RootSettingsReloader>()),
                 new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
                 this.writerLogger);

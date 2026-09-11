@@ -384,9 +384,10 @@ internal static class HostComposition
         // write is refused by it as well, and one compiler serves composition, every reload, and every pass, because it
         // holds no state.
         //
-        // What a rule claims about a mailbox is left unjudged here and judged once by ServedMailUsersStartupGate, which
-        // is the first reading that holds the roster: every mailbox is a user's own record, so no reading of the files
-        // could tell a scope naming one that exists from a scope naming one that does not.
+        // What a rule claims about a mailbox is left unjudged here, because every mailbox is a user's own record and no
+        // reading of the files could tell a scope naming one that exists from a scope naming one that does not.
+        // ServedMailUsersStartupGate reports such a claim once it holds the roster; a reload and a configuration write
+        // refuse it.
         var mailRuleConditionCompiler = new NCalcMailRuleConditionCompiler();
 
         ComposedSettings.RefuseFirstOf(

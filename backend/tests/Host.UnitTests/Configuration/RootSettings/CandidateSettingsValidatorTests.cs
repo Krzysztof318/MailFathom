@@ -10,7 +10,6 @@ using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.RootSettings;
@@ -23,8 +22,6 @@ namespace MailFathom.Host.UnitTests.Configuration.RootSettings;
 /// </summary>
 public sealed class CandidateSettingsValidatorTests
 {
-    private static readonly DateTimeOffset Today = new(2026, 8, 26, 12, 0, 0, TimeSpan.Zero);
-
     /// <summary>A configuration naming nothing is what a deployment that configured nothing runs, so it is usable.</summary>
     [Fact]
     public void FindErrors_AConfigurationNamingNothing_FindsNothing()
@@ -275,7 +272,7 @@ public sealed class CandidateSettingsValidatorTests
                 "alex",
                 [new MailSynchronizationAccountOptions { AccountId = "alex-work" }]),
         ]);
-        var validator = new CandidateSettingsValidator(new FakeTimeProvider(Today), [], roster);
+        var validator = new CandidateSettingsValidator([], roster);
 
         // Act
         var errors = validator.FindErrors(Compose(new()
@@ -290,7 +287,7 @@ public sealed class CandidateSettingsValidatorTests
     }
 
     private static CandidateSettingsValidator Validator(params ISensitiveContentCatalog[] catalogs) =>
-        new(new FakeTimeProvider(Today), catalogs, new ServedMailUsers());
+        new(catalogs, new ServedMailUsers());
 
     private static IConfiguration Compose(Dictionary<string, string?> settings) =>
         new ConfigurationBuilder().AddInMemoryCollection(settings).Build();

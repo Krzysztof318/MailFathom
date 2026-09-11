@@ -68,10 +68,16 @@ matches it.
 
 An account is named exactly as `MailAccounts:<m>:AccountId` states it within the record of the user whose mailbox it is,
 and the comparison is case-sensitive, because two identifiers differing only in case are two accounts. **An account
-nobody records is refused**, naming the rule and the identifier: a rule scoped to a mistyped account would otherwise
-reach no mail and say nothing about why. The judgement is made against the roster the startup gate settles rather than
-against a configuration key, so a rule set a start accepts is one a reload accepts, and a rule naming a mailbox
-somebody records later is refused until they record it.
+nobody records is refused by a configuration write and by a reload**, naming the rule and the identifier: a rule scoped
+to a mistyped account would otherwise reach no mail and say nothing about why. The judgement is made against the users
+this deployment serves rather than against a configuration key, so a rule naming a mailbox somebody records later is
+refused until they record it, and a reload that refuses keeps the rule set it last accepted.
+
+**A start reports it instead of refusing.** A mailbox can stop being recorded after the rule naming it was accepted —
+its user is erased, or their record stops declaring it — and a start refusing then could be undone only through the
+running host it refused. So a start logs a `Warning` for each rule that names a mailbox nobody records, or that
+reaches a mailbox which no longer maps its destination folder or permits its action, and the rule does nothing there
+until a record provides what it names or the rule is changed.
 
 The `account` fact stays available and is a different tool. The filter decides whether a rule runs; the fact lets one
 rule that does run say something about which account it is running for — `account == 'work' ? … : …` inside a condition
@@ -599,7 +605,10 @@ So is its `Actions` block, against the rule itself and against every account the
 Every defect in every rule is reported together, so a rule set with three mistakes is fixed once rather than three
 restarts running.
 
-**An invalid rule set fails startup**, because there is no previously valid set to fall back to.
+**An invalid rule set fails startup**, because there is no previously valid set to fall back to. What a rule claims
+about a mailbox is the exception: that an account it names is recorded, and that each account it reaches maps its
+destinations and permits its actions, are reported by a start rather than refused, for the reason
+[above](#which-accounts-a-rule-applies-to) gives. A configuration write and a reload still refuse them.
 
 ## Reload, and what a bad edit does
 

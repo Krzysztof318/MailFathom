@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
@@ -293,46 +294,54 @@ public sealed class ServedMailUsersStartupGateTests
     }
 
     /// <summary>
-    /// A rule's scope is a claim about somebody's mailbox, and every mailbox is a record, so composition cannot judge
-    /// it: it has the files and no roster. This is the first moment both exist, which is what makes it where the claim
-    /// is judged rather than a rule reaching no mail in silence.
+    /// A rule's scope is a claim about somebody's mailbox, and the roster can lose that mailbox after the rule was
+    /// accepted — its user is erased, or their record stops declaring it. A start refusing then could be undone only
+    /// through the host it refused, so it starts and names the rule rather than letting it reach no mail in silence.
     /// </summary>
     [Fact]
-    public async Task StartAsync_ARuleScopedToAMailboxNobodyRecords_FailsStartupNamingTheRule()
-    {
-        // Act
-        var refusal = await Assert.ThrowsAsync<OptionsValidationException>(() =>
-            CreateGate(
-                    [Held(SyntheticMailUser.Deployment, "alex")],
-                    RuleScopedTo("nobody-records-this"),
-                    documents: RecordsHolding(
-                        (SyntheticMailUser.Deployment, RecordDeclaring("work", "alex@example.test"))))
-                .StartAsync(TestContext.Current.CancellationToken));
-
-        // Assert
-        Assert.Contains(
-            refusal.Failures,
-            failure => failure.Contains("no user this deployment serves records a mail account", StringComparison.Ordinal));
-    }
-
-    /// <summary>The control for the refusal above: a rule scoped to a mailbox a served user's record names is a rule this deployment runs.</summary>
-    [Fact]
-    public async Task StartAsync_ARuleScopedToAMailboxAServedUserRecords_StartsTheDeployment()
+    public async Task StartAsync_ARuleScopedToAMailboxNobodyRecords_StartsAndReportsTheRule()
     {
         // Arrange
         var roster = new ServedMailUsers();
+        var startupLog = new RecordingLogger<ServedMailUsersStartupGate>();
+
+        // Act
+        await CreateGate(
+                [Held(SyntheticMailUser.Deployment, "alex")],
+                RuleScopedTo("nobody-records-this"),
+                servedUsers: roster,
+                documents: RecordsHolding(
+                    (SyntheticMailUser.Deployment, RecordDeclaring("work", "alex@example.test"))),
+                startupLog: startupLog)
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Single(roster.Users);
+        Assert.Contains(
+            startupLog.Messages,
+            message => message.Contains("a mail account named 'nobody-records-this'", StringComparison.Ordinal));
+    }
+
+    /// <summary>The control for the report above: a rule scoped to a mailbox a served user's record names is reported by nothing.</summary>
+    [Fact]
+    public async Task StartAsync_ARuleScopedToAMailboxAServedUserRecords_ReportsNothingAboutTheRule()
+    {
+        // Arrange
+        var startupLog = new RecordingLogger<ServedMailUsersStartupGate>();
 
         // Act
         await CreateGate(
                 [Held(SyntheticMailUser.Deployment, "alex")],
                 RuleScopedTo("work"),
-                servedUsers: roster,
                 documents: RecordsHolding(
-                    (SyntheticMailUser.Deployment, RecordDeclaring("work", "alex@example.test"))))
+                    (SyntheticMailUser.Deployment, RecordDeclaring("work", "alex@example.test"))),
+                startupLog: startupLog)
             .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Single(roster.Users);
+        Assert.DoesNotContain(
+            startupLog.Messages,
+            message => message.Contains(MailRulesOptions.SectionName, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -437,7 +446,7 @@ public sealed class ServedMailUsersStartupGateTests
 
         // Assert
         Assert.Contains(
-            ServedMailUsers.MaximumUsers.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ServedMailUsers.MaximumUsers.ToString(CultureInfo.InvariantCulture),
             refusal.Message,
             StringComparison.Ordinal);
     }
