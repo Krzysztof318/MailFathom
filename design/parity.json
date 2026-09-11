@@ -1,5 +1,5 @@
 {
-  "stamp": "417366b3bb130ff0",
+  "stamp": "84cbf4437f311220",
   "screens": {
     "sign-in": {
       "file": "MailFathom Sign-in.dc.html",
@@ -160,7 +160,7 @@
         },
         {
           "click": {
-            "text": "Show HTML"
+            "text": "Show the original"
           }
         },
         {
@@ -193,7 +193,7 @@
         },
         {
           "expect": {
-            "text": "Show the full HTML?"
+            "text": "Show the original message?"
           }
         }
       ]
