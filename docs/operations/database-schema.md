@@ -274,6 +274,14 @@ statement is refused — so a rotation an older build receives against this sche
 than stored. Keep the middle of the rollout short on these releases, and do not treat a previous image as something
 that can be left running against them.
 
+**`AddMailboxMutationWithdrawalHold` shortens a way back rather than failing anything.** It adds `HeldUntil` to
+`mailbox_mutations`, nullable with no default, so it is a catalog change on a table of any size. A build older than the
+release carrying it does not read the column, so a replica of that build still running in the middle of the rollout
+issues a deletion from the trash as soon as it finds one, before the hold a client asked for has run out — and pressing
+*Undo* on that deletion is then refused as already under way, which is the answer a deletion somebody else's replica
+has taken in hand always gets. Nothing is deleted that was not asked for; what the window costs is the moment to change
+one's mind.
+
 **`KeyMailAccountByUserAndIdentifier` also asks one thing of you after the rollout: authorize every OAuth mailbox
 again.** A sealed refresh token is bound to the account it was stored for, and the account is now the user and the
 identifier together rather than the identifier alone — so a token sealed by an earlier release **does not open**. The
