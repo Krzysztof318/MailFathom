@@ -140,9 +140,9 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
     /// <param name="users">Every user this deployment serves, each composed from their own record.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="users" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// An empty roster is a state a start admits rather than refuses: a fresh database is seeded with one user, but an
-    /// administrator may erase every user a deployment holds, and a deployment left that way starts and serves nobody
-    /// until one is recorded. What absence still means is *the gate has not run*, which is why that is a null field
+    /// An empty roster is a state a start admits rather than refuses: a fresh database holds no user, an administrator
+    /// may erase every user a deployment holds, and a deployment in either state starts and serves nobody until one is
+    /// recorded. What absence still means is *the gate has not run*, which is why that is a null field
     /// rather than an empty list.
     /// </remarks>
     internal void Resolved(IReadOnlyList<ServedMailUser> users)

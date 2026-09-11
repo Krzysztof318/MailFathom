@@ -186,11 +186,12 @@ the schema gate, because that table is the schema's, and a deployment it cannot 
 Every one is a refusal rather than degraded readiness, and deliberately: the alternative is a process that serves mail
 while it cannot say whose mail it is serving.
 
-**A deployment holding no user is not refused.** A fresh database is seeded with one, so that is a deployment whose
-every user was erased: the gate settles an empty roster, the deployment reports itself started, and it serves nobody
-until somebody is recorded — at which point that person is served without a restart, their mailboxes included.
-Synchronization being switched on with nothing recorded to synchronize — where a first run stands, its one user
-declaring no mailbox yet — is reported at `Information` rather than refused. **Every user the deployment holds
+**A deployment holding no user is not refused.** A fresh database holds none, so that is where every new deployment
+stands until its first user is recorded, and where one whose every user was erased returns to: the gate settles an
+empty roster, the deployment reports itself started, and it serves nobody until somebody is recorded — at which point
+that person is served without a restart, their mailboxes included. Synchronization being switched on with nothing
+recorded to synchronize — where a first run stands, holding nobody yet or a user declaring no mailbox yet — is reported
+at `Information` rather than refused. **Every user the deployment holds
 is served**, each from their own record; there is no held user nobody serves, because there is no file left to stop
 naming them.
 

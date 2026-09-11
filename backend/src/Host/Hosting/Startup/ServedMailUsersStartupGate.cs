@@ -23,9 +23,8 @@ namespace MailFathom.Host.Hosting.Startup;
 /// their row holds and from nothing else.
 /// </para>
 /// <para>
-/// <b>A deployment holding nobody is a state a start admits.</b> A fresh database is seeded with one user, so a first
-/// start serves that user and no mailbox; a deployment whose every user was erased finds no row, serves nobody, and
-/// says so. A user or a mailbox recorded afterwards, through <c>mfctl</c> or the administrative routes behind it, is
+/// <b>A deployment holding nobody is a state a start admits.</b> A fresh database holds no user, so a first start —
+/// like one of a deployment whose every user was erased — finds no row, serves nobody, and says so. A user or a mailbox recorded afterwards, through <c>mfctl</c> or the administrative routes behind it, is
 /// carried into this process without a restart by the roster publication that provisioning and a record write raise.
 /// </para>
 /// <para>
@@ -263,8 +262,8 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// <remarks>
     /// The empty deployment gets a line of its own rather than a count of zero, because the operator reading it needs
     /// the command that ends it. A synchronization switch left on with nothing to synchronize is reported beside it and
-    /// refuses nothing: it is what every deployment looks like between its first start, serving the one user a fresh
-    /// database is seeded with, and its first recorded mailbox. A mailbox identifier several users record is reported
+    /// refuses nothing: it is what every deployment looks like between its first start and its first recorded
+    /// mailbox. A mailbox identifier several users record is reported
     /// too, because nothing refuses it and it costs every one of them but the first that mailbox, and so is a rule
     /// set's claim about a mailbox nobody records, for the reason its own method gives.
     /// </remarks>
@@ -323,7 +322,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         Message = "This deployment serves {ServedUserCount} users, each read from their own record; no configuration source reaches anybody's mail accounts. Change them with mfctl.")]
     private partial void LogUsersResolved(int servedUserCount);
 
-    /// <remarks>Reached on a start of a deployment whose every user was erased; a fresh database is seeded with one, so a first run holds that user rather than nobody.</remarks>
+    /// <remarks>Reached on the first start of a fresh database, which holds no user, and on any start of a deployment whose every user was erased.</remarks>
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "This deployment holds no user and therefore serves nobody. Record one with 'mfctl user add', then give them a mailbox with 'mfctl user account add'.")]

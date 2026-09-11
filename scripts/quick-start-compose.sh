@@ -12,9 +12,9 @@ set -euo pipefail
 #
 # The mailbox is not among the settings it writes. A deployment declares no mail account in its own file: every mailbox
 # belongs to the record of the user whose mail it is, and a record is written while the deployment runs. So the answers
-# collected here become mailbox.json, and the run that starts the deployment declares that mailbox in the record of the
-# one user a fresh database is seeded with, through the administrative endpoint — which is why that endpoint is served
-# rather than optional.
+# collected here become mailbox.json, which is declared in the record of the user the deployment serves through the
+# administrative endpoint — which is why that endpoint is served rather than optional. A fresh database holds nobody,
+# and a user is the operator's to record first, so the run prints the commands that do both.
 #
 # It provisions no credential to sign in to that page with, and that is the current client rather than an omission: the
 # React client reads its own sample data and calls no endpoint yet, so a password would be a record nothing can present.
@@ -726,7 +726,7 @@ report_connection() {
     "$published_port" >&2
 
   if [[ "$mcp_authentication" == 'api-key' ]]; then
-    printf 'It accepts a key, and the deployment mints one for the user once it is running:\n\n' >&2
+    printf 'It accepts a key, which the deployment mints for its user once you have recorded them:\n\n' >&2
     printf '  mfctl credential create --method api-key\n\n' >&2
     printf 'That prints the key once and keeps only a digest of it. Give the client an Authorization\n' >&2
     printf 'header of `Bearer <key>` with what it printed.\n' >&2
@@ -754,10 +754,13 @@ report_connection() {
 }
 
 # Printed wherever this script did not record the mailbox itself, which is every path that leaves the deployment not
-# running. Nothing is synchronized until this record exists, so it is a step rather than an afterthought.
+# running and every fresh database, which holds no user to record it for. Nothing is synchronized until this record
+# exists, so it is a step rather than an afterthought.
 report_recording_commands() {
-  printf '\nThen declare the mailbox it reads, in the record of the one user it serves:\n\n' >&2
+  printf '\nThen record the user it serves, unless it holds one already, and declare the mailbox it reads in\n' >&2
+  printf 'their record:\n\n' >&2
   printf '  mfctl login --endpoint http://127.0.0.1:%s\n' "$admin_port" >&2
+  printf '  mfctl user add --display-name <name>\n' >&2
   printf '  mfctl user account add --from-file %s/mailbox.json\n\n' "$compose_directory" >&2
   printf 'A deployment declares no mail account in its own file, so until that record carries one it\n' >&2
   printf 'reads nothing. %s/users/administering.html\n' "$documentation_base" >&2
@@ -775,8 +778,9 @@ read_json_number() {
 }
 
 # The mailbox this deployment reads is a row it keeps rather than a setting it reads, so it is written through the
-# administrative endpoint once the deployment is up, into the record of the one user a fresh database is seeded with.
-# Declaring it after the start is what the product does rather than a way around a missing setting: the write that
+# administrative endpoint once the deployment is up, into the record of the one user it serves. A user is recorded by
+# an operator before anything is declared for them, and never by this script, so a fresh database — which holds nobody —
+# leaves the commands to the operator. Declaring it after the start is what the product does rather than a way around a missing setting: the write that
 # commits a record publishes it to the running roster, so this mailbox is synchronized without a restart. A refusal
 # answers with what it refused rather than with a failing status, which is why the outcome is read out of the body.
 record_the_mailbox() {
@@ -787,8 +791,8 @@ record_the_mailbox() {
     authorization=(--header "Authorization: Bearer $admin_api_key")
   fi
 
-  # A database this script did not create may hold more than that one user, and which of several a mailbox belongs to
-  # is the operator's answer rather than this script's guess — so anything but exactly one leaves the commands to them.
+  # Who a mailbox belongs to is the operator's answer rather than this script's guess, so anything but exactly one user
+  # — nobody yet, or several — leaves the commands to them.
   roster="$(curl -fsS "${authorization[@]}" "$origin/api/admin/users")" || return 1
   [[ "$roster" != *'"id":'*'"id":'* ]] || return 1
   user="$(printf '%s' "$roster" | read_json_text 'id')"
@@ -968,8 +972,8 @@ if [[ "$started" != 'yes' ]]; then
   exit 1
 fi
 
-printf '\nMailFathom %s started, serving the one user a fresh database holds and no mailbox yet.\n' "$version" >&2
-printf 'Declaring the mailbox it reads.\n' >&2
+printf '\nMailFathom %s started, reading no mailbox yet.\n' "$version" >&2
+printf 'Declaring the mailbox it reads, where it holds one user to declare it for.\n' >&2
 
 if record_the_mailbox; then
   printf 'Declared the mailbox %s in their record. It is served from now on, without a restart, and the\n' \

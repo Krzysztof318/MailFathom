@@ -10,8 +10,9 @@ from [installing MailFathom](installation.md); a developer evaluating from the c
 PostgreSQL and applies the schema on its own.
 
 **Somebody evaluating MailFathom on the Compose shape can have steps 1 to 7 performed for them.**
-`scripts/quick-start-compose.sh` asks the same questions this page does, writes the same values, records the user and
-the mailbox once the deployment is up, and ends by printing the two a client needs in step 8 — plus an address the [MailFathom client](../operations/client-endpoint.md) answers on
+`scripts/quick-start-compose.sh` asks the same questions this page does, writes the same values, prints the `mfctl`
+commands of step 6 — recording the user a deployment serves is yours, so it leaves that step to you — and ends by
+printing the two a client needs in step 8 — plus an address the [MailFathom client](../operations/client-endpoint.md) answers on
 and a generated username and password to sign in to it with, which it provisions for you. [Trying it first, with one
 command](../operations/deployment-compose.md#trying-it-first-with-one-command) is that path, including what a deployment
 it prepares is missing before anybody depends on it. Read this page anyway, for what each answer means.
@@ -60,8 +61,8 @@ says about mail:
 ```
 
 **The mailbox itself is not configuration.** Every mail account belongs to the record of the person whose mail it is,
-and a record is written while the deployment runs rather than read from a file — so a fresh deployment serves the one
-user its database is seeded with, reads no mail, and says so once.
+and a record is written while the deployment runs rather than read from a file — so a fresh deployment holds nobody,
+reads no mail, and says so at startup.
 [Step 6](#6-record-the-mailbox) is where this mailbox is recorded, and it is served from that moment
 without a restart. What to write now is the account's own JSON object, saved as `mailbox.json` on the machine you
 administer the deployment from:
@@ -250,9 +251,8 @@ first pass; later runs move only what changed, every five minutes by default.
 
 ## 6. Record the mailbox
 
-A fresh deployment holds one user: its database is seeded with a first row, labelled `user`, whose record declares
-nothing. So the deployment started above serves that one person and reads no mail yet, and said so once — in a line
-naming `mfctl user account add`. Who a deployment serves and which mailboxes it reads are its own to keep, and the
+A fresh deployment holds no user. So the deployment started above serves nobody and reads no mail yet, and said so at
+startup — in a line naming `mfctl user add` and `mfctl user account add`. Who a deployment serves and which mailboxes it reads are its own to keep, and the
 [administrative endpoint](administering.md) is where both are written;
 [a deployment that records no user](../operations/configuration-sources.md#a-deployment-that-records-no-user) is the
 rest of that story.
@@ -260,14 +260,15 @@ rest of that story.
 `mfctl` is the client for that endpoint; [administering a deployment](administering.md) covers reaching it. From there:
 
 ```console
-$ mfctl user rename --display-name "Alex"
+$ mfctl user add --display-name "Alex"
 $ mfctl user account add --from-file mailbox.json
 ```
 
-The first is optional and changes only the label the user is told apart by. The second reads the file written in
-[step 2](#2-write-down-the-mailbox) and declares that mailbox in their record. Neither names a user, because this
-deployment holds one: `--user` is how a deployment serving several says which of them — `mfctl user add` records a
-second person — and an invocation that omits it where there are several is refused rather than guessed at.
+The first records the person this deployment serves, under the label they are told apart by; `mfctl user rename`
+changes it later. The second reads the file written in [step 2](#2-write-down-the-mailbox) and declares that mailbox in
+their record. It names no user, because this deployment now holds exactly one: `--user` is how a deployment serving
+several says which of them — `mfctl user add` records each further person — and an invocation that omits it where there
+are several is refused rather than guessed at.
 
 **The mailbox is served from that moment, without a restart.** The write that commits the record publishes it to the
 running roster, so the next synchronization run is this account's first one — and the same holds for every user

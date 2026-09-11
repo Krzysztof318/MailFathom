@@ -41,7 +41,7 @@ cd MailFathom
 **To try MailFathom before choosing any of this, `scripts/quick-start-compose.sh` prepares the Compose shape for you** —
 it asks where the mailbox lives and performs every step
 [deploying with Docker Compose](../operations/deployment-compose.md#trying-it-first-with-one-command) otherwise asks you
-to type. What it produces is a deployment to evaluate with rather than one to depend on: it serves the machine it runs
+to type, except recording the user it serves, which stays yours. What it produces is a deployment to evaluate with rather than one to depend on: it serves the machine it runs
 on over plain HTTP, keeps its credentials in files under the checkout, and backs nothing up. The choice below is the one
 it does not make for you, and it stays yours to make afterwards.
 
@@ -113,9 +113,8 @@ self-service and no default, so a username and password are written over
   [secret reference](../operations/secret-provisioning.md) rather than written into configuration. The account itself
   is not configuration either: it is declared in the record of the user whose mailbox it is, which is the bullet below.
 - **The administrative endpoint, and `mfctl` to reach it.** No configuration source declares a mailbox: a fresh
-  deployment serves the one user its database is seeded with and reads nothing, in every shape here, until
-  `mfctl user account add` declares a mailbox in that user's record — and `mfctl user add` is how a second person is
-  recorded.
+  deployment holds no user and reads nothing, in every shape here, until `mfctl user add` records the person it serves
+  and `mfctl user account add` declares a mailbox in that user's record.
   That makes the endpoint part of an installation rather than an extra: [the administrative
   endpoint](../operations/admin-endpoint.md) is what to enable and how the credential it takes is provisioned, and
   [getting the command](../operations/admin-endpoint.md#getting-the-command) is where `mfctl` comes from.

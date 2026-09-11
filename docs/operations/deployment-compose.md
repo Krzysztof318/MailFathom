@@ -24,7 +24,8 @@ knowing before you start, because neither announces itself:
 
 `scripts/quick-start-compose.sh` performs everything on this page that is typed rather than decided: it asks where the
 mailbox lives, generates the credentials, writes the configuration, sets the modes, starts the stack, offers the schema
-step, records the user this deployment serves and the mailbox it reads, and reports the two probes.
+step, prints the `mfctl` commands that record the user this deployment serves and the mailbox it reads, and reports the
+two probes.
 
 ```bash
 scripts/quick-start-compose.sh
@@ -36,11 +37,12 @@ It provisions no credential to sign in with, because the client reads its own sa
 its closing report says so.
 
 **The mailbox it asked about is not written into the configuration**, because no configuration source declares one:
-the answers become `mailbox.json` beside `compose.yaml`, and the run that started the deployment declares that mailbox
-in the record of the one user a fresh database is seeded with, through the administrative endpoint, once the deployment
-is up. A run that started nothing — `--no-start`, or one that declined the schema step — leaves the file and prints the
-`mfctl` commands that declare it instead. Until then the deployment reads nothing, which is an ordinary first-run state
-rather than a failure.
+the answers become `mailbox.json` beside `compose.yaml`, and a mailbox is declared in the record of a user the
+deployment holds. A fresh database holds nobody, and the script never records a user for you — who the deployment
+serves is yours to say first — so it leaves the file and prints the `mfctl` commands that record the user and then
+declare the mailbox. Only a run that finds exactly one user already recorded declares it itself, through the
+administrative endpoint once the deployment is up. Until then the deployment reads nothing, which is an ordinary
+first-run state rather than a failure.
 
 **It also relaxes the platform's TLS policy for this deployment**, by copying
 [`deploy/openssl/legacy-mail-server.cnf.example`](https://github.com/Krzysztof318/MailFathom/blob/main/deploy/openssl/legacy-mail-server.cnf.example)
@@ -250,20 +252,21 @@ schema](database-schema.md) states the privileges it needs, the locks it takes, 
 
 ### Recording the mailbox
 
-A started deployment serves the one user a fresh database is seeded with, and reads no mailbox. Which mailboxes it reads
-are rows it keeps rather than settings it reads, so none is in the file above, and each is declared over the
-administrative endpoint once the stack is up — `mfctl login` asks for the key in `secrets/mailfathom/admin-api-key`:
+A started deployment holds no user, and reads no mailbox. Who it serves and which mailboxes it reads are rows it keeps
+rather than settings it reads, so neither is in the file above, and each is recorded over the administrative endpoint
+once the stack is up — `mfctl login` asks for the key in `secrets/mailfathom/admin-api-key`:
 
 ```bash
 mfctl login --endpoint http://127.0.0.1:8090
+mfctl user add --display-name Alex
 mfctl user account add --from-file mailbox.json
 ```
 
 `mailbox.json` is the JSON object one mail account is declared as — the same shape a configuration source used to carry,
 with the same `file:` reference into `/etc/mailfathom/secrets`. The mailbox is served from the moment that write
-commits, without a restart, and the next synchronization run is its first one. Neither command names a user, because
-the deployment holds one; `mfctl user add` records a second person, and `--user` then says whose record a command
-writes. [Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes
+commits, without a restart, and the next synchronization run is its first one. `mfctl user add` records the person
+under the label you tell them apart by, and `mfctl user account add` names no user, because the deployment then holds
+exactly one; once `mfctl user add` records a second person, `--user` says whose record a command writes. [Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes
 in the file, and [administering your deployment](../users/administering.md) the command group around it.
 
 ### What the first `up` of PostgreSQL does

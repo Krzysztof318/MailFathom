@@ -47,6 +47,32 @@ public sealed class DevelopmentCredentialProvisionerTests
     }
 
     [Fact]
+    public async Task WaitForSoleServedUserAsync_AHostHoldingNobody_NamesNoUserAndRecordsNone()
+    {
+        // Arrange
+        using var responses = new RecordingHandler(
+            Response(HttpStatusCode.OK),
+            JsonResponse("""{"users":[]}"""));
+        using var client = new HttpClient(responses);
+        var provisioner = new DevelopmentCredentialProvisioner(client, new FakeTimeProvider());
+
+        // Act
+        var user = await provisioner.WaitForSoleServedUserAsync(
+            StartedEndpoint,
+            AdminEndpoint,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(user);
+        Assert.Equal(
+            [
+                $"GET {StartedEndpoint}",
+                "GET http://127.0.0.1:5200/api/admin/users",
+            ],
+            responses.Requests.Select(static request => $"{request.Method} {request.Address}"));
+    }
+
+    [Fact]
     public async Task EnsureCredentialAsync_CredentialDoesNotExist_ProvisionsIt()
     {
         // Arrange

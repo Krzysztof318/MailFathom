@@ -15,7 +15,9 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
     private static readonly TimeSpan ReadinessRetryDelay = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan ReadinessTimeout = TimeSpan.FromMinutes(2);
 
-    internal async Task<Guid> WaitForSoleServedUserAsync(
+    /// <summary>Waits for the local host to start, then names the one user it holds.</summary>
+    /// <returns>That user, or <see langword="null" /> where the host holds nobody — which a fresh database does until a developer records somebody.</returns>
+    internal async Task<Guid?> WaitForSoleServedUserAsync(
         Uri startedEndpoint,
         Uri adminEndpoint,
         CancellationToken cancellationToken)
@@ -222,7 +224,7 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
         }
     }
 
-    private async Task<Guid> ReadSoleServedUserAsync(Uri adminEndpoint, CancellationToken cancellationToken)
+    private async Task<Guid?> ReadSoleServedUserAsync(Uri adminEndpoint, CancellationToken cancellationToken)
     {
         using var response = await client.GetAsync(
             new Uri(adminEndpoint, "api/admin/users"),
@@ -238,10 +240,13 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
             .Select(static user => user.GetProperty("id").GetGuid())
             .ToArray();
 
-        return users.Length == 1
-            ? users[0]
-            : throw new InvalidOperationException(
-                $"The normal Aspire launch expected one recorded user but found {users.Length.ToString(CultureInfo.InvariantCulture)}.");
+        return users switch
+        {
+            [] => null,
+            [var only] => only,
+            _ => throw new InvalidOperationException(
+                $"The normal Aspire launch expected one recorded user but found {users.Length.ToString(CultureInfo.InvariantCulture)}."),
+        };
     }
 
     private async Task<bool> CredentialExistsAsync(

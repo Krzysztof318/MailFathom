@@ -646,8 +646,8 @@ maintained — the one who reads their own mail on a deployment of their own, an
 alike. **Nothing is written into a file**: a user is recorded rather than declared, there is no configuration section
 that names one, and none that declares a mailbox either.
 
-A fresh deployment holds one user — the row its database is seeded with, labelled `user` until `mfctl user rename`
-changes it — and reads no mail until a mailbox is declared in their record. A deployment whose every user was erased
+A fresh deployment holds nobody and reads no mail: `mfctl user add` records the first person, and a mailbox declared
+in their record is what it then reads. A deployment holding no user — a new one, or one whose every user was erased —
 starts and serves nobody, and says so at startup naming the commands that end it. A person recorded, and a mailbox
 declared, is served from that moment — no restart.
 

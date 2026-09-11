@@ -14,9 +14,9 @@ namespace MailFathom.IntegrationTests.Orchestration;
 /// <remarks>
 /// <para>
 /// A deployment reads no mail account from its own file, so the app model cannot configure this one: every account a
-/// host serves belongs to a user's record. The composed host starts holding the one user a fresh database is seeded
-/// with and no mailbox at all, and this is what puts one there — through the administrative surface that host serves,
-/// which is the same act an operator performs with <c>mfctl user account add</c>.
+/// host serves belongs to a user's record. The composed host may start holding nobody — a fresh database records no
+/// user — and no mailbox at all, and this is what puts both there: through the administrative surface that host serves,
+/// which is the same act an operator performs with <c>mfctl user add</c> and <c>mfctl user account add</c>.
 /// </para>
 /// <para>
 /// It runs after the host is healthy rather than before it starts, and that is the arrangement rather than a
@@ -33,13 +33,19 @@ namespace MailFathom.IntegrationTests.Orchestration;
 /// </remarks>
 internal static class ComposedHostMailbox
 {
+    /// <summary>
+    /// The label the suite records its user under where no earlier start over this database recorded one — the one
+    /// <see cref="OrchestratedMailFathomServices" /> records under, so both converge on one row.
+    /// </summary>
+    private const string RecordedUserDisplayName = "user";
+
     internal static async Task RecordAsync(Uri adminAddress, CancellationToken cancellationToken)
     {
         using var client = new HttpClient { BaseAddress = adminAddress };
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", OrchestrationContract.AdminApiKey);
 
-        var user = await ReadSoleUserAsync(client, cancellationToken);
+        var user = await ReadOrRecordSoleUserAsync(client, cancellationToken);
         var version = await ReadRecordVersionAsync(client, user, cancellationToken);
 
         var requestBody = new JsonObject
@@ -105,7 +111,7 @@ internal static class ComposedHostMailbox
         },
     };
 
-    private static async Task<Guid> ReadSoleUserAsync(HttpClient client, CancellationToken cancellationToken)
+    private static async Task<Guid> ReadOrRecordSoleUserAsync(HttpClient client, CancellationToken cancellationToken)
     {
         using var response = await client.GetAsync(
             new Uri("api/admin/users", UriKind.Relative),
@@ -119,10 +125,27 @@ internal static class ComposedHostMailbox
             .Select(static user => user.GetProperty("id").GetGuid())
             .ToArray();
 
-        return users.Length == 1
-            ? users[0]
-            : throw new InvalidOperationException(
-                $"The composed host holds {users.Length} users, and the mailbox this suite reads belongs to one.");
+        return users switch
+        {
+            [var only] => only,
+            [] => await RecordUserAsync(client, cancellationToken),
+            _ => throw new InvalidOperationException(
+                $"The composed host holds {users.Length} users, and the mailbox this suite reads belongs to one."),
+        };
+    }
+
+    private static async Task<Guid> RecordUserAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        using var content = new StringContent(
+            new JsonObject { ["displayName"] = RecordedUserDisplayName }.ToJsonString(),
+            Encoding.UTF8,
+            "application/json");
+        using var response = await client.PostAsync(new Uri("api/admin/users", UriKind.Relative), content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        using var provisioned = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+
+        return provisioned.RootElement.GetProperty("id").GetGuid();
     }
 
     private static async Task<long> ReadRecordVersionAsync(
