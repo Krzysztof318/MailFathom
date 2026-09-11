@@ -5,7 +5,6 @@
 using MailFathom.Application.Access.Credentials;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Security.Endpoints;
-using MailFathom.Host.Security.Sessions;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -393,16 +392,14 @@ internal static class UserCredentialEndpoints
     /// <param name="credentialId">The credential being written.</param>
     /// <param name="request">Whether the credential should authenticate requests.</param>
     /// <param name="credentials">Performs the write, for a caller the use case's own grant admits.</param>
-    /// <param name="sessions">The client sessions this process minted, or <see langword="null" /> where no client endpoint is served.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>204</c> once the state stands, or <c>400</c> naming what was wrong with the request.</returns>
-    /// <remarks>Disabling ends whatever this credential is signed in as, which is what turning it off has to mean: a client presents a session token rather than the credential, so a row flipped without this would leave somebody working until their token expired.</remarks>
+    /// <remarks>Disabling ends whatever this credential is signed in as, which is what turning it off has to mean: a client presents a session token rather than the credential, so a row flipped without that would leave somebody working until their token expired. It is not a second call this route makes — the write and the removal commit together, which is what keeps an exchange in flight from landing between them.</remarks>
     internal static async Task<Results<NoContent, ProblemHttpResult>> SetEnabledAsync(
         Guid userId,
         Guid credentialId,
         [FromBody] UserCredentialEnablementRequest? request,
         [FromServices] UserCredentialAdministration credentials,
-        [FromServices] ClientSessionTokens? sessions,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(credentials);
@@ -424,11 +421,6 @@ internal static class UserCredentialEndpoints
 
         var outcome = await credentials.SetEnabledAsync(user, credentialId, enabled, cancellationToken);
 
-        if (!enabled)
-        {
-            EndClientSessions(sessions, outcome, credentialId);
-        }
-
         return Answer(outcome, userId, credentialId);
     }
 
@@ -436,15 +428,13 @@ internal static class UserCredentialEndpoints
     /// <param name="userId">The user the credential belongs to.</param>
     /// <param name="credentialId">The credential being removed.</param>
     /// <param name="credentials">Performs the write, for a caller the use case's own grant admits.</param>
-    /// <param name="sessions">The client sessions this process minted, or <see langword="null" /> where no client endpoint is served.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>204</c> once the credential is gone, or <c>400</c> naming what was wrong with the request.</returns>
-    /// <remarks>Removing ends whatever this credential is signed in as, for the reason disabling it does.</remarks>
+    /// <remarks>Removing ends whatever this credential is signed in as, for the reason disabling it does, and it ends them by the cascade the session row's own foreign key declares rather than through anything this route calls — which is also what leaves that person's other sessions alone.</remarks>
     internal static async Task<Results<NoContent, ProblemHttpResult>> DeleteAsync(
         Guid userId,
         Guid credentialId,
         [FromServices] UserCredentialAdministration credentials,
-        [FromServices] ClientSessionTokens? sessions,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(credentials);
@@ -460,8 +450,6 @@ internal static class UserCredentialEndpoints
         }
 
         var outcome = await credentials.DeleteAsync(user, credentialId, cancellationToken);
-
-        EndClientSessions(sessions, outcome, credentialId);
 
         return Answer(outcome, userId, credentialId);
     }
@@ -549,35 +537,6 @@ internal static class UserCredentialEndpoints
     private static string? FindPasswordRefusal(string? password) => password is null
         ? "The request carried no password."
         : UserPasswordPolicy.FindRefusal(password);
-
-    /// <summary>Ends every client session one credential minted, once the write that invalidated it stands.</summary>
-    /// <remarks>
-    /// <para>
-    /// A session token is verified against the store this process holds rather than against the row it was minted
-    /// from, which is what makes verifying one cost no read at all. The price of that is exactly this call: without
-    /// it, disabling or deleting a credential would leave whatever it signed in working until its token expired, and
-    /// the operator's act would be a promise the surface did not keep. Rotating a credential's material calls nothing
-    /// here and deliberately so — it changes what may be presented at the exchange and says nothing about a session
-    /// already exchanged, which <c>docs/operations/admin-endpoint.md</c> states for the operator deciding between the
-    /// two.
-    /// </para>
-    /// <para>
-    /// Nothing happens where the write did not stand, so a refused administrative call signs nobody out. Nothing
-    /// happens either where this deployment serves no client endpoint, which is the <see langword="null" /> case: the
-    /// store is registered by that endpoint's own composition, so its absence is a deployment that minted no sessions
-    /// rather than a dependency somebody forgot.
-    /// </para>
-    /// </remarks>
-    private static void EndClientSessions(
-        ClientSessionTokens? sessions,
-        UserCredentialWriteOutcome outcome,
-        Guid credentialId)
-    {
-        if (outcome == UserCredentialWriteOutcome.Written)
-        {
-            sessions?.RevokeEverythingMintedBy(credentialId);
-        }
-    }
 
     /// <summary>Turns a write's outcome into the answer a client reads.</summary>
     /// <remarks>

@@ -592,4 +592,14 @@ internal static class PersistenceConstraintNames
     /// what makes that removal proportional to what has expired rather than to every ticket the deployment holds.
     /// </remarks>
     internal const string ClientSignalTicketExpiryIndexName = "ix_client_signal_tickets_expires_at";
+
+    /// <summary>The order the sessions past their expiry are removed through.</summary>
+    /// <remarks>
+    /// Stated for the reason the two indexes above it are: nothing queries a session by when it expires, and the one
+    /// statement that touches the table other than the mint, the renewal, the revocation, and the verification is the
+    /// removal of everything already expired. The index is what makes that removal proportional to what has expired
+    /// rather than to every session the deployment is holding, which matters more here than for either of those two —
+    /// a session lives thirty days, so the table it walks is the deployment's whole signed-in population.
+    /// </remarks>
+    internal const string ClientSessionExpiryIndexName = "ix_client_sessions_expires_at";
 }

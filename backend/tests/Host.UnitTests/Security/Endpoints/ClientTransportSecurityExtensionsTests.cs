@@ -4,6 +4,7 @@
 
 using System.Security.Claims;
 using MailFathom.Application.Access.Credentials;
+using MailFathom.Application.Access.Sessions;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
@@ -11,6 +12,7 @@ using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Mcp;
 using MailFathom.Host.Security.Sessions;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Security.OAuth;
 using MailFathom.Infrastructure.Security.Passwords;
 using MailFathom.Infrastructure.Security.Transport;
@@ -271,7 +273,8 @@ public sealed class ClientTransportSecurityExtensionsTests
     {
         // Arrange
         using var composed = ComposeOAuthOnlyEndpoint();
-        var held = composed.GetRequiredService<ClientSessionTokens>().Mint(AdmittedByACredential())!;
+        var held = (await composed.GetRequiredService<ClientSessionTokens>()
+            .MintAsync(AdmittedByACredential(), TestContext.Current.CancellationToken)).Token!;
 
         var request = new DefaultHttpContext { RequestServices = composed };
         request.Request.Scheme = "https";
@@ -305,7 +308,8 @@ public sealed class ClientTransportSecurityExtensionsTests
         // Arrange
         var hasher = new CountingPasswordHasher();
         using var composed = ComposeEndpointTakingPasswordsAndSessions(hasher);
-        var held = composed.GetRequiredService<ClientSessionTokens>().Mint(AdmittedByACredential())!;
+        var held = (await composed.GetRequiredService<ClientSessionTokens>()
+            .MintAsync(AdmittedByACredential(), TestContext.Current.CancellationToken)).Token!;
 
         var request = new DefaultHttpContext { RequestServices = composed };
         request.Request.Headers[HeaderNames.Authorization] = $"Bearer {held.Value}";
@@ -424,6 +428,7 @@ public sealed class ClientTransportSecurityExtensionsTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSingleton<IClientSessionStore, InMemoryClientSessionStore>();
         alsoRegistering?.Invoke(services);
 
         var endpointSettings = EnabledEndpoint();
@@ -462,6 +467,7 @@ public sealed class ClientTransportSecurityExtensionsTests
 
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSingleton<IClientSessionStore, InMemoryClientSessionStore>();
         services.AddSingleton(credentials);
         services.AddSingleton(passwordHasher);
         services.AddSingleton<TimeProvider>(new FakeTimeProvider());

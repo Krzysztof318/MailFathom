@@ -40,6 +40,16 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 [RequiresIntegrationCoverage]
 internal sealed class UserCredentialEntity
 {
+    /// <summary>The table these rows live in, named here because a composed statement locks one.</summary>
+    /// <remarks>Stated for the reason <see cref="UserAccountEntity.TableName" /> is: a session's mint and renewal take a share lock on the credential row and require it to still be enabled before they write, which is what makes disabling a credential an act rather than a race.</remarks>
+    internal const string TableName = "user_credentials";
+
+    /// <summary>The key column, named here for the same reason the table is.</summary>
+    internal const string IdColumnName = "Id";
+
+    /// <summary>The column saying whether the credential still authenticates requests, named here for the same reason the table is.</summary>
+    internal const string EnabledColumnName = "Enabled";
+
     /// <summary>The longest stored material this column holds.</summary>
     /// <remarks>
     /// Bounded by the largest of the two methods that keep any: a password's record is under a hundred characters and

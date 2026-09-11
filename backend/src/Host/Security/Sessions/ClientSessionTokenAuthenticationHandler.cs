@@ -17,16 +17,25 @@ namespace MailFathom.Host.Security.Sessions;
 /// <summary>Authenticates a request against the sessions this process minted at a sign-in.</summary>
 /// <remarks>
 /// <para>
-/// The cheapest handler on the surface, and deliberately so: it lifts the bearer credential out of the header, hands it
-/// to <see cref="ClientSessionTokens" />, and turns the answer into the framework's own vocabulary. No key is derived,
-/// no row is read, and nothing is written — which is the whole reason a client exchanges its password for one of these
-/// rather than presenting the password on every request.
+/// The cheapest handler on the surface that reads anything at all: it lifts the bearer credential out of the header,
+/// hands it to <see cref="ClientSessionTokens" />, and turns the answer into the framework's own vocabulary. No key is
+/// derived and nothing is written — which is the reason a client exchanges its password for one of these rather than
+/// presenting the password on every request. What it does cost is one indexed read of the session the deployment
+/// holds, on a request that is about to read mail out of the same database, and nothing caches it: a cached session is
+/// a revoked session that goes on working for the cache's own window on every replica that had already read one.
 /// </para>
 /// <para>
 /// Every refusal produces one indistinguishable answer: an empty <c>401</c> carrying the same bare challenge, whether
-/// the request presented nothing, presented something that is not a token this process mints, presented one nobody
+/// the request presented nothing, presented something that is not a token this deployment mints, presented one nobody
 /// holds, presented an expired one, or presented one somebody revoked. The reason the framework records reaches the
 /// server log only, and even there it names the rejection rather than the credential.
+/// </para>
+/// <para>
+/// <b>A store that cannot answer is the one case that is not a refusal</b>, and it deliberately leaves this handler as
+/// an exception rather than as a failed authentication: a client meets <c>401</c> by clearing what it holds and asking
+/// for a password, so answering a database that could not be reached that way would turn a blip into a
+/// deployment-wide sign-out. <see cref="ClientSessionStoreUnavailableHandler" /> is what turns it into the
+/// <c>503</c> the record requires, for every route on the surface at once.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The authentication framework materializes this handler for its registered scheme.")]
@@ -39,7 +48,7 @@ internal sealed class ClientSessionTokenAuthenticationHandler
     /// <param name="schemeOptions">Which surface this registration protects.</param>
     /// <param name="loggerFactory">The framework's own logging, which records the reason a refusal carried.</param>
     /// <param name="urlEncoder">The framework's own encoder, unused here and required by the base class.</param>
-    /// <param name="sessions">The sessions this process minted, which is what a presented token is judged against.</param>
+    /// <param name="sessions">The sessions the deployment is holding, which is what a presented token is judged against.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="sessions" /> is <see langword="null" />.</exception>
     public ClientSessionTokenAuthenticationHandler(
         IOptionsMonitor<ClientSessionTokenAuthenticationSchemeOptions> schemeOptions,
@@ -59,12 +68,12 @@ internal sealed class ClientSessionTokenAuthenticationHandler
     /// when the request carried none and a joined value when it carried several. Both are refused identically, which is
     /// what a request supplying the header twice deserves rather than having one of the two picked for it.
     /// </remarks>
-    protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+    protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         if (!BearerCredentialHeader.TryRead(this.Request.Headers.Authorization.ToString(), out var presented)
-            || this.sessions.Verify(presented) is not { } admitted)
+            || await this.sessions.VerifyAsync(presented, this.Context.RequestAborted) is not { } admitted)
         {
-            return Task.FromResult(AuthenticateResult.Fail("The request presented no usable session token."));
+            return AuthenticateResult.Fail("The request presented no usable session token.");
         }
 
         var identity = TransportGrant.IdentityFor(
@@ -81,8 +90,8 @@ internal sealed class ClientSessionTokenAuthenticationHandler
         identity.AddClaim(TransportCallerUser.ClaimFor(admitted.User));
         identity.AddClaim(TransportCallerCredential.ClaimFor(admitted.CredentialId));
 
-        return Task.FromResult(AuthenticateResult.Success(
-            new AuthenticationTicket(new ClaimsPrincipal(identity), this.Scheme.Name)));
+        return AuthenticateResult.Success(
+            new AuthenticationTicket(new ClaimsPrincipal(identity), this.Scheme.Name));
     }
 
     /// <inheritdoc />

@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Access.Credentials;
+using MailFathom.Application.Access.Sessions;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts;
@@ -123,6 +124,7 @@ using MailFathom.Infrastructure.Persistence.Accounts;
 using MailFathom.Infrastructure.Persistence.AiProviders;
 using MailFathom.Infrastructure.Persistence.Answering;
 using MailFathom.Infrastructure.Persistence.ClientAssertions;
+using MailFathom.Infrastructure.Persistence.ClientSessions;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Contacts;
 using MailFathom.Infrastructure.Persistence.Coordination;
@@ -397,6 +399,11 @@ public static class ServiceCollectionExtensions
         // deployment serving no client surface still carries the table in its schema: what the client endpoint's switch
         // decides is whether anything ever mints a ticket, not whether the deployment knows where one would go.
         services.AddSingleton<IClientSignalTicketStore, ClientSignalTicketStore>();
+        // A singleton over the pool for the same reasons again, and registered here rather than beside the client
+        // endpoint's composition because a deployment serving no client surface still carries the table in its schema.
+        // Its callers are an authentication handler and a sign-in route, neither of which is a unit of work, and what
+        // it holds belongs to the deployment rather than to whichever replica minted it.
+        services.AddSingleton<IClientSessionStore, ClientSessionStore>();
         // Reads the persisted configuration layer once the process is running, which is what a reload asks. The
         // bootstrap read that composed the configuration happened before this container existed and built its own
         // data source for it; this registration is the same statement over the pool everything else uses.

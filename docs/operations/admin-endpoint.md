@@ -1386,13 +1386,15 @@ separately granted, so a token holding `mailfathom.admin.credentials.write` and 
 the listing, and the command reports that refusal, asks anyway, and sends the removal — otherwise the credential would be
 unremovable through the tool that exists to remove it.
 
-**Both also end the client sessions that credential minted**, on the next request each of them makes rather than at its
-own expiry, so closing a way into somebody's mail closes the clients already signed in through it. A rotation does not:
-it changes what may be presented at [the exchange](client-endpoint.md#the-session-token-routes) and says nothing about
-sessions already exchanged, so an operator ending somebody's sessions disables the credential rather than rotating it.
-Ending them also refuses a sign-in naming that credential for the next thirty seconds, which is how long an exchange
-that authenticated just before the act can still be deriving the password it presented; erasing a user refuses one
-naming that user for the same window. A credential enabled again inside it is answered `401` until it passes.
+**Both also end the client sessions that credential minted**, on every replica and on the next request each of them
+makes rather than at its own expiry, so closing a way into somebody's mail closes the clients already signed in through
+it. A rotation does not: it changes what may be presented at
+[the exchange](client-endpoint.md#the-session-token-routes) and says nothing about sessions already exchanged, so an
+operator ending somebody's sessions disables the credential rather than rotating it.
+Ending them is an act rather than a race, and PostgreSQL is what makes it one: a disable clears the flag and removes
+that credential's sessions in one transaction, while a sign-in holds the user record and then the enabled credential
+row until it commits. So an exchange that authenticated just before the act either matches no enabled credential and
+refuses, or commits first and has its session removed by the act that waited for it.
 
 **A rotation is one statement.** There is no moment at which both credentials work and none at which neither does, so a
 client still presenting the previous material meets a refusal rather than a half-written record. The credential keeps its

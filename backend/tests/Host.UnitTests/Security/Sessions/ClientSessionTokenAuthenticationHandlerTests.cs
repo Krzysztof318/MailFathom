@@ -7,6 +7,7 @@ using MailFathom.Application.Access.Credentials;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Security.Sessions;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
@@ -36,8 +37,8 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
     public async Task AuthenticateAsync_ALiveSessionToken_ActsForTheUserTheExchangeResolved()
     {
         // Arrange
-        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
-        var minted = sessions.Mint(Admitted())!;
+        var sessions = Sessions();
+        var minted = (await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken)).Token!;
 
         // Act
         var result = await AuthenticateAsync(sessions, $"Bearer {minted.Value}");
@@ -52,8 +53,8 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
     public async Task AuthenticateAsync_ALiveSessionToken_CarriesTheGrantTheCredentialHeld()
     {
         // Arrange
-        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
-        var minted = sessions.Mint(Admitted())!;
+        var sessions = Sessions();
+        var minted = (await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken)).Token!;
 
         // Act
         var result = await AuthenticateAsync(sessions, $"Bearer {minted.Value}");
@@ -70,9 +71,9 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
     public async Task AuthenticateAsync_ASessionRevokedSinceItWasMinted_IsRefused()
     {
         // Arrange
-        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
-        var minted = sessions.Mint(Admitted())!;
-        sessions.Revoke(minted.Value);
+        var sessions = Sessions();
+        var minted = (await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken)).Token!;
+        await sessions.RevokeAsync(minted.Value, TestContext.Current.CancellationToken);
 
         // Act
         var result = await AuthenticateAsync(sessions, $"Bearer {minted.Value}");
@@ -90,7 +91,7 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
     public async Task AuthenticateAsync_AnythingThatIsNotALiveSession_IsRefused(string headerValue)
     {
         // Arrange
-        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
+        var sessions = Sessions();
 
         // Act
         var result = await AuthenticateAsync(sessions, headerValue);
@@ -104,7 +105,7 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
     public async Task ChallengeAsync_ARequestPresentingNoSession_OffersTheBareChallengeAndNoPasswordChallenge()
     {
         // Arrange
-        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
+        var sessions = Sessions();
         var context = new DefaultHttpContext();
         var handler = await InitializeAsync(sessions, headerValue: string.Empty, context);
 
@@ -116,6 +117,9 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
         Assert.Contains("Bearer", challenges, StringComparison.Ordinal);
         Assert.DoesNotContain("Basic", challenges, StringComparison.Ordinal);
     }
+
+    private static ClientSessionTokens Sessions() =>
+        new(new InMemoryClientSessionStore(), new FakeTimeProvider(Instant));
 
     private static AdmittedUserCredential Admitted() => new(
         CredentialId,
