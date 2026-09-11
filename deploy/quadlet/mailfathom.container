@@ -220,6 +220,35 @@ Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom
 #Environment=SpamClassification__Scanner__Host=mailfathom-spamassassin
 #Environment=SpamClassification__Scanner__Port=783
 
+# The RESP endpoint this deployment's instances carry client signals to each other over, off because these lines are
+# commented out. Writing the section at all is what says a backplane exists, so an empty reference is refused at startup
+# rather than read as a deployment that runs without one — which is why these are commented rather than defaulted, like
+# the ContentStorage block above.
+#
+# **On one host it changes nothing an operator can observe**, and that is the expected state: a signal raised here
+# already reaches every client connection this deployment holds, because one process holds them all. What it is for is a
+# second instance, and running one under Quadlet is not supported today — issue #1295 decides whether it will be.
+#
+# The reference is a systemd credential like the database password, so it needs a LoadCredentialEncrypted= line in the
+# [Service] section below. What it holds is a whole StackExchange.Redis connection string rather than a bare password:
+# `mailfathom-garnet:6379,password=...` for the server mailfathom-garnet.container starts beside this unit — the
+# container name on the internal network — or the address of a Redis-compatible endpoint you already operate, in which
+# case install no unit for it. Both halves of the password are one decision: the string here presents it, and the ACL
+# credential that unit loads is what accepts it.
+#
+# The material is read once, when a connection is first wanted, and kept for the life of the process — so rotating it is
+# a restart to schedule rather than a reload. docs/operations/secret-rotation.md states the order.
+#
+# No ordering line at the top of this file goes with these, unlike every other optional unit here: the backplane unit
+# declares no health check to wait for, and nothing has to wait — MailFathom finishes starting whether or not the
+# endpoint answers, and an instance whose backplane is down serves every screen correctly from its own connections.
+#Environment=SignalBackplane__ConnectionString__Name=signal-backplane-connection-string
+#Environment=SignalBackplane__ConnectionString__SecretReference=systemd-credential:signal-backplane-connection-string
+# Optional, and only where two applications share one RESP endpoint: it prefixes every channel this deployment publishes
+# and subscribes to, and it defaults to `mailfathom`. Two MailFathom deployments on one endpoint collide under that
+# default and have to be told apart here.
+#Environment=SignalBackplane__ChannelPrefix=mailfathom
+
 # The same posture the image and the other two deployment shapes carry: nothing writable but one bounded tmpfs, no
 # capabilities, and no way to gain a privilege. /tmp is the one path the runtime needs to write.
 ReadOnly=true
@@ -264,6 +293,10 @@ LoadCredentialEncrypted=admin-api-key:%h/.config/credstore.encrypted/admin-api-k
 #LoadCredentialEncrypted=mailfathom-object-storage-access-key-id:%h/.config/credstore.encrypted/mailfathom-object-storage-access-key-id
 #LoadCredentialEncrypted=mailfathom-object-storage-secret-access-key:%h/.config/credstore.encrypted/mailfathom-object-storage-secret-access-key
 #LoadCredentialEncrypted=mailfathom-object-storage-trust-anchor:%h/.config/credstore.encrypted/mailfathom-object-storage-trust-anchor
+# Only when this deployment carries client signals over a RESP endpoint — uncommented together with the SignalBackplane
+# lines above. It holds the whole connection string rather than a password, because the endpoint's address is no secret
+# and the password in it is.
+#LoadCredentialEncrypted=signal-backplane-connection-string:%h/.config/credstore.encrypted/signal-backplane-connection-string
 
 # Bound the in-memory exposure that no code-level measure addresses, for the process that decrypts every credential
 # above before handing it on.

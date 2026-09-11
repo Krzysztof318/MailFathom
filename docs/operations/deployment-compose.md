@@ -830,18 +830,91 @@ PGSTY's own registry. Silo is AGPL-3.0-or-later, which
 together with the reading it is used under. Its own lifecycle — upgrades, its configuration, its users beyond the one
 above — is yours; MailFathom manages none of it.
 
+## The signal backplane
+
+The stack has a sixth service, `garnet`, and it is not started either. It sits behind its own Compose profile, so
+`docker compose up` pulls no image for it and holds none of its memory.
+
+**On one host it does nothing, and that is the expected state rather than a misconfiguration to fix.** A backplane
+carries a client signal from the instance that raised it to the instances holding the connections that have to hear
+about it, and this file runs one MailFathom — so every signal already reaches every connection this deployment holds,
+and the server relays each one back to the single subscriber that published it. It is here so that this shape offers the
+same component [the chart](deployment-kubernetes.md) does, and so that a deployment which grows a second instance has
+the piece provisioned before it needs one. Running more than one MailFathom under Compose is not supported today.
+[`SignalBackplane`](configuration-endpoints.md#signalbackplane) is what the section means, and
+[the signal channel](client-endpoint.md#the-signal-channel) is what a client does when a signal does not arrive.
+
+Switching it on is a profile and a credential rather than a switch, because what says a backplane exists is the
+configuration section itself — an empty reference is refused at startup rather than read as a deployment running without
+one, which is why `compose.yaml` carries those two lines commented out instead of defaulted. In this order:
+
+1. Choose one password and write it into two files. The first is the server's authority to accept a connection and is a
+   single Redis-style ACL line; the second is the whole connection string MailFathom presents, with the service's name
+   on the internal network and its port already in it:
+
+   ```bash
+   printf 'user default on >%s +@all\n' "$password" > secrets/garnet-acl
+   printf 'garnet:6379,password=%s' "$password" > secrets/mailfathom/signal-backplane-connection-string
+   chmod 444 secrets/garnet-acl secrets/mailfathom/signal-backplane-connection-string
+   ```
+
+2. Uncomment the two `SignalBackplane__ConnectionString__` lines in the `mailfathom` service.
+3. Add the profile:
+
+   ```dotenv
+   COMPOSE_PROFILES=signal-backplane
+   ```
+
+`COMPOSE_PROFILES` takes a list, so several at once are
+`COMPOSE_PROFILES=personal-data-scanning,spam-scanning,object-storage,signal-backplane`.
+
+To use a Redis-compatible endpoint you already operate, write that endpoint's own address and password into the
+connection-string file, do step 2, and leave `COMPOSE_PROFILES` alone — nothing is then started for it, and the ACL file
+is the server's business rather than this deployment's. Keep that endpoint **inside your own network**: what crosses it
+is which mailbox changed and for whom, which is personal data on its own. The server this file starts publishes no port
+and sits on `backend` alone, exactly as PostgreSQL does.
+
+**The password arrives as a file, which on this server means an ACL file**, and that is the one place this deployment
+differs from [the chart](deployment-kubernetes.md), where the kubelet expands it into `--auth Password --password` out
+of a Secret. Compose has no equivalent expansion — it interpolates `${...}` from `.env` while it parses `compose.yaml` —
+so that route would put the password in `.env`, in `docker inspect`, and in this host's process list rather than in the
+secrets directory beside every other credential. `--auth ACL` is the one mode Garnet reads its credentials from a path
+in. The default user is what a RESP client authenticating with a password alone becomes, and this server holds nothing
+but subscriptions, so the line above grants it every command.
+
+The service has no volume and nothing to persist: a backplane holds a live subscription rather than a record, so a
+restart loses nothing, and a server that kept anything across one would replay a statement whose subject has already
+moved. It has no health check either, for the reason MailFathom's own service has none — the image carries a .NET
+runtime and no RESP client, so there is nothing inside the container for a check to run. Nothing waits for it: MailFathom
+finishes starting whether or not the endpoint answers, and an instance whose backplane is down serves every screen
+correctly from the connections it holds itself.
+
+**Rotating the password is a restart, not a reload.** The connection string is read once, when a connection is first
+wanted, and the endpoint parsed out of it — password included — is kept for the life of the process.
+[Rotating the signal backplane's connection string](secret-rotation.md#rotating-the-signal-backplanes-connection-string)
+states the order that takes.
+
+**Nothing of Garnet is in MailFathom's image or in this repository.** `compose.yaml` names an image your host pulls from
+Microsoft's own registry, pinned by the same digest the chart renders — Garnet publishes its release tags beside moving
+`1`, `2`, and `latest` ones, so a digest is the only reference that names one artifact. Garnet is MIT-licensed, which
+[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records
+together with the base image it is built on.
+
 ## Bounds
 
-`.env.example` documents every knob: log rotation, CPU and memory limits for all five services, the published bind
+`.env.example` documents every knob: log rotation, CPU and memory limits for all six services, the published bind
 address and port, the database and role names, both volume names, the four personal-data settings, the seven spam
-settings, the six content-storage settings, and the four the object store adds. Each is the value the Compose file
-already applies, so an unset variable and the documented value mean the same thing.
+settings, the six content-storage settings, the four the object store adds, and the backplane's image and its two
+limits. Each is the value the Compose file already applies, so an unset variable and the documented value mean the same
+thing.
 
 The analyzer's memory limit is the one worth reading before it is lowered: it defaults to two gigabytes because the model
 is held for the life of the container, and below roughly one it is killed while loading — which reaches MailFathom as an
 analyzer that never became ready. The spam daemon's is modest by comparison and defaults to 512 megabytes, which holds
 the compiled corpus and a child per scan. The object store's is modest for a different reason — it holds no index in
-memory and streams what it serves, so what it wants is disk, and that is the volume rather than a limit.
+memory and streams what it serves, so what it wants is disk, and that is the volume rather than a limit. The backplane
+server's covers its hash index and the .NET runtime around it and nothing else: it allocates that index while it starts
+and grows its log only as records are written, and this one is never written to.
 
 ## Related
 
