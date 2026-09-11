@@ -54,11 +54,12 @@ internal static class EmbeddingStatusCommand
 
         CliDetails details = new();
         details.Add("Deployment", $"{profile.Name} ({profile.Endpoint.GetLeftPart(UriPartial.Authority)})");
+        details.Add("Answered by", status.Replica ?? "a deployment that does not report which replica answered");
         details.Add("Declared", DescribeDeclaration(status));
         details.Add("Serving", DescribeServing(status.Serving));
         details.Add("Reindex", DescribeReindex(status.Building));
-        details.Add("Next pass", DescribeNextPass(status.NextBackfillPassDueAt));
-        details.Add("Provider", DescribeProvider(status.Provider));
+        details.Add("Next pass here", DescribeNextPass(status.NextBackfillPassDueAt));
+        details.Add("Provider here", DescribeProvider(status.Provider));
         details.Add("Spend", status.Spend?.Describe() ?? "not reported");
         AddAttachmentDetails(details, status.AttachmentDerivation);
 
@@ -116,6 +117,11 @@ internal static class EmbeddingStatusCommand
     /// broken instance until one of them says a pass is simply not due yet. The instant is absolute rather than a
     /// countdown, because it is the deployment's clock rather than this terminal's that decides when the pass runs.
     /// <para>
+    /// It is the answering replica's pass rather than the deployment's, which is why the line names it as such. Every
+    /// replica schedules its own and one lease decides which of them actually walks, so a deployment running three
+    /// reports three instants and each is truthful about the process that gave it.
+    /// </para>
+    /// <para>
     /// The absence names both of its causes and asserts neither, because a deployment that has only just started shows
     /// it as truthfully as one whose walk is turned off, and a line claiming the second would send an operator to a
     /// setting that is already what they want it to be.
@@ -129,6 +135,11 @@ internal static class EmbeddingStatusCommand
     /// <remarks>
     /// The moment is reported beside the state because the state is observed rather than probed: nothing calls a
     /// provider to answer this, so a failure recorded hours ago and one recorded a moment ago read alike without it.
+    /// <para>
+    /// What is observed is the answering replica's own calls, which is what the line's name says. A replica that has
+    /// embedded nothing reports a provider nothing is known about while another is calling it successfully, and both
+    /// readings are true of the process that gave them.
+    /// </para>
     /// </remarks>
     private static string DescribeProvider(EmbeddingProviderHealth? provider)
     {

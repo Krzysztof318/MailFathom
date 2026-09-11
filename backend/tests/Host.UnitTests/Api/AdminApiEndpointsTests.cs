@@ -538,6 +538,7 @@ public sealed class AdminApiEndpointsTests
             Substitute.For<IAiProviderHealthReader>(),
             backfillSchedule,
             attachmentDerivation,
+            SyntheticReplica.Answering,
             Authorization));
         services.AddScoped(_ => new CountedEmbeddingActivation(
             generationStore,

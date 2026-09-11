@@ -26,6 +26,15 @@ internal sealed class WorkLeaseEntity
 
     public required string Holder { get; set; }
 
+    /// <summary>Gets or sets the replica the current holder belongs to, which is what an operator reads to find the process the work is happening in.</summary>
+    /// <remarks>
+    /// Descriptive and never a predicate. Every conditional write here is refused against <see cref="Holder" />, which
+    /// names one hold; this names the process that took it, so an operator asking who holds an account is told
+    /// something they can find a log for rather than a generated identity that names nothing. A takeover replaces it
+    /// with the new holder's, because the row describes the hold it currently records.
+    /// </remarks>
+    public required string Replica { get; set; }
+
     /// <summary>Gets or sets when the current holder took the scope, which a renewal leaves where it is.</summary>
     public DateTimeOffset HeldSince { get; set; }
 

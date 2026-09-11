@@ -153,16 +153,25 @@ internal sealed record EmbeddingSpendResponse(
 }
 
 /// <summary>Where semantic search stands on this instance, as one answer.</summary>
+/// <param name="Replica">
+/// The replica that composed the answer. Two members below are that process's own reading rather than the deployment's
+/// — what the last provider call established, and when the next backfill pass is due — and this is what an operator
+/// reads them against when a deployment runs more than one.
+/// </param>
 /// <param name="Declared">The geometry configuration declares, or <see langword="null" /> on an instance that declared no provider.</param>
 /// <param name="ActivationOutstanding">Whether the declaration is waiting for an activation nobody has performed.</param>
 /// <param name="Serving">The generation searches are answered from, or <see langword="null" /> when this instance has activated none.</param>
 /// <param name="Building">The generation a reindex is filling, or <see langword="null" /> when no reindex is running.</param>
-/// <param name="Provider">What the last call to the embedding provider established.</param>
+/// <param name="Provider">
+/// What the last call to the embedding provider established, as the replica named above read it. Another replica of the
+/// same deployment calls the provider on its own and may report a different reading.
+/// </param>
 /// <param name="Spend">Where the budget period stands.</param>
 /// <param name="NextBackfillPassDueAt">
-/// When the backfill's next pass is due, or <see langword="null" /> while none is scheduled. It is what tells a
-/// deployment that is waiting apart from one that is failing, which every other member here reads alike: an instance
-/// between passes reports no vectors, no provider call, and no reason.
+/// When the replica named above will next take a backfill pass, or <see langword="null" /> while it has scheduled none.
+/// Another replica schedules its own passes and may report a different instant. It is what tells a replica that is
+/// waiting apart from one that is failing, which every other member here reads alike: an instance between passes
+/// reports no vectors, no provider call, and no reason.
 /// </param>
 /// <param name="AttachmentDerivation">
 /// How far reading this deployment's attachments and images has come, and where their own two ceilings stand. Reported
@@ -170,6 +179,7 @@ internal sealed record EmbeddingSpendResponse(
 /// have every document in it unread, and the two are counted in units that do not convert.
 /// </param>
 internal sealed record EmbeddingStatusResponse(
+    string Replica,
     EmbeddingGeometryResponse? Declared,
     bool ActivationOutstanding,
     EmbeddingGenerationResponse? Serving,
@@ -188,6 +198,7 @@ internal sealed record EmbeddingStatusResponse(
         ArgumentNullException.ThrowIfNull(status);
 
         return new EmbeddingStatusResponse(
+            status.Replica.Value,
             status.Declared is { } declared ? EmbeddingGeometryResponse.For(declared) : null,
             status.ActivationOutstanding,
             EmbeddingGenerationResponse.For(status.Serving),

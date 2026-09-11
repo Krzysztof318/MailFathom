@@ -32,6 +32,7 @@
     <Compile Include="..\shared\InMemoryAttachmentDerivationCoverageReader.cs" Link="InMemoryAttachmentDerivationCoverageReader.cs" />
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
+    <Compile Include="..\shared\SyntheticReplica.cs" Link="SyntheticReplica.cs" />
     <!-- The draft routes take a file in and read a draft back, so the two client-facing acts a request decides
          anything about are exercised over the same in-memory account the application suite writes drafts into. -->
     <Compile Include="..\shared\OwnedMailAccountCatalogs.cs" Link="OwnedMailAccountCatalogs.cs" />

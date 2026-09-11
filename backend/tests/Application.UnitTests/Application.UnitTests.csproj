@@ -35,6 +35,7 @@
     <Compile Include="..\shared\InMemoryAttachmentDerivationCoverageReader.cs" Link="InMemoryAttachmentDerivationCoverageReader.cs" />
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
+    <Compile Include="..\shared\SyntheticReplica.cs" Link="SyntheticReplica.cs" />
     <!-- A draft's record and the message it is are one decision, so the two stores that hold them are linked together
          and into every suite that writes a draft: this one proves the use cases, and Mcp.UnitTests the tools over
          them. -->

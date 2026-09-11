@@ -8,6 +8,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts.Collection;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Move;
@@ -139,6 +140,13 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// </remarks>
     internal MailUserId ServedUser => this.host.Services.GetRequiredService<IDeploymentMailUserSource>().User;
 
+    /// <summary>Gets the replica this graph is, which is what every per-process figure it answers with is named beside.</summary>
+    /// <remarks>
+    /// Each call to <see cref="StartAsync" /> is a replica of its own, exactly as two hosts against one database are, so
+    /// a test proving that two of them answer alike reads each one's identity from here rather than restating it.
+    /// </remarks>
+    internal ReplicaIdentity Replica => this.host.Services.GetRequiredService<ReplicaIdentity>();
+
     /// <summary>Starts the composed services against the orchestrated infrastructure.</summary>
     /// <param name="orchestration">The running orchestration whose database and mail server are used.</param>
     /// <param name="cancellationToken">Cancels the startup.</param>
@@ -237,6 +245,10 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             keepsDrafts);
 
         builder.Services.AddSingleton(TimeProvider.System);
+        // Which replica answered, registered by the composition root from the machine and the process. Each graph this
+        // suite starts is a separate replica, so the identity is minted per start rather than shared: two graphs
+        // reporting one identity would make a lease this one holds read as a lease the other one holds.
+        builder.Services.AddSingleton(ReplicaIdentity.Create($"integration-{Guid.CreateVersion7()}"));
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
         builder.Services.AddOutboundResiliencePipelines(builder.Configuration.GetSection("Resilience"));
         builder.Services.AddSingleton<IImapAccountSettingsProvider>(account);

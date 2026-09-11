@@ -6,7 +6,7 @@ using MailFathom.Application.Coordination;
 
 namespace MailFathom.Infrastructure.Persistence.Coordination;
 
-/// <summary>Composes the three statements a lease's whole life is.</summary>
+/// <summary>Composes the statements a lease's whole life is, and the one that reads what they left.</summary>
 /// <remarks>
 /// <para>
 /// Written rather than composed through the query provider, because each of them is the mechanism rather than a query.
@@ -30,6 +30,12 @@ namespace MailFathom.Infrastructure.Persistence.Coordination;
 /// — so the statements are verified as text.
 /// </para>
 /// <para>
+/// The read is here beside them because it has to judge an expiry the same way, and for no other reason: it decides
+/// nothing, holds nothing, and is composed as a statement only so that <c>now()</c> stays the one clock every reading
+/// of this table is made against. A reader comparing the stored expiry with its own clock would report a held scope as
+/// free on a replica running fast, which is the same drift the exclusion itself is written to survive.
+/// </para>
+/// <para>
 /// Every value is a parameter. The identifiers are quoted because EF Core names the columns after the properties,
 /// which PostgreSQL would otherwise fold to lower case and fail to find.
 /// </para>
@@ -39,9 +45,10 @@ internal static class WorkLeaseStatements
     /// <summary>Composes the statement that takes a free or expired scope and stamps it with a hold.</summary>
     /// <param name="scope">The unit of work to hold.</param>
     /// <param name="holder">The hold the lease is stamped with.</param>
+    /// <param name="replica">The replica the hold belongs to, stamped beside it so the row says which process holds the scope.</param>
     /// <param name="leaseDuration">How long the scope is held for from the instant PostgreSQL takes it.</param>
     /// <returns>The statement, whose one row is the expiry of the lease it took, and which returns none when the claim was refused.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> or <paramref name="holder" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" />, <paramref name="holder" />, or <paramref name="replica" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// One statement covers both ways a scope can be free, which is what keeps them one decision: an insert takes a
     /// scope no row names, and the conflict path takes one whose recorded lease has run out. The predicate on the
@@ -52,19 +59,23 @@ internal static class WorkLeaseStatements
     internal static FormattableString ComposeClaim(
         WorkScope scope,
         WorkLeaseHolder holder,
+        ReplicaIdentity replica,
         TimeSpan leaseDuration)
     {
         ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(holder);
+        ArgumentNullException.ThrowIfNull(replica);
 
         var scopeValue = scope.Value;
         var holderValue = holder.Value;
+        var replicaValue = replica.Value;
 
         return $"""
-                INSERT INTO work_leases ("Scope", "Holder", "HeldSince", "ExpiresAt")
-                VALUES ({scopeValue}, {holderValue}, now(), now() + {leaseDuration})
+                INSERT INTO work_leases ("Scope", "Holder", "Replica", "HeldSince", "ExpiresAt")
+                VALUES ({scopeValue}, {holderValue}, {replicaValue}, now(), now() + {leaseDuration})
                 ON CONFLICT ("Scope") DO UPDATE
                 SET "Holder" = EXCLUDED."Holder",
+                    "Replica" = EXCLUDED."Replica",
                     "HeldSince" = EXCLUDED."HeldSince",
                     "ExpiresAt" = EXCLUDED."ExpiresAt"
                 WHERE work_leases."ExpiresAt" <= now()
@@ -125,6 +136,37 @@ internal static class WorkLeaseStatements
                 DELETE FROM work_leases
                 WHERE "Scope" = {scopeValue}
                   AND "Holder" = {holderValue}
+                """;
+    }
+
+    /// <summary>Composes the statement that reads which of a set of scopes is held right now.</summary>
+    /// <param name="scopes">The scopes to ask about, as the text each is held under.</param>
+    /// <returns>The statement, whose rows are the unexpired leases among those scopes.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="scopes" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// The expiry comparison is the claim's own inverted, so what this reports as held is exactly what a claim would be
+    /// refused for. One statement over the whole set rather than one per scope, because the surface asking is
+    /// describing every account a deployment serves, and the equality against the primary key is answered by it whether
+    /// the set holds one scope or thirty.
+    /// </para>
+    /// <para>
+    /// Every mapped column is selected because the rows come back as the mapped type, which is how one statement can
+    /// carry four values without a second shape declared for it. <c>HeldSince</c> is therefore read and not reported:
+    /// when a hold was taken says nothing an operator can act on that the expiry ahead of it does not already say.
+    /// </para>
+    /// </remarks>
+    internal static FormattableString ComposeHeldRead(IReadOnlyCollection<string> scopes)
+    {
+        ArgumentNullException.ThrowIfNull(scopes);
+
+        var scopeValues = scopes.ToArray();
+
+        return $"""
+                SELECT "Scope", "Holder", "Replica", "HeldSince", "ExpiresAt"
+                FROM work_leases
+                WHERE "Scope" = ANY({scopeValues})
+                  AND "ExpiresAt" > now()
                 """;
     }
 }

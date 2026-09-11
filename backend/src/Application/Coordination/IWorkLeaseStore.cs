@@ -95,4 +95,31 @@ public interface IWorkLeaseStore
     /// scope another replica is working under.
     /// </remarks>
     Task<bool> ReleaseAsync(WorkScope scope, WorkLeaseHolder holder, CancellationToken cancellationToken);
+
+    /// <summary>Reads which of a set of scopes the deployment is holding right now, and under which replica.</summary>
+    /// <param name="scopes">The units of work to ask about.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>One lease per scope something holds, in no particular order; a scope nothing holds is absent.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="scopes" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// The one operation here that decides nothing. It exists so an administrative surface can answer about the
+    /// deployment rather than about the replica the request happened to reach: an account supervised elsewhere is a
+    /// lease this replica did not take, and without reading the table the only thing a status answer could say is that
+    /// nothing has run here.
+    /// </para>
+    /// <para>
+    /// A lease whose recorded expiry has passed is absent, judged against the database's clock exactly as a claim
+    /// judges it, so the answer is the set of scopes a claim would be refused for. It is a snapshot rather than a
+    /// reservation, and a caller may do nothing with it but report it — deciding whether to run work from this reading
+    /// would leave the window between reading and acting that <see cref="ClaimAsync" /> exists to close.
+    /// </para>
+    /// <para>
+    /// Several scopes in one call rather than one each, because the surface that asks is describing every account a
+    /// deployment serves and a read per account would turn one answer into a round trip per configured mailbox.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<WorkLease>> ReadHeldAsync(
+        IReadOnlyCollection<WorkScope> scopes,
+        CancellationToken cancellationToken);
 }

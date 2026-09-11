@@ -214,8 +214,40 @@ public sealed class EmbeddingCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
             this.harness.Console.Lines,
-            line => line.StartsWith("Next pass:", StringComparison.Ordinal)
+            line => line.StartsWith("Next pass here:", StringComparison.Ordinal)
                 && line.Contains("due at 2026-08-08 12:00:30Z", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Two lines of this reading are the answering replica's own — the pass it has scheduled and the provider call it
+    /// last made — so the answer names which replica they belong to, exactly as the mailbox status reading does.
+    /// </summary>
+    [Fact]
+    public async Task Status_ADeploymentReportingWhichReplicaAnswered_NamesItBesideTheReadingsThatAreItsOwn()
+    {
+        // Arrange
+        using var deployment = FakeEmbeddingDeployment.Answering(status: """
+            {
+              "replica": "mailfathom-0:1",
+              "declared": {"fingerprint":"a1b2c3","provider":"a-provider","model":"a-model","modelVersion":null,"dimension":1536,"distanceMetric":"Cosine"},
+              "activationOutstanding": false,
+              "serving": null,
+              "building": null,
+              "provider": {"state":"Unobserved","observedAt":null},
+              "spend": {"periodStartsAt":"2026-08-08T00:00:00+00:00","periodEndsAt":"2026-08-09T00:00:00+00:00","consumedInputCharacterCount":0,"ceilingInputCharacterCount":null,"remainingInputCharacterCount":null},
+              "nextBackfillPassDueAt": null
+            }
+            """);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "embedding", "status", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.StartsWith("Answered by:", StringComparison.Ordinal)
+                && line.Contains("mailfathom-0:1", StringComparison.Ordinal));
     }
 
     /// <summary>A deployment whose walk is turned off schedules nothing, and the line says which setting does that.</summary>
@@ -242,7 +274,7 @@ public sealed class EmbeddingCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         var nextPass = Assert.Single(
             this.harness.Console.Lines,
-            line => line.StartsWith("Next pass:", StringComparison.Ordinal));
+            line => line.StartsWith("Next pass here:", StringComparison.Ordinal));
         Assert.Contains("EmbeddingBackfill:Enabled", nextPass, StringComparison.Ordinal);
 
         // Both causes, because a deployment that has only just started reports the absence as truthfully as one whose

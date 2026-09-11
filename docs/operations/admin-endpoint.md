@@ -254,8 +254,10 @@ and without a metrics stack it reaches you as a mailbox that looks empty rather 
 $ mfctl mailbox status
 Deployment:       production (https://mail.example.test:8443)
 Synchronization:  on
+Answered by:      mailfathom-7c9f4d8b6-2xql:1
 
 Account:            work
+Supervised by:      mailfathom-7c9f4d8b6-2xql:1, the replica that answered; its hold runs until 2026-08-15 12:25:00Z unless it is renewed
 Phase:              waiting; next run due at 2026-08-15 12:20:00Z
 Backoff:            4 runs failed in a row, which is what the wait above was grown from
 Last run:           failed at 2026-08-15 11:55:00Z; 1 of 2 folders failed
@@ -282,10 +284,32 @@ that sends you to the log. A folder interrupted because the deployment was shutt
 ended its turn, its checkpoint holds whatever that turn had already committed, and the first run after the deployment
 comes back resumes from there.
 
-**`Phase` says which of three things the account is doing** — running now, ready to run and waiting for one of the
-`MailSynchronization:MaxConcurrentAccounts` slots, or waiting out the delay its last run chose. The instant is the
-deployment's clock rather than yours. `Backoff` is the consecutive failure count that delay was grown from, so a wait
-far longer than `MailSynchronization:Interval` is explained rather than merely observed.
+**`Phase` says which of five things the account is doing** — running now, ready to run and waiting for one of the
+`MailSynchronization:MaxConcurrentAccounts` slots, waiting out the delay its last run chose, not yet run on the replica
+that holds it, or supervised on another replica of the same deployment. The instant is the deployment's clock rather
+than yours. `Backoff` is the consecutive failure count that delay was grown from, so a wait far longer than
+`MailSynchronization:Interval` is explained rather than merely observed.
+
+**The answer covers the deployment, and it names which replica read the parts that are one process's.** An account is
+supervised by exactly one replica at a time, and `Supervised by` is read from the lease table rather than from the
+answering process — so an account held elsewhere is reported as supervised, with the replica holding it and how long
+that hold runs, instead of as an account nothing has ever run. `Phase`, `Backoff`, and `Last run` beside it are that
+holder's scheduling state, which lives only in the holder's memory, so all three stand aside where the answering
+replica is not the holder and name it instead of reading their absent figures as none:
+
+```console
+Account:            work
+Supervised by:      mailfathom-7c9f4d8b6-9tmqz:1; its hold runs until 2026-08-15 12:25:00Z unless it is renewed
+Phase:              supervised by another replica of this deployment, which is where its run is read
+Backoff:            not reported here; the replica supervising the account is where its backoff is read
+Last run:           not reported here; the replica supervising the account is where its runs are read
+```
+
+The folder table below that is unaffected, because a folder's progress is a durable row rather than a process's memory.
+`Answered by` on the first block is the replica that composed the answer, which is what makes two readings taken from a
+load balancer comparable. A deployment running one replica reads exactly as it did before, with its own identity in
+both places, and `no replica holds this account, so nothing is fetching it` is the reading that says no replica has
+taken the mailbox up at all.
 
 **The three attachment lines are this account's alone**, and they say how far reading its mail's attachments and
 images has come — coverage, what reading produced, and an aggregate of why the rest yielded nothing. They are here as
@@ -298,14 +322,17 @@ enforces. `not reported` on any of the three is an older deployment that does no
 mirroring was switched off never reads as a folder that vanished. `Synchronization: off` on the first line says the
 whole deployment fetches nothing, which is what makes every figure below it still.
 
-The account state is what the running process is doing, so a restart resets it: the phase reads as not started and the
-last run as none until the account runs again, which happens within one interval. The folder progress is a durable row
-and survives, which is deliberate — the half that tells a stalled folder from an idle one is the half that outlives the
-process, and the half a restart clears is the backoff a restart genuinely clears.
+The account state is what the supervising process is doing, so a restart resets it: the phase reads as not started and
+the last run as none until the account runs again, which happens within one interval. A handover between replicas does
+the same and for the same reason, since the state never left the process that grew it. The folder progress is a durable
+row and survives, which is deliberate — the half that tells a stalled folder from an idle one is the half that outlives
+the process, and the half a restart clears is the backoff a restart genuinely clears. Nothing durable records a backoff,
+so no answer can name one that no replica is applying.
 
-Nothing in the answer is mail. Configured account identifiers, folder aliases, a phase, counts, UIDs, timestamps, and
-the attachment aggregate's reason names are the whole of it: no subject, no address, no remote folder path, no
-attachment filename, and no exception detail.
+Nothing in the answer is mail. Configured account identifiers, folder aliases, a phase, counts, UIDs, timestamps, a
+replica identity, and the attachment aggregate's reason names are the whole of it: no subject, no address, no remote
+folder path, no attachment filename, and no exception detail. A replica identity is the machine name and the process
+identifier of a MailFathom process, which names a container or a pod rather than a person.
 
 ### Reading what MailFathom changed
 
@@ -418,12 +445,13 @@ money per unit of mail.
 
 ```console
 $ mfctl embedding status
-Deployment:  production (https://mail.example.test:8443)
-Declared:    openai text-embedding-3-small, 1536 dimensions, Cosine
-Serving:     openai text-embedding-3-small, 1536 dimensions, Cosine — 4,120 of 4,120 messages embedded; nothing outstanding
-Reindex:     none running.
-Next pass:   due at 2026-08-08 12:14:30Z
-Provider:    Serving, as of 2026-08-08 11:59:00Z
+Deployment:      production (https://mail.example.test:8443)
+Answered by:     mailfathom-7c9f4d8b6-2xql:1
+Declared:        openai text-embedding-3-small, 1536 dimensions, Cosine
+Serving:         openai text-embedding-3-small, 1536 dimensions, Cosine — 4,120 of 4,120 messages embedded; nothing outstanding
+Reindex:         none running.
+Next pass here:  due at 2026-08-08 12:14:30Z
+Provider here:   Serving, as of 2026-08-08 11:59:00Z
 Spend:              1,200 of 50,000,000 characters; the period rolls over at 2026-08-09 00:00:00Z
 Attachments:        980 of 1,240 messages with attachments read; 412 attachments left over 88,104,336 octets
 Attachment yield:   1,504 document extracts and 96 described images; 3,918,220 characters of lexical index
@@ -449,7 +477,15 @@ holds what each bounds. The line to read first is `Declared`, which says so outr
 activation is outstanding — an edited configuration file changes nothing until one happens, and this is where you find
 that out rather than from search results that stayed the same.
 
-`Next pass` is the line for the minutes just after an activation, when a deployment that is waiting and one that is
+**Two of those lines are the answering replica's own, and they say so in their labels.** `Next pass here` is when that
+process will next take a backfill pass, and `Provider here` is what that process last saw of the provider; neither is
+durable, so on a deployment running several replicas each answers for itself and a second reading taken from a load
+balancer can name a different instant without anything being wrong. `Answered by` on the first block is the replica that
+composed the answer, which is what makes the two readings comparable. Everything else here — the declaration, both
+generations, the coverage, and every spend period — is read from the database and is the deployment's, so it reads
+alike whichever replica answers.
+
+`Next pass here` is the line for the minutes just after an activation, when a deployment that is waiting and one that is
 failing read identically everywhere else: nothing serving, nothing embedded, and a provider nothing has been asked of.
 An activation asks for a pass immediately, so the instant it names is normally the one now or a moment away rather than
 the end of an interval an earlier pass chose; `none scheduled` means the deployment has only just started, or that
