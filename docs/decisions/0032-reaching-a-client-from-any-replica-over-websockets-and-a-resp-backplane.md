@@ -81,10 +81,12 @@ The in-process dictionary becomes a table every replica shares, in the shape iss
 - **It pins more than the pair.** A cookie pins every request a client makes, and hashing the source address puts every client behind one NAT on one replica. Both distort the load the replicas were added to share.
 - **It fails in a rollout.** The replica that minted the ticket is the one being replaced.
 
-**Redemption is bounded where it happens, not by the minting route.** Minting costs one insert, on a route that has just authenticated a credential against the same database. Redeeming costs one delete, and it runs on the hub, which is mapped outside the client route group and has authenticated nothing when a ticket arrives. So two things bound it, and issue 1878 owns both:
+**Redemption is bounded where it happens, not by the minting route.** Minting costs one insert, on a route that has just authenticated a credential against the same database. Redeeming costs one delete, and it runs on the hub, which is mapped outside the client route group and has authenticated nothing when a ticket arrives. So redemption refuses anything this deployment did not mint, and refuses it before any statement runs. Issue 1878 owns both checks:
 
-- **A value without the shape of a minted ticket is refused before any statement runs**, as it is today: its length, its separator, and its encoding.
-- **The hub's handshake takes a rate limit of its own**, counted per caller address and per handshake rather than per standing connection. That is the one thing `ClientEndpoint:RateLimiting` cannot be made to do without also counting a connection that stands open for hours.
+- **A value without the shape of a minted ticket is refused first**: its length, its separator, and its encoding. Today's in-memory `Redeem` checks the length and the separator before its lookup, and the encoding only after it. That order moves, because under this record the lookup is the statement.
+- **The identifier half is sealed under the deployment key ring [ADR 0005](0005-data-encryption-key-ring-and-provisioning.md) provisions**, bound to a purpose of its own and carrying the ticket's expiry. Every replica already holds that key ring, so any replica refuses a forged or expired value by failing to open it, with no statement. What reaches the store is a ticket this deployment minted in the last 30 seconds, and minting sits behind an authenticated route and that route's limiter.
+
+**A rate limit on the handshake was the other way to bound it, and it is refused.** Behind a proxy the deployment declared, the peer address is the proxy's, and this deployment deliberately reads no forwarded client address. A limit counted per address would then be one bucket for every client, which one caller could empty to close live updates for everyone. `BasicAuthenticationHandler` drops its source axis behind a declared proxy for the same reason.
 
 ### Signals cross replicas through a RESP pub/sub backplane
 
@@ -173,7 +175,7 @@ Above one replica, an operator configures four things:
 ## Validation
 
 - **The transport.** A unit test over the hub's mapping requires a server-sent-events connection and a long-polling connection to be refused. Issue 1878 owns it.
-- **The ticket's bounds.** A unit test over the hub requires a value without the shape of a minted ticket to be refused without the store being asked, and one over the hub's mapping requires the handshake to carry its own rate limit. Issue 1878 owns both.
+- **The ticket's bounds.** Unit tests over redemption require three values to be refused without the store being asked: one without the shape of a minted ticket, one whose sealed identifier does not open, and one whose identifier has expired. Issue 1878 owns them.
 - **The backplane.** Startup validation refuses a backplane section that names no connection, and a unit test requires nothing to be registered when the section is absent or the client surface is not served. Issue 1879 owns both.
 - **The chart.** The golden manifests carry a values case for each mode — Garnet deployed, an external endpoint, and none. A case of `replicaCount: 2` with the client surface served and no backplane must fail to render, and `scripts/render-helm-manifests.sh` holds it. Issue 1880 owns this.
 - **The client.** Unit tests require a re-read after every reconnect, and every five minutes while the window is visible and never while it is hidden. Issue 1877 owns them.
@@ -204,7 +206,7 @@ Above one replica, an operator configures four things:
 - Good, because the shape is issue 1835's, which is already in production and already understood.
 - Good, because authentication never depends on an optional component.
 - Neutral, because the table exists in every deployment's schema, including those that never mint a ticket.
-- Bad, because each connection costs an insert and a delete that the in-memory store did not, and a handshake nobody minted a ticket for can cost a statement, which is why the hub takes a rate limit of its own.
+- Bad, because each connection costs an insert and a delete that the in-memory store did not, and because the identifier has to be sealed so that a value nobody minted costs no statement on a path that has authenticated nothing.
 
 ### A ticket store in the backplane's key space
 
