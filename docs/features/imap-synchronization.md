@@ -93,7 +93,11 @@ moved is kept, and a mail server may briefly see two connections for one account
 Nothing about what a run does changes with it. A run still opens no transaction across an IMAP exchange and still
 never sets `\Seen`; the lease is claimed, renewed, and released in statements of its own, each committed before any
 mail server is reached. Which replica holds which account is on the `mailfathom.work_leases.held` gauge, as
-[Holding work that must not run twice](../operations/telemetry.md#holding-work-that-must-not-run-twice) describes.
+[Holding work that must not run twice](../operations/telemetry.md#holding-work-that-must-not-run-twice) describes, and
+in the status answer, which reads the same leases so that an account supervised elsewhere is reported as supervised and
+by whom rather than as one the answering replica has never run —
+[Reading what synchronization is doing](../operations/admin-endpoint.md#reading-what-synchronization-is-doing) holds
+what such an answer covers.
 
 ### Two bounds, and what each one is for
 

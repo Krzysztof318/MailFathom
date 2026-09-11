@@ -15,15 +15,17 @@ namespace MailFathom.Cli.Administration.Embeddings;
 /// sends a state saying nothing has been observed. The command reads each absence as the answer it is rather than as a
 /// malformed response.
 /// </remarks>
+/// <param name="Replica">The replica that answered, or <see langword="null" /> from a deployment that reports none.</param>
 /// <param name="Declared">The vector space configuration declares, or <see langword="null" /> where it declares none.</param>
 /// <param name="ActivationOutstanding">Whether that declaration is waiting for an activation nobody has performed.</param>
 /// <param name="Serving">The generation searches are answered from, or <see langword="null" /> when the deployment has activated none.</param>
 /// <param name="Building">The generation a reindex is filling, or <see langword="null" /> when no reindex is running.</param>
-/// <param name="Provider">What the deployment's last call to its embedding provider established.</param>
+/// <param name="Provider">What the replica that answered last established about the embedding provider.</param>
 /// <param name="Spend">Where the deployment's budget period stands.</param>
-/// <param name="NextBackfillPassDueAt">When the deployment's backfill runs its next pass, or <see langword="null" /> while it has scheduled none.</param>
+/// <param name="NextBackfillPassDueAt">When the replica that answered will next take a pass, or <see langword="null" /> while it has scheduled none.</param>
 /// <param name="AttachmentDerivation">How far reading the deployment's attachments and images has come, and where their own two ceilings stand.</param>
 internal sealed record EmbeddingStatus(
+    [property: JsonPropertyName("replica")] string? Replica,
     [property: JsonPropertyName("declared")] EmbeddingGeometry? Declared,
     [property: JsonPropertyName("activationOutstanding")] bool ActivationOutstanding,
     [property: JsonPropertyName("serving")] EmbeddingGeneration? Serving,

@@ -4,7 +4,9 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.Emails.AttachmentText.Administration;
+using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -21,6 +23,9 @@ namespace MailFathom.Application.UnitTests.Synchronization.Administration;
 public sealed class MailSynchronizationStatusReaderTests
 {
     private static readonly DateTimeOffset Start = new(2026, 8, 15, 10, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset HoldExpiresAt = Start.AddMinutes(2);
+    private static readonly ReplicaIdentity AnsweringReplica = SyntheticReplica.Answering;
+    private static readonly ReplicaIdentity AnotherReplica = ReplicaIdentity.Create("mailfathom-1:1");
     private static readonly MailAccountId Work = MailAccountId.Create("work");
     private static readonly MailFolderIdentity Inbox = new(Work, MailFolderAlias.Create("inbox"));
     private static readonly MailFolderIdentity Archive = new(Work, MailFolderAlias.Create("archive"));
@@ -166,6 +171,106 @@ public sealed class MailSynchronizationStatusReaderTests
         Assert.Null(inbox.LastSeenUid);
     }
 
+    /// <summary>
+    /// The failure this read was changed for. An account another replica supervises reached an operator as an account
+    /// nothing had ever run, because the ledger the answer was composed from belongs to the process that took the
+    /// request — so whichever replica they reached decided what they were told.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AnAccountAnotherReplicaHolds_ReportsItAsSupervisedThereRatherThanAsNeverRun()
+    {
+        // Arrange
+        var reader = Reader(
+            new MailSynchronizationRunLedger(new FakeTimeProvider(Start)),
+            supervisedBy: AnotherReplica);
+
+        // Act
+        var status = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var account = Assert.Single(status.Accounts);
+        Assert.Equal(MailAccountRunPhase.SupervisedElsewhere, account.Run.Phase);
+        Assert.Equal(AnotherReplica, account.Supervision?.Replica);
+        Assert.Equal(HoldExpiresAt, account.Supervision?.HeldUntil);
+    }
+
+    /// <summary>
+    /// The ledger keeps what it last recorded for an account whose hold has since moved, and reporting that would name
+    /// a backoff this deployment stopped applying the moment the hold left. The account is reported as the other
+    /// replica's and nothing further.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AnAccountThisReplicaUsedToHold_ReportsNoneOfTheSchedulingItStillRemembers()
+    {
+        // Arrange
+        var ledger = new MailSynchronizationRunLedger(new FakeTimeProvider(Start));
+        ledger.RecordRunEnded(Work, scheduledFolderCount: 2, failedFolderCount: 2, mutationConvergenceFailed: false);
+        ledger.RecordNextRunDue(Work, TimeSpan.FromMinutes(20), consecutiveFailureCount: 3);
+        var reader = Reader(ledger, supervisedBy: AnotherReplica);
+
+        // Act
+        var status = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var run = Assert.Single(status.Accounts).Run;
+        Assert.Equal(0, run.ConsecutiveFailureCount);
+        Assert.Null(run.NextRunDueAt);
+        Assert.Null(run.LastRun);
+    }
+
+    /// <summary>An account this replica holds is the one case the ledger describes, so its scheduling is reported in full.</summary>
+    [Fact]
+    public async Task ReadAsync_AnAccountThisReplicaHolds_ReportsItsOwnSchedulingBesideTheHold()
+    {
+        // Arrange
+        var ledger = new MailSynchronizationRunLedger(new FakeTimeProvider(Start));
+        ledger.RecordNextRunDue(Work, TimeSpan.FromMinutes(20), consecutiveFailureCount: 3);
+        var reader = Reader(ledger, supervisedBy: AnsweringReplica);
+
+        // Act
+        var status = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var account = Assert.Single(status.Accounts);
+        Assert.Equal(MailAccountRunPhase.WaitingForNextRun, account.Run.Phase);
+        Assert.Equal(3, account.Run.ConsecutiveFailureCount);
+        Assert.Equal(AnsweringReplica, account.Supervision?.Replica);
+    }
+
+    /// <summary>
+    /// No replica holding an account is its own reading rather than an absence: a deployment fetching nothing, every
+    /// replica stopped, and a hold that expired without being taken again all mean the mailbox is not being fetched,
+    /// and the surface says so instead of naming a replica that is not there.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AnAccountNoReplicaHolds_ReportsNoSupervisionAtAll()
+    {
+        // Arrange
+        var reader = Reader(new MailSynchronizationRunLedger(new FakeTimeProvider(Start)));
+
+        // Act
+        var status = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var account = Assert.Single(status.Accounts);
+        Assert.Null(account.Supervision);
+        Assert.Equal(MailAccountRunPhase.NotStarted, account.Run.Phase);
+    }
+
+    /// <summary>The answer names the process that composed it, because the scheduling half of it belongs to that process alone.</summary>
+    [Fact]
+    public async Task ReadAsync_AnyDeployment_NamesTheReplicaThatAnswered()
+    {
+        // Arrange
+        var reader = Reader(new MailSynchronizationRunLedger(new FakeTimeProvider(Start)));
+
+        // Act
+        var status = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(AnsweringReplica, status.Replica);
+    }
+
     private static MailFolderSynchronizationProgress Advanced(MailFolderIdentity folder, uint lastSeenUid) =>
         new(folder, ImapUidValidity.Create(1), ImapUid.Create(lastSeenUid), Start);
 
@@ -239,12 +344,16 @@ public sealed class MailSynchronizationStatusReaderTests
         IReadOnlyList<MailFolderSynchronizationProgress>? progress = null,
         AccessAuthorization? authorization = null,
         InMemoryAttachmentDerivationCoverageReader? attachmentCoverage = null,
-        IReadOnlyList<MailAccountId>? served = null)
+        IReadOnlyList<MailAccountId>? served = null,
+        ReplicaIdentity? supervisedBy = null)
     {
+        var servedAccounts = (served ?? [Work])
+            .Select(account => SyntheticServedAccount.Of(account))
+            .ToArray();
+
         var accounts = Substitute.For<IDeploymentMailAccountCatalog>();
         accounts.SynchronizationEnabled.Returns(enabled);
-        accounts.ServedAccounts.Returns(
-            [.. (served ?? [Work]).Select(account => SyntheticServedAccount.Of(account))]);
+        accounts.ServedAccounts.Returns(servedAccounts);
 
         var progressReader = Substitute.For<IMailFolderSynchronizationProgressReader>();
         progressReader.ReadAsync(Arg.Any<CancellationToken>()).Returns(progress ?? []);
@@ -255,6 +364,32 @@ public sealed class MailSynchronizationStatusReaderTests
             ledger,
             progressReader,
             attachmentCoverage ?? new InMemoryAttachmentDerivationCoverageReader(),
+            Leases(servedAccounts, supervisedBy),
+            AnsweringReplica,
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
+    }
+
+    /// <summary>Stands in for the lease table, holding every served account under one replica or holding none of them.</summary>
+    private static IWorkLeaseStore Leases(
+        IReadOnlyList<ServedMailAccount> servedAccounts,
+        ReplicaIdentity? supervisedBy)
+    {
+        var leases = Substitute.For<IWorkLeaseStore>();
+        IReadOnlyList<WorkLease> held = supervisedBy is null
+            ? []
+            :
+            [
+                .. servedAccounts.Select(account => new WorkLease(
+                    MailAccountSupervisionScope.For(account.Identity),
+                    WorkLeaseHolder.Create("a-hold"),
+                    supervisedBy,
+                    HoldExpiresAt)),
+            ];
+
+        leases
+            .ReadHeldAsync(Arg.Any<IReadOnlyCollection<WorkScope>>(), Arg.Any<CancellationToken>())
+            .Returns(held);
+
+        return leases;
     }
 }

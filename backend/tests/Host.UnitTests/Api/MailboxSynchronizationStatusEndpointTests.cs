@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.Emails.AttachmentText.Administration;
 using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Domain.Accounts;
@@ -173,6 +174,19 @@ public sealed class MailboxSynchronizationStatusEndpointTests
             ledger,
             progressReader,
             attachmentCoverage ?? new InMemoryAttachmentDerivationCoverageReader(),
+            NoHeldLeases(),
+            SyntheticReplica.Answering,
             AdministrativeGrant.WholeSurface);
+    }
+
+    /// <summary>Stands in for a lease table holding nothing, which is what a deployment with no worker running has.</summary>
+    private static IWorkLeaseStore NoHeldLeases()
+    {
+        var leases = Substitute.For<IWorkLeaseStore>();
+        leases
+            .ReadHeldAsync(Arg.Any<IReadOnlyCollection<WorkScope>>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+
+        return leases;
     }
 }

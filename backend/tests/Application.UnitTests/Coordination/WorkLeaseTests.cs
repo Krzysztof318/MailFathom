@@ -18,6 +18,8 @@ public sealed class WorkLeaseTests
 
     private static readonly WorkScope Scope = WorkScope.Create("mail-account:personal");
 
+    private static readonly ReplicaIdentity Replica = ReplicaIdentity.Create("mailfathom-0:1");
+
     [Fact]
     public void HasExpiredAt_AnInstantBeforeTheExpiry_ReportsTheLeaseAsStillHeld()
     {
@@ -48,7 +50,7 @@ public sealed class WorkLeaseTests
     {
         // Arrange
         var holder = WorkLeaseHolder.NewHold();
-        var lease = new WorkLease(Scope, holder, HeldFrom.AddMinutes(5));
+        var lease = new WorkLease(Scope, holder, Replica, HeldFrom.AddMinutes(5));
 
         // Act and assert
         Assert.True(lease.IsHeldBy(holder));
@@ -59,12 +61,12 @@ public sealed class WorkLeaseTests
     public void IsHeldBy_AHoldThatReplacedIt_ReportsThatItDoesNot()
     {
         // Arrange
-        var lease = new WorkLease(Scope, WorkLeaseHolder.NewHold(), HeldFrom.AddMinutes(5));
+        var lease = new WorkLease(Scope, WorkLeaseHolder.NewHold(), Replica, HeldFrom.AddMinutes(5));
 
         // Act and assert
         Assert.False(lease.IsHeldBy(WorkLeaseHolder.NewHold()));
     }
 
     private static WorkLease Lease(DateTimeOffset expiresAt) =>
-        new(Scope, WorkLeaseHolder.NewHold(), expiresAt);
+        new(Scope, WorkLeaseHolder.NewHold(), Replica, expiresAt);
 }

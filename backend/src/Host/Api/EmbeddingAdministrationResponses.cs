@@ -153,6 +153,11 @@ internal sealed record EmbeddingSpendResponse(
 }
 
 /// <summary>Where semantic search stands on this instance, as one answer.</summary>
+/// <param name="Replica">
+/// The replica that composed the answer. Two members below are that process's own reading rather than the deployment's
+/// — what the last provider call established, and when the next backfill pass is due — and this is what an operator
+/// reads them against when a deployment runs more than one.
+/// </param>
 /// <param name="Declared">The geometry configuration declares, or <see langword="null" /> on an instance that declared no provider.</param>
 /// <param name="ActivationOutstanding">Whether the declaration is waiting for an activation nobody has performed.</param>
 /// <param name="Serving">The generation searches are answered from, or <see langword="null" /> when this instance has activated none.</param>
@@ -170,6 +175,7 @@ internal sealed record EmbeddingSpendResponse(
 /// have every document in it unread, and the two are counted in units that do not convert.
 /// </param>
 internal sealed record EmbeddingStatusResponse(
+    string Replica,
     EmbeddingGeometryResponse? Declared,
     bool ActivationOutstanding,
     EmbeddingGenerationResponse? Serving,
@@ -188,6 +194,7 @@ internal sealed record EmbeddingStatusResponse(
         ArgumentNullException.ThrowIfNull(status);
 
         return new EmbeddingStatusResponse(
+            status.Replica.Value,
             status.Declared is { } declared ? EmbeddingGeometryResponse.For(declared) : null,
             status.ActivationOutstanding,
             EmbeddingGenerationResponse.For(status.Serving),

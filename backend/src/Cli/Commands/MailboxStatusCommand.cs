@@ -57,6 +57,7 @@ internal static class MailboxStatusCommand
         CliDetails deployment = new();
         deployment.Add("Deployment", $"{profile.Name} ({profile.Endpoint.GetLeftPart(UriPartial.Authority)})");
         deployment.Add("Synchronization", DescribeSwitch(status.SynchronizationEnabled));
+        deployment.Add("Answered by", status.Replica ?? "a deployment that does not report which replica answered");
 
         if (accounts.Count == 0)
         {
@@ -70,7 +71,7 @@ internal static class MailboxStatusCommand
 
         foreach (var account in accounts)
         {
-            WriteAccount(context, account);
+            WriteAccount(context, account, status.Replica);
         }
 
         return CliExitCode.Success;
@@ -92,15 +93,19 @@ internal static class MailboxStatusCommand
     /// different shapes: an operator reads the account's phase and backoff once, and scans the folders for the one that
     /// has stopped.
     /// </remarks>
-    private static void WriteAccount(CliContext context, MailboxAccountSynchronization account)
+    private static void WriteAccount(
+        CliContext context,
+        MailboxAccountSynchronization account,
+        string? answeringReplica)
     {
         context.Console.WriteLine(string.Empty);
 
         CliDetails details = new();
         details.Add("Account", account.Account ?? "an unnamed account");
+        details.Add("Supervised by", account.DescribeSupervision(answeringReplica));
         details.Add("Phase", account.DescribePhase());
         details.Add("Backoff", account.DescribeBackoff());
-        details.Add("Last run", account.LastRun?.Describe() ?? "none finished since this deployment started");
+        details.Add("Last run", account.DescribeLastRun());
         details.Add("Attachments", account.AttachmentText?.DescribeProgress() ?? "not reported");
         details.Add("Attachment yield", account.AttachmentText?.DescribeYield() ?? "not reported");
         details.Add("Attachment skips", string.Join("; ", account.AttachmentText?.DescribeSkips() ?? ["not reported"]));
@@ -138,7 +143,7 @@ internal static class MailboxStatusCommand
             listing.AddRow(
                 $"{folder.Alias ?? "an unnamed folder"}{mirrored}",
                 folder.DescribeProgress(),
-                folder.LastRun?.Describe() ?? "none since this deployment started");
+                folder.LastRun?.Describe() ?? "none on the replica that answered");
         }
 
         context.Console.Write(listing);

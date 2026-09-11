@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Coordination;
 using MailFathom.Host.Hosting.Workers;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -151,7 +152,11 @@ public sealed class WorkLeaseHoldTests
         var store = Substitute.For<IWorkLeaseStore>();
         store.ClaimAsync(Arg.Any<WorkScope>(), Arg.Any<WorkLeaseHolder>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult<WorkLease?>(
-                new WorkLease(call.Arg<WorkScope>()!, call.Arg<WorkLeaseHolder>()!, clock.GetUtcNow() + LeaseDuration)));
+                new WorkLease(
+                    call.Arg<WorkScope>()!,
+                    call.Arg<WorkLeaseHolder>()!,
+                    ScriptedWorkLeaseStore.Replica,
+                    clock.GetUtcNow() + LeaseDuration)));
 
         return store;
     }

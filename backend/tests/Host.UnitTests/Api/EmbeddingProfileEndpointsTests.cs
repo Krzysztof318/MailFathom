@@ -412,6 +412,7 @@ public sealed class EmbeddingProfileEndpointsTests
                 providerHealth,
                 backfillSchedule,
                 attachmentDerivation,
+                SyntheticReplica.Answering,
                 AdministrativeGrant.WholeSurface),
             new EmbeddingReindexCancellation(
                 generationStore,

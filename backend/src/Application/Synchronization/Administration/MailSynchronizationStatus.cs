@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Coordination;
 using MailFathom.Application.Emails.AttachmentText.Administration;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -19,19 +20,55 @@ namespace MailFathom.Application.Synchronization.Administration;
 /// mailbox rather than as a stalled worker.
 /// </para>
 /// <para>
-/// Nothing here is mail. Configured account identifiers and folder aliases, a phase, counts, UIDs, and instants are the
-/// whole of it — no subject, no address, no remote folder path, and no exception detail.
+/// It answers about the deployment rather than about the replica the request reached. Which replica supervises an
+/// account is read from the lease table every replica shares, so an operator asking twice is told the same thing twice;
+/// what only the answering process knows is reported beside <see cref="Replica" /> and never as the deployment's.
+/// </para>
+/// <para>
+/// Nothing here is mail. Configured account identifiers and folder aliases, a phase, counts, UIDs, instants, and a
+/// replica identity are the whole of it — no subject, no address, no remote folder path, and no exception detail.
 /// </para>
 /// </remarks>
+/// <param name="Replica">
+/// The replica that composed this answer. It is here so the parts only one process can answer for — the phase, the
+/// backoff, and the last run of an account this replica supervises — are attributable to a process an operator can
+/// read a log for, rather than reading as the deployment's.
+/// </param>
 /// <param name="SynchronizationEnabled">Whether this deployment refreshes its local copy at all, which is the answer that makes every count below still.</param>
 /// <param name="Accounts">One entry per configured account, ordered ordinally by identifier.</param>
 public sealed record MailSynchronizationStatus(
+    ReplicaIdentity Replica,
     bool SynchronizationEnabled,
     IReadOnlyList<MailAccountSynchronizationStatus> Accounts);
 
+/// <summary>Which replica of a deployment is supervising one account, and how long its hold runs for.</summary>
+/// <remarks>
+/// <para>
+/// Read from the lease table rather than from anything a process remembers, which is what makes it the deployment's
+/// answer: a replica that has never supervised an account still reports the replica that is supervising it.
+/// </para>
+/// <para>
+/// The instant is when the hold would run out if its holder stopped renewing, and not a promise about the work. A hold
+/// held well into the future is a replica that was answering the database moments ago, which is the whole of what the
+/// deployment durably knows about a run in another process — the scheduling state that would say more is deliberately
+/// not durable, for the reason <see cref="MailSynchronizationRunLedger" /> records.
+/// </para>
+/// </remarks>
+/// <param name="Replica">The replica holding the account's supervision.</param>
+/// <param name="HeldUntil">When the hold expires unless it is renewed before then.</param>
+public sealed record MailAccountSupervision(ReplicaIdentity Replica, DateTimeOffset HeldUntil);
+
 /// <summary>Where one account's synchronization stands, and what each of its folders last did.</summary>
 /// <param name="AccountId">The account, as configuration names it.</param>
-/// <param name="Run">What the account's supervisor is doing and how its last run ended.</param>
+/// <param name="Supervision">
+/// Which replica holds the account, or <see langword="null" /> when no replica does — a deployment that synchronizes
+/// nothing, one whose replicas have all stopped, or an account whose hold has expired and has not yet been taken again.
+/// </param>
+/// <param name="Run">
+/// What the account's supervisor is doing and how its last run ended. It describes the answering replica's own loop, so
+/// an account <paramref name="Supervision" /> names another replica for reports
+/// <see cref="MailAccountRunPhase.SupervisedElsewhere" /> and nothing further: what that replica is doing is read on it.
+/// </param>
 /// <param name="Folders">One entry per folder the account maps, ordered ordinally by alias.</param>
 /// <param name="AttachmentText">
 /// How much of this account's attachment and image content has been read, how much waits, and what was skipped. It sits
@@ -41,6 +78,7 @@ public sealed record MailSynchronizationStatus(
 /// </param>
 public sealed record MailAccountSynchronizationStatus(
     MailAccountId AccountId,
+    MailAccountSupervision? Supervision,
     MailAccountRunState Run,
     IReadOnlyList<MailFolderSynchronizationStatus> Folders,
     AttachmentDerivationCoverage AttachmentText);

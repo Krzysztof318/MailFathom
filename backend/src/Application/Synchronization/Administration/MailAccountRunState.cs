@@ -34,6 +34,19 @@ public sealed record MailAccountRunState(
         NextRunDueAt: null,
         ConsecutiveFailureCount: 0,
         LastRun: null);
+
+    /// <summary>Gets the state reported for an account another replica of this deployment is supervising.</summary>
+    /// <remarks>
+    /// The figures are what this replica has, which about an account it does not hold is nothing: the scheduling state
+    /// describing the run is in the replica holding it, which is why the supervision beside this names that replica. The
+    /// phase is what a surface reads before any of them, so that a zero failure count is never presented as an account
+    /// with no failures behind it.
+    /// </remarks>
+    public static MailAccountRunState SupervisedElsewhere { get; } = new(
+        MailAccountRunPhase.SupervisedElsewhere,
+        NextRunDueAt: null,
+        ConsecutiveFailureCount: 0,
+        LastRun: null);
 }
 
 /// <summary>What one finished run of an account produced, in counts alone.</summary>

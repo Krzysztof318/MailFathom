@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using MailFathom.AI;
 using MailFathom.AI.Chat;
 using MailFathom.AI.Providers;
@@ -212,12 +213,38 @@ internal static class HostComposition
         builder.Services.AddScoped<PersistedSettingsAdministration>();
     }
 
+    /// <summary>Names the replica this process is, in the words an operator finds its log by.</summary>
+    /// <remarks>
+    /// <para>
+    /// The host name is what identifies a process where MailFathom actually runs more than once: a Kubernetes pod is
+    /// reached by it, a container is named by it, and a log or a trace is filtered by it. The process is carried beside
+    /// it so two replicas sharing one host — which is every deployment that runs the service outside a container — are
+    /// still told apart.
+    /// </para>
+    /// <para>
+    /// Composed here rather than in the application layer, because reading what a machine is called is the environment
+    /// and that stops at this boundary. It is truncated rather than refused: a host name longer than a replica identity
+    /// may be is a deployment naming its machines unusually, and failing a start over the identity an administrative
+    /// answer is labelled with would take the service down for a reading.
+    /// </para>
+    /// </remarks>
+    private static ReplicaIdentity ThisReplica()
+    {
+        var process = Environment.ProcessId.ToString(CultureInfo.InvariantCulture);
+        var room = ReplicaIdentity.MaximumLength - process.Length - 1;
+        var machine = Environment.MachineName;
+
+        return ReplicaIdentity.Create(
+            $"{machine[..Math.Min(machine.Length, room)]}:{process}");
+    }
+
     /// <summary>Registers the telemetry, resilience, clock, and secret resolution every other stage assumes.</summary>
     private static void AddPlatformDefaults(WebApplicationBuilder builder)
     {
         builder.AddServiceDefaults();
         builder.Services.AddProblemDetails();
         builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton(ThisReplica());
         // What the application layer is told a unit of work is running for. Registered here rather than beside the
         // transport, because it answers for work reached outside a request as well: a scope with no request behind it
         // is this process's own, and a use case that runs without a caller depends on being told so.

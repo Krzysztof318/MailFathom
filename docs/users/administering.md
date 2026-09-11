@@ -267,7 +267,16 @@ the two are indistinguishable, which is exactly the situation this command exist
 
 The account's own readings above that table say whether a run is happening now, queued behind other accounts, or
 waiting; and, when runs have been failing, how many in a row — which is what a wait far longer than your configured
-interval is explained by. [Administering a deployment](../operations/admin-endpoint.md#reading-what-synchronization-is-doing) reads every
+interval is explained by.
+
+**A deployment running several replicas answers about the deployment rather than about whichever one your command
+reached.** One replica supervises each account at a time, and the answer names it beside the account, so a mailbox
+another replica is fetching reads as supervised by that replica rather than as one nothing has run. The phase, the
+backoff, and the last run are the supervising replica's own scheduling state, so they are reported where the replica
+that answered is the one holding the account and point you at the holder where it is not — never as "no backoff" and
+"no run", which would read as a mailbox nothing has ever fetched. The folder table is unaffected, its progress being
+durable. `Answered by` on the first line names the replica that composed the answer.
+[Administering a deployment](../operations/admin-endpoint.md#reading-what-synchronization-is-doing) reads every
 line of the output back to you.
 
 ## Turning semantic search on
@@ -299,6 +308,11 @@ that model is still the one your configuration declares, whether your provider i
 is embedded, what the current budget period has spent, and when the walk that embeds your existing mail next runs. That
 last line is the one to read in the minutes after an activation: until the first passages have gone out, a deployment
 that is simply between passes looks exactly like one that is broken.
+
+Two of those readings say `here` in their labels, and on a deployment running several replicas that word matters: when
+the walk next runs, and what the provider last answered, are the answering replica's own and another replica may be
+waiting out a different pause. Everything else comes from the database and is the whole deployment's. `Answered by` on
+the first line names which replica gave you the answer.
 
 It reports how far reading your attachments has come separately from all of that, because the two are separate: a
 mailbox can be entirely searchable on what people typed while every document attached to it is still unread. Beside the

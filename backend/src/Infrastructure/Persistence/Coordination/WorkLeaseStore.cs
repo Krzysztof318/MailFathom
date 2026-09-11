@@ -28,9 +28,17 @@ namespace MailFathom.Infrastructure.Persistence.Coordination;
 /// transaction that took it. There is therefore nothing for a caller to enlist this in, which is what makes a lease
 /// lost to somebody else's rollback structurally impossible rather than merely unlikely.
 /// </para>
+/// <para>
+/// The replica is a constructor dependency rather than something each caller passes, because it is one fact about the
+/// process and every claim from this process stamps the same one. A caller that could supply it is a caller that could
+/// supply somebody else's, which would make the one column an operator reads to find a log point at the wrong process.
+/// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class WorkLeaseStore(MailFathomDbContext dbContext, WorkLeaseTelemetry telemetry) : IWorkLeaseStore
+internal sealed class WorkLeaseStore(
+    MailFathomDbContext dbContext,
+    ReplicaIdentity replica,
+    WorkLeaseTelemetry telemetry) : IWorkLeaseStore
 {
     /// <inheritdoc />
     public async Task<WorkLease?> ClaimAsync(
@@ -44,10 +52,10 @@ internal sealed class WorkLeaseStore(MailFathomDbContext dbContext, WorkLeaseTel
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(leaseDuration, TimeSpan.Zero);
 
         var takenExpiries = await dbContext.Database
-            .SqlQuery<DateTimeOffset>(WorkLeaseStatements.ComposeClaim(scope, holder, leaseDuration))
+            .SqlQuery<DateTimeOffset>(WorkLeaseStatements.ComposeClaim(scope, holder, replica, leaseDuration))
             .ToArrayAsync(cancellationToken);
 
-        var lease = LeaseOf(scope, holder, takenExpiries);
+        var lease = LeaseOf(scope, holder, replica, takenExpiries);
         telemetry.RecordClaim(scope, lease is not null);
 
         return lease;
@@ -68,7 +76,7 @@ internal sealed class WorkLeaseStore(MailFathomDbContext dbContext, WorkLeaseTel
             .SqlQuery<DateTimeOffset>(WorkLeaseStatements.ComposeRenewal(scope, holder, leaseDuration))
             .ToArrayAsync(cancellationToken);
 
-        var lease = LeaseOf(scope, holder, renewedExpiries);
+        var lease = LeaseOf(scope, holder, replica, renewedExpiries);
         telemetry.RecordRenewal(scope, lease is not null);
 
         return lease;
@@ -92,6 +100,33 @@ internal sealed class WorkLeaseStore(MailFathomDbContext dbContext, WorkLeaseTel
         return releasedRows == 1;
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<WorkLease>> ReadHeldAsync(
+        IReadOnlyCollection<WorkScope> scopes,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(scopes);
+
+        if (scopes.Count == 0)
+        {
+            return [];
+        }
+
+        var held = await dbContext.WorkLeases
+            .FromSql(WorkLeaseStatements.ComposeHeldRead([.. scopes.Select(static scope => scope.Value)]))
+            .AsNoTracking()
+            .ToArrayAsync(cancellationToken);
+
+        return
+        [
+            .. held.Select(static row => new WorkLease(
+                WorkScope.Create(row.Scope),
+                WorkLeaseHolder.Create(row.Holder),
+                ReplicaIdentity.Create(row.Replica),
+                row.ExpiresAt)),
+        ];
+    }
+
     /// <summary>Reads the lease a statement wrote, or reports that it wrote none.</summary>
     /// <remarks>
     /// A claim and a renewal answer the same two ways — one row carrying the expiry PostgreSQL stamped, or no row at
@@ -100,7 +135,8 @@ internal sealed class WorkLeaseStore(MailFathomDbContext dbContext, WorkLeaseTel
     private static WorkLease? LeaseOf(
         WorkScope scope,
         WorkLeaseHolder holder,
+        ReplicaIdentity replica,
         IReadOnlyList<DateTimeOffset> writtenExpiries) => writtenExpiries is [var expiresAt]
-        ? new WorkLease(scope, holder, expiresAt)
+        ? new WorkLease(scope, holder, replica, expiresAt)
         : null;
 }

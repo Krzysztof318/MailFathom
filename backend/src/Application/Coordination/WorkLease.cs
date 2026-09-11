@@ -19,11 +19,21 @@ namespace MailFathom.Application.Coordination;
 /// complete rather than when the expiry it last read has passed. A failed renewal happens strictly before the expiry,
 /// and the difference is the margin that leaves the cancellation time to reach a session rather than only a loop.
 /// </para>
+/// <para>
+/// The replica is carried beside the holder and is never compared with anything. The holder is what makes a write from
+/// a hold that moved write nothing; the replica is what makes the row readable — an operator asking who holds an
+/// account is told a process they can find a log for rather than a generated hold identity that names nothing.
+/// </para>
 /// </remarks>
 /// <param name="Scope">The unit of work the lease holds.</param>
 /// <param name="Holder">The hold the lease is held under.</param>
+/// <param name="Replica">The replica the hold belongs to, which is what an operator reads to find the process the work is happening in.</param>
 /// <param name="ExpiresAt">The instant after which the scope is takeable again whatever the holder is doing.</param>
-public sealed record WorkLease(WorkScope Scope, WorkLeaseHolder Holder, DateTimeOffset ExpiresAt)
+public sealed record WorkLease(
+    WorkScope Scope,
+    WorkLeaseHolder Holder,
+    ReplicaIdentity Replica,
+    DateTimeOffset ExpiresAt)
 {
     /// <summary>Reports whether the lease has run out by a given instant.</summary>
     /// <param name="instant">The instant to judge the lease at.</param>

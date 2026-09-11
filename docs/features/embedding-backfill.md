@@ -177,7 +177,7 @@ The pause itself is unchanged and so is its purpose. `EmbeddingBackfill:IdleSwee
 with nothing to do, which is exactly the instance that should stop asking the database about nothing.
 
 **When the next pass is due is readable while it is being waited for.** `mfctl embedding status` reports it on the
-`Next pass` line, and that line is what separates a deployment that is waiting from one that is failing — every other
+`Next pass here` line, and that line is what separates a deployment that is waiting from one that is failing — every other
 reading in that output says the same thing during a pause as it does on a broken instance: nothing serving, nothing
 embedded, and a provider nothing has been asked of. A deployment reporting no pass at all has scheduled none, which
 happens for two reasons and neither is a fault: it has only just started, or `EmbeddingBackfill:Enabled` is `false` and
@@ -215,7 +215,8 @@ deployment's — but the scan `EmbeddingBackfill:IdleSweepInterval` paces is tak
 An operator's act follows the same rule. Activating a profile or cancelling a reindex brings forward the pass of the
 replica that served the request, and that replica asks for the lease at once. Where another replica is in the middle of
 a pass, the log says so at `Information` and this replica asks again after the short interval; whichever pass runs
-next reads what the act committed. The `Next pass` line `mfctl embedding status` prints is the answering replica's.
+next reads what the act committed. The `Next pass here` line `mfctl embedding status` prints is the answering
+replica's, which is what its label says and what the `Answered by` line beside it names.
 
 ## What an operator can see
 

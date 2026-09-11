@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.Emails.AttachmentText.Administration;
 using MailFathom.Application.Emails.Embeddings.Limits;
 
@@ -18,19 +19,30 @@ namespace MailFathom.Application.Emails.Embeddings.Administration;
 /// operator checking five things to learn that the sixth was the problem.
 /// </para>
 /// <para>
-/// Nothing here is mail. Model names, counts, timestamps, and a health state are what it holds, which is what makes it
-/// safe to serve from the administrative endpoint.
+/// Two of its members answer for the replica that composed it rather than for the deployment, and
+/// <see cref="Replica" /> is what makes that readable: what the last provider call established is what
+/// <em>this</em> process last saw, and when the next backfill pass is due is when <em>this</em> process will next
+/// try for the walk's lease. Everything else is a durable figure every replica answers alike. An operator asking twice
+/// and getting two different instants is reading two replicas, and without the identity beside them there is nothing
+/// in the answer that says so.
+/// </para>
+/// <para>
+/// Nothing here is mail. Model names, counts, timestamps, a health state, and a replica identity are what it holds,
+/// which is what makes it safe to serve from the administrative endpoint.
 /// </para>
 /// </remarks>
+/// <param name="Replica">The replica that composed this answer, which the two members only one process can answer for are read against.</param>
 /// <param name="Declared">The geometry configuration declares, or <see langword="null" /> on an instance that declared no provider.</param>
 /// <param name="Serving">The generation searches are answered from, or <see langword="null" /> when this instance has activated none.</param>
 /// <param name="Building">The generation a reindex is filling, or <see langword="null" /> when no reindex is running.</param>
-/// <param name="ProviderHealth">What the last call to the embedding provider established about it.</param>
+/// <param name="ProviderHealth">What the last call to the embedding provider established about it, as the replica that answered saw it.</param>
 /// <param name="Period">Where the deployment's budget period stands.</param>
 /// <param name="NextBackfillPassDueAt">
-/// When the backfill's next pass is due, or <see langword="null" /> while none is scheduled. An instant already past is
-/// a pass that is running or about to be taken; the absence is an instance that has only just started, or one whose
-/// walk is turned off and will schedule nothing at all.
+/// When the replica that answered will next take a pass, or <see langword="null" /> while it has none scheduled. An
+/// instant already past is a pass that is running or about to be taken; the absence is a process that has only just
+/// started, or one whose walk is turned off and will schedule nothing at all. Every replica schedules its own passes
+/// and one lease decides which of them the pass belongs to, so this is when this process will next ask rather than when
+/// the deployment will next walk.
 /// </param>
 /// <param name="AttachmentDerivation">
 /// How far reading this deployment's attachments and images has come, and what its own two ceilings have consumed. A
@@ -39,6 +51,7 @@ namespace MailFathom.Application.Emails.Embeddings.Administration;
 /// with every document in it still unread.
 /// </param>
 public sealed record EmbeddingStatus(
+    ReplicaIdentity Replica,
     EmbeddingProfileIdentity? Declared,
     EmbeddingGenerationProgress? Serving,
     EmbeddingGenerationProgress? Building,

@@ -173,7 +173,71 @@ public sealed class MailboxStatusCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("not mirrored", StringComparison.Ordinal));
-        Assert.Contains(this.harness.Console.Lines, line => line.Contains("none since this deployment started", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("none on the replica that answered", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// An account another replica holds carries none of the scheduling the answering replica could speak for, so the
+    /// three lines that would otherwise read its absent figures as zero name the holder instead. Reporting "no backoff"
+    /// and "no run" for a mailbox another process is fetching is the reading this command was changed to stop giving.
+    /// </summary>
+    [Fact]
+    public async Task Status_AnAccountAnotherReplicaSupervises_NamesTheHolderRatherThanReadingItsAbsentFiguresAsZero()
+    {
+        // Arrange
+        using var deployment = FakeMailboxDeployment.Answering("""
+            {
+              "synchronizationEnabled": true,
+              "replica": "mailfathom-0:1",
+              "accounts": [
+                {
+                  "account": "work",
+                  "supervisedBy": "mailfathom-1:1",
+                  "supervisionHeldUntil": "2026-08-15T12:02:00+00:00",
+                  "phase": "SupervisedElsewhere",
+                  "nextRunDueAt": null,
+                  "consecutiveFailureCount": 0,
+                  "lastRun": null,
+                  "folders": []
+                }
+              ]
+            }
+            """);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "mailbox", "status", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("mailfathom-1:1", StringComparison.Ordinal));
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.StartsWith("Backoff:", StringComparison.Ordinal)
+                && line.Contains("is where its backoff is read", StringComparison.Ordinal));
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.StartsWith("Last run:", StringComparison.Ordinal)
+                && line.Contains("is where its runs are read", StringComparison.Ordinal));
+    }
+
+    /// <summary>The replica that answered is named on the first block, so two readings taken from a load balancer are comparable.</summary>
+    [Fact]
+    public async Task Status_ADeploymentReportingWhichReplicaAnswered_NamesItBesideTheSwitch()
+    {
+        // Arrange
+        using var deployment = FakeMailboxDeployment.Answering("""
+            {"synchronizationEnabled": true, "replica": "mailfathom-0:1", "accounts": []}
+            """);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "mailbox", "status", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.StartsWith("Answered by:", StringComparison.Ordinal)
+                && line.Contains("mailfathom-0:1", StringComparison.Ordinal));
     }
 
     /// <summary>The switch is the first line, because every count below it is still while it is off.</summary>

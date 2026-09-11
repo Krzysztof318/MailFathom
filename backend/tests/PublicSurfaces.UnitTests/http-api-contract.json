@@ -4434,6 +4434,9 @@
           "provider": {
             "$ref": "#/components/schemas/EmbeddingProviderHealthResponse"
           },
+          "replica": {
+            "type": "string"
+          },
           "serving": {
             "oneOf": [
               {
@@ -4449,6 +4452,7 @@
           }
         },
         "required": [
+          "replica",
           "declared",
           "activationOutstanding",
           "serving",
@@ -4688,10 +4692,25 @@
           },
           "phase": {
             "type": "string"
+          },
+          "supervisedBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "supervisionHeldUntil": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
           "account",
+          "supervisedBy",
+          "supervisionHeldUntil",
           "phase",
           "nextRunDueAt",
           "consecutiveFailureCount",
@@ -5893,11 +5912,15 @@
             },
             "type": "array"
           },
+          "replica": {
+            "type": "string"
+          },
           "synchronizationEnabled": {
             "type": "boolean"
           }
         },
         "required": [
+          "replica",
           "synchronizationEnabled",
           "accounts"
         ],

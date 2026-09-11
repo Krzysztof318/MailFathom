@@ -214,7 +214,7 @@ public sealed class EmbeddingCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
             this.harness.Console.Lines,
-            line => line.StartsWith("Next pass:", StringComparison.Ordinal)
+            line => line.StartsWith("Next pass here:", StringComparison.Ordinal)
                 && line.Contains("due at 2026-08-08 12:00:30Z", StringComparison.Ordinal));
     }
 
@@ -242,7 +242,7 @@ public sealed class EmbeddingCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         var nextPass = Assert.Single(
             this.harness.Console.Lines,
-            line => line.StartsWith("Next pass:", StringComparison.Ordinal));
+            line => line.StartsWith("Next pass here:", StringComparison.Ordinal));
         Assert.Contains("EmbeddingBackfill:Enabled", nextPass, StringComparison.Ordinal);
 
         // Both causes, because a deployment that has only just started reports the absence as truthfully as one whose

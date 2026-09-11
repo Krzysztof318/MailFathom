@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.Emails.AttachmentText.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
@@ -27,6 +28,7 @@ public sealed class EmbeddingStatusReader
     private readonly IAiProviderHealthReader providerHealth;
     private readonly EmbeddingBackfillSchedule backfillSchedule;
     private readonly AttachmentDerivationStatusReader attachmentDerivation;
+    private readonly ReplicaIdentity replica;
     private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes a new reader over the state one status answer is composed from.</summary>
@@ -36,6 +38,7 @@ public sealed class EmbeddingStatusReader
     /// <param name="providerHealth">Reports what the last call to the embedding provider established.</param>
     /// <param name="backfillSchedule">Reports when the walk's next pass is due.</param>
     /// <param name="attachmentDerivation">Reports how far reading attachments has come and what its own periods have consumed.</param>
+    /// <param name="replica">Names the replica answering, so the two readings only one process can make are attributable to it.</param>
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmbeddingStatusReader(
@@ -45,6 +48,7 @@ public sealed class EmbeddingStatusReader
         IAiProviderHealthReader providerHealth,
         EmbeddingBackfillSchedule backfillSchedule,
         AttachmentDerivationStatusReader attachmentDerivation,
+        ReplicaIdentity replica,
         AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(generationStore);
@@ -53,6 +57,7 @@ public sealed class EmbeddingStatusReader
         ArgumentNullException.ThrowIfNull(providerHealth);
         ArgumentNullException.ThrowIfNull(backfillSchedule);
         ArgumentNullException.ThrowIfNull(attachmentDerivation);
+        ArgumentNullException.ThrowIfNull(replica);
         ArgumentNullException.ThrowIfNull(authorization);
 
         this.generationStore = generationStore;
@@ -61,6 +66,7 @@ public sealed class EmbeddingStatusReader
         this.providerHealth = providerHealth;
         this.backfillSchedule = backfillSchedule;
         this.attachmentDerivation = attachmentDerivation;
+        this.replica = replica;
         this.authorization = authorization;
     }
 
@@ -88,6 +94,7 @@ public sealed class EmbeddingStatusReader
         var generations = await this.generationStore.ReadGenerationsAsync(cancellationToken);
 
         return new EmbeddingStatus(
+            this.replica,
             declared,
             await this.DescribeAsync(generations.Serving, cancellationToken),
             await this.DescribeAsync(generations.Building, cancellationToken),

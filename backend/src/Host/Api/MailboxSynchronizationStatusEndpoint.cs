@@ -27,8 +27,14 @@ namespace MailFathom.Host.Api;
 /// no mail.
 /// </para>
 /// <para>
-/// Nothing it answers with is mail. Configured account identifiers and folder aliases, a phase, counts, UIDs, and
-/// timestamps are the whole of it — never a subject, an address, a remote folder path, or the detail of an exception.
+/// It answers about the deployment rather than about the replica the request reached, which is what makes asking twice
+/// worth doing: which replica supervises an account comes out of the lease table every replica shares, and the parts
+/// only the answering process knows are reported beside the replica that answered.
+/// </para>
+/// <para>
+/// Nothing it answers with is mail. Configured account identifiers and folder aliases, a phase, counts, UIDs,
+/// timestamps, and a replica identity are the whole of it — never a subject, an address, a remote folder path, or the
+/// detail of an exception.
 /// </para>
 /// </remarks>
 internal static class MailboxSynchronizationStatusEndpoint
@@ -69,9 +75,11 @@ internal static class MailboxSynchronizationStatusEndpoint
 }
 
 /// <summary>What the administrative endpoint reports about this deployment's synchronization.</summary>
+/// <param name="Replica">The replica that composed the answer, which every figure only one process can answer for is read against.</param>
 /// <param name="SynchronizationEnabled">Whether this deployment refreshes its local copy at all.</param>
 /// <param name="Accounts">One entry per configured account, ordered ordinally by identifier.</param>
 internal sealed record MailSynchronizationStatusResponse(
+    string Replica,
     bool SynchronizationEnabled,
     IReadOnlyList<MailAccountSynchronizationResponse> Accounts)
 {
@@ -84,6 +92,7 @@ internal sealed record MailSynchronizationStatusResponse(
         ArgumentNullException.ThrowIfNull(status);
 
         return new MailSynchronizationStatusResponse(
+            status.Replica.Value,
             status.SynchronizationEnabled,
             [.. status.Accounts.Select(MailAccountSynchronizationResponse.For)]);
     }
@@ -91,6 +100,8 @@ internal sealed record MailSynchronizationStatusResponse(
 
 /// <summary>Where one account's synchronization stands.</summary>
 /// <param name="Account">The account, as configuration names it.</param>
+/// <param name="SupervisedBy">The replica holding the account's supervision, or <see langword="null" /> when no replica holds it.</param>
+/// <param name="SupervisionHeldUntil">When that hold expires unless it is renewed, or <see langword="null" /> when no replica holds the account.</param>
 /// <param name="Phase">What the account's supervisor is doing, as the phase's own name.</param>
 /// <param name="NextRunDueAt">When its next run is due, or <see langword="null" /> while it is not waiting for one.</param>
 /// <param name="ConsecutiveFailureCount">How many of its runs failed in a row; zero once one succeeds.</param>
@@ -99,6 +110,8 @@ internal sealed record MailSynchronizationStatusResponse(
 /// <param name="AttachmentText">How far reading this account's attachments and images has come, and why the ones that yielded nothing did not.</param>
 internal sealed record MailAccountSynchronizationResponse(
     string Account,
+    string? SupervisedBy,
+    DateTimeOffset? SupervisionHeldUntil,
     string Phase,
     DateTimeOffset? NextRunDueAt,
     int ConsecutiveFailureCount,
@@ -112,6 +125,8 @@ internal sealed record MailAccountSynchronizationResponse(
     internal static MailAccountSynchronizationResponse For(MailAccountSynchronizationStatus account) =>
         new(
             account.AccountId.Value,
+            account.Supervision?.Replica.Value,
+            account.Supervision?.HeldUntil,
             account.Run.Phase.ToString(),
             account.Run.NextRunDueAt,
             account.Run.ConsecutiveFailureCount,

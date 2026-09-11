@@ -16,6 +16,9 @@ namespace MailFathom.Host.UnitTests.TestDoubles;
 /// </remarks>
 internal sealed class ScriptedWorkLeaseStore : IWorkLeaseStore
 {
+    /// <summary>The replica every lease this store grants is stamped with, since one store stands in for one process.</summary>
+    internal static readonly ReplicaIdentity Replica = ReplicaIdentity.Create("scripted-replica:1");
+
     private readonly ConcurrentDictionary<WorkScope, WorkLeaseHolder> holders = new();
     private readonly ConcurrentQueue<WorkScope> releases = new();
     private readonly Channel<WorkScope> claims = Channel.CreateUnbounded<WorkScope>();
@@ -42,7 +45,7 @@ internal sealed class ScriptedWorkLeaseStore : IWorkLeaseStore
 
         this.claims.Writer.TryWrite(scope);
 
-        return Task.FromResult(granted ? new WorkLease(scope, holder, DateTimeOffset.MaxValue) : null);
+        return Task.FromResult(granted ? new WorkLease(scope, holder, Replica, DateTimeOffset.MaxValue) : null);
     }
 
     public Task<WorkLease?> RenewAsync(
@@ -53,7 +56,7 @@ internal sealed class ScriptedWorkLeaseStore : IWorkLeaseStore
     {
         var renewed = !this.HeldElsewhere && this.holders.TryGetValue(scope, out var recorded) && recorded == holder;
 
-        return Task.FromResult(renewed ? new WorkLease(scope, holder, DateTimeOffset.MaxValue) : null);
+        return Task.FromResult(renewed ? new WorkLease(scope, holder, Replica, DateTimeOffset.MaxValue) : null);
     }
 
     public Task<bool> ReleaseAsync(WorkScope scope, WorkLeaseHolder holder, CancellationToken cancellationToken)
@@ -66,5 +69,19 @@ internal sealed class ScriptedWorkLeaseStore : IWorkLeaseStore
         }
 
         return Task.FromResult(released);
+    }
+
+    public Task<IReadOnlyList<WorkLease>> ReadHeldAsync(
+        IReadOnlyCollection<WorkScope> scopes,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<WorkLease> held =
+        [
+            .. scopes
+                .Where(this.holders.ContainsKey)
+                .Select(scope => new WorkLease(scope, this.holders[scope], Replica, DateTimeOffset.MaxValue)),
+        ];
+
+        return Task.FromResult(held);
     }
 }

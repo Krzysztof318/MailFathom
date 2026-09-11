@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
@@ -21,6 +22,8 @@ namespace MailFathom.Application.UnitTests.Emails.Embeddings.Administration;
 public sealed class EmbeddingStatusReaderTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
+
+    private static readonly ReplicaIdentity AnsweringReplica = SyntheticReplica.Answering;
 
     /// <summary>
     /// The answer this whole read exists for: a declaration edited into configuration takes effect at an activation and
@@ -154,6 +157,24 @@ public sealed class EmbeddingStatusReaderTests
         Assert.Null(status.NextBackfillPassDueAt);
     }
 
+    /// <summary>
+    /// Two members of this answer are the answering process's own — what it last saw of the provider, and when it will
+    /// next take a pass — so the answer names which process gave them. Without it an operator asking twice across a
+    /// deployment running three replicas reads two different instants with nothing saying they are different processes.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AnyDeployment_NamesTheReplicaItsPerProcessReadingsCameFrom()
+    {
+        // Arrange
+        var world = CreateWorld();
+
+        // Act
+        var status = await world.Reader.ReadAsync(CreateIdentity("a-model"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(AnsweringReplica, status.Replica);
+    }
+
     private static EmbeddingProfileIdentity CreateIdentity(string modelIdentifier) =>
         EmbeddingProfileIdentity.Create(
             "a-provider",
@@ -200,6 +221,7 @@ public sealed class EmbeddingStatusReaderTests
             providerHealth,
             backfillSchedule,
             InMemoryAttachmentDerivationCoverageReader.Unbounded(Now).Reader,
+            AnsweringReplica,
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
 
         return new StatusWorld(generationStore, workloadReader, ledger, providerHealth, backfillSchedule, reader);

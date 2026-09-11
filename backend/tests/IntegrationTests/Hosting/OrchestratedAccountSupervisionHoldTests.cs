@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Coordination;
+using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.IntegrationTests.Orchestration;
@@ -34,7 +35,7 @@ public sealed class OrchestratedAccountSupervisionHoldTests(MailFathomOrchestrat
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var firstReplica = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         await using var secondReplica = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var scope = MailSynchronizationCoordinator.SupervisionScope(
+        var scope = MailAccountSupervisionScope.For(
             MailAccountIdentity.Create(firstReplica.ServedUser, MailAccountId.Create("replica-handover")));
 
         // Act
