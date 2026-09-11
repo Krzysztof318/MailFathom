@@ -2,10 +2,12 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Coordination;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Sessions;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Transport;
@@ -398,6 +400,43 @@ public sealed class MailSynchronizationCoordinatorTests
         var held = Assert.Single(heldWhileRunning);
         Assert.Equal([held], leases.Releases);
         Assert.Empty(leases.HeldScopes);
+    }
+
+    /// <summary>An operator reading the lease table finds the account under the user and the name the configuration gave it.</summary>
+    [Fact]
+    public void SupervisionScope_AccountIdentifierFits_NamesTheUserAndTheAccount()
+    {
+        // Arrange
+        var user = MailUserId.Create(new Guid("0197c0de-0000-7000-8000-000000001290"));
+
+        // Act
+        var scope = MailSynchronizationCoordinator.SupervisionScope(MailAccountIdentity.Create(user, MailAccountId.Create("primary")));
+
+        // Assert
+        Assert.Equal("mail-synchronization/0197c0de-0000-7000-8000-000000001290/primary", scope.Value);
+    }
+
+    /// <summary>
+    /// Configuration accepts account identifiers far longer than a scope may be, and a scope that could not be composed
+    /// would end supervision for every account on the replica; such an account is named by its digest instead.
+    /// </summary>
+    [Fact]
+    public void SupervisionScope_AccountIdentifierTooLongForAScope_NamesEachAccountByItsOwnDigest()
+    {
+        // Arrange
+        var user = MailUserId.Create(new Guid("0197c0de-0000-7000-8000-000000001290"));
+        var first = MailAccountIdentity.Create(user, MailAccountId.Create(new string('a', 4000)));
+        var second = MailAccountIdentity.Create(user, MailAccountId.Create(new string('b', 4000)));
+
+        // Act
+        var firstScope = MailSynchronizationCoordinator.SupervisionScope(first);
+        var secondScope = MailSynchronizationCoordinator.SupervisionScope(second);
+
+        // Assert
+        Assert.StartsWith("mail-synchronization/0197c0de-0000-7000-8000-000000001290/sha256-", firstScope.Value, StringComparison.Ordinal);
+        Assert.True(firstScope.Value.Length <= WorkScope.MaximumLength);
+        Assert.Equal(firstScope, MailSynchronizationCoordinator.SupervisionScope(first));
+        Assert.NotEqual(firstScope, secondScope);
     }
 
     /// <summary>Models a server that accepts the connection and then answers nothing until the caller gives up.</summary>

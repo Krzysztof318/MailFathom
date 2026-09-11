@@ -60,7 +60,10 @@ internal sealed class ScriptedWorkLeaseStore : IWorkLeaseStore
     {
         var released = !this.HeldElsewhere && this.holders.TryRemove(KeyValuePair.Create(scope, holder));
 
-        this.releases.Enqueue(scope);
+        if (released)
+        {
+            this.releases.Enqueue(scope);
+        }
 
         return Task.FromResult(released);
     }

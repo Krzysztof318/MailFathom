@@ -4,6 +4,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Coordination;
 using MailFathom.Application.Signals;
@@ -87,11 +89,30 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
     /// <param name="account">The account supervised.</param>
     /// <returns>The scope every replica configured with the account asks for.</returns>
     /// <remarks>
+    /// <para>
     /// The unit is the account's whole identity rather than its identifier alone, because two users may each name an
     /// account alike and neither has any reason to be synchronized by the replica holding the other.
+    /// </para>
+    /// <para>
+    /// An account identifier the scope cannot carry — longer than it leaves room for, or holding a control character —
+    /// is named by its SHA-256 digest instead. Configuration accepts identifiers far longer than a scope, and a scope
+    /// that could not be composed would end supervision for every account on the replica rather than for that one.
+    /// </para>
     /// </remarks>
-    internal static WorkScope SupervisionScope(MailAccountIdentity account) => WorkScope.Create(
-        string.Create(CultureInfo.InvariantCulture, $"mail-synchronization/{account.User.Value}/{account.Id.Value}"));
+    internal static WorkScope SupervisionScope(MailAccountIdentity account)
+    {
+        var accountId = account.Id.Value;
+        var readableScope = string.Create(CultureInfo.InvariantCulture, $"mail-synchronization/{account.User.Value}/{accountId}");
+
+        if (readableScope.Length <= WorkScope.MaximumLength && !accountId.Any(char.IsControl))
+        {
+            return WorkScope.Create(readableScope);
+        }
+
+        var digest = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(accountId)));
+
+        return WorkScope.Create(string.Create(CultureInfo.InvariantCulture, $"mail-synchronization/{account.User.Value}/sha256-{digest}"));
+    }
 
     /// <inheritdoc />
     /// <remarks>

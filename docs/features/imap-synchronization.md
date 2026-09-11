@@ -74,7 +74,8 @@ start a supervisor — and its read sessions and its push watch — for every ac
 connection limit. So a coordinator starts a supervisor only for an account whose lease it took, under the scope
 `mail-synchronization/<user>/<account>` in the lease table
 [ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
-decides. A replica configured with an account another one holds starts nothing for it: no run, no mailbox session, no
+decides; an account identifier too long for a scope, or holding a control character, is named there by its SHA-256
+digest instead. A replica configured with an account another one holds starts nothing for it: no run, no mailbox session, no
 push watch. It asks for the account again on each supervision pass — every `Interval`, and whenever a reload or a
 supervisor ending wakes the pass early — and neither fails nor reports anything, because the account is being
 synchronized, just not here. The folders of one account are never divided between replicas; the account is the unit.
