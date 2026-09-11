@@ -256,11 +256,11 @@ public sealed class OrchestratedClientSessionTests(MailFathomOrchestrationFixtur
         var stranger = Guid.NewGuid();
 
         await OrchestratedForeignUser.ProvisionAsync(host, holder, cancellationToken);
-        await OrchestratedForeignUser.ProvisionAsync(host, stranger, cancellationToken);
 
         try
         {
             // Arrange
+            await OrchestratedForeignUser.ProvisionAsync(host, stranger, cancellationToken);
             var credential = await ProvisionCredentialAsync(host, holder, "held-by-somebody-else", cancellationToken);
             var minted = await (await SessionsOnAsync(host, cancellationToken))
                 .MintAsync(Admitted(holder, credential), cancellationToken);

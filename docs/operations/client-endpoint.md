@@ -187,7 +187,8 @@ The token is presented as a bearer credential — `Authorization: Bearer mfs_…
 including this one. **That is what the exchange is for.** A password is verified by deriving a PBKDF2 record sized for
 authenticating a person, which is around half a second of the deployment's own processor; a client opens several
 requests to draw one screen, and a surface authenticating each of them that way spends that cost per request rather
-than per sign-in. Verifying a token is a lookup and one fixed-time comparison: no derivation, and no database read.
+than per sign-in. Verifying a token is one indexed read and one fixed-time comparison, and no key derivation at all — which is
+the whole of what the exchange removes.
 
 **Every credential this deployment holds is exchanged here** — a password, an API key, a signed assertion. Nothing else
 changes about them: the bound on guessing a password is the same bound, counted the same way per source and per user
@@ -231,14 +232,16 @@ asking a person for their password, and a database that is briefly away is not a
 somebody who asked to be kept signed in, so a shorter one here would make that screen promise something this deployment
 does not keep. What bounds the case a person is actually in is
 renewal rather than the number, so somebody who keeps using a client never meets the thirty days at all. An abandoned
-session stands for the whole of them and is then removed by the sweep, because nothing else ends one: the paragraph
-below ends a session on the next request that presents it, and an abandoned session makes no further request. Thirty
-days is therefore a length the deployment keeps rather than the most a session could last, which is what a restart used
-to make it.
+session stands for the whole of them unless an operator ends the credential behind it, which removes it there and then
+rather than waiting for a request nobody is going to make; the sweep is what reaches one nobody ended. Thirty days is
+therefore a length the deployment keeps rather than the most a session could last, which is what a restart used to make
+it.
 
 **An operator revokes sessions by revoking the credential behind them.** Disabling or deleting a user credential over
-[the administrative endpoint](admin-endpoint.md#user-credentials) ends every session that credential minted, on the
-next request each of them makes. Rotating a credential's material does not: rotation changes what may be presented at
+[the administrative endpoint](admin-endpoint.md#user-credentials) removes every session that credential minted, in the
+act itself rather than at the next request each of them makes — so it reaches an abandoned session as readily as an
+active one. Erasing the user does the same for every session of theirs, including one minted where no credential was
+required. Rotating a credential's material does not: rotation changes what may be presented at
 the exchange and says nothing about sessions already exchanged, so an operator ending somebody's sessions disables the
 credential rather than rotating it.
 

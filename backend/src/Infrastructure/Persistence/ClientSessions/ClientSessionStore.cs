@@ -208,7 +208,7 @@ internal sealed class ClientSessionStore(NpgsqlDataSource dataSource) : IClientS
             }
 
             return new HeldClientSession(
-                GrantRead(reader, userIdOrdinal: 0, credentialIdOrdinal: 1, permissionsOrdinal: 2),
+                ReadGrant(reader, userIdOrdinal: 0, credentialIdOrdinal: 1, permissionsOrdinal: 2),
                 reader.GetFieldValue<byte[]>(3),
                 reader.GetFieldValue<DateTimeOffset>(4));
         }
@@ -379,13 +379,13 @@ internal sealed class ClientSessionStore(NpgsqlDataSource dataSource) : IClientS
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         return await reader.ReadAsync(cancellationToken)
-            ? GrantRead(reader, userIdOrdinal: 0, credentialIdOrdinal: 1, permissionsOrdinal: 2)
+            ? ReadGrant(reader, userIdOrdinal: 0, credentialIdOrdinal: 1, permissionsOrdinal: 2)
             : null;
     }
 
     /// <summary>Reads a row's three grant columns back into what the session admits.</summary>
     /// <remarks>A name this release does not publish is dropped rather than raising, and the published order is restored, for the reason a credential's stored grant is read that way: a row written by a release that published a permission this one withdrew must not stop a session working, and a grant is a set rather than the order two writers happened to use.</remarks>
-    private static ClientSessionGrant GrantRead(
+    private static ClientSessionGrant ReadGrant(
         NpgsqlDataReader reader,
         int userIdOrdinal,
         int credentialIdOrdinal,

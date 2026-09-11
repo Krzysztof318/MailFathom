@@ -595,9 +595,11 @@ internal static class PersistenceConstraintNames
 
     /// <summary>The order the sessions past their expiry are removed through.</summary>
     /// <remarks>
-    /// Stated for the reason the two indexes above it are: nothing queries a session by when it expires, and the one
-    /// statement that touches the table other than the mint, the renewal, the revocation, and the verification is the
-    /// removal of everything already expired. The index is what makes that removal proportional to what has expired
+    /// Stated for the reason the two indexes above it are: nothing queries a session by when it expires, and the sweep
+    /// is the only path that reaches a row by its age at all. Every other one reaches a row by a key the table already
+    /// carries — the mint, the renewal, the revocation, and the verification by the identifier, the disable by the
+    /// credential, and a deleted credential or an erased user through the cascading foreign keys, whose own index
+    /// entries EF Core derives. The index is what makes the sweep proportional to what has expired
     /// rather than to every session the deployment is holding, which matters more here than for either of those two —
     /// a session lives thirty days, so the table it walks is the deployment's whole signed-in population.
     /// </remarks>

@@ -188,31 +188,6 @@ public sealed class ClientTransportSecurityExtensionsTests
     /// registration. Registering a second instance here would leave which surface's origins that check enforced decided
     /// by the order composition happened to run in, so this surface builds its policy and registers nothing.
     /// </summary>
-    /// <summary>Serving a client surface registers the handler that answers an unreachable session store, which is what turns a database outage into `503` rather than a sign-out.</summary>
-    /// <remarks>
-    /// The handler is reached from the pipeline rather than from a route, so nothing else in the composition says it
-    /// was registered: without it the failure escapes unhandled and the surface answers `500`, with every route test
-    /// still green. It is added here rather than centrally because nothing outside a client endpoint holds a client
-    /// session.
-    /// </remarks>
-    [Fact]
-    public void AddClientTransportSecurity_AClientSurfaceServed_RegistersTheHandlerThatAnswersAnUnreachableSessionStore()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-        services.AddLogging();
-
-        // Act
-        services.AddClientTransportSecurity(EnabledEndpoint());
-
-        using var composed = services.BuildServiceProvider();
-
-        // Assert
-        Assert.Contains(
-            composed.GetServices<IExceptionHandler>(),
-            handler => handler is ClientSessionStoreUnavailableHandler);
-    }
-
     [Fact]
     public void AddClientTransportSecurity_ComposedBesideTheMcpSurface_LeavesTheMcpOriginCheckReadingItsOwnOrigins()
     {
@@ -236,6 +211,31 @@ public sealed class ClientTransportSecurityExtensionsTests
         // Assert
         Assert.False(originPolicy.AllowsAnyOrigin);
         Assert.Equal(["https://agent.example.test"], originPolicy.AllowedOrigins);
+    }
+
+    /// <summary>Serving a client surface registers the handler that answers an unreachable session store, which is what turns a database outage into `503` rather than a sign-out.</summary>
+    /// <remarks>
+    /// The handler is reached from the pipeline rather than from a route, so nothing else in the composition says it
+    /// was registered: without it the failure escapes unhandled and the surface answers `500`, with every route test
+    /// still green. It is added here rather than centrally because nothing outside a client endpoint holds a client
+    /// session.
+    /// </remarks>
+    [Fact]
+    public void AddClientTransportSecurity_AClientSurfaceServed_RegistersTheHandlerThatAnswersAnUnreachableSessionStore()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // Act
+        services.AddClientTransportSecurity(EnabledEndpoint());
+
+        using var composed = services.BuildServiceProvider();
+
+        // Assert
+        Assert.Contains(
+            composed.GetServices<IExceptionHandler>(),
+            handler => handler is ClientSessionStoreUnavailableHandler);
     }
 
     /// <summary>

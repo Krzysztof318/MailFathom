@@ -119,24 +119,30 @@ public sealed class ClientSessionTokensTests
 
     /// <summary>A value longer than anything this type mints is refused unread rather than walked.</summary>
     /// <remarks>
-    /// The value presented is a live token of this deployment's own with whitespace inside its proof, which the
-    /// base64url decoder ignores — so every step after the length check holds and the value authenticates the moment
-    /// the bound stops refusing to walk it. That is what makes this an assertion about the bound rather than about a
-    /// lookup missing in an empty store.
+    /// The two values differ in length and in nothing else: both are a live token of this deployment's own, the second
+    /// carrying a proof lengthened with characters the base64url alphabet holds, so the prefix, the separator, the
+    /// alphabet, and the decode all pass on both. What tells them apart is the store, made unreachable here so that
+    /// reaching it is loud — the value inside the bound raises, and the one past it answers without the store having
+    /// been asked at all. Asserting a refusal alone would prove nothing, because a value that never reaches the store
+    /// is refused whatever the bound does.
     /// </remarks>
     [Fact]
     public async Task VerifyAsync_AValuePastTheBound_IsRefusedWithoutBeingWalked()
     {
         // Arrange
-        var sessions = Sessions(out _);
+        var sessions = Sessions(out var store);
         var minted = await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken);
-        var separator = minted.Token!.Value.IndexOf('.', StringComparison.Ordinal) + 1;
-        var padded = minted.Token.Value[..separator] + new string(' ', 300) + minted.Token.Value[separator..];
+        var lengthened = minted.Token!.Value + new string('A', ClientSessionTokens.LongestPresentedToken);
+        store.Unreachable = Unreachable();
 
         // Act, Assert
-        Assert.NotNull(await sessions.VerifyAsync(minted.Token.Value, TestContext.Current.CancellationToken));
-        Assert.True(padded.Length > ClientSessionTokens.LongestPresentedToken);
-        Assert.Null(await sessions.VerifyAsync(padded, TestContext.Current.CancellationToken));
+        Assert.True(minted.Token.Value.Length <= ClientSessionTokens.LongestPresentedToken);
+        Assert.True(lengthened.Length > ClientSessionTokens.LongestPresentedToken);
+
+        await Assert.ThrowsAsync<ClientSessionStoreUnavailableException>(
+            () => sessions.VerifyAsync(minted.Token.Value, TestContext.Current.CancellationToken));
+
+        Assert.Null(await sessions.VerifyAsync(lengthened, TestContext.Current.CancellationToken));
     }
 
     /// <summary>A session ends by itself, so a token left on a machine nobody came back to stops authenticating.</summary>
@@ -199,6 +205,40 @@ public sealed class ClientSessionTokensTests
         // Act, Assert
         await Assert.ThrowsAsync<ClientSessionStoreUnavailableException>(
             () => sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>A renewal refuses the same way, so the scheduled renewal every open client performs is not what an outage signs it out by.</summary>
+    /// <remarks>
+    /// This is the one an outage reaches first and reaches everybody with: a client renews an hour before its expiry
+    /// whether or not anybody is looking at it, and a renewal answered "no" is a `401` the client meets by asking for a
+    /// password. A renewal that swallowed the failure would turn a database blip into the deployment-wide sign-out the
+    /// whole arrangement exists to prevent.
+    /// </remarks>
+    [Fact]
+    public async Task RenewAsync_WhenTheStoreCannotBeReached_RaisesRatherThanRefusingTheRenewal()
+    {
+        // Arrange
+        var sessions = Sessions(out var store);
+        var minted = await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken);
+        store.Unreachable = Unreachable();
+
+        // Act, Assert
+        await Assert.ThrowsAsync<ClientSessionStoreUnavailableException>(
+            () => sessions.RenewAsync(minted.Token?.Value, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>A sign-out refuses the same way, because reporting one as complete against a store that was never written leaves the token working.</summary>
+    [Fact]
+    public async Task RevokeAsync_WhenTheStoreCannotBeReached_RaisesRatherThanReportingASignOut()
+    {
+        // Arrange
+        var sessions = Sessions(out var store);
+        var minted = await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken);
+        store.Unreachable = Unreachable();
+
+        // Act, Assert
+        await Assert.ThrowsAsync<ClientSessionStoreUnavailableException>(
+            () => sessions.RevokeAsync(minted.Token?.Value, TestContext.Current.CancellationToken));
     }
 
     /// <summary>Renewing gives a client a fresh lifetime without anybody typing a password again.</summary>
