@@ -13,7 +13,7 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// <param name="User">The identity every mail account and every stored message of theirs hangs on.</param>
 /// <param name="DisplayName">The label an operator tells this user apart by.</param>
 /// <param name="MailAccounts">The user's mail accounts, as their record declares them.</param>
-/// <param name="Language">The language this deployment writes for them in, which their record states and never omits.</param>
+/// <param name="Language">The language this deployment writes for them in; a record held from before the property existed states none and reads as English.</param>
 /// <param name="SpamClassification">How this user's own mail is classified, or nothing where their record states none.</param>
 /// <param name="SensitiveContent">What this user asks to have their own mail scanned for, or nothing where they asked for nothing.</param>
 /// <remarks>

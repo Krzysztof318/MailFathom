@@ -40,12 +40,18 @@ public sealed class EmailEnrichmentAgentCompositionTests
         Assert.All(chatClient.Calls, call => Assert.True(call.Options?.Tools is null or []));
     }
 
-    [Fact]
-    public async Task Compose_TheEnrichmentAgent_CarriesItsOwnInstructionInsideTheEnvelope()
+    /// <summary>
+    /// Over every language, so that composing the instruction for one and sending another is a failure here rather
+    /// than something only the pure instruction tests would have noticed.
+    /// </summary>
+    [Theory]
+    [InlineData(MailUserLanguage.English)]
+    [InlineData(MailUserLanguage.Polish)]
+    public async Task Compose_TheEnrichmentAgent_CarriesItsOwnInstructionInsideTheEnvelope(MailUserLanguage language)
     {
         // Arrange
         using var chatClient = ScriptedChatClient.Answering(Answer);
-        var agent = AgentOver(chatClient);
+        var agent = AgentOver(chatClient, language);
 
         // Act
         await agent.RunAsync(
@@ -57,7 +63,7 @@ public sealed class EmailEnrichmentAgentCompositionTests
         // Assert
         Assert.All(
             chatClient.Calls,
-            call => Assert.Equal(EmailEnrichmentInstructions.TextFor(MailUserLanguage.English), call.Options?.Instructions));
+            call => Assert.Equal(EmailEnrichmentInstructions.TextFor(language), call.Options?.Instructions));
     }
 
     /// <summary>The name is what every mark records as its origin, so it is this agent's alone.</summary>
@@ -75,11 +81,13 @@ public sealed class EmailEnrichmentAgentCompositionTests
         Assert.NotEqual(MailAnsweringAgentComposition.AgentName, agent.Name);
     }
 
-    private static ChatClientAgent AgentOver(ScriptedChatClient chatClient) =>
+    private static ChatClientAgent AgentOver(
+        ScriptedChatClient chatClient,
+        MailUserLanguage language = MailUserLanguage.English) =>
         EmailEnrichmentAgentComposition.Compose(
             chatClient,
             ChatDeclarations.Plan(),
-            MailUserLanguage.English,
+            language,
             new EmptyAgentInstructionEnvelope(),
             NullLoggerFactory.Instance);
 }
