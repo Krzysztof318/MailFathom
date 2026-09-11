@@ -100,7 +100,10 @@ describe('HeadActs', () => {
     it('says an act already on its way is on its way rather than submitting it twice', () => {
         const performed = vi.fn();
         drawHead({
-            acts: { ...actsOffering(performed), asked: new Map([[message.storedEmailId, 'flag']]) },
+            acts: {
+                ...actsOffering(performed),
+                asked: new Map([[message.storedEmailId, { act: 'flag', from: message.folder, leaves: false }]]),
+            },
         });
 
         fireEvent.click(screen.getByRole('button', { name: 'Flag — this is already on its way to your mail server.' }));

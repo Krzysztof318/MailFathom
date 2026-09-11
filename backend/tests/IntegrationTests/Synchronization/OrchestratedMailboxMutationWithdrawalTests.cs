@@ -98,13 +98,65 @@ public sealed class OrchestratedMailboxMutationWithdrawalTests(MailFathomOrchest
             withdrawn.Single(record => record.Id == recordId).Stage;
     }
 
+    /// <summary>
+    /// The hold in front of a change a person can still take back, which is a comparison in the outstanding query and
+    /// a write through a batched read — both of them things only the real provider answers. A record opened with its
+    /// window still running is absent from what a pass is handed, and releasing it puts it there without moving its
+    /// stage, twice over, which is what makes a client asking twice the same as asking once.
+    /// </summary>
+    [Fact]
+    public async Task ReleaseAsync_ARecordHeldForAWayBack_IsLeftOutOfThePassUntilReleased()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, "mutation-withdrawal", cancellationToken);
+        var stillWaiting = new DateTimeOffset(2999, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        var held = await OpenAsync(services, binding, uid: 7104U, isSeen: true, cancellationToken, stillWaiting);
+
+        var whileHeld = await ReadOutstandingIdsAsync(services, cancellationToken);
+
+        // Act
+        var released = await ReleaseAsync(services, held, cancellationToken);
+        var releasedAgain = await ReleaseAsync(services, held, cancellationToken);
+
+        // Assert
+        Assert.DoesNotContain(held, whileHeld);
+        Assert.Equal(MailboxMutationStage.Recorded, Assert.Single(released).Stage);
+        Assert.Equal(MailboxMutationStage.Recorded, Assert.Single(releasedAgain).Stage);
+        Assert.Contains(held, await ReadOutstandingIdsAsync(services, cancellationToken));
+    }
+
+    private static Task<IReadOnlyList<MailboxMutationRecord>> ReleaseAsync(
+        OrchestratedMailFathomServices services,
+        MailboxMutationRecordId recordId,
+        CancellationToken cancellationToken) =>
+        services.CommitProducingAsync(
+            (scope, session, token) => scope.GetRequiredService<IMailboxMutationRecordStore>()
+                .ReleaseAsync(session, SyntheticMailAccount.User, [recordId], token),
+            cancellationToken);
+
+    private static async Task<MailboxMutationRecordId[]> ReadOutstandingIdsAsync(
+        OrchestratedMailFathomServices services,
+        CancellationToken cancellationToken)
+    {
+        var outstanding = await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IMailboxMutationRecordStore>()
+                .ReadOutstandingAsync(SyntheticMailAccount.Account, limit: 100, token),
+            cancellationToken);
+
+        return [.. outstanding.Select(candidate => candidate.Record.Id)];
+    }
+
     /// <summary>Stores one message and opens a flag change against it, which is the state a withdrawal acts on.</summary>
     private static async Task<MailboxMutationRecordId> OpenAsync(
         OrchestratedMailFathomServices services,
         MailFolderResolution binding,
         uint uid,
         bool isSeen,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        DateTimeOffset? heldUntil = null)
     {
         var occurrence = SyntheticEmail.OccurrenceIn(binding, uid);
         var storedEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
@@ -124,7 +176,7 @@ public sealed class OrchestratedMailboxMutationWithdrawalTests(MailFathomOrchest
 
         return await services.CommitProducingAsync(
             async (scope, session, token) => (await scope.GetRequiredService<IMailboxMutationRecordStore>()
-                .OpenAsync(session, request, token)).Id,
+                .OpenAsync(session, request, heldUntil, token)).Id,
             cancellationToken);
     }
 }

@@ -216,6 +216,7 @@ export function preferencesAnswering(telemetryEnabled: boolean, aiFiltersShown =
             markReadOnOpen: true,
             expandWholeThread: false,
             aiFiltersShown,
+            notificationSeconds: 5,
             embeddedHtmlMessages: false,
         }),
     };
@@ -383,6 +384,7 @@ export function deploymentWorkingInTabs(): DeploymentTransport {
                     markReadOnOpen: true,
                     expandWholeThread: false,
                     aiFiltersShown: true,
+                    notificationSeconds: 5,
                     embeddedHtmlMessages: false,
                 }),
             }),

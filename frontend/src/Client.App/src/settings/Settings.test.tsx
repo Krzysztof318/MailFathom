@@ -25,6 +25,7 @@ const settings: ClientPreferencesInForce = {
     expandWholeThread: false,
     aiFiltersShown: true,
     embeddedHtmlMessages: false,
+    notificationSeconds: 5,
     notStated: false,
     chooseTheme: () => undefined,
     chooseTabMode: () => undefined,
@@ -32,6 +33,7 @@ const settings: ClientPreferencesInForce = {
     chooseThreadExpansion: () => undefined,
     chooseMessageView: () => undefined,
     chooseAiFilters: () => undefined,
+    chooseNotificationSeconds: () => undefined,
 };
 
 const named: OwnProfileInForce = {
@@ -303,6 +305,37 @@ describe('Settings', () => {
         renderSettings({ profile: { ...named, pictureNotStated: true } });
 
         expect(screen.getByText(/was not saved to the deployment/u)).toBeDefined();
+    });
+
+    it('says a typed notification time outside the bound was not taken, and sends nothing for it', () => {
+        const chooseNotificationSeconds = vi.fn();
+        renderSettings({ preferences: { ...settings, chooseNotificationSeconds } });
+        openApplication();
+
+        const field = screen.getByRole('spinbutton', { name: /^How long a notification stands/ });
+        fireEvent.change(field, { target: { value: '45' } });
+        fireEvent.blur(field);
+
+        expect(screen.getByText(/^That was not changed/)).toBeDefined();
+        expect(chooseNotificationSeconds).not.toHaveBeenCalled();
+    });
+
+    it('sends a typed notification time inside the bound, and takes back the refusal it had drawn', () => {
+        const chooseNotificationSeconds = vi.fn();
+        renderSettings({ preferences: { ...settings, chooseNotificationSeconds } });
+        openApplication();
+
+        const field = screen.getByRole('spinbutton', { name: /^How long a notification stands/ });
+        fireEvent.change(field, { target: { value: '0' } });
+        fireEvent.blur(field);
+
+        expect(screen.getByText(/^That was not changed/)).toBeDefined();
+
+        fireEvent.change(field, { target: { value: '12' } });
+        fireEvent.blur(field);
+
+        expect(chooseNotificationSeconds).toHaveBeenCalledWith(12);
+        expect(screen.queryByText(/^That was not changed/)).toBeNull();
     });
 
     it('draws telemetry as the decision to withhold it, so the switch being on is the private answer', () => {

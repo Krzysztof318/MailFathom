@@ -9,6 +9,8 @@ import {
     mostMessagesPerMutation,
     moveMail,
     readMailFolders,
+    releaseMailDeletes,
+    withdrawMailDeletes,
     type ClientFailureReason,
     type ClientResult,
     type ClientSession,
@@ -19,7 +21,7 @@ import {
 } from '@mailfathom/client-backend';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
-import { useToasts } from '../toasts/useToasts';
+import { useToasts, type Toast } from '../toasts/useToasts';
 import {
     deletesPermanently,
     destinationName,
@@ -33,6 +35,7 @@ import {
     MailboxActsContext,
     nothingActed,
     type ActedMessage,
+    type AskedAct,
     type MailboxAct,
     type MailboxActs,
 } from './useMailboxActs';
@@ -85,7 +88,7 @@ const messagesCounted: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
 interface Held {
     readonly session: ClientSession | null;
     readonly directory: MailFolderDirectory | null;
-    readonly asked: ReadonlyMap<string, MailboxAct>;
+    readonly asked: ReadonlyMap<string, AskedAct>;
 }
 
 const heldForNobody: Held = { session: null, directory: null, asked: new Map() };
@@ -104,6 +107,22 @@ function writtenDown(batches: readonly Submitted[]): ReadonlySet<string> {
                 ? answer.value.filter((result) => result.outcome === 'recorded').map((result) => result.storedEmailId)
                 : [],
         ),
+    );
+}
+
+/**
+ * The records a submission wrote down, which is what taking a delete back and ending its wait each name.
+ *
+ * Records rather than messages, because a record is the unit the deployment holds, cancels, and takes in hand — and a
+ * message it answered `recorded` for is exactly a message whose changes carry one.
+ */
+function recordsWritten(batches: readonly Submitted[]): readonly string[] {
+    return batches.flatMap(({ answer }) =>
+        answer.outcome === 'read'
+            ? answer.value
+                  .filter((result) => result.outcome === 'recorded')
+                  .flatMap((result) => result.changes.map((change) => change.recordId))
+            : [],
     );
 }
 
@@ -239,13 +258,18 @@ export function MailboxActsProvider({
         return deletesPermanently(held.directory, messages);
     }
 
-    /** Writes down what was asked for, so the rows say so from the press rather than from the next read of the folder. */
-    function remember(act: MailboxAct, messages: readonly ActedMessage[]): void {
+    /**
+     * Writes down what was asked for, so the rows say so from the press rather than from the next read of the folder.
+     *
+     * The folder each message was in is written down with it, because an act is about a message *in a place*: it is
+     * what the sentence a row wears is drawn against, and what says the row is to leave this list and no other.
+     */
+    function remember(act: MailboxAct, messages: readonly ActedMessage[], leaves: boolean): void {
         setKept((current) => {
             const asked = new Map(current.session === session ? current.asked : []);
 
             for (const message of messages) {
-                asked.set(message.storedEmailId, act);
+                asked.set(message.storedEmailId, { act, from: message.folder, leaves });
             }
 
             return { session, directory: current.session === session ? current.directory : null, asked };
@@ -345,35 +369,37 @@ export function MailboxActsProvider({
         refused: readonly string[],
         destination: MoveDestination | undefined,
         failure: ClientFailureReason | null,
-        destroyed: boolean,
+        destroying: boolean,
+        records: readonly string[],
     ): void {
         if (recorded.length > 0) {
             // The way back is the toast's single action, which is the design project's own: the three acts that change
-            // a flag offer none, because a flag is what the control that set it takes off again — and neither does a
-            // delete that destroyed the mail, because there is no message left to move back and offering the control
-            // would be a promise this client could not keep. The question in front of that act said so already.
-            const wayBack =
-                changesAFlag(act) || destroyed
-                    ? {}
-                    : {
-                          action: {
-                              label: translate('act.undo'),
-                              take: () => {
-                                  takeBack(recorded);
-                              },
+            // a flag offer none, because a flag is what the control that set it takes off again. A delete that
+            // destroys the mail offers a different one — the wait in front of it rather than a reverse move — which is
+            // why it is composed apart rather than folded in here.
+            const wayBack = changesAFlag(act)
+                ? {}
+                : {
+                      action: {
+                          label: translate('act.undo'),
+                          take: () => {
+                              takeBack(recorded);
                           },
-                      };
+                      },
+                  };
 
-            toasts.raise({
-                kind: 'neutral',
-                title: destroyed
-                    ? translate('act.deletedPermanently')
-                    : translate(actReported[act], {
-                          folder: destination === undefined ? '' : destinationName(destination, translate),
-                      }),
-                body: counted(recorded.length),
-                ...wayBack,
-            });
+            toasts.raise(
+                destroying
+                    ? deleting(recorded.length, records)
+                    : {
+                          kind: 'neutral',
+                          title: translate(actReported[act], {
+                              folder: destination === undefined ? '' : destinationName(destination, translate),
+                          }),
+                          body: counted(recorded.length),
+                          ...wayBack,
+                      },
+            );
         }
 
         if (refused.length > 0) {
@@ -385,6 +411,104 @@ export function MailboxActsProvider({
                 kind: 'error',
                 title: translate('act.failed', { reason: translate(failureLabels[failure]) }),
             });
+        }
+    }
+
+    /** Splits records into the batches the two record routes admit, which are bounded exactly as a submission is. */
+    function batchesOf(records: readonly string[]): readonly (readonly string[])[] {
+        const batches: (readonly string[])[] = [];
+
+        for (let from = 0; from < records.length; from += mostMessagesPerMutation) {
+            batches.push(records.slice(from, from + mostMessagesPerMutation));
+        }
+
+        return batches;
+    }
+
+    /**
+     * The toast a permanent delete stands behind, which is also the whole of how long its way back is open.
+     *
+     * The deployment holds the delete for as long as this toast stands and no longer, so the card going is what closes
+     * the offer: taken back, the records are cancelled and nothing reaches the mail server; left alone, the client says
+     * so and the deployment stops waiting rather than sitting out a window nobody is watching any more. Both are the
+     * same moment read two ways, which is why one toast carries both rather than a timer somewhere else agreeing with
+     * a card somewhere else.
+     */
+    function deleting(messages: number, records: readonly string[]): Toast {
+        let takenBack = false;
+
+        return {
+            kind: 'neutral',
+            title: translate('act.deletingPermanently'),
+            body: counted(messages),
+            action: {
+                label: translate('act.undo'),
+                take: () => {
+                    takenBack = true;
+                    withdraw(records);
+                },
+            },
+            whenGone: () => {
+                if (!takenBack) {
+                    release(records);
+                }
+            },
+        };
+    }
+
+    /** Takes a permanent delete back, which cancels the records it was written down as before anything goes out. */
+    function withdraw(records: readonly string[]): void {
+        if (session === null) {
+            return;
+        }
+
+        const asking = session;
+
+        void Promise.all(batchesOf(records).map((batch) => withdrawMailDeletes(asking, transport, batch))).then(
+            (answered) => {
+                // Each record's own answer, exactly as the act itself is read: one the deployment has already taken in
+                // hand is refused rather than cancelled, and that message goes on saying it is being deleted, which is
+                // the truth about it.
+                const cancelled = answered.flatMap((answer) =>
+                    answer.outcome === 'read' ? answer.value.filter((record) => record.state === 'cancelled') : [],
+                );
+
+                forget(cancelled.map((record) => record.storedEmailId));
+
+                if (cancelled.length > 0) {
+                    toasts.raise({
+                        kind: 'neutral',
+                        title: translate('act.deleteWithdrawn'),
+                        body: counted(cancelled.length),
+                    });
+                }
+
+                const failed = answered.find((answer) => answer.outcome === 'failed');
+
+                if (failed?.outcome === 'failed') {
+                    toasts.raise({
+                        kind: 'error',
+                        title: translate('act.failed', {
+                            reason: translate(failureLabels[failed.failure.reason]),
+                        }),
+                    });
+                } else if (cancelled.length < records.length) {
+                    toasts.raise({ kind: 'warning', title: translate('act.someNotChanged') });
+                }
+            },
+        );
+    }
+
+    /** Says the way back has closed, so the deployment stops holding the delete and takes it in hand at once. */
+    function release(records: readonly string[]): void {
+        if (session === null) {
+            return;
+        }
+
+        for (const batch of batchesOf(records)) {
+            // Nothing is reported and nothing is waited for: what this asks for is what would have happened anyway
+            // once the window ran out, so a client that never asks costs the delete a wait rather than an outcome.
+            void releaseMailDeletes(session, transport, batch);
         }
     }
 
@@ -467,7 +591,12 @@ export function MailboxActsProvider({
         // somebody was told was permanent into one reported as a move.
         const destroying = act === 'delete' && destroys(messages);
 
-        remember(act, messages);
+        // Whether the message is leaving the list it was acted in, which the three filing acts do and a delete that
+        // destroys the mail does not: there is nowhere left for it to go, so it stays where it is and says so until
+        // the wait in front of it is over.
+        const leaves = act === 'archive' || act === 'move' || (act === 'delete' && !destroying);
+
+        remember(act, messages, leaves);
 
         void submitted(session, act, messages, destination, destroying).then((answered) => {
             // A batch that was written down stands whatever the batch beside it came to: two hundred messages the
@@ -477,7 +606,15 @@ export function MailboxActsProvider({
             const recorded = messages.filter((message) => written.has(message.storedEmailId));
 
             forget(messages.filter((message) => !written.has(message.storedEmailId)).map((one) => one.storedEmailId));
-            report(act, recorded, refusedBy(answered, written), destination, failureAmong(answered), destroying);
+            report(
+                act,
+                recorded,
+                refusedBy(answered, written),
+                destination,
+                failureAmong(answered),
+                destroying,
+                recordsWritten(answered),
+            );
         });
     }
 

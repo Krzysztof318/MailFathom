@@ -64,7 +64,7 @@ export const refusalSaid: Readonly<Record<ActRefusal, MessageKey>> = {
 
 /** Whether this act is already being carried out for every message the control is about. */
 export function underway(acts: MailboxActs, act: MailboxAct, messages: readonly ActedMessage[]): boolean {
-    return messages.length > 0 && messages.every((message) => acts.asked.get(message.storedEmailId) === act);
+    return messages.length > 0 && messages.every((message) => acts.asked.get(message.storedEmailId)?.act === act);
 }
 
 /**

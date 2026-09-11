@@ -8,13 +8,12 @@ import { ToastCard } from './ToastCard';
 import {
     mostToastsShown,
     toastLeaving,
-    toastLifetime,
     ToastContext,
     type Operation,
     type OperationSettled,
     type StandingToast,
     type Toast,
-    type ToastSurface,
+    type ToastsRaised,
 } from './useToasts';
 
 // The one surface the client says things back on, mounted once above every screen. A screen asks for a toast and is
@@ -31,8 +30,8 @@ import {
 // Nothing here takes focus. A toast is a statement rather than a place, so it is reachable from the keyboard by being
 // in the document and never by being moved to.
 
-/** What the provider holds: the surface every screen gets, and the one operation only the surface itself performs. */
-interface HeldToasts extends ToastSurface {
+/** What the provider holds: the surface every screen reaches, and the one operation only the surface itself performs. */
+interface HeldToasts extends ToastsRaised {
     readonly dismiss: (id: number) => void;
 }
 
@@ -43,6 +42,11 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
     // What is waiting to happen to each toast: the lifetime that dismisses it, and then the moment its leaving
     // animation is over. One timer each, because the two never overlap — dismissing cancels the lifetime by definition.
     const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+
+    // What each toast has to say once its card has gone, held apart from the card because it is not drawn and because
+    // it must be called exactly once: taken out as it is called, so a card closed while it is already leaving reports
+    // its going once rather than twice.
+    const goings = useRef(new Map<number, () => void>());
     const raised = useRef(0);
 
     useEffect(
@@ -52,6 +56,10 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
             }
 
             timers.current.clear();
+
+            // Deliberately not called. The surface going with the tab is the one case where nothing is left to report
+            // a going to, and calling them here would fire every standing offer at the moment the page is unloading.
+            goings.current.clear();
         },
         [],
     );
@@ -76,6 +84,11 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
 
             wait(id, toastLeaving, () => {
                 setStanding((current) => current.filter((toast) => toast.id !== id));
+
+                const going = goings.current.get(id);
+
+                goings.current.delete(id);
+                going?.();
             });
         }
 
@@ -85,10 +98,14 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
             setStanding((current) => [toast, ...current].slice(0, mostToastsShown));
         }
 
-        function raise(said: Toast): void {
+        function raise(said: Toast, standFor: number): void {
             raised.current += 1;
 
             const id = raised.current;
+
+            if (said.whenGone !== undefined) {
+                goings.current.set(id, said.whenGone);
+            }
 
             show({
                 id,
@@ -97,14 +114,15 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
                 action: said.action,
                 leaving: false,
                 stands: { kind: said.kind },
+                standFor,
             });
 
-            wait(id, toastLifetime, () => {
+            wait(id, standFor, () => {
                 dismiss(id);
             });
         }
 
-        function raiseOperation(operation: Operation): OperationSettled {
+        function raiseOperation(operation: Operation, standFor: number): OperationSettled {
             raised.current += 1;
 
             const id = raised.current;
@@ -118,9 +136,14 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
                 action: undefined,
                 leaving: false,
                 stands: { operation },
+                standFor,
             });
 
             return (outcome) => {
+                if (outcome.whenGone !== undefined) {
+                    goings.current.set(id, outcome.whenGone);
+                }
+
                 setStanding((current) =>
                     current.map((toast) =>
                         toast.id === id
@@ -137,7 +160,7 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
 
                 // It becomes the outcome where it already stands rather than being replaced by a second card, and its
                 // own lifetime starts from there — so what somebody was watching is what tells them how it went.
-                wait(id, toastLifetime, () => {
+                wait(id, standFor, () => {
                     dismiss(id);
                 });
             };
@@ -156,11 +179,14 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
 
         toast.stands.operation.stop();
         toasts.dismiss(toast.id);
-        toasts.raise({
-            kind: 'warning',
-            title: translate('toast.stopped'),
-            body: translate('toast.stoppedNothingWritten'),
-        });
+        toasts.raise(
+            {
+                kind: 'warning',
+                title: translate('toast.stopped'),
+                body: translate('toast.stoppedNothingWritten'),
+            },
+            toast.standFor,
+        );
     }
 
     return (

@@ -9,7 +9,7 @@ import type { IconName } from '../controls/icons';
 import { swipeSoFar } from '../controls/swipeAcross';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
-import { toastLeaving, toastLifetime, type StandingToast, type ToastAction, type ToastKind } from './useToasts';
+import { toastLeaving, type StandingToast, type ToastAction, type ToastKind } from './useToasts';
 
 // One toast as it stands on the screen: what happened, what it was about, at most one thing to do about it, and the
 // close control that is on every card in every composition. The bar along the bottom edge is the lifetime running out,
@@ -221,7 +221,7 @@ export function ToastCard({
                 <span
                     aria-hidden="true"
                     className={`absolute inset-x-0 bottom-0 h-0.5 origin-left animate-toast-lifetime opacity-55 ${mark.bar}`}
-                    style={{ animationDuration: `${String(toastLifetime)}ms` }}
+                    style={{ animationDuration: `${String(toast.standFor)}ms` }}
                 />
             )}
 

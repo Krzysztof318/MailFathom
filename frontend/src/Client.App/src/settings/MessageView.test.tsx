@@ -25,12 +25,14 @@ function inForce(
         expandWholeThread: false,
         aiFiltersShown: true,
         embeddedHtmlMessages,
+        notificationSeconds: 5,
         chooseTheme: () => undefined,
         chooseTelemetry: () => undefined,
         chooseTabMode: () => undefined,
         chooseThreadExpansion: () => undefined,
         chooseMessageView,
         chooseAiFilters: () => undefined,
+        chooseNotificationSeconds: () => undefined,
     };
 }
 

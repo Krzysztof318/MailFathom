@@ -155,8 +155,8 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
 
                 // Both open before either commits, which is the whole point: neither transaction can see the other's
                 // pending row, so both reach the insert.
-                await firstScope.GetRequiredService<IMailboxMutationRecordStore>().OpenAsync(first, request, token);
-                await secondScope.GetRequiredService<IMailboxMutationRecordStore>().OpenAsync(second, request, token);
+                await firstScope.GetRequiredService<IMailboxMutationRecordStore>().OpenAsync(first, request, heldUntil: null, token);
+                await secondScope.GetRequiredService<IMailboxMutationRecordStore>().OpenAsync(second, request, heldUntil: null, token);
 
                 return (First: await first.CommitAsync(token), Second: await second.CommitAsync(token));
             },
@@ -187,7 +187,7 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
     {
         var recordId = await services.CommitProducingAsync(
             async (scope, session, token) => (await scope.GetRequiredService<IMailboxMutationRecordStore>()
-                .OpenAsync(session, request, token)).Id,
+                .OpenAsync(session, request, heldUntil: null, token)).Id,
             cancellationToken);
 
         var placement = await services.InScopeAsync(

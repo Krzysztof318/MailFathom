@@ -80,6 +80,8 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/mutations/moves` | `mailfathom.mail.move` |
 | `POST /api/client/mutations/moves/withdrawals` | `mailfathom.mail.move` |
 | `POST /api/client/mutations/deletes` | `mailfathom.mail.delete` |
+| `POST /api/client/mutations/deletes/withdrawals` | `mailfathom.mail.delete` |
+| `POST /api/client/mutations/deletes/releases` | `mailfathom.mail.delete` |
 | `GET /api/client/record` | `mailfathom.mail.read` |
 | `POST /api/client/record` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts` | `mailfathom.mail.accounts.write` |
@@ -1415,9 +1417,9 @@ flag.
 
 ### The mutation routes
 
-These six are how a person changes the mailbox itself: marking mail read or unread, starring it, relabelling it,
-filing it into another folder, and deleting it off the server — and asking where each of those changes has got to, or
-taking one back.
+These eight are how a person changes the mailbox itself: marking mail read or unread, starring it, relabelling it,
+filing it into another folder, and deleting it off the server — and asking where each of those changes has got to,
+taking one back, or saying a delete need wait no longer.
 
 | Route | What it does |
 | --- | --- |
@@ -1427,6 +1429,8 @@ taking one back.
 | `GET /api/client/mutations?record=…&record=…` | Reports where each of the caller's own changes stands |
 | `POST /api/client/mutations/flags/withdrawals` | Takes back flag and tag changes nothing has been asked of a server for |
 | `POST /api/client/mutations/moves/withdrawals` | Takes back moves nothing has been asked of a server for |
+| `POST /api/client/mutations/deletes/withdrawals` | Takes back deletes that are still waiting |
+| `POST /api/client/mutations/deletes/releases` | Ends the wait in front of deletes, so they are taken in hand at once |
 
 **Nothing here reaches a mail server, and that is the design rather than a limitation.** A submission writes a durable
 record and answers; the account's own reconciliation pass is what issues the IMAP command, which is
@@ -1536,14 +1540,31 @@ Each result carries `recorded`, `message-not-found`, or `account-no-longer-confi
 `destination-not-found` here for the same reason there is no destination, and a message already gone is reported as one
 that is not there rather than as a delete that succeeded twice.
 
-**Deleting mail is its own grant again, and it has no withdrawal route.** `mailfathom.mail.move` does not reach it and
-`mailfathom.mail.delete` does: a move the user did not want is undone by moving the mail back, while this is the act
-that means the mail stops existing on the server, so a deployment that lets a client file mail has not thereby let it
-destroy any. Nothing takes one back either — a withdrawal exists so a change nothing has been asked of a server for can
-be stopped, and this is the one change a client is expected to confirm before it is written down rather than to undo
-after. Which folder the message is in decides nothing on this surface: the rule that MailFathom's own client offers
-this only for mail already in the trash is that client's sentence to its reader, and the grant is the whole of what
-this route enforces.
+**Deleting mail is its own grant again.** `mailfathom.mail.move` does not reach it and `mailfathom.mail.delete` does: a
+move the user did not want is undone by moving the mail back, while this is the act that means the mail stops existing
+on the server, so a deployment that lets a client file mail has not thereby let it destroy any. Which folder the message
+is in decides nothing on this surface: the rule that MailFathom's own client offers this only for mail already in the
+trash is that client's sentence to its reader, and the grant is the whole of what this route enforces.
+
+**A delete written here waits before anything is asked of the mail server, and can be taken back while it does.** Every
+record a batch writes is held for the signed-in person's own [`notificationSeconds`](#the-preferences-routes) plus ten
+seconds, read once for the whole batch so a selection deleted as one act can be taken back as one. The account's pass
+does not see a held record, so for that long `POST /api/client/mutations/deletes/withdrawals` cancels it exactly as the
+other two withdrawal routes cancel theirs, and under `mailfathom.mail.delete`, the grant that wrote it. The ten seconds
+are for a client that never gets to say it has stopped offering the way back — a tab closed, a network gone, a machine
+put to sleep — so that a delete does not reach the server while the offer is still on somebody's screen. The
+confirmation a client asks in front of the act stays: it is answered before anybody has seen what happened, and the
+wait adds the seconds in which they still can.
+
+**A client that has stopped offering the way back says so, and the wait ends.**
+`POST /api/client/mutations/deletes/releases` names records exactly as a withdrawal does, takes each one in hand at
+once, and answers with each record as it now stands. Nothing depends on it being called: a window elapses on its own
+and the record is taken in hand exactly as if it had been, so a client that never asks costs the mailbox a wait rather
+than a delete. Asking twice, or after the window has passed, is the same as asking once, and a record already withdrawn
+is reported `cancelled` rather than revived.
+
+**A delete written anywhere else does not wait.** A rule, a spam verdict, and an MCP tool write theirs with no window,
+because nobody is looking at a notification that could take one back.
 
 **A move either completes or leaves the message where it was, and a half-finished one is reported rather than
 guessed at.** The read route's `outcomeUnknown` is that report: a placement command went out and its answer never came
@@ -1582,7 +1603,7 @@ to look at rather than something the deployment keeps trying forever.
 `cancelled`, and the account's pass never sees it. A record past the point a command went out is reported where it
 stands instead of being refused, which is also what makes the call safe to repeat: a `STORE` already issued cannot be
 recalled, and a placement whose answer never came back has to be re-established rather than declared void. The grant
-that authored a change is the grant that withdraws it, which is why there are two withdrawal routes rather than one.
+that authored a change is the grant that withdraws it, which is why there are three withdrawal routes rather than one.
 
 **A record belonging to somebody else is absent from every answer here rather than refused**, and so is one recorded in
 a folder this caller may no longer read — the same answer a read of that folder's mail gives. Nothing on this surface
@@ -1747,22 +1768,25 @@ and somebody who set the client up the way they work should not have to set it u
   "markReadOnOpen": true,
   "expandWholeThread": false,
   "embeddedHtmlMessages": false,
-  "aiFiltersShown": true
+  "aiFiltersShown": true,
+  "notificationSeconds": 5
 }
 ```
 
-**It holds seven preferences and nothing else.** Whether this deployment may be told what the person's client is doing;
+**It holds eight preferences and nothing else.** Whether this deployment may be told what the person's client is doing;
 what the client is painted in, which is `system`, `light`, or `dark`; whether opening a message opens a tab rather
 than replacing what is on the screen; whether opening a message marks it read on the person's own mail server; whether
 opening a conversation draws every message in it rather than the one it was opened at; whether an open message
-draws the sender's own markup rather than the reduced text; and whether the client offers the standing views of the
-mailbox beneath its folder tree. Each of them says how
+draws the sender's own markup rather than the reduced text; whether the client offers the standing views of the
+mailbox beneath its folder tree; and how long one of the client's own notifications stands before it takes itself
+away. Each of them says how
 somebody wants to work, which is why it belongs to the person. The language does not, and stays on the device: it is
 resolved for somebody who has not signed in and may never get a session. Neither does the width a person drags the
 message list to, which describes the screen in front of them.
 
 **Unset reads as telemetry on, the theme following the machine, tabs off, marking read on, a conversation opening at
-the message it was opened at, a message read as the reduced text, and the standing views drawn.** A person who has set nothing is answered a
+the message it was opened at, a message read as the reduced text, the standing views drawn, and a notification standing
+for five seconds.** A person who has set nothing is answered a
 document rather than a refusal, so a first run draws a screen. The theme is still resolved on the device
 before sign-in — the client cannot wait on the network to paint itself, and there is no session to read this over above
 the sign-in screen — and what this answers replaces that device value once a session exists.
@@ -1799,6 +1823,13 @@ and the commitments falling due this week. Each is a shortcut to the `carriesMar
 control where any other narrowing does, and can be taken off or changed there one criterion at a time. With it off the
 section is gone rather than empty, and nothing else changes: the criteria are still reachable from that control, and no
 list this deployment answers is narrowed differently.
+
+**`notificationSeconds` decides how long one of the client's own notifications stands, in whole seconds from 1 to
+30.** A notification is the one place the client offers a way back from an act, so this is also how long that offer
+lasts — and for a permanent delete it is how long the deployment holds the record before asking anything of the mail
+server, plus the grace [the mutation routes](#the-mutation-routes) describe. A value outside that range is refused
+naming the range rather than clamped to it: a person who asked for a minute would otherwise be handed half of one
+without being told, and the one screen that writes this offers nothing outside it.
 
 **A write states the whole document.** It is a closed set rather than a patch: a key nothing binds is refused rather
 than stored, a theme this deployment does not publish is refused naming the three that are, and a preference the body

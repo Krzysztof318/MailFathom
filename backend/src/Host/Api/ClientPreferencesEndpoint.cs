@@ -44,7 +44,7 @@ internal static class ClientPreferencesEndpoint
 
     /// <summary>The greatest request body the write route reads before refusing it.</summary>
     /// <remarks>
-    /// Far above six scalars and their JSON escaping, and far below anything worth an allocation. The document is
+    /// Far above eight scalars and their JSON escaping, and far below anything worth an allocation. The document is
     /// closed, so what the bound guards against is not a large record but a body that was never a preferences document
     /// at all; it is answered <c>413</c> before the handler is reached, as every other write on this surface is.
     /// </remarks>
@@ -95,7 +95,7 @@ internal static class ClientPreferencesEndpoint
     /// <param name="preferences">The acting person's own preferences.</param>
     /// <param name="request">The whole document, with an omitted preference stored as its unset answer.</param>
     /// <param name="cancellationToken">Cancels the commit.</param>
-    /// <returns><c>200</c> with what is now stored, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the body names a theme this build does not publish.</returns>
+    /// <returns><c>200</c> with what is now stored, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the body names a theme this build does not publish or a notification time outside the bound.</returns>
     internal static async Task<Results<Ok<ClientPreferencesResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> SaveAsync(
         [FromServices] OwnClientPreferences preferences,
         [FromBody] ClientPreferencesRequest request,
@@ -103,6 +103,14 @@ internal static class ClientPreferencesEndpoint
     {
         ArgumentNullException.ThrowIfNull(preferences);
         ArgumentNullException.ThrowIfNull(request);
+
+        if (request.NotificationSeconds is { } seconds && !ClientPreferences.IsUsableNotificationTime(seconds))
+        {
+            // Refused rather than clamped, for the reason ClientPreferences.IsUsableNotificationTime gives: a client
+            // told its value was stored and handed a different one draws a screen the deployment disagrees with.
+            return Refusal(
+                $"A notification stands for a whole number of seconds between {ClientPreferences.ShortestNotificationSeconds} and {ClientPreferences.LongestNotificationSeconds}.");
+        }
 
         if (request.Stated() is not { } stated)
         {
@@ -131,11 +139,12 @@ internal static class ClientPreferencesEndpoint
 /// <param name="ExpandWholeThread">Whether a conversation opens with every message drawn, or nothing for the unset answer.</param>
 /// <param name="EmbeddedHtmlMessages">Whether an open message draws the sender's own markup inline, or nothing for the unset answer.</param>
 /// <param name="AiFiltersShown">Whether the folder tree carries the standing views of what a derivation read, or nothing for the unset answer.</param>
+/// <param name="NotificationSeconds">How long one of the client's own notifications stands, in whole seconds, or nothing for the unset answer.</param>
 /// <remarks>
 /// <para>
 /// Bound strictly: a key nothing here binds fails the bind rather than being stored, which is what keeps the document
-/// closed — it holds seven preferences because seven is what a client can state, not because a writer happened to send
-/// seven. Every one of them is optional, and an omitted one is committed as its unset answer rather than left at
+/// closed — it holds eight preferences because eight is what a client can state, not because a writer happened to send
+/// eight. Every one of them is optional, and an omitted one is committed as its unset answer rather than left at
 /// whatever the row held.
 /// </para>
 /// <para>
@@ -153,7 +162,8 @@ internal sealed record ClientPreferencesRequest(
     bool? MarkReadOnOpen = null,
     bool? ExpandWholeThread = null,
     bool? EmbeddedHtmlMessages = null,
-    bool? AiFiltersShown = null)
+    bool? AiFiltersShown = null,
+    int? NotificationSeconds = null)
 {
     /// <summary>Reads the request as the whole set the write commits.</summary>
     /// <returns>The preferences, with every one the body omitted answered as unset, or <see langword="null" /> when the body names a theme this build does not publish.</returns>
@@ -173,7 +183,8 @@ internal sealed record ClientPreferencesRequest(
             this.MarkReadOnOpen ?? ClientPreferences.Unset.MarkReadOnOpen,
             this.ExpandWholeThread ?? ClientPreferences.Unset.ExpandWholeThread,
             this.EmbeddedHtmlMessages ?? ClientPreferences.Unset.EmbeddedHtmlMessages,
-            this.AiFiltersShown ?? ClientPreferences.Unset.AiFiltersShown);
+            this.AiFiltersShown ?? ClientPreferences.Unset.AiFiltersShown,
+            this.NotificationSeconds ?? ClientPreferences.Unset.NotificationSeconds);
     }
 }
 
@@ -185,6 +196,7 @@ internal sealed record ClientPreferencesRequest(
 /// <param name="ExpandWholeThread">Whether a conversation opens with every message drawn rather than at the one it was opened at.</param>
 /// <param name="EmbeddedHtmlMessages">Whether an open message draws the sender's own markup inline rather than the reduced text.</param>
 /// <param name="AiFiltersShown">Whether the folder tree carries the standing views of what a derivation read in the mail.</param>
+/// <param name="NotificationSeconds">How long one of the client's own notifications stands before it takes itself away.</param>
 /// <remarks>
 /// Every preference is answered, whether or not the person ever set it, so a client renders one screen rather than one
 /// per combination of what happens to be stored. What it does not report is when anything was set or from where: this
@@ -198,7 +210,8 @@ internal sealed record ClientPreferencesResponse(
     bool MarkReadOnOpen,
     bool ExpandWholeThread,
     bool EmbeddedHtmlMessages,
-    bool AiFiltersShown)
+    bool AiFiltersShown,
+    int NotificationSeconds)
 {
     /// <summary>Describes one person's preferences on the wire.</summary>
     /// <param name="preferences">What they set.</param>
@@ -215,6 +228,7 @@ internal sealed record ClientPreferencesResponse(
             preferences.MarkReadOnOpen,
             preferences.ExpandWholeThread,
             preferences.EmbeddedHtmlMessages,
-            preferences.AiFiltersShown);
+            preferences.AiFiltersShown,
+            preferences.NotificationSeconds);
     }
 }

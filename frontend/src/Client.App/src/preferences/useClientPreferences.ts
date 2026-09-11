@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
+    isNotificationTime,
     readClientPreferences,
     unsetClientPreferences,
     writeClientPreferences,
@@ -74,6 +75,14 @@ export interface ClientPreferencesInForce {
      */
     readonly aiFiltersShown: boolean;
 
+    /**
+     * How long a notification stands before it takes itself away, in whole seconds.
+     *
+     * It is how long somebody is given to read what just happened, and — for the one act that offers it — how long the
+     * way back out of that act stays open. Unset reads as the design project's own five seconds.
+     */
+    readonly notificationSeconds: number;
+
     /** Whether the deployment refused the last change, which is the one thing about this a screen has to say out loud. */
     readonly notStated: boolean;
 
@@ -83,6 +92,14 @@ export interface ClientPreferencesInForce {
     readonly chooseThreadExpansion: (expandWholeThread: boolean) => void;
     readonly chooseMessageView: (embeddedHtmlMessages: boolean) => void;
     readonly chooseAiFilters: (aiFiltersShown: boolean) => void;
+
+    /**
+     * States how long a notification stands, in whole seconds.
+     *
+     * A value outside the bound is refused rather than brought inside it, here as at the route: a screen that quietly
+     * turned an answer into a different one would report a preference nobody stated.
+     */
+    readonly chooseNotificationSeconds: (notificationSeconds: number) => void;
 }
 
 // What is held, and whose it is. The session is carried beside the document rather than trusted to have stayed the
@@ -233,6 +250,7 @@ export function useClientPreferences(
         expandWholeThread: inForce.preferences.expandWholeThread,
         embeddedHtmlMessages: inForce.preferences.embeddedHtmlMessages,
         aiFiltersShown: inForce.preferences.aiFiltersShown,
+        notificationSeconds: inForce.preferences.notificationSeconds,
         notStated: inForce.notStated,
         chooseTheme: (choice) => {
             setThemeChoice(choice);
@@ -252,6 +270,15 @@ export function useClientPreferences(
         },
         chooseAiFilters: (aiFiltersShown) => {
             state({ ...composedFrom(), aiFiltersShown });
+        },
+        chooseNotificationSeconds: (notificationSeconds) => {
+            // Refused rather than brought inside the bound, which is the deployment's own answer to the same value:
+            // clamping here would draw a setting nobody stated and send it back under their credential.
+            if (!isNotificationTime(notificationSeconds)) {
+                return;
+            }
+
+            state({ ...composedFrom(), notificationSeconds });
         },
     };
 }

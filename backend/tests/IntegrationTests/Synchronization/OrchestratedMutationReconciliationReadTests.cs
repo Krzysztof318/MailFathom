@@ -352,6 +352,6 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
         MailboxMutationRequest request,
         CancellationToken cancellationToken) => services.CommitProducingAsync(
             async (scope, session, token) => (await scope.GetRequiredService<IMailboxMutationRecordStore>()
-                .OpenAsync(session, request, token)).Id,
+                .OpenAsync(session, request, heldUntil: null, token)).Id,
             cancellationToken);
 }

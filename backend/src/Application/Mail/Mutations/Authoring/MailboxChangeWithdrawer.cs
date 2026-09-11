@@ -25,9 +25,10 @@ namespace MailFathom.Application.Mail.Mutations.Authoring;
 /// call safe to repeat.
 /// </para>
 /// <para>
-/// The grant that authored a change is the grant that withdraws it, which is why there are two entry points rather than
-/// one taking the caller's word for which surface it is. Withdrawing causes no mailbox change and cannot: the worst it
-/// does is stop one, so what it needs is authority over the same kind of change rather than authority of its own.
+/// The grant that authored a change is the grant that withdraws it, which is why there is an entry point per grant
+/// rather than one taking the caller's word for which surface it is. Withdrawing causes no mailbox change and cannot:
+/// the worst it does is stop one, so what it needs is authority over the same kind of change rather than authority of
+/// its own.
 /// </para>
 /// </remarks>
 public sealed class MailboxChangeWithdrawer
@@ -94,6 +95,28 @@ public sealed class MailboxChangeWithdrawer
             recordIds,
             MailFathomPermission.MailMove,
             [MailboxMutation.Relocate],
+            cancellationToken);
+
+    /// <summary>Withdraws deletes this caller authored.</summary>
+    /// <param name="recordIds">The records to withdraw.</param>
+    /// <param name="cancellationToken">Cancels the read and the commit.</param>
+    /// <returns>One entry per record this caller holds under those identities, each reporting where it now stands.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="recordIds" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when more records are named than one call may withdraw.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the deleting grant.</exception>
+    /// <remarks>
+    /// It is the way back from the one act that has none once it has happened, which is why a delete is worth holding
+    /// before it is attempted at all: a record still at <see cref="MailboxMutationStage.Recorded" /> is a message that
+    /// is still there, and this is what leaves it there. A record a pass has already taken in hand is reported where it
+    /// stands, exactly as a flag change or a move is — the mail has gone, and saying otherwise would be a promise this
+    /// deployment cannot keep.
+    /// </remarks>
+    public Task<IReadOnlyList<MailboxChangeProgress>> WithdrawDeletesAsync(
+        IReadOnlyList<MailboxMutationRecordId> recordIds,
+        CancellationToken cancellationToken) => this.WithdrawAsync(
+            recordIds,
+            MailFathomPermission.MailDelete,
+            [MailboxMutation.Delete],
             cancellationToken);
 
     /// <summary>Withdraws every named record that this caller holds, may reach, and this grant covers.</summary>

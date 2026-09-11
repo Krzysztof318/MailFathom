@@ -448,7 +448,7 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
         MailboxMutationRecord? openedRecord = null;
 
         await this.commitPolicy.CommitAsync(
-            async (session, token) => openedRecord = await this.store.OpenAsync(session, request, token),
+            async (session, token) => openedRecord = await this.store.OpenAsync(session, request, heldUntil: null, token),
             cancellationToken);
 
         return openedRecord

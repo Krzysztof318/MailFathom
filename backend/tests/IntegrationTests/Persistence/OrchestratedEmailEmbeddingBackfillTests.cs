@@ -242,6 +242,7 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
                         occurrenceId,
                         MailboxMutationRequester.Rule("file-the-newsletters", "1"),
                         RemoteFolderPath.Create("Archive")),
+                    heldUntil: null,
                     token),
             cancellationToken);
 

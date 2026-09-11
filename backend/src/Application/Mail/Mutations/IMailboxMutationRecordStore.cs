@@ -30,13 +30,24 @@ public interface IMailboxMutationRecordStore
     /// <summary>Writes the intent down, or reads back the record that already holds this idempotency identity.</summary>
     /// <param name="session">The session the write joins.</param>
     /// <param name="request">The change that was asked for.</param>
+    /// <param name="heldUntil">The instant before which no convergence pass may take the record in hand, or <see langword="null" /> where it may be taken at once.</param>
     /// <param name="cancellationToken">Cancels the write or the read that follows a losing insert.</param>
     /// <returns>The record for this request, whether this call created it or another one did.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="request" /> is <see langword="null" />.</exception>
-    /// <remarks>The record starts at <see cref="MailboxMutationStage.Recorded" /> with no attempt counted, so opening one performs nothing by itself.</remarks>
+    /// <remarks>
+    /// <para>The record starts at <see cref="MailboxMutationStage.Recorded" /> with no attempt counted, so opening one performs nothing by itself.</para>
+    /// <para>
+    /// A hold is what makes a change withdrawable for a stated stretch after it was asked for, and it belongs to the
+    /// record rather than to whoever asked: a client that closes, loses its network, or is put to sleep costs the
+    /// mailbox nothing, because the window elapses and the record is taken in hand exactly as it would have been. It
+    /// is honoured by <see cref="ReadOutstandingAsync" /> and lifted by <see cref="ReleaseAsync" />, and a record that
+    /// already exists under this identity keeps the hold it was opened with rather than taking this call's.
+    /// </para>
+    /// </remarks>
     Task<MailboxMutationRecord> OpenAsync(
         IPersistenceSession session,
         MailboxMutationRequest request,
+        DateTimeOffset? heldUntil,
         CancellationToken cancellationToken);
 
     /// <summary>Reports whether one local email has ever had a mutation of a given kind asked for by a given kind of requester.</summary>
@@ -111,6 +122,26 @@ public interface IMailboxMutationRecordStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<MailboxMutationRecord>> WithdrawAsync(
+        IPersistenceSession session,
+        MailUserId user,
+        IReadOnlyList<MailboxMutationRecordId> recordIds,
+        CancellationToken cancellationToken);
+
+    /// <summary>Lifts the hold on the user's changes among those named, so the next convergence pass may take each in hand.</summary>
+    /// <param name="session">The session the write joins.</param>
+    /// <param name="user">The user the records must belong to.</param>
+    /// <param name="recordIds">The records to release.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>Each named record as it now stands, unchanged where nothing was holding it, and absent where this user holds no such record.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="recordIds" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// It is the opposite half of <see cref="WithdrawAsync" /> and is shaped like it for the same reasons: a record
+    /// nothing was holding is reported where it stands rather than refused, which is what makes the call safe to
+    /// repeat, and the whole set is taken in one commit because a caller that submitted a batch releases it as one.
+    /// Releasing changes no stage, so a record already withdrawn stays withdrawn and one already under way is
+    /// untouched — what it removes is a wait, never a decision.
+    /// </remarks>
+    Task<IReadOnlyList<MailboxMutationRecord>> ReleaseAsync(
         IPersistenceSession session,
         MailUserId user,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
@@ -195,6 +226,12 @@ public interface IMailboxMutationRecordStore
     /// <para>
     /// Oldest first, because the answer starts with whatever has been outstanding longest. It is bounded like every
     /// other public query, and convergence treats the bound as a page it comes back for rather than as a cut.
+    /// </para>
+    /// <para>
+    /// A record still inside the hold <see cref="OpenAsync" /> opened it under is absent from this answer, and it is
+    /// absent rather than skipped afterwards so that a page is spent on work a pass can actually do. It counts as
+    /// pending in <see cref="ReadLifecycleCountsAsync" /> throughout, which is what it is: a change asked for that
+    /// nothing has started.
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(

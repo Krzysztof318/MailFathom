@@ -48,6 +48,27 @@ export interface ActedMessage {
     readonly folder: string;
 }
 
+/**
+ * One act as it was asked for: what was asked, where it was asked, and whether it takes the message out of there.
+ *
+ * The folder is part of it because an act is about a message *in a place*, and the sentence a row wears belongs to the
+ * place the act was asked from. Without it a message somebody filed into the trash goes on saying `Moving to the
+ * trash…` while it sits in the trash — a row reporting an act against the folder it already landed in.
+ *
+ * Whether it leaves is the other half of the same fact, and it is what the list acts on: an act a person performs is
+ * theirs, so the message goes from the folder it is leaving at the press rather than when a mailbox is seen to agree.
+ * A row that is gone says nothing, which is why nothing draws a sentence for one of these.
+ */
+export interface AskedAct {
+    readonly act: MailboxAct;
+
+    /** The folder the act was asked in, which is the only folder its sentence is drawn in. */
+    readonly from: string;
+
+    /** Whether the act takes the message out of that folder rather than leaving it there. */
+    readonly leaves: boolean;
+}
+
 export interface MailboxActs {
     /**
      * What this client has asked for and the deployment has not been seen to have applied, by the message it is about.
@@ -56,7 +77,7 @@ export interface MailboxActs {
      * durable the moment it is written down and converges minutes later, so a screen drawing only what the deployment
      * last reported would show mail somebody has just filed as though nothing had happened. It goes when the tab does.
      */
-    readonly asked: ReadonlyMap<string, MailboxAct>;
+    readonly asked: ReadonlyMap<string, AskedAct>;
 
     /** Why the act cannot be performed on those messages, or `null` where it can. */
     readonly refusalOf: (act: MailboxAct, messages: readonly ActedMessage[]) => ActRefusal | null;
@@ -147,24 +168,48 @@ export function opensAsDraft(acts: MailboxActs, email: MailTimelineEntry): boole
  *
  * Nothing polls for convergence: the row itself is what says the change arrived. A flag this client asked for is
  * pending until the deployment reports the message flagged, one it asked to have taken off is pending until the
- * deployment reports it unflagged, and a message asked to be marked unread is pending until
- * it is reported unread — so the sentence goes on its own the moment the account's pass has been round. The three that
- * file a message elsewhere have no such flag to watch, and their rows leave the folder on the next read of it.
+ * deployment reports it unflagged, and a message asked to be marked unread is pending until it is reported unread — so
+ * the sentence goes on its own the moment the account's pass has been round.
+ *
+ * **An act is only pending where it was asked.** The three that file a message elsewhere take the row out of the folder
+ * they are leaving at the press, and the message then arrives somewhere else — where the act is finished rather than
+ * waiting, whatever this client has or has not seen. So a row drawn in a folder the act did not act in wears no
+ * sentence about it, which is the same rule read from the other end.
  */
-export function actPending(acts: MailboxActs, email: MailTimelineEntry): MailboxAct | null {
-    const act = acts.asked.get(email.id) ?? null;
+export function actPending(acts: MailboxActs, email: MailTimelineEntry): AskedAct | null {
+    const asked = acts.asked.get(email.id);
 
-    if (act === 'flag') {
-        return email.flagged ? null : act;
+    if (asked?.from !== email.folder) {
+        return null;
     }
 
-    if (act === 'unflag') {
-        return email.flagged ? act : null;
+    if (asked.act === 'flag') {
+        return email.flagged ? null : asked;
     }
 
-    if (act === 'markUnread') {
-        return email.unread ? null : act;
+    if (asked.act === 'unflag') {
+        return email.flagged ? asked : null;
     }
 
-    return act;
+    if (asked.act === 'markUnread') {
+        return email.unread ? null : asked;
+    }
+
+    return asked;
+}
+
+/**
+ * Whether this row has been asked to leave the folder it is drawn in.
+ *
+ * **An act a person performs is theirs, and the screen follows the person.** So a message archived, filed, or sent to
+ * the trash is out of the folder it was in from the press, rather than when a mailbox is next seen to agree — which is
+ * a read the deployment answers with the pre-change state anyway, and then never re-reads.
+ *
+ * It is asked of the row rather than of a message, because the act took the message out of *that* folder and out of no
+ * other: the same message drawn in the folder it was filed into has arrived there, and belongs in that list.
+ */
+export function actLeaving(acts: MailboxActs, email: MailTimelineEntry): boolean {
+    const asked = acts.asked.get(email.id);
+
+    return asked !== undefined && asked.leaves && asked.from === email.folder;
 }

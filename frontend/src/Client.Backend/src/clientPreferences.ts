@@ -39,7 +39,22 @@ export interface ClientPreferences {
 
     /** Whether the folder tree carries the standing views of what a derivation read in the mail. */
     readonly aiFiltersShown: boolean;
+
+    /**
+     * How long one of the client's own notifications stands, in whole seconds.
+     *
+     * It is bounded by {@link shortestNotificationSeconds} and {@link longestNotificationSeconds}, and the deployment
+     * refuses a value outside that rather than clamping it — so a client that sent one is told, instead of drawing a
+     * setting the deployment quietly disagrees with.
+     */
+    readonly notificationSeconds: number;
 }
+
+/** The shortest a notification may be asked to stand for, which is the deployment's own bound. */
+export const shortestNotificationSeconds = 1;
+
+/** The longest a notification may be asked to stand for, which is the deployment's own bound. */
+export const longestNotificationSeconds = 30;
 
 /**
  * What somebody who has set nothing is answered with, which is also what stands in until an answer arrives.
@@ -55,12 +70,13 @@ export const unsetClientPreferences: ClientPreferences = {
     expandWholeThread: false,
     embeddedHtmlMessages: false,
     aiFiltersShown: true,
+    notificationSeconds: 5,
 };
 
 /**
  * The most of one preferences answer this package reads before refusing it.
  *
- * The document is seven scalars, so this is far above anything the deployment will legitimately send and far below
+ * The document is eight scalars, so this is far above anything the deployment will legitimately send and far below
  * anything worth buffering. It is the same order the write route bounds its request body at, for the same reason:
  * what the bound guards against is an answer that was never a preferences document.
  */
@@ -147,6 +163,11 @@ function parsePreferences(body: string): ClientPreferences | null {
     const expandWholeThread = record['expandWholeThread'];
     const embeddedHtmlMessages = record['embeddedHtmlMessages'];
     const aiFiltersShown = record['aiFiltersShown'];
+    const notificationSeconds = record['notificationSeconds'];
+
+    if (!isNotificationTime(notificationSeconds)) {
+        return null;
+    }
 
     if (
         typeof telemetryEnabled !== 'boolean' ||
@@ -171,9 +192,29 @@ function parsePreferences(body: string): ClientPreferences | null {
         expandWholeThread,
         embeddedHtmlMessages,
         aiFiltersShown,
+        notificationSeconds,
     };
 }
 
 function isThemePreference(value: unknown): value is ClientThemePreference {
     return typeof value === 'string' && themePreferences.includes(value as ClientThemePreference);
+}
+
+/**
+ * Whether that is a notification time this deployment will take, which is a whole number of seconds inside the bound.
+ *
+ * Checked here as well as at the deployment's own boundary, for the reason every field on this surface is checked: an
+ * answer is untrusted input, and a value outside the bound would reach a screen as a notification that never goes or
+ * one nobody can read. A whole number, because the preference is stated in seconds and a fraction is not one.
+ *
+ * Exported because the screen that offers the setting asks the same question before stating one, and a second reading
+ * of the bound is how a client comes to send what the deployment refuses.
+ */
+export function isNotificationTime(value: unknown): value is number {
+    return (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        value >= shortestNotificationSeconds &&
+        value <= longestNotificationSeconds
+    );
 }

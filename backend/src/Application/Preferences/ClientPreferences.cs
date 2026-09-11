@@ -12,11 +12,12 @@ namespace MailFathom.Application.Preferences;
 /// <param name="ExpandWholeThread">Whether opening a conversation draws every message in it rather than the one it was opened at.</param>
 /// <param name="EmbeddedHtmlMessages">Whether an open message draws the sender's own markup inline rather than the reduced text.</param>
 /// <param name="AiFiltersShown">Whether the folder tree carries the standing views of what a derivation read in the mail.</param>
+/// <param name="NotificationSeconds">How long one of the client's own notifications stands before it takes itself away.</param>
 /// <remarks>
 /// <para>
-/// A closed set of seven rather than a settings service. Each of them says how somebody wants to work rather than what
+/// A closed set of eight rather than a settings service. Each of them says how somebody wants to work rather than what
 /// the screen in front of them is like, which is why they belong to the person and not to the browser profile or the
-/// desktop install they happened to set them in — and why an eighth is added when there is an eighth to add.
+/// desktop install they happened to set them in — and why a ninth is added when there is a ninth to add.
 /// </para>
 /// <para>
 /// Marking read is here rather than on the mail account for the reason
@@ -42,8 +43,28 @@ public sealed record ClientPreferences(
     bool MarkReadOnOpen,
     bool ExpandWholeThread,
     bool EmbeddedHtmlMessages,
-    bool AiFiltersShown)
+    bool AiFiltersShown,
+    int NotificationSeconds)
 {
+    /// <summary>The shortest a notification may be asked to stand for.</summary>
+    /// <remarks>A second is long enough to read a title and reach the control on it, and shorter than that is a notification nobody can act on rather than a preference.</remarks>
+    public const int ShortestNotificationSeconds = 1;
+
+    /// <summary>The longest a notification may be asked to stand for.</summary>
+    /// <remarks>
+    /// Half a minute is past the point where a card in the corner is being read and into the point where it is in the
+    /// way, and a permanent delete waits it out, with a short grace behind it, before it reaches the mail server — so a
+    /// bound above this would be a person asking their own mailbox to hold still for as long as they liked.
+    /// </remarks>
+    public const int LongestNotificationSeconds = 30;
+
+    /// <summary>Gets whether a stated notification time is one this deployment accepts.</summary>
+    /// <param name="seconds">The whole seconds a notification was asked to stand for.</param>
+    /// <returns><see langword="true" /> when the value is within the bound, both ends included.</returns>
+    /// <remarks>Asked at the boundary and answered with a refusal rather than clamped, because a client told its value was stored and given a different one is a screen that disagrees with the deployment about what somebody chose.</remarks>
+    public static bool IsUsableNotificationTime(int seconds) =>
+        seconds is >= ShortestNotificationSeconds and <= LongestNotificationSeconds;
+
     /// <summary>Gets what a person who has set nothing is answered with.</summary>
     /// <remarks>
     /// Telemetry on, because the switch withdraws a default this deployment already applies rather than granting one,
@@ -56,7 +77,9 @@ public sealed record ClientPreferences(
     /// has always drawn and the sender's own markup is a surface somebody asks for rather than one they are handed.
     /// The standing views are drawn, because they are a section of the tree somebody turns off rather than one they
     /// go looking for, and a deployment deriving nothing answers each of them as a list with nothing in it.
+    /// A notification stands for five seconds, which is what the client's own toast has always stood for — so a
+    /// deployment nobody has asked behaves as it did before this preference existed.
     /// </remarks>
     public static ClientPreferences Unset { get; } =
-        new(true, ClientThemeChoice.System, false, true, false, false, true);
+        new(true, ClientThemeChoice.System, false, true, false, false, true, 5);
 }

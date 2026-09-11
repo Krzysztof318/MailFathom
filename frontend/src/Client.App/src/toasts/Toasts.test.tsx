@@ -10,6 +10,7 @@ import { ToastsProvider } from './Toasts';
 import type { ReactNode } from 'react';
 import {
     mostToastsShown,
+    ToastLifetimeContext,
     toastLeaving,
     toastLifetime,
     useToasts,
@@ -180,6 +181,50 @@ describe('ToastsProvider', () => {
         pass(1 + toastLeaving);
 
         expect(standing()).toHaveLength(0);
+    });
+
+    // How long a notification stands is the person's own preference, so a screen raising one under it is held for
+    // that long — and the bar says the same number, because a bar running out before the card goes is a promise the
+    // card breaks.
+    it('holds a toast for as long as the person chose, and draws the bar for exactly that long', () => {
+        surface = renderHook(() => useToasts(), {
+            wrapper: ({ children }: { readonly children: ReactNode }) => (
+                <Surrounded>
+                    <ToastLifetimeContext value={12_000}>{children}</ToastLifetimeContext>
+                </Surrounded>
+            ),
+        }).result.current;
+
+        raise({ kind: 'neutral', title: 'Three threads archived' });
+
+        expect(lifetimeBar()?.style.animationDuration).toBe('12000ms');
+
+        pass(toastLifetime + toastLeaving);
+
+        expect(standing()).toHaveLength(1);
+
+        pass(12_000 - toastLifetime);
+
+        expect(standing()).toHaveLength(0);
+    });
+
+    // What a way back is worth depends on when the card stops offering it, so the caller is told the moment it goes —
+    // once, whichever way it went.
+    it('tells the one who raised it that it has gone, once, whether it ran out or was closed', () => {
+        drawSurface();
+
+        const ranOut = vi.fn();
+        const closed = vi.fn();
+
+        raise({ kind: 'neutral', title: 'Deleting permanently…', whenGone: ranOut });
+        pass(toastLifetime + toastLeaving);
+
+        raise({ kind: 'neutral', title: 'Deleting permanently…', whenGone: closed });
+        fireEvent.click(closeControl('Close'));
+        pass(toastLifetime + toastLeaving);
+
+        expect(ranOut).toHaveBeenCalledTimes(1);
+        expect(closed).toHaveBeenCalledTimes(1);
     });
 
     it('draws that lifetime as a bar running for exactly as long as the toast is held', () => {

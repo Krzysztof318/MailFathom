@@ -205,6 +205,11 @@ export const en = {
         'When the window is not in front of you, this machine says how much arrived and of what kind — never who wrote or what about.',
     'settings.systemNotificationsRefused':
         'This browser has been told to block notifications from here. Allow them in its own site settings, and this switch will work again.',
+    'settings.notificationSeconds': 'How long a notification stands',
+    'settings.notificationSecondsExplanation':
+        'In whole seconds, between {shortest} and {longest}. It is also how long you have to take back a permanent delete, which waits for exactly as long as its notification stands.',
+    'settings.notificationSecondsRefused':
+        'That was not changed. A notification stands for a whole number of seconds, between {shortest} and {longest}.',
     'settings.mailbox': 'Mailbox',
     'settings.aiFilters': 'Show the AI filters in the folder tree',
     'settings.aiFiltersExplanation':
@@ -392,7 +397,8 @@ export const en = {
         'Already in the trash — deleting now removes {count} messages together with attachments.',
     'act.purgeReversal': 'This cannot be undone.',
     'act.purgeConfirm': 'Delete permanently',
-    'act.deletedPermanently': 'Permanently deleted',
+    'act.deletingPermanently': 'Deleting permanently…',
+    'act.deleteWithdrawn': 'Kept — nothing was deleted',
     'act.moveTitle': 'File in another folder',
     'act.moveClose': 'Close',
 

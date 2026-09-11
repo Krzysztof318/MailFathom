@@ -25,6 +25,11 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
     private readonly Dictionary<MailboxMutationRecordId, MailboxMutationRecord> recordsById = [];
     private readonly Dictionary<string, MailboxMutationRecordId> identities = [];
     private readonly Dictionary<MailFolderResolutionId, MailFolderResolution> folderBindings = [];
+
+    // What each record is held until, for the records opened with a withdrawal window in front of them. Kept beside
+    // the records rather than on one, because it is a column the real store filters on and never publishes: what a
+    // caller reads back is the record, and what a pass sees is what the filter left.
+    private readonly Dictionary<MailboxMutationRecordId, DateTimeOffset> heldUntilByRecord = [];
     private DateTimeOffset now = new(2026, 8, 7, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>Gets how many requests were written down, which is one per idempotency identity however often it was asked.</summary>
@@ -49,6 +54,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
     public Task<MailboxMutationRecord> OpenAsync(
         IPersistenceSession session,
         MailboxMutationRequest request,
+        DateTimeOffset? heldUntil,
         CancellationToken cancellationToken)
     {
         var identity = IdentityOf(request);
@@ -77,7 +83,39 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
         this.identities[identity] = record.Id;
         this.recordsById[record.Id] = record;
 
+        if (heldUntil is { } waitsUntil)
+        {
+            this.heldUntilByRecord[record.Id] = waitsUntil;
+        }
+
         return Task.FromResult(record);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<MailboxMutationRecord>> ReleaseAsync(
+        IPersistenceSession session,
+        MailUserId user,
+        IReadOnlyList<MailboxMutationRecordId> recordIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(recordIds);
+
+        var released = new List<MailboxMutationRecord>(recordIds.Count);
+
+        foreach (var recordId in recordIds.Distinct())
+        {
+            if (this.recordsById.GetValueOrDefault(recordId) is not { } record || record.User != user)
+            {
+                continue;
+            }
+
+            // The stage is left alone, exactly as the real store leaves it: what ends is the wait in front of the
+            // record rather than anything about where it stands.
+            this.heldUntilByRecord.Remove(recordId);
+            released.Add(record);
+        }
+
+        return Task.FromResult<IReadOnlyList<MailboxMutationRecord>>(released);
     }
 
     /// <inheritdoc />
@@ -245,7 +283,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
     {
         IReadOnlyList<MailboxMutationLifecycleCount> counts =
         [
-            .. this.OutstandingOf(account.Id)
+            .. this.UnsettledOf(account.Id)
                 .GroupBy(record => new { record.Request.Mutation, record.Lifecycle })
                 .Select(group => new MailboxMutationLifecycleCount(
                     group.Key.Mutation,
@@ -264,6 +302,14 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
     /// </remarks>
     internal void BindFolder(MailFolderResolution resolution) =>
         this.folderBindings[resolution.Id] = resolution;
+
+    /// <summary>Reads back what a request's record is held until, or <see langword="null" /> where nothing holds it.</summary>
+    /// <remarks>
+    /// The real store keeps this on the row and never publishes it, so a test asserting that a delete waits has to ask
+    /// the store rather than the record. What a pass would see is the filter in <c>ReadOutstandingAsync</c>.
+    /// </remarks>
+    internal DateTimeOffset? HeldUntilOf(MailboxMutationRequest request) =>
+        this.heldUntilByRecord.TryGetValue(this.identities[IdentityOf(request)], out var heldUntil) ? heldUntil : null;
 
     /// <summary>Reads back the one record written for a request, as a test asserts against it.</summary>
     internal MailboxMutationRecord RecordOf(MailboxMutationRequest request) =>
@@ -285,10 +331,16 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
         request.Requester.Identity,
         request.Mutation.Name);
 
-    private IEnumerable<MailboxMutationRecord> OutstandingOf(MailAccountId accountId) =>
+    // Counted without the hold, as the real store counts them: a held delete is still work the account owes, and only
+    // what a pass is handed leaves it out.
+    private IEnumerable<MailboxMutationRecord> UnsettledOf(MailAccountId accountId) =>
         this.recordsById.Values.Where(record => record.Request.Occurrence.AccountId == accountId &&
             record.Stage != MailboxMutationStage.Completed &&
             record.Stage != MailboxMutationStage.Cancelled);
+
+    private IEnumerable<MailboxMutationRecord> OutstandingOf(MailAccountId accountId) =>
+        this.UnsettledOf(accountId)
+            .Where(record => this.heldUntilByRecord.GetValueOrDefault(record.Id, this.now) <= this.now);
 
     private MailFolderResolution BindingOf(MailboxMutationRecord record)
     {

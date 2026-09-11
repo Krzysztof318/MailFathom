@@ -31,12 +31,14 @@ function stored(preferences: {
     expandWholeThread?: boolean;
     aiFiltersShown?: boolean;
     embeddedHtmlMessages?: boolean;
+    notificationSeconds?: number;
 }): string {
     return JSON.stringify({
         markReadOnOpen: true,
         expandWholeThread: false,
         aiFiltersShown: true,
         embeddedHtmlMessages: false,
+        notificationSeconds: 5,
         ...preferences,
     });
 }
@@ -189,6 +191,7 @@ describe('useClientPreferences', () => {
             expandWholeThread: false,
             aiFiltersShown: true,
             embeddedHtmlMessages: false,
+            notificationSeconds: 5,
         });
     });
 
@@ -236,7 +239,65 @@ describe('useClientPreferences', () => {
             expandWholeThread: false,
             aiFiltersShown: false,
             embeddedHtmlMessages: false,
+            notificationSeconds: 5,
         });
+    });
+
+    it('states the whole document when the notification time is the decision that changed', async () => {
+        const { transport, requests } = recording(
+            stored({ telemetryEnabled: false, theme: 'light', openMailInTabs: false }),
+        );
+        const { result } = reading(transport);
+
+        await waitFor(() => {
+            expect(result.current.theme.choice).toBe('light');
+        });
+
+        act(() => {
+            result.current.preferences.chooseNotificationSeconds(12);
+        });
+
+        await waitFor(() => {
+            expect(requests).toHaveLength(2);
+        });
+
+        expect(JSON.parse(requests[1]?.body ?? '')).toStrictEqual({
+            telemetryEnabled: false,
+            theme: 'light',
+            openMailInTabs: false,
+            markReadOnOpen: true,
+            expandWholeThread: false,
+            aiFiltersShown: true,
+            embeddedHtmlMessages: false,
+            notificationSeconds: 12,
+        });
+    });
+
+    // The choice made after the two refused ones is the first thing written, which is what says the refused ones sent
+    // nothing rather than merely arriving later.
+    it('writes nothing for a notification time outside the bound, rather than bringing it inside', async () => {
+        const { transport, requests } = recording(
+            stored({ telemetryEnabled: false, theme: 'light', openMailInTabs: false }),
+        );
+        const { result } = reading(transport);
+
+        await waitFor(() => {
+            expect(result.current.theme.choice).toBe('light');
+        });
+
+        act(() => {
+            result.current.preferences.chooseNotificationSeconds(0);
+            result.current.preferences.chooseNotificationSeconds(31);
+        });
+        act(() => {
+            result.current.preferences.chooseNotificationSeconds(7);
+        });
+
+        await waitFor(() => {
+            expect(requests).toHaveLength(2);
+        });
+
+        expect(JSON.parse(requests[1]?.body ?? '')).toMatchObject({ notificationSeconds: 7 });
     });
 
     it('writes a chosen theme to the deployment and paints it on the device at once', async () => {
@@ -265,6 +326,7 @@ describe('useClientPreferences', () => {
                 expandWholeThread: false,
                 aiFiltersShown: true,
                 embeddedHtmlMessages: false,
+                notificationSeconds: 5,
             });
         });
     });
@@ -321,6 +383,7 @@ describe('useClientPreferences', () => {
             expandWholeThread: false,
             aiFiltersShown: true,
             embeddedHtmlMessages: false,
+            notificationSeconds: 5,
         });
     });
 
@@ -389,6 +452,7 @@ describe('useClientPreferences', () => {
             expandWholeThread: false,
             aiFiltersShown: true,
             embeddedHtmlMessages: false,
+            notificationSeconds: 5,
         });
     });
 
@@ -422,6 +486,7 @@ describe('useClientPreferences', () => {
             expandWholeThread: false,
             aiFiltersShown: true,
             embeddedHtmlMessages: false,
+            notificationSeconds: 5,
         });
         expect(window.localStorage.getItem(telemetryKey(anna))).toBe('false');
     });

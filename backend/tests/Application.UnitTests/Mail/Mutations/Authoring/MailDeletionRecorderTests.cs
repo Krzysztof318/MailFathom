@@ -62,7 +62,7 @@ public sealed class MailDeletionRecorderTests
         var recorder = this.Recorder(target);
 
         // Act
-        var result = await recorder.RecordAsync(LocalEmail, Requester, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(LocalEmail, Requester, withdrawalWindow: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailDeletionOutcome.Recorded, result.Outcome);
@@ -91,7 +91,7 @@ public sealed class MailDeletionRecorderTests
         var recorder = this.Recorder(TargetIn(Trash));
 
         // Act
-        await recorder.RecordAsync(LocalEmail, Requester, TestContext.Current.CancellationToken);
+        await recorder.RecordAsync(LocalEmail, Requester, withdrawalWindow: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(configured, Assert.Single(this.records.OpenedRequests).LocalDisposition);
@@ -111,7 +111,7 @@ public sealed class MailDeletionRecorderTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
-            recorder.RecordAsync(LocalEmail, Requester, TestContext.Current.CancellationToken));
+            recorder.RecordAsync(LocalEmail, Requester, withdrawalWindow: null, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFathomPermission.MailDelete, refusal.RequiredPermission);
@@ -126,7 +126,7 @@ public sealed class MailDeletionRecorderTests
         var recorder = this.Recorder(TargetIn(Withheld));
 
         // Act
-        var result = await recorder.RecordAsync(LocalEmail, Requester, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(LocalEmail, Requester, withdrawalWindow: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailDeletionOutcome.MessageNotFound, result.Outcome);
@@ -142,7 +142,7 @@ public sealed class MailDeletionRecorderTests
         var recorder = this.Recorder(target: null);
 
         // Act
-        var result = await recorder.RecordAsync(LocalEmail, Requester, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(LocalEmail, Requester, withdrawalWindow: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailDeletionOutcome.MessageNotFound, result.Outcome);
@@ -163,7 +163,7 @@ public sealed class MailDeletionRecorderTests
         var recorder = this.Recorder(TargetIn(Trash));
 
         // Act
-        var result = await recorder.RecordAsync(LocalEmail, Requester, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(LocalEmail, Requester, withdrawalWindow: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailDeletionOutcome.AccountNoLongerConfigured, result.Outcome);
@@ -178,8 +178,8 @@ public sealed class MailDeletionRecorderTests
         var recorder = this.Recorder(TargetIn(Trash));
 
         // Act
-        var first = await recorder.RecordAsync(LocalEmail, Requester, TestContext.Current.CancellationToken);
-        var second = await recorder.RecordAsync(LocalEmail, Requester, TestContext.Current.CancellationToken);
+        var first = await recorder.RecordAsync(LocalEmail, Requester, withdrawalWindow: null, TestContext.Current.CancellationToken);
+        var second = await recorder.RecordAsync(LocalEmail, Requester, withdrawalWindow: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, this.records.OpenedRecordCount);
@@ -194,7 +194,7 @@ public sealed class MailDeletionRecorderTests
         var recorder = this.Recorder(TargetIn(MailFolderAlias.Create("INBOX")));
 
         // Act
-        var result = await recorder.RecordAsync(LocalEmail, Requester, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(LocalEmail, Requester, withdrawalWindow: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailDeletionOutcome.Recorded, result.Outcome);
@@ -210,12 +210,98 @@ public sealed class MailDeletionRecorderTests
         var recorder = this.Recorder(TargetIn(Trash), runSignal: runSignal);
 
         // Act
-        await recorder.RecordAsync(LocalEmail, Requester, TestContext.Current.CancellationToken);
+        await recorder.RecordAsync(LocalEmail, Requester, withdrawalWindow: null, TestContext.Current.CancellationToken);
 
         // Assert
         using var waiting = runSignal.Register(Account.Id, TestContext.Current.CancellationToken);
 
         Assert.True(waiting.Token.IsCancellationRequested);
+    }
+
+    /// <summary>
+    /// A delete a person may still take back is written down held, and the account is deliberately left asleep: a pass
+    /// brought forward now would issue the command while the way back is still on their screen.
+    /// </summary>
+    [Fact]
+    public async Task RecordAsync_ADeleteCarryingAWithdrawalWindow_HoldsTheRecordAndLeavesTheAccountAsleep()
+    {
+        // Arrange
+        var runSignal = new MailAccountRunSignal();
+        var recorder = this.Recorder(TargetIn(Trash), runSignal: runSignal);
+
+        // Act
+        await recorder.RecordAsync(
+            LocalEmail,
+            Requester,
+            TimeSpan.FromSeconds(15),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        using var waiting = runSignal.Register(Account.Id, TestContext.Current.CancellationToken);
+
+        Assert.False(waiting.Token.IsCancellationRequested);
+        Assert.Equal(
+            RecordedAt + TimeSpan.FromSeconds(15),
+            this.records.HeldUntilOf(Assert.Single(this.records.OpenedRequests)));
+    }
+
+    /// <summary>A caller naming no window is every caller but the client's own, and its delete waits for nothing.</summary>
+    [Fact]
+    public async Task RecordAsync_ADeleteCarryingNoWithdrawalWindow_HoldsTheRecordForNoTime()
+    {
+        // Arrange
+        var recorder = this.Recorder(TargetIn(Trash));
+
+        // Act
+        await recorder.RecordAsync(LocalEmail, Requester, withdrawalWindow: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(this.records.HeldUntilOf(Assert.Single(this.records.OpenedRequests)));
+    }
+
+    /// <summary>
+    /// A zero window is no wait at all, so it is written down as the unheld record it is and brings the account forward
+    /// like one — rather than held until the instant it was written, which a pass would find due and nothing would wake.
+    /// </summary>
+    [Fact]
+    public async Task RecordAsync_ADeleteCarryingAZeroWithdrawalWindow_IsRecordedUnheldAndBringsTheRunForward()
+    {
+        // Arrange
+        var runSignal = new MailAccountRunSignal();
+        var recorder = this.Recorder(TargetIn(Trash), runSignal: runSignal);
+
+        // Act
+        await recorder.RecordAsync(LocalEmail, Requester, TimeSpan.Zero, TestContext.Current.CancellationToken);
+
+        // Assert
+        using var waiting = runSignal.Register(Account.Id, TestContext.Current.CancellationToken);
+
+        Assert.True(waiting.Token.IsCancellationRequested);
+        Assert.Null(this.records.HeldUntilOf(Assert.Single(this.records.OpenedRequests)));
+    }
+
+    /// <summary>
+    /// The grant is asked before the window is measured, as a withdrawal asks it before it measures a batch, so a caller
+    /// holding nothing is refused as unauthorized whatever else is wrong with what it sent.
+    /// </summary>
+    [Fact]
+    public async Task RecordAsync_ACallerWithoutTheGrantNamingANegativeWindow_IsRefusedAsUnauthorized()
+    {
+        // Arrange
+        var recorder = this.Recorder(
+            TargetIn(Trash),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailFlagsWrite));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => recorder.RecordAsync(
+            LocalEmail,
+            Requester,
+            TimeSpan.FromSeconds(-1),
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailDelete, refusal.RequiredPermission);
+        Assert.Equal(0, this.records.OpenedRecordCount);
     }
 
     private MailDeletionRecorder Recorder(
@@ -251,7 +337,8 @@ public sealed class MailDeletionRecorderTests
                 sessions,
                 new PersistenceConcurrencyOptions(),
                 new FakeTimeProvider(RecordedAt)),
-            runSignal ?? new MailAccountRunSignal());
+            runSignal ?? new MailAccountRunSignal(),
+            new FakeTimeProvider(RecordedAt));
     }
 
     private static AuthoredMailboxTarget TargetIn(MailFolderAlias folderAlias)

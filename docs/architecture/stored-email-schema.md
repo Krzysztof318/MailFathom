@@ -761,6 +761,15 @@ withdrawn. It is terminal like `Completed` and `Abandoned`, and unlike `Abandone
 it is a stage of its own rather than a reuse of the one that means *stuck, and a person should look*. The stage is
 stored by name, so it needed no migration.
 
+`HeldUntil` is the one way a record at `Recorded` is kept from the account's pass. It is null on every record but a
+delete a person asked for through the client endpoint, where it is the instant their own notification time and a
+ten-second grace run out: until then the pass does not take the record in hand, and a withdrawal can still reach
+`Cancelled` because nothing has been issued. It is written with the row rather than computed from the person's current
+preference, so the window a delete opened under is the window it keeps whatever that preference is changed to while it
+waits. A client that stops offering the way back clears it to null, which ends the wait at once; a client that
+never does leaves it to elapse, and the record is taken in hand exactly as if it had. A null is the ordinary record,
+taken in hand on the next pass as it always was.
+
 `PlacementIssued` is the one stage a retry may not act on. A `COPY` issued twice is a second message rather than a
 repeat of the first, so a mutation found there is reported as an unknown outcome, has
 `MailboxMutationOutcomeUnknown` (25002) written to `LastFailureCode` so an operator reading the row sees why it is

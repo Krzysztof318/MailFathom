@@ -258,6 +258,29 @@ afterEach(() => {
 });
 
 describe('MessageList', () => {
+    // An act that files a message elsewhere is the reader's, so the row goes at the press rather than when the
+    // deployment next agrees — and it comes back where it stood the moment the act is let go of, which is all a
+    // refusal leaves behind.
+    it('draws no row for a message just asked to be filed elsewhere, and draws it again once the act is let go of', async () => {
+        const transport = answering(wholeFolder);
+        const leaving: MailboxActs = {
+            ...nothingActed,
+            asked: new Map([['message-2', { act: 'archive', from: 'INBOX', leaves: true }]]),
+        };
+        const drawn = renderList(transport, { acts: leaving });
+
+        await rows();
+
+        expect(row(1)).toBeDefined();
+        expect(
+            within(screen.getByRole('listbox', { name: 'Messages' })).queryByRole('option', { name: /Message 2$/ }),
+        ).toBeNull();
+
+        drawn.rerender(listUnder(transport, { acts: nothingActed }));
+
+        expect(row(2)).toBeDefined();
+    });
+
     it('says it is reading from the moment the read starts, where the mail will appear', () => {
         renderList(() => new Promise(() => undefined));
 
@@ -401,6 +424,24 @@ describe('MessageList', () => {
         renderList(answering(pageOf([])));
 
         expect(await screen.findByText('There is no mail in this folder.')).toBeDefined();
+    });
+
+    // A folder every row of which was asked to leave is empty from where the reader stands, and the act landing changes
+    // nothing the list holds — the read it would take to see it is not asked again — so it says so now rather than
+    // standing in a state no act ends.
+    it('says a folder is empty once every message drawn in it has been asked to leave', async () => {
+        renderList(answering(pageOf([message(0), message(1)])), {
+            acts: {
+                ...nothingActed,
+                asked: new Map([
+                    ['message-0', { act: 'archive', from: 'INBOX', leaves: true }],
+                    ['message-1', { act: 'archive', from: 'INBOX', leaves: true }],
+                ]),
+            },
+        });
+
+        expect(await screen.findByText('There is no mail in this folder.')).toBeDefined();
+        expect(screen.queryByRole('listbox', { name: 'Messages' })).toBeNull();
     });
 
     it('tells a folder nothing has been taken into yet apart from an empty one', async () => {

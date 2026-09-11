@@ -204,6 +204,7 @@ public sealed class MailboxChangeProgressReaderTests
     private Task<MailboxMutationRecord> OpenAsync(MailboxMutationRequest request) => this.records.OpenAsync(
         Substitute.For<IPersistenceSession>(),
         request,
+        heldUntil: null,
         TestContext.Current.CancellationToken);
 
     private MailboxChangeProgressReader Reader(AccessAuthorization? authorization = null)

@@ -26,7 +26,7 @@ import { Skeleton } from '../controls/Skeleton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { ActQuestions } from '../mailboxActs/ActQuestions';
-import { opensAsDraft, useMailboxActs, type ActedMessage } from '../mailboxActs/useMailboxActs';
+import { actLeaving, opensAsDraft, useMailboxActs, type ActedMessage } from '../mailboxActs/useMailboxActs';
 import { useComposing } from '../composer/useComposing';
 import { MessageReading } from '../messageRows/MessageReading';
 import { leadingReading, readingsOf } from '../messageRows/messageReadings';
@@ -51,6 +51,7 @@ import {
     rowCountOf,
     trimmedAround,
     wantedFor,
+    withoutLeaving,
     type HeldTimeline,
     type TimelineRead,
 } from './heldTimeline';
@@ -173,19 +174,31 @@ export function MessageList({
     const dragging = useRef(false);
     const wantsFocus = useRef(false);
 
-    const rowCount = rowCountOf(held);
+    // What is drawn is what the deployment answered, less the rows somebody has just asked to have filed elsewhere.
+    // Derived here rather than written into what is held, for the reason `withoutLeaving` gives: the deployment answers
+    // the pre-change state for as long as its own pass takes, so a row taken out of the held pages would come back on
+    // the next read of one — and a refusal has nothing to put back, whereas letting the act go from the map this is
+    // derived from puts the row where it stood.
+    //
+    // Every reading below is against this rather than against `held`, so the row count, the window, the page wanted,
+    // and the keyboard all agree with what is on the screen. What writes back into `held` agrees with it too: a page is
+    // named by its slot, which this never drops, so the page a read refills is the same page either way, and the
+    // trimming is handed what is leaving so that it counts rows in the numbering the window was worked out in.
+    const shown = withoutLeaving(held, (email) => actLeaving(acts, email));
+
+    const rowCount = rowCountOf(shown);
     const drawn = windowOf(rowCount, rowHeight, scrollTop, viewport);
     const lastDrawn = drawn.first + drawn.count - 1;
-    const rows = heldRows(held);
+    const rows = heldRows(shown);
 
     // The message the open menu is about, worked out during render rather than held beside which row was pressed: a
     // page dropped under a menu that is still open would otherwise leave a menu naming mail this list no longer holds.
-    const pressedRow = pressed === null ? null : rowAt(held, pressed.row);
+    const pressedRow = pressed === null ? null : rowAt(shown, pressed.row);
 
     // Whether the row the keyboard is on is a row rather than the space one is arriving into. The effect below waits on
     // it: a keyboard that reached a dropped page has nothing to put focus on until that page answers, and refilling one
     // changes neither the row count nor the window — so this is what says the row is there now.
-    const focusedIsDrawn = rowAt(held, focusedRow) !== null;
+    const focusedIsDrawn = rowAt(shown, focusedRow) !== null;
 
     // Which page is wanted is worked out during render rather than kept beside what is held, because it is a function
     // of what is held and where the window is: two pieces of state that have to agree are one piece of state and a
@@ -202,10 +215,10 @@ export function MessageList({
     const wanted =
         !online || failure !== null
             ? null
-            : held.slots.length === 0
+            : shown.slots.length === 0
               ? { cursor: opening.cursor, direction: opening.readAs, refilling: null }
               : restored || rowCount === 0
-                ? wantedFor(held, drawn.first, lastDrawn)
+                ? wantedFor(shown, drawn.first, lastDrawn)
                 : null;
 
     // Named apart so the effect below depends on what the request *is* rather than on the object naming it. A fresh
@@ -267,7 +280,7 @@ export function MessageList({
     // both times, so nothing here re-renders.
     useEffect(() => {
         function keep(): void {
-            const position = positionOfRow(held, leadingRow(scrollTop, rowHeight));
+            const position = positionOfRow(shown, leadingRow(scrollTop, rowHeight));
 
             if (position !== null) {
                 rememberListing(session.baseAddress, scope, { ...listing, readingsShown, ...position });
@@ -281,7 +294,7 @@ export function MessageList({
             window.clearTimeout(timer);
             window.removeEventListener('pagehide', keep);
         };
-    }, [held, scrollTop, rowHeight, listing, readingsShown, scope, session.baseAddress]);
+    }, [shown, scrollTop, rowHeight, listing, readingsShown, scope, session.baseAddress]);
 
     // The two measurements the window is arithmetic over, taken after the browser has laid the list out rather than
     // written down as numbers here. One element each, on a commit that has already happened: the row height is a token
@@ -384,52 +397,6 @@ export function MessageList({
         };
     }, []);
 
-    // Taking the listing in at once is asked for from the selection bar, which stands above this column and holds none
-    // of what *everything* means: the rows this list is holding are a window over a folder rather than the folder. So
-    // the bar draws the control and this performs it, and a screen with no list on it performs nothing.
-    //
-    // Registered on every render rather than against a dependency list, because what is registered closes over the rows
-    // held at that moment — and it is a reference being written rather than state being set, so nothing re-renders.
-    useEffect(() => {
-        listed.listing({
-            selectAll: () => {
-                select(rows.map(identityOf));
-            },
-
-            // Straight onto the row where it is drawn, and asked of the next commit where it is not: the bar hands
-            // focus over before it clears the selection, so the row is in the document at that moment, and a list
-            // scrolled away from the focused row is the case the commit below answers.
-            takeFocus: () => {
-                const row = elements.current.get(focusedRow);
-
-                if (row === undefined) {
-                    wantsFocus.current = true;
-                } else {
-                    row.focus();
-                }
-            },
-
-            // A standing view in the tree is a shortcut to filters on the folder in front of the reader, so it lands
-            // here as any other filter change does — the same restart, the same remembered listing, and the criteria
-            // then drawn in the panel where every other narrowing is.
-            stand: (view) => {
-                readWith({ ...listing, filters: narrowedToView(listing.filters, view, new Date()) });
-            },
-
-            // The same act the deployment's own arrival signal performs, and deliberately the same one: the leading
-            // page is let go of and read again while the reader is looking at it, so the list is never emptied and
-            // never stands as a skeleton of itself. A reader who has scrolled away keeps every row in front of them
-            // and meets the new leading page when they come back to it.
-            readAgain: () => {
-                setHeld(arrivalNoticed);
-            },
-        });
-
-        return () => {
-            listed.listing(null);
-        };
-    });
-
     // Scrolling is where the list stops holding what the reader has moved away from. Here rather than in an effect
     // watching the window, because dropping rows is what a scroll did rather than something to reconcile afterwards —
     // and `trimmedAround` answers with the list it was given where nothing was far enough to drop, so the ordinary
@@ -440,7 +407,7 @@ export function MessageList({
         const moved = windowOf(rowCount, rowHeight, top, viewport);
         const last = moved.first + moved.count - 1;
 
-        setHeld((current) => trimmedAround(current, moved.first, last));
+        setHeld((current) => trimmedAround(current, moved.first, last, (email) => actLeaving(acts, email)));
 
         // What the rows that moved are let go of, and it is a scroll rather than an animation that does it: a row
         // carried out of the window is unmounted, and an unmounted row never reports its own animation ending. Asked
@@ -449,7 +416,7 @@ export function MessageList({
             const stillDrawn = new Set<string>();
 
             for (let row = moved.first; row <= last; row += 1) {
-                const email = rowAt(held, row);
+                const email = rowAt(shown, row);
 
                 if (email !== null) {
                     stillDrawn.add(email.id);
@@ -497,18 +464,64 @@ export function MessageList({
         setScrollTop(0);
     }
 
+    // Taking the listing in at once is asked for from the selection bar, which stands above this column and holds none
+    // of what *everything* means: the rows this list is holding are a window over a folder rather than the folder. So
+    // the bar draws the control and this performs it, and a screen with no list on it performs nothing.
+    //
+    // Registered on every render rather than against a dependency list, because what is registered closes over the rows
+    // held at that moment — and it is a reference being written rather than state being set, so nothing re-renders.
+    useEffect(() => {
+        listed.listing({
+            selectAll: () => {
+                select(rows.map(identityOf));
+            },
+
+            // Straight onto the row where it is drawn, and asked of the next commit where it is not: the bar hands
+            // focus over before it clears the selection, so the row is in the document at that moment, and a list
+            // scrolled away from the focused row is the case the commit below answers.
+            takeFocus: () => {
+                const row = elements.current.get(focusedRow);
+
+                if (row === undefined) {
+                    wantsFocus.current = true;
+                } else {
+                    row.focus();
+                }
+            },
+
+            // A standing view in the tree is a shortcut to filters on the folder in front of the reader, so it lands
+            // here as any other filter change does — the same restart, the same remembered listing, and the criteria
+            // then drawn in the panel where every other narrowing is.
+            stand: (view) => {
+                readWith({ ...listing, filters: narrowedToView(listing.filters, view, new Date()) });
+            },
+
+            // The same act the deployment's own arrival signal performs, and deliberately the same one: the leading
+            // page is let go of and read again while the reader is looking at it, so the list is never emptied and
+            // never stands as a skeleton of itself. A reader who has scrolled away keeps every row in front of them
+            // and meets the new leading page when they come back to it.
+            readAgain: () => {
+                setHeld(arrivalNoticed);
+            },
+        });
+
+        return () => {
+            listed.listing(null);
+        };
+    });
+
     // Turning the readings on or off for this folder, which reads no page: the rows already held stop saying what
     // MailFathom made of them, or start, and the reader stays on the row they were on. Written down on the press for
     // the reason `readWith` writes there — this is a choice somebody made rather than a position they drifted to, and
     // leaving the moment after making it keeps it.
-    function drawReadings(shown: boolean): void {
-        setReadingsShown(shown);
+    function drawReadings(readings: boolean): void {
+        setReadingsShown(readings);
 
-        const position = positionOfRow(held, leadingRow(scrollTop, rowHeight));
+        const position = positionOfRow(shown, leadingRow(scrollTop, rowHeight));
 
         rememberListing(session.baseAddress, scope, {
             ...listing,
-            readingsShown: shown,
+            readingsShown: readings,
             ...(position ?? { cursor: opening.cursor, readAs: opening.readAs, rowInPage: opening.rowInPage }),
         });
     }
@@ -529,18 +542,17 @@ export function MessageList({
     // Opening what MailFathom made of one message, offered only where it made something of it. It is reached from the
     // row's menu because the row is an `option` of a listbox and holds no focusable descendant of its own —
     // `messageRows/ReadingsAsked.tsx` holds the whole of that reasoning.
-    function checkingReadings(email: MailTimelineEntry): (() => void) | undefined {
-        const marks = readingsOf(email.enrichment);
+    //
+    // A handler taking the message rather than a function answering one per message, because the handler reaches a
+    // ref: one built by a call made while the list renders is a call the compiler cannot tell is never made there.
+    function checkReadings(email: MailTimelineEntry): void {
+        setAskedReadings({ storedEmailId: email.id, subject: email.subject, marks: readingsOf(email.enrichment) });
+        closeMenu();
+        checking.current?.showModal();
+    }
 
-        if (marks.length === 0) {
-            return undefined;
-        }
-
-        return () => {
-            setAskedReadings({ storedEmailId: email.id, subject: email.subject, marks });
-            closeMenu();
-            checking.current?.showModal();
-        };
+    function hasReadings(email: MailTimelineEntry): boolean {
+        return readingsOf(email.enrichment).length > 0;
     }
 
     function reveal(row: number): void {
@@ -566,7 +578,7 @@ export function MessageList({
         setFocusedRow(reached);
         wantsFocus.current = true;
 
-        const email = rowAt(held, reached);
+        const email = rowAt(shown, reached);
 
         if (email === null || keepingSelection) {
             return;
@@ -582,7 +594,7 @@ export function MessageList({
     }
 
     function open(row: number): void {
-        const email = rowAt(held, row);
+        const email = rowAt(shown, row);
 
         if (email !== null) {
             opened(email);
@@ -604,7 +616,7 @@ export function MessageList({
     }
 
     function point(event: PointerEvent<HTMLLIElement>, row: number): void {
-        const email = rowAt(held, row);
+        const email = rowAt(shown, row);
 
         if (email === null) {
             return;
@@ -670,7 +682,7 @@ export function MessageList({
     // performs. Absent where the client cannot do it — a deployment that refuses a draft, or an account whose archive
     // folder is not known — so the row springs back rather than promising an act nobody would see happen.
     function answering(row: number): (() => void) | undefined {
-        const email = rowAt(held, row);
+        const email = rowAt(shown, row);
 
         if (email === null || !composing.offered) {
             return undefined;
@@ -685,7 +697,7 @@ export function MessageList({
     }
 
     function filingAway(row: number): (() => void) | undefined {
-        const email = rowAt(held, row);
+        const email = rowAt(shown, row);
 
         if (email === null) {
             return undefined;
@@ -709,7 +721,7 @@ export function MessageList({
     }
 
     function dragOver(row: number): void {
-        const email = rowAt(held, row);
+        const email = rowAt(shown, row);
 
         if (!dragging.current || email === null || anchor === null) {
             return;
@@ -730,7 +742,7 @@ export function MessageList({
                 moveTo(0, event.shiftKey, event.ctrlKey || event.metaKey);
                 break;
             case ' ': {
-                const email = rowAt(held, focusedRow);
+                const email = rowAt(shown, focusedRow);
 
                 if (email !== null) {
                     setAnchor(email.id);
@@ -826,6 +838,9 @@ export function MessageList({
                 </div>
             )}
 
+            {/* A folder whose every drawn row has been asked to leave is empty from where the reader stands, and says so
+                rather than waiting to: nothing reads it again once the act lands, so a state kept for "not yet" would be
+                one no act ever ends. A refusal brings the rows back, exactly as it brings one back. */}
             {rowCount === 0 ? (
                 <Note>{translate(emptyReason(accounts, scope, listing))}</Note>
             ) : (
@@ -854,7 +869,7 @@ export function MessageList({
                         onKeyDown={onKeyDown}
                     >
                         {Array.from({ length: drawn.count }, (_, at) => drawn.first + at).map((row) => {
-                            const email = rowAt(held, row);
+                            const email = rowAt(shown, row);
 
                             return email === null ? (
                                 <ArrivingRow key={`arriving-${String(row)}`} position={row + 1} />
@@ -873,7 +888,13 @@ export function MessageList({
                                         setChangedRows((rows) => rowSettled(rows, email.id));
                                     }}
                                     note={readingOn(email)}
-                                    onReadings={checkingReadings(email)}
+                                    onReadings={
+                                        hasReadings(email)
+                                            ? () => {
+                                                  checkReadings(email);
+                                              }
+                                            : undefined
+                                    }
                                     onOpen={() => {
                                         open(row);
                                     }}
@@ -909,7 +930,7 @@ export function MessageList({
                         </p>
                     ) : null}
 
-                    {cursorAfter(held) === null ? (
+                    {cursorAfter(shown) === null ? (
                         <p className="px-3 py-2 text-sm text-faint">{translate('list.wholeFolderRead')}</p>
                     ) : null}
                 </div>
@@ -928,7 +949,13 @@ export function MessageList({
                         select(withToggled(workspace.selected, pressedRow.id));
                     }}
                     onAsk={ask}
-                    onCheckReadings={checkingReadings(pressedRow)}
+                    onCheckReadings={
+                        hasReadings(pressedRow)
+                            ? () => {
+                                  checkReadings(pressedRow);
+                              }
+                            : undefined
+                    }
                     onClose={closeMenu}
                 />
             )}

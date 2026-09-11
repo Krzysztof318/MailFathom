@@ -11,6 +11,8 @@ import {
     mostRecordsPerRead,
     moveMail,
     readMailMutationRecords,
+    releaseMailDeletes,
+    withdrawMailDeletes,
 } from './mailMutations';
 import type { ClientSession } from './session';
 import type { ClientRequest, ClientResponse, MailFathomTransport } from './transport';
@@ -382,6 +384,76 @@ describe('deleteMail', () => {
 
     it('says the credential may not delete mail where the deployment refused it, which is its own grant', async () => {
         const answer = await deleteMail(session, answering({ status: 403, body: '' }), [storedEmailId]);
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unauthorized', status: 403 } });
+    });
+});
+
+// The two ends of the wait in front of a delete. Both name records rather than messages, and both answer with each
+// record as it now stands, so what a client learns from either is read exactly as a read of those records is.
+describe.each([
+    ['withdrawMailDeletes', withdrawMailDeletes, 'withdrawals'],
+    ['releaseMailDeletes', releaseMailDeletes, 'releases'],
+] as const)('%s', (_, ask, route) => {
+    it(`names the records on the client surface’s delete ${route} route`, async () => {
+        const { transport, requests } = recording({ status: 200, body: JSON.stringify({ changes: [] }) });
+
+        await ask(session, transport, [recordId]);
+
+        expect(requests[0]?.method).toBe('POST');
+        expect(requests[0]?.path).toBe(`https://mail.example.invalid/api/client/mutations/deletes/${route}`);
+        expect(JSON.parse(requests[0]?.body ?? '')).toStrictEqual({ recordIds: [recordId] });
+    });
+
+    it('answers where each record now stands', async () => {
+        const answer = await ask(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({
+                    changes: [{ recordId, storedEmailId, state: 'cancelled', outcomeUnknown: false }],
+                }),
+            }),
+            [recordId],
+        );
+
+        expect(answer).toStrictEqual({
+            outcome: 'read',
+            value: [{ recordId, storedEmailId, state: 'cancelled', outcomeUnknown: false }],
+        });
+    });
+
+    it('names no more records than one submission may carry', async () => {
+        const asked = Array.from({ length: mostMessagesPerMutation + 5 }, (_, at) => `record-${String(at)}`);
+        const { transport, requests } = recording({ status: 200, body: JSON.stringify({ changes: [] }) });
+
+        await ask(session, transport, asked);
+
+        const sent = JSON.parse(requests[0]?.body ?? '') as { recordIds: readonly unknown[] };
+
+        expect(sent.recordIds).toHaveLength(mostMessagesPerMutation);
+    });
+
+    it('refuses an answer naming more records than it asked about', async () => {
+        const answer = await ask(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({
+                    changes: [
+                        { recordId, storedEmailId, state: 'pending', outcomeUnknown: false },
+                        { recordId: 'another', storedEmailId, state: 'pending', outcomeUnknown: false },
+                    ],
+                }),
+            }),
+            [recordId],
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    it('says the credential may not delete mail where the deployment refused it', async () => {
+        const answer = await ask(session, answering({ status: 403, body: '' }), [recordId]);
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unauthorized', status: 403 } });
     });

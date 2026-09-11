@@ -1173,10 +1173,12 @@ public static class ServiceCollectionExtensions
         // mail in the trash is reversible and this is not, so a deployment decides the two separately.
         services.AddScoped<MailDeletionRecorder>();
 
-        // What a caller does with a record after it has one — read where it got to, and withdraw it while nothing has
-        // been asked of the server. Both are about records already opened, which is why neither depends on an author.
+        // What a caller does with a record after it has one — read where it got to, withdraw it while nothing has been
+        // asked of the server, and end the wait a held one was opened under. All three are about records already
+        // opened, which is why none of them depends on an author.
         services.AddScoped<MailboxChangeProgressReader>();
         services.AddScoped<MailboxChangeWithdrawer>();
+        services.AddScoped<MailboxChangeReleaser>();
     }
 
     /// <summary>Registers the outbox, the drafts beside it, the bounds a send is judged against, and every use case that authors one.</summary>

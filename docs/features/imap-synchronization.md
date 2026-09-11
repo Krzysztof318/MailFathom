@@ -754,6 +754,7 @@ every screen an operator reads.
 | Where a change is left | What the next run does |
 | --- | --- |
 | Recorded, nothing issued | Issues it, from the beginning |
+| Recorded, and still held for a way back | Nothing yet; it is issued from the beginning once the hold runs out |
 | A relocation whose copy the server confirmed | Removes the source; the copy is never repeated |
 | A delete whose `\Deleted` flag landed | Reissues the expunge alone |
 | A placement whose answer never arrived | Never reissues it — see below |
@@ -764,7 +765,10 @@ A withdrawal is the third ending, and it is the person who asked for the change 
 here deciding: a record still at *recorded* is moved to *cancelled*, and no run ever reads it. It is reachable from that
 one stage alone, so nothing withdraws a command already issued. [The client
 endpoint](../operations/client-endpoint.md#the-mutation-routes) is where a person does it, which is what makes a change
-against an unreachable account something they can change their mind about rather than something they wait out.
+against an unreachable account something they can change their mind about rather than something they wait out. A
+delete asked for there is also held at *recorded* for the person's own notification time and a short grace before any
+run takes it in hand, so that permanent act has a moment in which a withdrawal still has something to take back; a
+delete a rule, a spam verdict, or an MCP tool writes is held for nothing.
 
 An unacknowledged placement is the one case that cannot simply be resumed, and how it ends depends on which sequence
 issued it. A relocation the server carried with `MOVE` removes the source as part of the same command, so once

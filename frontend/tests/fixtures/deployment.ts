@@ -64,6 +64,7 @@ export const clientPreferences = {
     expandWholeThread: false,
     embeddedHtmlMessages: false,
     aiFiltersShown: true,
+    notificationSeconds: 5,
 };
 
 /** The mailbox everything else in the corpus belongs to, up to date and with nothing to say about itself. */
