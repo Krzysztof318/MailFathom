@@ -23,11 +23,16 @@ set -euo pipefail
 # against it. What appears in the pull request is then the manifests themselves — a changed image reference, a dropped
 # volume, a security context that stopped being applied — rather than the absence of a failure.
 #
+# And some values documents are supposed to be refused rather than rendered. Those live under `ci/refusals/`, each
+# carrying the wording its refusal has to contain, and this requires the chart to refuse each one and to name the
+# setting while doing so — which no golden manifest can record, a refusal producing none.
+#
 # Nothing here reaches a cluster or a network. `helm template` renders; it does not admit, and the values documents name
 # no real image, database, or host.
 
 readonly chart_directory='deploy/helm/mailfathom'
 readonly golden_directory="$chart_directory/ci/golden"
+readonly refusals_directory="$chart_directory/ci/refusals"
 readonly release_name='mailfathom'
 
 if ! repository_root="$(git rev-parse --show-toplevel 2> /dev/null)"; then
@@ -200,6 +205,46 @@ while IFS= read -r golden_file; do
     "$golden_file" "$chart_directory" >&2
   differing_charts=$(( differing_charts + 1 ))
 done < <(find "$golden_directory" -maxdepth 1 -name '*.yaml' -type f | sort)
+
+# The other half of what the chart promises, and the half a rendering cannot show: some values documents are supposed to
+# be refused. A combination the chart accepts by accident is invisible in every golden manifest here, because what it
+# produces is a plausible rendering — so each refusal is a values document of its own under `ci/refusals/`, and this
+# requires the chart to refuse it and to say which setting is wrong while doing so.
+#
+# The expected wording lives in the document rather than here, on the `# refuses:` line, so a refusal and the reason it
+# is expected sit in one file. Matching it is what separates a chart that refused this document from one that refuses
+# every document: without it, a typo in the values would pass as a refusal.
+while IFS= read -r refusal_document; do
+  printf '\n--- %s ---\n' "$refusal_document"
+
+  expected_refusal="$(sed -n 's/^# refuses: //p' "$refusal_document" | head -1)"
+
+  if [[ -z "$expected_refusal" ]]; then
+    printf '::error::%s carries no "# refuses: <wording>" line, so nothing states which refusal it is for.\n' \
+      "$refusal_document" >&2
+    differing_charts=$(( differing_charts + 1 ))
+
+    continue
+  fi
+
+  if refusal="$(helm template "$release_name" "$chart_directory" --values "$refusal_document" 2>&1)"; then
+    printf '::error::The chart renders %s instead of refusing it.\n' "$refusal_document" >&2
+    differing_charts=$(( differing_charts + 1 ))
+
+    continue
+  fi
+
+  if [[ "$refusal" != *"$expected_refusal"* ]]; then
+    printf '::error::The chart refuses %s for another reason than the one it records.\n' "$refusal_document" >&2
+    printf 'Expected the refusal to say: %s\n' "$expected_refusal" >&2
+    printf '%s\n' "$refusal" >&2
+    differing_charts=$(( differing_charts + 1 ))
+
+    continue
+  fi
+
+  printf 'The chart refuses %s, naming the setting.\n' "$refusal_document"
+done < <(find "$refusals_directory" -maxdepth 1 -name '*-values.yaml' -type f | sort)
 
 if [[ "$differing_charts" -ne 0 ]]; then
   exit 1

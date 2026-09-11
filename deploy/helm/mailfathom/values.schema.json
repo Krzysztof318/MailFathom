@@ -652,6 +652,165 @@
       },
       "additionalProperties": false
     },
+    "signalBackplane": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "connectionStringSecretKey",
+        "channelPrefix",
+        "garnet"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether signals raised on one replica reach the client connections another replica holds. Off renders no workload, no Service for one, and sets no configuration key, which is the supported shape for a single replica. The chart's own validation refuses off where replicaCount is above 1 and the client surface is served, because that is the one configuration that installs, serves, and silently tells its clients nothing."
+        },
+        "connectionStringSecretKey": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "description": "A key inside secrets.existingSecret holding the whole StackExchange.Redis connection string rather than the string itself. Required once enabled is true, which the chart's own validation is what refuses, so that a deployment running no backplane is not made to name a key nothing reads. The chart templates no credential, so this becomes a file: reference into the Secret the pod already mounts. It is the same key whether the chart runs the server or points at one somebody else operates. The pattern and the length are what MailFathom accepts as a secret name."
+        },
+        "channelPrefix": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What every channel this deployment publishes to and subscribes to begins with. Two MailFathom deployments sharing one RESP endpoint at the same prefix receive each other's statements, so a shared endpoint needs one of its own."
+        },
+        "garnet": {
+          "type": "object",
+          "required": [
+            "deploy",
+            "passwordSecretKey",
+            "image",
+            "service",
+            "resources",
+            "podSecurityContext",
+            "containerSecurityContext"
+          ],
+          "properties": {
+            "deploy": {
+              "type": "boolean",
+              "description": "Whether the chart runs Garnet as the RESP endpoint. Turn it off to point the connection string above at an endpoint you already operate, so you run one such service rather than two."
+            },
+            "passwordSecretKey": {
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9._-]*$",
+              "description": "A key inside the same Secret holding the bare password the server is started with, read only when deploy is true. It is the same password the connection string carries, written twice because those are the two forms the two programs read, and it is in that Secret rather than one of its own because the application pod already holds it inside the connection string. The chart refuses a values document naming one key for both."
+            },
+            "image": {
+              "type": "object",
+              "required": [
+                "repository",
+                "digest"
+              ],
+              "properties": {
+                "registry": {
+                  "type": "string"
+                },
+                "repository": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Microsoft's Garnet, an MIT-licensed RESP server that documents its compatibility with StackExchange.Redis. THIRD_PARTY_LICENSES.md records what is in the image."
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "description": "A digest rather than a tag, because the upstream publishes its release tags beside moving 1, 2, and latest ones: the digest is the only reference that names one artifact."
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "Always",
+                    "IfNotPresent",
+                    "Never"
+                  ]
+                },
+                "pullSecrets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "service": {
+              "type": "object",
+              "required": [
+                "port"
+              ],
+              "properties": {
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535,
+                  "description": "The port the Service publishes, and the port the connection string names beside the Service's own host. The container always listens on 6379."
+                }
+              },
+              "additionalProperties": false
+            },
+            "resources": {
+              "type": "object"
+            },
+            "podSecurityContext": {
+              "type": "object",
+              "required": [
+                "runAsNonRoot"
+              ],
+              "properties": {
+                "runAsNonRoot": {
+                  "const": true,
+                  "description": "The image declares an unprivileged account and the server binds its port as it, so nothing here has to begin as root. Restated by the chart so the cluster enforces it rather than trusting the image's own USER, and kept from being switched off because leaving the restricted Pod Security Standard is not a values decision."
+                }
+              }
+            },
+            "containerSecurityContext": {
+              "type": "object",
+              "required": [
+                "allowPrivilegeEscalation",
+                "readOnlyRootFilesystem",
+                "capabilities"
+              ],
+              "properties": {
+                "allowPrivilegeEscalation": {
+                  "const": false
+                },
+                "readOnlyRootFilesystem": {
+                  "const": true,
+                  "description": "The server keeps nothing, so it writes nothing but the runtime's scratch directory, which is an in-memory emptyDir the template mounts at /tmp."
+                },
+                "capabilities": {
+                  "type": "object",
+                  "required": [
+                    "drop"
+                  ],
+                  "properties": {
+                    "drop": {
+                      "type": "array",
+                      "contains": {
+                        "const": "ALL"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "nodeSelector": {
+              "type": "object"
+            },
+            "tolerations": {
+              "type": "array"
+            },
+            "affinity": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "personalDataScanning": {
       "type": "object",
       "required": [

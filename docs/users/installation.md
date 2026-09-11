@@ -89,6 +89,14 @@ its own and is what both heads call. Signing in to it needs a credential no shap
 self-service and no default, so a username and password are written over
 [the administrative endpoint](../operations/admin-endpoint.md#user-credentials) or they do not exist.
 
+**One shape runs more than one instance, and it asks for one more thing when you do.** Compose, the Quadlet units, and
+the native process are a single host each. The Helm chart takes a replica count, and above one the client's live
+updates need a signal backplane — Garnet the chart deploys beside MailFathom, or a Redis-compatible endpoint you
+already operate — because the replica that noticed a change is routinely not the one holding the client's connection.
+The chart refuses to render the combination that would otherwise install, start, and serve every request while telling
+its clients nothing.
+[Signals between replicas](../operations/deployment-kubernetes.md#signals-between-replicas) is the page.
+
 ## What every shape needs
 
 - **Linux.** It is the only platform this project officially supports, and everything below assumes it: the image is

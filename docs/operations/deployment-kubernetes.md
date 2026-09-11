@@ -12,6 +12,7 @@ operates the cluster, and the chart is written so that it cannot pretend otherwi
 | A PostgreSQL StatefulSet, its Service, and its initialization script, unless `database.deploy.enabled` is false | Any certificate material |
 | A personal-data analyzer Deployment and Service, and a SpamAssassin Deployment and Service, only when the section that owns each is enabled and left to deploy its own | Any schema step |
 | A Silo object-store StatefulSet, its claim, and its Service, only when `contentStorage.objectStorage.deploy.enabled` is true | Any bucket, or any access key inside one |
+| A Garnet Deployment and Service for the signal backplane, only when `signalBackplane.enabled` and `.garnet.deploy` are both true | |
 | An optional Ingress | |
 
 ## What you supply
@@ -378,6 +379,91 @@ Two more things belong to the same decision:
 **Authorization is unchanged.** A browser is an untrusted client wherever it was served from, so whatever
 `ClientEndpoint:Authentication` requires is still required of it. Serving the page grants nobody anything; what it
 exposes is the application's own code, which is published under AGPL-3.0-only in this repository.
+
+## Signals between replicas
+
+A client's live updates arrive over one connection, held by whichever replica answered its handshake. Above one replica
+that is routinely not the replica that synchronized the account something happened in, and a signal raised there reaches
+only the connections that replica holds. What carries it across is a RESP pub/sub endpoint, and the chart either deploys
+one or is pointed at one:
+
+```yaml
+replicaCount: 2
+
+signalBackplane:
+  enabled: true
+```
+
+That renders a single-replica Garnet Deployment with no volume, a ClusterIP Service, and the three keys the application
+reads. Point it at an endpoint you already operate instead — Redis, Valkey, or a managed cache — with
+`signalBackplane.garnet.deploy: false`, and nothing of a workload is rendered while the application is configured
+identically. The difference between the two is what is deployed and nothing the application reads, because the
+connection string names the endpoint either way.
+
+**The chart refuses to render `replicaCount` above 1 with the client surface served and no backplane configured.** It is
+the one combination here that installs, starts, and answers every request while doing none of what it was configured to
+do: nothing fails, no probe goes red, and the clients are simply never told anything. Everything else about it looks
+healthy, which is why it is refused at `helm install` rather than left to be found from a mailbox that stopped updating.
+A deployment that serves no client surface is never refused over this, whatever its replica count, because nothing there
+raises a signal. What "served" means is read from three places, since the surface is a configuration key rather than a
+chart value: `client.enabled`, any `config.files` document whose `ClientEndpoint.Enabled` is true, and
+`ClientEndpoint__Enabled` in `config.extraEnvironment`.
+
+**The connection string is yours to write in both shapes**, as a key inside `secrets.existingSecret` beside the database
+password. That is not an omission: MailFathom reads one connection string, it carries the password, and this chart
+templates no credential and creates no Secret — for the reason [what you supply](#what-you-supply) gives about the
+data-encryption key, which is that a Helm-generated value is replaced on any upgrade not guarded by `lookup`, and
+`lookup` returns nothing under `helm template`, under a dry run, and under Argo CD. For a Garnet the chart runs, what to
+write is the Service it rendered and the password you gave the server:
+
+```bash
+kubectl --namespace mailfathom create secret generic mailfathom-secrets \
+  --from-literal=mailfathom-signal-backplane-password='…' \
+  --from-literal=mailfathom-signal-backplane-connection-string='mailfathom-garnet:6379,password=…' \
+  … every other key this deployment reads
+```
+
+Two keys rather than one, because the server reads a bare password and MailFathom reads a connection string, and those
+are the two forms the two programs accept. Both are in the Secret the application pod mounts, which is the opposite of
+the database superuser password and the object store's root credential — and for a reason those two do not have: this
+password is one the application pod already holds, inside the connection string. Keeping it out of that Secret would
+protect nothing and would add a second Secret to create. The server's own pod reads that one key and mounts nothing else
+of it. The install notes print the exact connection string to write.
+
+**Rotating that password is a short signal outage rather than a rolling one**, which is the one place a Garnet the chart
+runs differs from what [rotating the connection string](secret-rotation.md#rotating-the-signal-backplanes-connection-string)
+describes. That procedure keeps the old credential accepted at the server while the replicas restart, and a server
+started with one `--password` accepts exactly one. So the order here is: write both keys, roll the Garnet Deployment,
+then roll MailFathom's. Between those two rolls no signal crosses, and every client falls back on the re-read it already
+does — which is why this is a few minutes to schedule rather than an outage.
+
+**Anyone who can subscribe on that endpoint reads every signal of every user of this deployment** — account and folder
+aliases, stored identities, flags, and a raised notification's two lines. No subject, address, body fragment, or
+attachment name crosses it, and nothing rests there at all: pub/sub delivers to whoever is subscribed at that moment and
+keeps nothing, which is why the Garnet the chart runs has no volume and why no retention, export, or erasure obligation
+reaches it. What does reach it is confidentiality, so the endpoint belongs inside the same boundary as the database. An
+endpoint somebody else operates owes four things, and the connection string is where the first two are written:
+
+- **`ssl=true`**, because the hop is no longer inside one cluster's network.
+- **A credential of its own**, and where the endpoint supports per-channel permissions, one limited to publishing and
+  subscribing under this deployment's prefix.
+- **A channel prefix no other deployment on that endpoint uses**, which is `signalBackplane.channelPrefix`. Two
+  MailFathom deployments sharing one endpoint at the default prefix do not exchange a user's signals — a group is named
+  from an identifier each deployment generated for itself — but they do receive each other's traffic on the backplane's
+  own fixed channels, which names connections and the groups holding user identifiers.
+- **A recipient entry in your own processing record**, where the endpoint is a managed service somebody else runs, since
+  signals are then disclosed to that processor.
+
+**Losing the backplane costs signals and never mail.** It is logged at `Warning` and counted, and it does not fail
+readiness: a pod pulled from service over a lost optimization is a worse outage than a list a few minutes stale. The
+guarantee is the client's own re-read, which happens after every reconnect and every five minutes while its window is
+visible, so the worst a lost signal costs somebody watching the screen is that interval.
+[The signal channel](client-endpoint.md#the-signal-channel) is what a client does about it, and
+[`SignalBackplane`](configuration-endpoints.md#signalbackplane) is every key the application reads.
+
+**This is necessary above one replica and it is not sufficient.** A signed-in session still lives in the process that
+minted it, so a client served by more than one replica is signed out on most of its requests whatever the backplane
+does. That is tracked separately and the chart says nothing about it.
 
 ## Security defaults
 
@@ -881,19 +967,29 @@ and exist so that a change in what the chart produces appears in a diff rather t
 anything. A rendering is normalized before it is compared — trailing whitespace and the blank lines Helm leaves between
 documents go — so the Helm version a machine happens to carry does not decide the verdict.
 
-Five values documents are what the chart is held against, and each renders a shape the others do not.
+Seven values documents are what the chart is held against, and each renders a shape the others do not.
 `release-values.yaml` names an external database, an external analyzer, and an external spam scanner, and turns the
 ingress on. `nightly-values.yaml` selects the unsupported channel with its acknowledgement and renders the analyzer and
 the scanner the chart deploys itself. `content-storage-values.yaml` selects the object backend against an endpoint
 somebody else operates, and `object-store-values.yaml` selects it against the store the chart runs itself — between them
 both branches of `contentStorage.objectStorage.deploy.enabled`, with the console off in the second, which is what makes
-the committed manifest the record that no console listener is produced by default. `defaults-values.yaml` is
+the committed manifest the record that no console listener is produced by default.
+`signal-backplane-garnet-values.yaml` and `signal-backplane-external-values.yaml` do the same for the backplane, at two
+replicas with the client surface served: the first renders the Garnet the chart runs and the second renders no workload
+at all while configuring the application identically. `defaults-values.yaml` is
 `values.yaml` plus only what the chart refuses to default — an image reference, the Secret the pod mounts, and the
 Secret holding the database superuser password, which the chart requires whenever it deploys the database itself and so
 by default — meaning it renders the shape an operator following the quick start gets. That last one is also what keeps
 the chart's own defaults inside schema validation: Helm validates each values document coalesced with `values.yaml`
 against `values.schema.json` during both the lint and the render, and a default the schema would reject is overridden by
 the others.
+
+Some values documents are supposed to be refused rather than rendered, and a rendering cannot record that: a
+combination the chart accepts by accident produces a plausible manifest and no golden file shows anything. Those live
+under `ci/refusals/`, each carrying on a `# refuses:` line the wording its refusal has to contain, and the same script
+requires the chart to refuse each one and to name the setting while doing so. Two are there today, and they are one
+refusal reached two ways — more than one replica serving the page, and more than one replica serving the client surface
+from a configuration file — because what the chart reads to decide that is two different values.
 
 The `Helm chart` job of `CI` runs the same script on every pull request that touches `deploy/helm/`, which is where a
 chart that stopped rendering is now found. The release run lints and renders again before it publishes anything, so a

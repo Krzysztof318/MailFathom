@@ -1,0 +1,50 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# The backplane somebody else operates, which is the half of the choice `signal-backplane-garnet-values.yaml` does not
+# render: there the Deployment and the Service are produced and the endpoint is the release's own, and here nothing of a
+# workload is, while the application is configured exactly the same way. That is the point worth recording — the two
+# shapes differ in what is deployed and in nothing the application reads, because the connection string names the
+# endpoint in both.
+#
+# Everything else is the smallest values document the chart installs from, so what the golden manifest shows against
+# `defaults.yaml` is the backplane decision and nothing else.
+image:
+  repository: example/mailfathom
+  tag: 0.1.0-verification
+  allowVersionMismatch: true
+
+secrets:
+  existingSecret: mailfathom-secrets
+
+database:
+  deploy:
+    superuserPasswordSecret: mailfathom-postgres-superuser
+
+replicaCount: 2
+
+# The client surface without the page, which is the other way a deployment serves it: a client somebody downloaded, or a
+# page hosted elsewhere, calling the routes this deployment publishes. The chart reads this file rather than only
+# `client.enabled` when it decides whether a backplane is owed, which is why this document configures one.
+config:
+  files:
+    10-mailfathom.json: |
+      {
+        "ClientEndpoint": {
+          "Enabled": true,
+          "Authentication": [
+            { "Method": "password" }
+          ]
+        }
+      }
+
+# The connection string names the endpoint, the credential, and the transport, and it is a key inside the Secret above
+# rather than a value here. `ssl=true` is what an endpoint outside this deployment's own network owes, and it is part of
+# what the operator writes rather than of what the chart renders — which is why nothing in this document states an
+# address at all.
+signalBackplane:
+  enabled: true
+  connectionStringSecretKey: mailfathom-signal-backplane
+  garnet:
+    deploy: false

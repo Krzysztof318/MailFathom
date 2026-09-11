@@ -1,0 +1,36 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# refuses: signalBackplane.enabled is false while replicaCount is 2
+
+# The same refusal reached the other way, and the reason it is a second document rather than a second assertion on the
+# first: `client.enabled` is the page, and a deployment can serve the client surface without it — a downloaded head, or
+# a page hosted elsewhere, calling the routes this deployment publishes. So the chart reads the configuration files it
+# renders as well, and this proves it does. A deployment that serves no client surface at all is never refused over the
+# backplane, whatever its replica count, which is what `defaults-values.yaml` and `release-values.yaml` render.
+image:
+  repository: example/mailfathom
+  tag: 0.1.0-verification
+  allowVersionMismatch: true
+
+secrets:
+  existingSecret: mailfathom-secrets
+
+database:
+  deploy:
+    superuserPasswordSecret: mailfathom-postgres-superuser
+
+replicaCount: 2
+
+config:
+  files:
+    10-mailfathom.json: |
+      {
+        "ClientEndpoint": {
+          "Enabled": true,
+          "Authentication": [
+            { "Method": "password" }
+          ]
+        }
+      }

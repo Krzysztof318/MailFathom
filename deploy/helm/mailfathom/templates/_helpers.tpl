@@ -276,6 +276,51 @@ that are the point of naming a Service.
     {{- fail (printf "spamScanning.scanner.host is %q while spamScanning.enabled is false. Nothing would read it, so this deployment scores no mail while its values file reads as though it did. Switch spam scanning on, or remove the address." .Values.spamScanning.scanner.host) -}}
   {{- end -}}
 {{- end -}}
+
+{{/*
+The backplane is the one optional component whose absence is refused rather than rendered as nothing, because it is the
+one whose absence looks healthy: above one replica a deployment serving the client surface installs, starts, and serves
+correctly while its clients are told nothing. So the combination is refused here, where an operator reads it, instead of
+being found from a mailbox that stopped updating.
+
+Whether the client surface is served is read from three places rather than one, because `client.enabled` is the page
+and the surface is a configuration key the chart does not otherwise look inside. A file that switches `ClientEndpoint`
+on counts, and so does the environment block, which outranks every file. A file that is not a JSON object is skipped
+rather than failing the render: `config.files` is the operator's text, and a refusal about the backplane is the wrong
+place to report a malformed one.
+*/}}
+{{- $clientSurfaceServed := .Values.client.enabled -}}
+{{- range $name, $contents := .Values.config.files -}}
+  {{- $document := fromJson $contents -}}
+  {{- if and (kindIs "map" $document) (dig "ClientEndpoint" "Enabled" false $document) -}}
+    {{- $clientSurfaceServed = true -}}
+  {{- end -}}
+{{- end -}}
+{{- if eq (lower (toString (dig "ClientEndpoint__Enabled" "" (default dict .Values.config.extraEnvironment)))) "true" -}}
+  {{- $clientSurfaceServed = true -}}
+{{- end -}}
+
+{{- $backplane := .Values.signalBackplane -}}
+{{- if $backplane.enabled -}}
+  {{- if not $backplane.connectionStringSecretKey -}}
+    {{- fail "signalBackplane.connectionStringSecretKey is not set while signalBackplane.enabled is true. MailFathom reaches the endpoint by one connection string, which carries the password, so the chart templates none and reads it from the Secret the pod already mounts: name the key holding it." -}}
+  {{- end -}}
+  {{- if not $backplane.channelPrefix -}}
+    {{- fail "signalBackplane.channelPrefix is empty. It is what keeps two deployments sharing one endpoint from receiving each other's statements, so leave it unset to take 'mailfathom' rather than clearing it." -}}
+  {{- end -}}
+  {{- if $backplane.garnet.deploy -}}
+    {{- if not $backplane.garnet.passwordSecretKey -}}
+      {{- fail "signalBackplane.garnet.passwordSecretKey is not set while the chart is running Garnet. The server is started with a password and reads it as a bare value rather than as a connection string, so it needs a key of its own inside secrets.existingSecret holding the same password the connection string carries." -}}
+    {{- end -}}
+    {{- if eq $backplane.garnet.passwordSecretKey $backplane.connectionStringSecretKey -}}
+      {{- fail (printf "signalBackplane.garnet.passwordSecretKey and signalBackplane.connectionStringSecretKey both name %q. One file cannot hold both a bare password and a connection string, so the server and MailFathom would each read the other's form." $backplane.connectionStringSecretKey) -}}
+    {{- end -}}
+  {{- end -}}
+{{- else -}}
+  {{- if and (gt (int .Values.replicaCount) 1) $clientSurfaceServed -}}
+    {{- fail (printf "signalBackplane.enabled is false while replicaCount is %d and the client surface is served. A signal is raised by whichever replica holds the account and has to reach whichever replica holds the client's connection, so without a backplane this deployment installs, serves, and tells its clients nothing — which is the one configuration here that looks healthy and silently cannot do what it was configured for. Set signalBackplane.enabled=true and let the chart run Garnet, point it at a RESP endpoint you already operate with signalBackplane.garnet.deploy=false, or run one replica." (int .Values.replicaCount)) -}}
+  {{- end -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
@@ -527,6 +572,49 @@ read.
 */}}
 {{- define "mailfathom.objectStoreCertificatesDirectory" -}}/etc/silo/certs{{- end -}}
 {{- define "mailfathom.objectStoreCredentialsDirectory" -}}/etc/silo/credentials{{- end -}}
+
+{{/*
+The backplane's objects, named after the release with `-garnet` appended. The suffix names the server rather than the
+feature, for the reason the analyzer's, the scanner's, and the object store's do: what a listing has to distinguish is
+which image is in the pod. It is also the name an operator writes into the connection string, which is why the install
+notes print it rather than leaving it to be derived.
+*/}}
+{{- define "mailfathom.backplaneFullname" -}}
+{{- printf "%s-garnet" (include "mailfathom.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "mailfathom.backplaneSelectorLabels" -}}
+app.kubernetes.io/name: {{ printf "%s-garnet" (include "mailfathom.name" .) | trunc 63 | trimSuffix "-" }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{/*
+The version label carries the digest rather than a release number, for the reason the spam scanner's does: the digest is
+what this chart pins, and a number written beside it would be a second value to keep in step. The `sha256:` prefix is
+dropped, since a label value may not contain a colon.
+*/}}
+{{- define "mailfathom.backplaneLabels" -}}
+helm.sh/chart: {{ include "mailfathom.chart" . }}
+{{ include "mailfathom.backplaneSelectorLabels" . }}
+app.kubernetes.io/version: {{ .Values.signalBackplane.garnet.image.digest | trimPrefix "sha256:" | trunc 63 | trimSuffix "-" | quote }}
+app.kubernetes.io/component: signal-backplane
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: mailfathom
+{{- end -}}
+
+{{/*
+The backplane image, pinned by digest because Garnet publishes its release tags beside moving `1`, `2`, and `latest`
+ones: a digest reference carries no tag at all, which is what makes it the whole of the pin rather than a hint beside
+one.
+*/}}
+{{- define "mailfathom.backplaneImage" -}}
+{{- $image := .Values.signalBackplane.garnet.image -}}
+{{- if $image.registry -}}
+{{- printf "%s/%s@%s" $image.registry $image.repository $image.digest -}}
+{{- else -}}
+{{- printf "%s@%s" $image.repository $image.digest -}}
+{{- end -}}
+{{- end -}}
 
 {{/*
 The connection string, without the password. The password reaches MailFathom as a mounted file named by

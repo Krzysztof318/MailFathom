@@ -14,6 +14,9 @@ Secrets:  {{ .Values.secrets.existingSecret }}, mounted read-only at {{ .Values.
 {{- if eq .Values.contentStorage.backend "objectStorage" }}
 Content:  {{ include "mailfathom.objectStorageEndpoint" . }}/{{ .Values.contentStorage.objectStorage.bucket }}{{ if .Values.contentStorage.objectStorage.deploy.enabled }}, deployed by this release{{ else }}, operated by you{{ end }}
 {{- end }}
+{{- if .Values.signalBackplane.enabled }}
+Signals:  {{ if .Values.signalBackplane.garnet.deploy }}{{ include "mailfathom.backplaneFullname" . }}:{{ .Values.signalBackplane.garnet.service.port }}, deployed by this release{{ else }}the RESP endpoint your connection string names, operated by you{{ end }}
+{{- end }}
 {{- if $documentation }}
 Docs:     {{ $documentation }}
 {{- end }}
@@ -68,6 +71,19 @@ this deployment reports itself unready rather than storing mail. The `mcli` comm
 
 Two stores now, so a pg_dump is no longer a whole backup: back the bucket up beside the database, and restore the
 database first, or the reclamation sweep is entitled to delete objects nothing points at yet.
+{{ end }}
+{{ if and .Values.signalBackplane.enabled .Values.signalBackplane.garnet.deploy }}
+The signal backplane is this release's own: one Garnet, with no volume, because pub/sub keeps nothing. It is started
+with the password in {{ .Values.secrets.existingSecret }} under {{ .Values.signalBackplane.garnet.passwordSecretKey }},
+and MailFathom reaches it with the connection string in the same Secret under
+{{ .Values.signalBackplane.connectionStringSecretKey }} — which names this release's own Service and carries that same
+password:
+
+  {{ include "mailfathom.backplaneFullname" . }}:{{ .Values.signalBackplane.garnet.service.port }},password=<the password above>
+
+Until both keys are there the replicas fan no signal out, and every client falls back on the re-read it already does.
+Nothing reports that as unready: a signal is an optimization, and a pod pulled from service over one is the worse
+outage.
 {{ end }}
 {{ if not .Values.ingress.enabled }}
 No Ingress is configured, so the endpoint is reachable only from inside the cluster. Reach it for a check with:

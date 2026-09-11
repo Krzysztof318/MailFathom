@@ -384,6 +384,116 @@ config:
 client:
   enabled: false
 
+### Signals between replicas
+#
+# A client's live updates arrive over one connection, and above one replica the replica that synchronized an account is
+# routinely not the one holding that connection. A RESP pub/sub endpoint is what carries a signal from the first to the
+# second. It is off, and off is the supported shape for every deployment running a single replica: nothing is rendered,
+# no configuration key is written, and no connection is opened.
+#
+# **This is the one option the chart refuses to let you skip.** With `replicaCount` above 1 and the client surface
+# served, a deployment that configures no backplane renders nothing wrong and serves correctly — and its clients stop
+# being told anything. So `helm install` refuses that combination rather than leaving it to be found from a mailbox
+# that stopped updating. A deployment that serves no client surface is never refused over this, whatever its replica
+# count, because nothing raises a signal there.
+#
+# Turning it on has two shapes, and `garnet.deploy` below is which one:
+#
+#   * **The chart runs Garnet**, as one replica with no volume, because pub/sub keeps nothing. This is the default once
+#     the block is on, exactly as the analyzer and the spam scanner are deployed by default once theirs are.
+#   * **You point it at a RESP endpoint you already operate** — Redis, Valkey, or a managed cache — so you run one such
+#     service rather than two.
+#
+# Either way the connection string is yours to write, as a key inside `secrets.existingSecret`, and that is deliberate
+# rather than an omission: MailFathom reads one connection string, it carries the password, and this chart templates no
+# credential. For a Garnet the chart runs, what to write is the Service it renders and the password you gave it —
+# `<release>-garnet:6379,password=…` — which the install notes print for you.
+#
+# **Anyone who can subscribe on that endpoint reads every signal of every user of this deployment**, so it belongs
+# inside the same confidentiality boundary as the database. An endpoint somebody else operates owes `ssl=true` in the
+# connection string, a credential of its own, and a channel prefix no other deployment on it uses. Nothing rests there:
+# pub/sub delivers to whoever is subscribed at that moment and keeps nothing.
+signalBackplane:
+  enabled: false
+
+  # The key inside `secrets.existingSecret` holding the whole connection string, which is how MailFathom reads every
+  # other credential too: a `file:` reference into the Secret the pod already mounts. It is required once this block is
+  # on, and it is the same key in both shapes below.
+  connectionStringSecretKey: mailfathom-signal-backplane-connection-string
+
+  # What every channel this deployment publishes to and subscribes to begins with. Two MailFathom deployments sharing
+  # one endpoint at the same prefix receive each other's statements, so a shared endpoint needs this set to something
+  # of its own; a MailFathom beside somebody else's application never does.
+  channelPrefix: mailfathom
+
+  garnet:
+    # Whether the chart runs the RESP server, exactly as `spamScanning.scanner.deploy` decides whether it runs the
+    # daemon. On, the chart creates a Deployment and a Service for it, and the address your connection string names is
+    # the Service the release installed. Off, nothing of the sort is rendered and the connection string names whatever
+    # you already operate.
+    deploy: true
+
+    # The key inside `secrets.existingSecret` holding the bare password the server is started with — the same password
+    # the connection string above carries, written once as a password and once inside a connection string because those
+    # are the two forms the two programs read.
+    #
+    # It is in that Secret rather than in one of its own, which is the opposite of the database's superuser password and
+    # the object store's root credential, and for a reason those two do not have: this credential is one the application
+    # pod already holds. It is inside the connection string MailFathom reads, so keeping it out of that Secret would
+    # protect nothing and would add a second Secret to create. The server's pod reads this one key and mounts nothing
+    # else of it.
+    passwordSecretKey: mailfathom-signal-backplane-password
+
+    # A digest rather than a tag. This is a dependency the chart operates rather than a version a deployment chooses,
+    # like the database and the analyzer images — and unlike those two, Garnet's release tags are published beside
+    # moving `1`, `2`, and `latest` tags, so the digest is what names one artifact rather than a line. It resolves to
+    # Garnet 2.1.0, which is MIT-licensed and runs as an unprivileged account in its own image;
+    # THIRD_PARTY_LICENSES.md records both.
+    image:
+      registry: ghcr.io
+      repository: microsoft/garnet
+      digest: sha256:4e298b9b274088cded4156853a32b85fed7b42242eb9ca90216d332e25f2bceb
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+
+    service:
+      port: 6379
+
+    # Modest, and sized by what the server reserves rather than by what this deployment asks of it. Garnet is a
+    # cache-store being used as a pipe: no key is ever written, so what it holds is one subscription per replica and the
+    # hash index it allocates while starting, which is a flat array of the server's own default size. The chart passes
+    # no memory options to shrink it — the defaults are what the image is verified against, and a smaller index would be
+    # a number nothing here can check — so the request is what that index plus the runtime costs.
+    resources:
+      requests:
+        cpu: 50m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 512Mi
+
+    # Restricted Pod Security Standard, met without anything having to be relaxed: the image declares the same
+    # unprivileged account the .NET base images give MailFathom's own, and the server binds its port as that account
+    # rather than starting as root and dropping privilege the way the spam daemon does. The account is stated here as
+    # well so the cluster enforces it rather than trusting the image's own `USER`.
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 1654
+      runAsGroup: 1654
+      seccompProfile:
+        type: RuntimeDefault
+
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
 ### Personal-data scanning
 #
 # MailFathom can hide personal data before mail is copied into a derived store or handed out, and doing that beyond the
