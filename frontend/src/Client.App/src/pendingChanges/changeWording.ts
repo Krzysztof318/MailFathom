@@ -18,20 +18,49 @@ import type { UndecidedChange } from './usePendingChanges';
 
 /** What a message this act was refused for is called, selected by plural form for the count it happened to. */
 export const refusalTitles: Readonly<Record<ChangeAct, Readonly<Record<Intl.LDMLPluralRule, MessageKey>>>> = {
-    markRead: {
-        zero: 'pendingChange.notMarkedRead.other',
-        one: 'pendingChange.notMarkedRead.one',
-        two: 'pendingChange.notMarkedRead.other',
-        few: 'pendingChange.notMarkedRead.few',
-        many: 'pendingChange.notMarkedRead.many',
-        other: 'pendingChange.notMarkedRead.other',
-    },
+    markRead: forms('notMarkedRead'),
+    flag: forms('notFlagged'),
+    unflag: forms('notUnflagged'),
+    markUnread: forms('notMarkedUnread'),
+    archive: forms('notArchived'),
+    delete: forms('notDeleted'),
+    move: forms('notFiled'),
+    putBack: forms('notPutBack'),
 };
 
 /** What the act itself is called, which is the half of an undecided change that says what was asked for. */
 export const actNames: Readonly<Record<ChangeAct, MessageKey>> = {
     markRead: 'pendingChange.markRead',
+    flag: 'pendingChange.flag',
+    unflag: 'pendingChange.unflag',
+    markUnread: 'pendingChange.markUnread',
+    archive: 'pendingChange.archive',
+    delete: 'pendingChange.delete',
+    move: 'pendingChange.move',
+    putBack: 'pendingChange.putBack',
 };
+
+/** The four forms one act's refusal is counted in, which every act declares the same way. */
+function forms(
+    refusal:
+        | 'notMarkedRead'
+        | 'notFlagged'
+        | 'notUnflagged'
+        | 'notMarkedUnread'
+        | 'notArchived'
+        | 'notDeleted'
+        | 'notFiled'
+        | 'notPutBack',
+): Readonly<Record<Intl.LDMLPluralRule, MessageKey>> {
+    return {
+        zero: `pendingChange.${refusal}.other`,
+        one: `pendingChange.${refusal}.one`,
+        two: `pendingChange.${refusal}.other`,
+        few: `pendingChange.${refusal}.few`,
+        many: `pendingChange.${refusal}.many`,
+        other: `pendingChange.${refusal}.other`,
+    };
+}
 
 /**
  * Why the deployment wrote nothing down, or `null` for the two outcomes nobody is told about.

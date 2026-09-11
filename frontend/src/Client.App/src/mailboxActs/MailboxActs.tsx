@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
     changeMailFlags,
     deleteMail,
@@ -21,6 +21,8 @@ import {
 } from '@mailfathom/client-backend';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import type { ChangeAct, ChangeSubmission } from '../pendingChanges/changeStandings';
+import { usePendingChanges } from '../pendingChanges/usePendingChanges';
 import { useToasts, type Toast } from '../toasts/useToasts';
 import {
     deletesPermanently,
@@ -45,10 +47,14 @@ import {
 // account's own convergence pass is what issues the IMAP command. So an account nobody can connect to leaves the act
 // pending rather than failing it, and what is held below is what was asked for rather than what has been observed.
 //
-// **Every act reports what it came to**, in the toast surface rather than on the control that was pressed, and the
-// three that file a message elsewhere offer the way back as that toast's single action. Taking one back is the reverse
-// move rather than a withdrawal of the first: a change already on its way to a mail server cannot be unsaid, and
-// pretending otherwise would leave the mailbox and the screen disagreeing. The one act that offers no way back is the
+// **Every act is followed in the pending-changes queue**, which is `pendingChanges/`: what the deployment wrote down is
+// waited on until the mailbox agrees or somebody has to decide, and what it refused or never answered is said there, in
+// the words it says them in for every act — so which sentence a person meets never turns on which surface asked. What
+// stays here is the half the queue has no notion of: the report of what an act was written down for, in the toast
+// surface rather than on the control that was pressed, and the way back the three that file a message elsewhere offer
+// as that toast's single action. Taking one back is the reverse move rather than a withdrawal of the first: a change
+// already on its way to a mail server cannot be unsaid, and pretending otherwise would leave the mailbox and the screen
+// disagreeing. The one act that offers no way back is the
 // delete that destroys the mail, which is what *delete* means for a message already in the trash — there is no message
 // left to move back, which is why the question in front of it says so before it is performed.
 //
@@ -126,22 +132,6 @@ function recordsWritten(batches: readonly Submitted[]): readonly string[] {
     );
 }
 
-/** The messages a batch answered for without writing them down, which is not a batch that never answered at all. */
-function refusedBy(batches: readonly Submitted[], written: ReadonlySet<string>): readonly string[] {
-    return batches
-        .filter(({ answer }) => answer.outcome === 'read')
-        .flatMap(({ messages }) => messages)
-        .filter((message) => !written.has(message.storedEmailId))
-        .map((message) => message.storedEmailId);
-}
-
-/** Why a batch never reached the deployment, or `null` where every one of them did. */
-function failureAmong(batches: readonly Submitted[]): ClientFailureReason | null {
-    const failed = batches.find(({ answer }) => answer.outcome === 'failed')?.answer;
-
-    return failed?.outcome === 'failed' ? failed.failure.reason : null;
-}
-
 /**
  * One batch as it went out: the messages it carried, beside what the deployment answered about them.
  *
@@ -181,6 +171,7 @@ export function MailboxActsProvider({
 }) {
     const { locale, translate } = useLocalization();
     const toasts = useToasts();
+    const pending = usePendingChanges();
     const [kept, setKept] = useState<Held>(heldForNobody);
 
     // How many times the folders have been asked for, which is what the second attempt is: the read is an effect, so
@@ -191,6 +182,15 @@ export function MailboxActsProvider({
     // tab keeps this component mounted, and the previous person's pending acts would otherwise be drawn over the next
     // person's mail — and their folders read as this one's.
     const held = kept.session === session ? kept : heldForNobody;
+
+    // Who is signed in now, for the reason `readMarking/ReadMarking.tsx` gives about its own: an act answers, and a
+    // question the queue holds about it is answered, after the render that asked has gone — and neither may be acted
+    // on under a credential that has since left. Nothing reads it while rendering, so it drives nothing on the screen.
+    const signedIn = useRef(session);
+
+    useEffect(() => {
+        signedIn.current = session;
+    }, [session]);
 
     // The folders, because three of the acts are folder moves and none of them can name a destination without
     // them. Read where the credential may file mail or delete it: without either grant those three acts are refused
@@ -356,61 +356,108 @@ export function MailboxActsProvider({
     }
 
     /**
-     * Reports what an act came to, and offers the way back where the act has one.
+     * Reports what an act was written down for, and offers the way back where the act has one.
      *
-     * All three at once where a submission came to all three: a batch that was written down is reported as written
-     * down however the batch after it ended, because what the deployment holds does not turn on what it was asked
-     * next. The two that did not land are said apart, a message the deployment answered about being a different thing
-     * from one it never answered for at all.
+     * Only the half the queue has no notion of. A batch that was written down is reported as written down however the
+     * batch beside it ended, because what the deployment holds does not turn on what it was asked next — and what it
+     * refused, or never answered at all, is the queue's to say, which `handOver` gives it.
      */
     function report(
         act: MailboxAct,
         recorded: readonly ActedMessage[],
-        refused: readonly string[],
         destination: MoveDestination | undefined,
-        failure: ClientFailureReason | null,
         destroying: boolean,
         records: readonly string[],
     ): void {
-        if (recorded.length > 0) {
-            // The way back is the toast's single action, which is the design project's own: the three acts that change
-            // a flag offer none, because a flag is what the control that set it takes off again. A delete that
-            // destroys the mail offers a different one — the wait in front of it rather than a reverse move — which is
-            // why it is composed apart rather than folded in here.
-            const wayBack = changesAFlag(act)
-                ? {}
-                : {
-                      action: {
-                          label: translate('act.undo'),
-                          take: () => {
-                              takeBack(recorded);
-                          },
-                      },
-                  };
+        if (recorded.length === 0) {
+            return;
+        }
 
-            toasts.raise(
-                destroying
-                    ? deleting(recorded.length, records)
-                    : {
-                          kind: 'neutral',
-                          title: translate(actReported[act], {
-                              folder: destination === undefined ? '' : destinationName(destination, translate),
-                          }),
-                          body: counted(recorded.length),
-                          ...wayBack,
+        // The way back is the toast's single action, which is the design project's own: the three acts that change a
+        // flag offer none, because a flag is what the control that set it takes off again. A delete that destroys the
+        // mail offers a different one — the wait in front of it rather than a reverse move — which is why it is
+        // composed apart rather than folded in here.
+        const wayBack = changesAFlag(act)
+            ? {}
+            : {
+                  action: {
+                      label: translate('act.undo'),
+                      take: () => {
+                          takeBack(recorded);
                       },
+                  },
+              };
+
+        toasts.raise(
+            destroying
+                ? deleting(recorded.length, records)
+                : {
+                      kind: 'neutral',
+                      title: translate(actReported[act], {
+                          folder: destination === undefined ? '' : destinationName(destination, translate),
+                      }),
+                      body: counted(recorded.length),
+                      ...wayBack,
+                  },
+        );
+    }
+
+    /**
+     * Hands the queue what an act's batches came to, which is where a refusal is said and a written-down change is
+     * waited on until the mailbox agrees or somebody has to decide.
+     *
+     * Two submissions at most rather than one per batch: the batches that answered are one answer, so a reason is said
+     * once however many batches it happened in, and the batches that never reached the deployment are one silence with
+     * the way to ask again on it. Both ways out are the producer's, because only it knows what performing its act afresh,
+     * or no longer claiming it, means — and neither is taken unless the credential it was performed under is still the
+     * one signed in.
+     */
+    function handOver(
+        asking: ClientSession,
+        act: ChangeAct,
+        answered: readonly Submitted[],
+        askAgain: (messages: readonly ActedMessage[]) => void,
+        letGo: (storedEmailIds: readonly string[]) => void,
+    ): void {
+        function submission(
+            batches: readonly Submitted[],
+            results: readonly MailMutationResult[] | null,
+        ): ChangeSubmission {
+            const carried = batches.flatMap(({ messages }) => messages);
+
+            return {
+                act,
+                asked: carried.map((message) => message.storedEmailId),
+                results,
+                askAgain: (storedEmailIds) => {
+                    const named = new Set(storedEmailIds);
+
+                    if (signedIn.current === asking) {
+                        askAgain(carried.filter((message) => named.has(message.storedEmailId)));
+                    }
+                },
+                letGo: (storedEmailIds) => {
+                    if (signedIn.current === asking) {
+                        letGo(storedEmailIds);
+                    }
+                },
+            };
+        }
+
+        const reached = answered.filter(({ answer }) => answer.outcome === 'read');
+        const lost = answered.filter(({ answer }) => answer.outcome === 'failed');
+
+        if (reached.length > 0) {
+            pending.follow(
+                submission(
+                    reached,
+                    reached.flatMap(({ answer }) => (answer.outcome === 'read' ? answer.value : [])),
+                ),
             );
         }
 
-        if (refused.length > 0) {
-            toasts.raise({ kind: 'warning', title: translate('act.someNotChanged') });
-        }
-
-        if (failure !== null) {
-            toasts.raise({
-                kind: 'error',
-                title: translate('act.failed', { reason: translate(failureLabels[failure]) }),
-            });
+        if (lost.length > 0) {
+            pending.follow(submission(lost, null));
         }
     }
 
@@ -524,6 +571,7 @@ export function MailboxActsProvider({
             return;
         }
 
+        const asking = session;
         const batches: Promise<Submitted>[] = [];
 
         for (let from = 0; from < messages.length; from += mostMessagesPerMutation) {
@@ -531,7 +579,7 @@ export function MailboxActsProvider({
 
             batches.push(
                 moveMail(
-                    session,
+                    asking,
                     transport,
                     batch.map((message) => ({
                         storedEmailId: message.storedEmailId,
@@ -542,6 +590,10 @@ export function MailboxActsProvider({
         }
 
         void Promise.all(batches).then((answered) => {
+            if (signedIn.current !== asking) {
+                return;
+            }
+
             // Each message's own answer, exactly as the act itself is read: a mailbox that moved on between the act
             // and the press has messages the reverse move cannot write down either, and a row whose way back was not
             // recorded is still on its way to where the act put it — so it goes on saying so rather than being
@@ -555,18 +607,11 @@ export function MailboxActsProvider({
                 toasts.raise({ kind: 'neutral', title: translate('act.undone'), body: counted(returned.length) });
             }
 
-            if (refusedBy(answered, written).length > 0) {
-                toasts.raise({ kind: 'warning', title: translate('act.someNotChanged') });
-            }
-
-            const failure = failureAmong(answered);
-
-            if (failure !== null) {
-                toasts.raise({
-                    kind: 'error',
-                    title: translate('act.failed', { reason: translate(failureLabels[failure]) }),
-                });
-            }
+            // Followed like any act, because it is one: a way back the account stopped retrying is mail somebody was
+            // told is back where it was. Letting one go claims nothing, because there is nothing left to stop
+            // claiming — the act it reversed still stands for every message it did not return, and the ones it did
+            // return are already drawn wherever the deployment lists them.
+            handOver(asking, 'putBack', answered, takeBack, () => undefined);
         });
     }
 
@@ -596,24 +641,42 @@ export function MailboxActsProvider({
         // the wait in front of it is over.
         const leaves = act === 'archive' || act === 'move' || (act === 'delete' && !destroying);
 
+        const asking = session;
+
         remember(act, messages, leaves);
 
-        void submitted(session, act, messages, destination, destroying).then((answered) => {
+        void submitted(asking, act, messages, destination, destroying).then((answered) => {
+            // An answer arriving after somebody else has signed in is neither theirs to be told about nor their queue's
+            // to follow.
+            if (signedIn.current !== asking) {
+                return;
+            }
+
             // A batch that was written down stands whatever the batch beside it came to: two hundred messages the
             // deployment holds are two hundred messages it holds, and forgetting them because the next batch never
             // reached it would leave every one of those rows saying nothing while the mailbox says otherwise.
             const written = writtenDown(answered);
             const recorded = messages.filter((message) => written.has(message.storedEmailId));
 
+            // Everything that was not written down stops being claimed here, rather than only where the queue lets go
+            // of it: a message already where it was asked to go is a refusal nobody is told about, and an act filing
+            // it into the folder it is already in has not taken it out of the list it is drawn in either.
             forget(messages.filter((message) => !written.has(message.storedEmailId)).map((one) => one.storedEmailId));
-            report(
+            report(act, recorded, destination, destroying, recordsWritten(answered));
+
+            // Asking again is the same act performed afresh over the same messages, naming the folder a move named, so
+            // it travels the path the first attempt took and is followed again from its own answer. The claim the
+            // first attempt left is taken back before it goes: an act the folders no longer allow is refused before
+            // anything is submitted, and a row must not go on saying the first attempt is still on its way.
+            handOver(
+                asking,
                 act,
-                recorded,
-                refusedBy(answered, written),
-                destination,
-                failureAmong(answered),
-                destroying,
-                recordsWritten(answered),
+                answered,
+                (again) => {
+                    forget(again.map((message) => message.storedEmailId));
+                    perform(act, again, destination);
+                },
+                forget,
             );
         });
     }
