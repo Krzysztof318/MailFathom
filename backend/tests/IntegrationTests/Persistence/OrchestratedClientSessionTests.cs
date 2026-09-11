@@ -240,6 +240,46 @@ public sealed class OrchestratedClientSessionTests(MailFathomOrchestrationFixtur
         }
     }
 
+    /// <summary>A disable naming a credential its user does not hold writes nothing and signs nobody out, so a mistyped identifier is not a way to end somebody else's session.</summary>
+    /// <remarks>
+    /// The removal beside the disable is keyed on the credential alone, so what stops it reaching a credential the
+    /// named user does not hold is that the update ahead of it matched no row. Nothing below a real server settles
+    /// that: the two statements are one transaction, and the count the first one reports is what the second is
+    /// conditioned on.
+    /// </remarks>
+    [Fact]
+    public async Task SetEnabledAsync_ACredentialTheNamedUserDoesNotHold_WritesNothingAndLeavesItsSessionsLive()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var host = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var holder = Guid.NewGuid();
+        var stranger = Guid.NewGuid();
+
+        await OrchestratedForeignUser.ProvisionAsync(host, holder, cancellationToken);
+        await OrchestratedForeignUser.ProvisionAsync(host, stranger, cancellationToken);
+
+        try
+        {
+            // Arrange
+            var credential = await ProvisionCredentialAsync(host, holder, "held-by-somebody-else", cancellationToken);
+            var minted = await (await SessionsOnAsync(host, cancellationToken))
+                .MintAsync(Admitted(holder, credential), cancellationToken);
+
+            // Act
+            var written = await SetEnabledAsync(host, stranger, credential, enabled: false, cancellationToken);
+
+            // Assert
+            Assert.Equal(UserCredentialWriteOutcome.UnknownCredential, written);
+            Assert.NotNull(await (await SessionsOnAsync(host, cancellationToken))
+                .VerifyAsync(minted.Token?.Value, cancellationToken));
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(host, holder);
+            await OrchestratedForeignUser.EraseAsync(host, stranger);
+        }
+    }
+
     /// <summary>Deleting a credential takes its live sessions with it, by the cascade rather than by a walk the deleting replica performs.</summary>
     [Fact]
     public async Task DeleteAsync_ACredentialHoldingALiveSession_TakesTheSessionWithIt()

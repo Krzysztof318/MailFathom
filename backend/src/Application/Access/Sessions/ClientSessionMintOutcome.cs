@@ -13,11 +13,11 @@ namespace MailFathom.Application.Access.Sessions;
 public enum ClientSessionMintOutcome
 {
     /// <summary>The deployment is holding the session.</summary>
-    Minted,
+    Minted = 0,
 
     /// <summary>The user or the credential the session would have named no longer admits one, because an operator erased, deleted, or disabled it.</summary>
-    NoLongerAdmitted,
+    NoLongerAdmitted = 1,
 
     /// <summary>The deployment is already holding as many live sessions as it will hold.</summary>
-    BoundReached,
+    BoundReached = 2,
 }

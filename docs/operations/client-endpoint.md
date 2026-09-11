@@ -229,9 +229,12 @@ asking a person for their password, and a database that is briefly away is not a
 
 **The lifetime is thirty days** and it is not configurable. It is what the client's own sign-in screen states to
 somebody who asked to be kept signed in, so a shorter one here would make that screen promise something this deployment
-does not keep. What bounds the case a person is actually in is renewal rather than the number, and what bounds the
-abandoned case is the paragraph below: ending the credential behind a session ends it on the next request that presents
-it. Thirty days is therefore the most a session lasts rather than a length an operator can count on.
+does not keep. What bounds the case a person is actually in is
+renewal rather than the number, so somebody who keeps using a client never meets the thirty days at all. An abandoned
+session stands for the whole of them and is then removed by the sweep, because nothing else ends one: the paragraph
+below ends a session on the next request that presents it, and an abandoned session makes no further request. Thirty
+days is therefore a length the deployment keeps rather than the most a session could last, which is what a restart used
+to make it.
 
 **An operator revokes sessions by revoking the credential behind them.** Disabling or deleting a user credential over
 [the administrative endpoint](admin-endpoint.md#user-credentials) ends every session that credential minted, on the

@@ -4,6 +4,7 @@
 
 using System.Text.Encodings.Web;
 using MailFathom.Application.Access.Credentials;
+using MailFathom.Application.Access.Sessions;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Security.Sessions;
 using MailFathom.Host.Security.Transport;
@@ -98,6 +99,31 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
 
         // Assert
         Assert.False(result.Succeeded);
+    }
+
+    /// <summary>A store that could not be reached leaves the handler rather than becoming a failed authentication, which is what keeps an outage from signing everybody out.</summary>
+    /// <remarks>
+    /// The handler has no answer of its own to give — an authentication result says admitted or not, and the whole
+    /// point is that neither is true — so the failure travels out to the pipeline's exception handler, which answers
+    /// <c>503</c>. Catching it here and reporting a refusal would read as a revoked session on every request the
+    /// outage covered, and a client meets that by asking a person for their password.
+    /// </remarks>
+    [Fact]
+    public async Task AuthenticateAsync_ASessionStoreThatCouldNotBeReached_RaisesRatherThanRefusing()
+    {
+        // Arrange
+        var store = new InMemoryClientSessionStore
+        {
+            Unreachable = new ClientSessionStoreUnavailableException(
+                "The deployment's client sessions could not be reached.",
+                new InvalidOperationException("No connection.")),
+        };
+
+        var sessions = new ClientSessionTokens(store, new FakeTimeProvider(Instant));
+
+        // Act, Assert
+        await Assert.ThrowsAsync<ClientSessionStoreUnavailableException>(
+            () => AuthenticateAsync(sessions, "Bearer mfs_a-session.aGVsbG8"));
     }
 
     /// <summary>A refusal offers the bare challenge every method on the surface produces, and never asks a person for a password.</summary>

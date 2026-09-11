@@ -14,7 +14,7 @@ using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Security.Sessions;
 
-/// <summary>Authenticates a request against the sessions this process minted at a sign-in.</summary>
+/// <summary>Authenticates a request against the sessions the deployment holds, whichever replica minted one at a sign-in.</summary>
 /// <remarks>
 /// <para>
 /// The cheapest handler on the surface that reads anything at all: it lifts the bearer credential out of the header,

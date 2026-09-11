@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Security.Cryptography;
 using MailFathom.Application.Access.Credentials;
 using MailFathom.Application.Access.Sessions;
 using MailFathom.Domain.Access;
@@ -389,24 +390,63 @@ public sealed class ClientSessionTokensTests
     }
 
     /// <summary>An expired session is not a live one, so a deployment whose ceiling is reached by history sweeps and admits the next sign-in.</summary>
-    /// <remarks>The bound is counted by the statement that writes the row, which counts what stands rather than what is live — so without the sweep before the refusal, ten thousand abandoned rows would refuse every sign-in until something else removed them.</remarks>
+    /// <remarks>
+    /// The bound is counted by the statement that writes the row, which counts what stands rather than what is live —
+    /// so without the sweep the refusal triggers, ten thousand abandoned rows would refuse every sign-in until
+    /// something else removed them. The rows are held directly and the clock is left inside the sweep interval, which
+    /// is what keeps the periodic sweep from emptying the table before the mint is ever refused: it is the
+    /// bound-triggered sweep this case is about, and a periodic one running first would prove nothing about it.
+    /// </remarks>
     [Fact]
     public async Task MintAsync_AtTheCeilingWhereEverySessionHasExpired_SweepsAndAdmitsTheNextSignIn()
     {
         // Arrange
-        var sessions = Sessions(out _, out var clock);
+        var sessions = Sessions(out var store, out var clock);
 
-        for (var minted = 0; minted < ClientSessionTokens.MostLiveSessions; minted += 1)
+        foreach (var ordinal in Enumerable.Range(0, ClientSessionTokens.MostLiveSessions))
         {
-            await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken);
+            store.Hold(
+                $"abandoned-{ordinal}",
+                new HeldClientSession(
+                    new ClientSessionGrant(SyntheticMailUser.Deployment, CredentialId, [MailFathomPermission.MailRead]),
+                    SHA256.HashData([(byte)ordinal]),
+                    Instant - TimeSpan.FromSeconds(1)));
         }
 
         // Act
-        clock.Advance(ClientSessionTokens.Lifetime + TimeSpan.FromSeconds(1));
+        clock.Advance(ClientSessionTokens.SweepInterval - TimeSpan.FromMinutes(1));
         var admitted = await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(ClientSessionMintOutcome.Minted, admitted.Outcome);
+        Assert.Equal(1, store.Count);
+    }
+
+    /// <summary>A ceiling the deployment genuinely holds live is refused rather than swept away, so the retry above admits nobody it should not.</summary>
+    /// <remarks>Beside the case above because the two differ only in whether the held rows have expired, which is the whole of what the bound-triggered sweep decides — and a sweep that removed a live row would pass that case and fail this one.</remarks>
+    [Fact]
+    public async Task MintAsync_AtTheCeilingWhereTheSweepFreesNothing_RefusesRatherThanAdmitting()
+    {
+        // Arrange
+        var sessions = Sessions(out var store, out var clock);
+
+        foreach (var ordinal in Enumerable.Range(0, ClientSessionTokens.MostLiveSessions))
+        {
+            store.Hold(
+                $"live-{ordinal}",
+                new HeldClientSession(
+                    new ClientSessionGrant(SyntheticMailUser.Deployment, CredentialId, [MailFathomPermission.MailRead]),
+                    SHA256.HashData([(byte)ordinal]),
+                    Instant + ClientSessionTokens.Lifetime));
+        }
+
+        // Act
+        clock.Advance(ClientSessionTokens.SweepInterval - TimeSpan.FromMinutes(1));
+        var refused = await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ClientSessionMintOutcome.BoundReached, refused.Outcome);
+        Assert.Equal(ClientSessionTokens.MostLiveSessions, store.Count);
     }
 
     /// <summary>A replacement never meets the bound, so a full deployment renews the clients it already signed in rather than expiring them.</summary>
