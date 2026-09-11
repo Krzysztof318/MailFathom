@@ -26,8 +26,41 @@ database:
 # to cross between processes.
 replicaCount: 2
 
+# The page and the surface behind it, in the pairing `ci/release-values.yaml` uses: `client.enabled` serves the bundle
+# and the configuration file turns the endpoint it calls on, and the application refuses to start with one without the
+# other. Naming only the page would render a manifest describing a pod that could never run, which would prove that the
+# backplane's own branch renders rather than that the shape works.
 client:
   enabled: true
+
+config:
+  files:
+    10-mailfathom.json: |
+      {
+        "ClientEndpoint": {
+          "Enabled": true,
+          "Authentication": [
+            { "Method": "password" }
+          ]
+        }
+      }
+
+# The ingress terminates TLS, which is what makes the chart write the clear-text permission the application requires of
+# a socket serving the page. Without it the same refusal at startup applies.
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: mailfathom.example.test
+      paths:
+        - path: /api/client
+          pathType: Prefix
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: mailfathom-tls
+      hosts:
+        - mailfathom.example.test
 
 # The channel prefix is stated rather than left at its default, so the rendering shows the key the application is given
 # rather than the key being absent — this deployment shares its endpoint with nothing, and naming a prefix anyway is

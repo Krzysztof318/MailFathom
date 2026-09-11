@@ -33,6 +33,15 @@ metadata:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: mailfathom
 data:
+  10-mailfathom.json: |
+    {
+      "ClientEndpoint": {
+        "Enabled": true,
+        "Authentication": [
+          { "Method": "password" }
+        ]
+      }
+    }
 ---
 # Source: mailfathom/templates/postgres-configmap.yaml
 apiVersion: v1
@@ -188,7 +197,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 243a3d43bc74f382c06f3414255c6a7bb191695204d774f59fb700df7b3073d5
+        checksum/config: 63db1431b7bbb5ebcf1f4d5513a300f8459b62d4f6ef2ec34e1d444454fa5dd7
       labels:
         app.kubernetes.io/name: mailfathom
         app.kubernetes.io/instance: mailfathom
@@ -238,6 +247,8 @@ spec:
             - name: Persistence__Password__SecretReference
               value: "file:/etc/mailfathom/secrets/mailfathom-database-password"
             - name: ClientEndpoint__Application__Enabled
+              value: "true"
+            - name: ClientEndpoint__Application__AllowClearText
               value: "true"
             - name: SignalBackplane__ConnectionString__Name
               value: "mailfathom-signal-backplane-connection-string"
@@ -549,3 +560,40 @@ spec:
           emptyDir: {}
         - name: temporary
           emptyDir: {}
+---
+# Source: mailfathom/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mailfathom
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: ""
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+spec:
+  ingressClassName: "nginx"
+  tls:
+    - hosts:
+      - mailfathom.example.test
+      secretName: mailfathom-tls
+  rules:
+    - host: "mailfathom.example.test"
+      http:
+        paths:
+          - path: /api/client
+            pathType: Prefix
+            backend:
+              service:
+                name: mailfathom
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mailfathom
+                port:
+                  number: 8080

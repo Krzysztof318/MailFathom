@@ -9,6 +9,10 @@
 # configuration file still serves the surface by stating this single entry. Reading `client.enabled` and the files
 # without reading this would leave the refusal walkable around by configuring the same thing a third way, which is why
 # each of the three is a document of its own rather than one document asserting all three at once.
+#
+# Written in the conventional all-capitals shape of an environment variable, which is the spelling an operator is most
+# likely to use and the one an exact-case reading would miss: .NET's environment-variable provider keys its data
+# case-insensitively, so this serves the surface exactly as the mixed-case spelling does.
 image:
   repository: example/mailfathom
   tag: 0.1.0-verification
@@ -25,4 +29,4 @@ replicaCount: 2
 
 config:
   extraEnvironment:
-    ClientEndpoint__Enabled: "true"
+    CLIENTENDPOINT__ENABLED: "true"

@@ -519,13 +519,18 @@ collect_image_references() {
   # collecting both forms would report one image on two rows under two spellings — while a digest is a pin the chart can
   # hold alone, which is what makes it the one that could otherwise age here unreported. A digest the chart shares with
   # another asset composes to the identical string and is deduplicated with it.
+  #
+  # Both halves are cleared at whichever key ends an image block, digest or tag, rather than only where a reference was
+  # printed: a block pinned by tag would otherwise leave its registry standing, and the next digest pin that states a
+  # repository without one — a shape the templates support — would be surveyed at the wrong host.
   if [[ -f 'deploy/helm/mailfathom/values.yaml' ]]; then
     awk '
       function reference() { return (registry == "" ? "" : registry "/") repository }
       { key = $1; value = $2; gsub(/"/, "", value) }
       key == "registry:" { registry = value; next }
       key == "repository:" { repository = value; next }
-      key == "digest:" && repository != "" && value != "" { print reference() "@" value; registry = ""; repository = ""; next }
+      key == "digest:" { if (repository != "" && value != "") print reference() "@" value; registry = ""; repository = ""; next }
+      key == "tag:" { registry = ""; repository = ""; next }
     ' 'deploy/helm/mailfathom/values.yaml'
   fi
 }

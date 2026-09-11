@@ -432,6 +432,12 @@ password is one the application pod already holds, inside the connection string.
 protect nothing and would add a second Secret to create. The server's own pod reads that one key and mounts nothing else
 of it. The install notes print the exact connection string to write.
 
+**Write both keys before turning the block on**, because neither pod starts without them. MailFathom proves the
+connection string's reference while the host is built and refuses to start when the mounted file is absent, and the
+kubelet cannot create the Garnet container at all without the password key, so a rollout begun without them never
+completes. That is the reference being provable rather than the endpoint answering, and the two are not the same
+refusal: an endpoint that does not answer fails nothing, which is what losing the backplane below is about.
+
 **Rotating that password is a short signal outage rather than a rolling one**, which is the one place a Garnet the chart
 runs differs from what [rotating the connection string](secret-rotation.md#rotating-the-signal-backplanes-connection-string)
 describes. That procedure keeps the old credential accepted at the server while the replicas restart, and a server

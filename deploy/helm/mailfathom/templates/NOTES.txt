@@ -82,9 +82,14 @@ password:
 
   {{ include "mailfathom.backplaneFullname" . }}:{{ .Values.signalBackplane.garnet.service.port }},password=<the password above>
 
-Until both keys are there the replicas fan no signal out, and every client falls back on the re-read it already does.
-Nothing reports that as unready: a signal is an optimization, and a pod pulled from service over one is the worse
-outage.
+Write both keys before you turn this block on. Neither pod starts without them: MailFathom proves the reference while
+it builds and refuses to start when the mounted file is missing, and the kubelet cannot even create the Garnet
+container without the password key, so a rollout begun without them cannot complete.
+
+Once they are there, whether the server actually answers is a different matter and is not a reason to refuse anything.
+An endpoint that is unreachable leaves the replicas fanning no signal out, and every client falls back on the re-read
+it already does. Nothing reports that as unready: a signal is an optimization, and a pod pulled from service over one
+is the worse outage.
 {{ end }}
 {{ if not .Values.ingress.enabled }}
 No Ingress is configured, so the endpoint is reachable only from inside the cluster. Reach it for a check with:
