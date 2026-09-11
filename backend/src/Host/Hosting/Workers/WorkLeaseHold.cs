@@ -165,6 +165,37 @@ internal sealed partial class WorkLeaseHold : IDisposable
         }
     }
 
+    /// <summary>Runs one bounded piece of work under this hold: renewed while it runs, stopped the moment the hold is lost, and given back once it ends.</summary>
+    /// <typeparam name="TResult">What the work produces.</typeparam>
+    /// <param name="work">The guarded work, handed a token cancelled by <paramref name="cancellationToken" /> or by the hold being lost.</param>
+    /// <param name="cancellationToken">Stops the work from outside, such as the host stopping.</param>
+    /// <returns>What the work produced.</returns>
+    /// <exception cref="OperationCanceledException">Thrown when the work was stopped; <see cref="Lost" /> says whether the hold was the reason.</exception>
+    /// <remarks>
+    /// The hold is given back after the work has ended, whichever way it ended, so nothing the work writes outlives the
+    /// hold it was written under — and it is given back rather than kept, so the next piece of work is contested afresh.
+    /// </remarks>
+    internal async Task<TResult> RunWhileHeldAsync<TResult>(
+        Func<CancellationToken, Task<TResult>> work,
+        CancellationToken cancellationToken)
+    {
+        using var renewalStop = new CancellationTokenSource();
+        using var heldWork = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.lost.Token);
+
+        var renewals = this.KeepAsync(renewalStop.Token);
+
+        try
+        {
+            return await work(heldWork.Token);
+        }
+        finally
+        {
+            await renewalStop.CancelAsync();
+            await renewals;
+            await this.ReleaseAsync();
+        }
+    }
+
     /// <summary>Gives the scope back, so another replica can take it without waiting out the expiry.</summary>
     /// <returns>A task that completes once the release was written or given up on, and that never faults.</returns>
     /// <remarks>

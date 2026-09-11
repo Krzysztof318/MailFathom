@@ -784,6 +784,11 @@ synchronizing it. A replica configured with an account another one holds counts 
 supervision pass and publishes no series for it, which is how a second replica reads on a dashboard: waiting, not
 broken.
 
+The two derived-data sweeps hold `stored-email-embedding` and `stored-email-extraction` — the names of the position rows
+they resume from — and only while a pass runs, so on the gauge each is a series that appears on whichever replica is
+running a pass and leaves it when the pass ends. A refused claim for either is the ordinary answer of a replica that asked
+while another was mid-pass.
+
 ### What a synchronization cycle emits
 
 No instrumentation package exists for the mail library, so without what follows the part of MailFathom that spends the

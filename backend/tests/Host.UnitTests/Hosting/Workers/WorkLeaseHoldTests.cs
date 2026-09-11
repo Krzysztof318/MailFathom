@@ -91,6 +91,61 @@ public sealed class WorkLeaseHoldTests
         Assert.True(clock.GetUtcNow() - claimedAt < LeaseDuration);
     }
 
+    /// <summary>Work run under a hold gives the scope back once it ends, so the next piece of work is contested afresh.</summary>
+    [Fact]
+    public async Task RunWhileHeldAsync_WorkEnds_GivesTheScopeBackAndAnswersWithWhatTheWorkProduced()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider();
+        var store = StoreGrantingClaims(clock);
+        await using var services = new ServiceCollection().AddSingleton(store).BuildServiceProvider();
+        using var hold = await TakeAsync(services, clock);
+
+        // Act
+        var produced = await hold!.RunWhileHeldAsync(_ => Task.FromResult(7), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(7, produced);
+        await store.Received(1).ReleaseAsync(Arg.Any<WorkScope>(), Arg.Any<WorkLeaseHolder>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A hold lost while its work runs stops that work, rather than letting it run on and write as a second replica's.</summary>
+    [Fact]
+    public async Task RunWhileHeldAsync_HoldLostWhileTheWorkRuns_CancelsTheWorkAndStillGivesTheScopeBack()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider();
+        var workStarted = new TaskCompletionSource();
+        var store = StoreGrantingClaims(clock);
+        store.RenewAsync(Arg.Any<WorkScope>(), Arg.Any<WorkLeaseHolder>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<WorkLease?>(null));
+        await using var services = new ServiceCollection().AddSingleton(store).BuildServiceProvider();
+        using var hold = await TakeAsync(services, clock);
+
+        // Act
+        var running = hold!.RunWhileHeldAsync(
+            token => RunUntilCancelledAsync(workStarted, token),
+            TestContext.Current.CancellationToken);
+        await workStarted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        clock.Advance(RenewalInterval);
+
+        // Assert
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => running.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken));
+        Assert.True(hold.Lost.IsCancellationRequested);
+        await store.Received(1).ReleaseAsync(Arg.Any<WorkScope>(), Arg.Any<WorkLeaseHolder>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Models guarded work that runs until it is told to stop.</summary>
+    private static async Task<int> RunUntilCancelledAsync(TaskCompletionSource started, CancellationToken cancellationToken)
+    {
+        started.TrySetResult();
+
+        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+
+        return 0;
+    }
+
     private static IWorkLeaseStore StoreGrantingClaims(FakeTimeProvider clock)
     {
         var store = Substitute.For<IWorkLeaseStore>();

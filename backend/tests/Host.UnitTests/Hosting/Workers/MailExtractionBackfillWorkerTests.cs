@@ -4,17 +4,22 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
 using MailFathom.Common.Observability;
+using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -297,16 +302,153 @@ public sealed class MailExtractionBackfillWorkerTests : IDisposable
         Assert.Contains(0d, measurements.ValuesOf(OutstandingGauge));
     }
 
+    /// <summary>A replica refused the walk reads nothing and keeps its worker, asking again on its own interval.</summary>
+    /// <remarks>
+    /// A refusal says nothing about whether emails still await extraction, so it must not end the worker the way a run
+    /// that found nothing left does: the replica holding the walk may stop before it finishes.
+    /// </remarks>
+    [Fact]
+    public async Task ExecuteAsync_AnotherReplicaIsWalking_ReadsNoPositionAndAsksAgainOnTheInterval()
+    {
+        // Arrange
+        var settings = new MailExtractionBackfillOptions();
+        var backfillStore = Substitute.For<IStoredEmailExtractionBackfillStore>();
+        var leases = new ScriptedWorkLeaseStore { HeldElsewhere = true };
+        var clock = new FakeTimeProvider();
+        using var worker = CreateWorker(settings, backfillStore, out var logger, leases, clock);
+
+        // Act
+        await worker.StartAsync(CancellationToken.None);
+        await leases.WaitForClaimAsync(TestContext.Current.CancellationToken).WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await SynchronizationTestHost.AdvanceUntilAsync(
+            clock,
+            leases.WaitForClaimAsync(TestContext.Current.CancellationToken),
+            settings.Interval,
+            DeadlockGuard);
+
+        // Assert
+        Assert.False(worker.ExecuteTask!.IsCompleted);
+        await worker.StopAsync(CancellationToken.None);
+        await backfillStore.DidNotReceiveWithAnyArgs().FindResumePositionAsync(CancellationToken.None);
+        Assert.Contains(
+            logger.Messages,
+            message => message.Contains("Another replica is running the extracted-text backfill", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A run whose hold is lost stops where it is: the batch it committed stays committed for the next holder to resume
+    /// from, and the worker waits for its next interval rather than ending as though the walk were finished.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_HoldLostMidRun_StopsTheRunAndLeavesTheLastCommittedPosition()
+    {
+        // Arrange
+        var settings = new MailExtractionBackfillOptions { BatchSize = 1, MaxBatchesPerRun = 2 };
+        var committed = StoredEmailId.Create(Guid.CreateVersion7());
+        var secondBatchAsked = new TaskCompletionSource();
+        var secondBatchStopped = new TaskCompletionSource();
+        var backfillStore = Substitute.For<IStoredEmailExtractionBackfillStore>();
+        var leases = new ScriptedWorkLeaseStore();
+        var clock = new FakeTimeProvider();
+
+        // The first message's content is gone, so the run steps over it, commits the position past it, and asks for the
+        // next batch — which the database never answers, so the run is still going when its hold is lost.
+        backfillStore
+            .GetEmailsAwaitingExtractionAsync(Arg.Any<StoredEmailId?>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(
+                _ => Task.FromResult<IReadOnlyList<StoredEmailAwaitingExtraction>>([AwaitingExtraction(committed)]),
+                call => NeverAnswerUntilStoppedAsync(secondBatchAsked, secondBatchStopped, call.Arg<CancellationToken>()));
+        using var worker = CreateWorker(settings, backfillStore, out _, leases, clock);
+
+        // Act
+        await worker.StartAsync(CancellationToken.None);
+        await leases.WaitForClaimAsync(TestContext.Current.CancellationToken).WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await secondBatchAsked.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        leases.HeldElsewhere = true;
+        clock.Advance(settings.LeaseRenewalInterval);
+        await secondBatchStopped.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await SynchronizationTestHost.AdvanceUntilAsync(
+            clock,
+            leases.WaitForClaimAsync(TestContext.Current.CancellationToken),
+            settings.Interval,
+            DeadlockGuard);
+
+        // Assert
+        Assert.False(worker.ExecuteTask!.IsCompleted);
+        await worker.StopAsync(CancellationToken.None);
+        await backfillStore.Received(1).SaveResumePositionAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<StoredEmailId>(),
+            Arg.Any<CancellationToken>());
+        await backfillStore.Received(1).SaveResumePositionAsync(
+            Arg.Any<IPersistenceSession>(),
+            committed,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A worker that ends itself gives the walk back first, so the replicas still asking are not kept from it.</summary>
+    [Fact]
+    public async Task ExecuteAsync_NoStoredEmailAwaitsExtraction_GivesTheWalkBackAsItEnds()
+    {
+        // Arrange
+        var backfillStore = Substitute.For<IStoredEmailExtractionBackfillStore>();
+        backfillStore
+            .GetEmailsAwaitingExtractionAsync(Arg.Any<StoredEmailId?>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingExtraction>>([]));
+        var leases = new ScriptedWorkLeaseStore();
+        using var worker = CreateWorker(new MailExtractionBackfillOptions(), backfillStore, out _, leases);
+
+        // Act
+        await worker.StartAsync(CancellationToken.None);
+        await worker.ExecuteTask!.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([MailExtractionBackfillWorker.WalkScope], leases.Releases);
+        Assert.Empty(leases.HeldScopes);
+    }
+
+    private static StoredEmailAwaitingExtraction AwaitingExtraction(StoredEmailId storedEmailId) =>
+        new(
+            storedEmailId,
+            EmailOccurrenceId.Create(
+                MailAccountId.Create("primary"),
+                new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
+                ImapUidValidity.Create(1),
+                ImapUid.Create(1)),
+            MailUserId.Create(Guid.CreateVersion7()));
+
+    private static async Task<IReadOnlyList<StoredEmailAwaitingExtraction>> NeverAnswerUntilStoppedAsync(
+        TaskCompletionSource asked,
+        TaskCompletionSource stopped,
+        CancellationToken cancellationToken)
+    {
+        asked.TrySetResult();
+
+        try
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        }
+        finally
+        {
+            stopped.TrySetResult();
+        }
+
+        return [];
+    }
+
     private static MailExtractionBackfillWorker CreateWorker(
         MailExtractionBackfillOptions settings,
         IStoredEmailExtractionBackfillStore backfillStore,
-        out RecordingLogger<MailExtractionBackfillWorker> logger)
+        out RecordingLogger<MailExtractionBackfillWorker> logger,
+        ScriptedWorkLeaseStore? leases = null,
+        FakeTimeProvider? timeProvider = null)
     {
         logger = new RecordingLogger<MailExtractionBackfillWorker>();
-        var timeProvider = new FakeTimeProvider();
+        timeProvider ??= new FakeTimeProvider();
 
         var services = new ServiceCollection();
         services.AddSingleton<TimeProvider>(timeProvider);
+        services.AddSingleton<IWorkLeaseStore>(leases ?? new ScriptedWorkLeaseStore());
         services.AddSingleton(backfillStore);
         services.AddSingleton(Substitute.For<IEmailContentStore>());
         services.AddSingleton(Substitute.For<IEmailMimeReader>());
@@ -327,6 +469,7 @@ public sealed class MailExtractionBackfillWorkerTests : IDisposable
             Options.Create(settings),
             new MailExtractionBackfillTelemetry(),
             logger,
+            NullLoggerFactory.Instance,
             timeProvider);
     }
 }

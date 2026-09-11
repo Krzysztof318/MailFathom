@@ -110,6 +110,7 @@ internal sealed class SyntheticMailAccount(
         "embedding-backfill",
         "embedding-generation",
         "embedding-generations",
+        "embedding-sweep-hold",
         "embedding-workload",
         "extraction-backfill",
         "hybrid-retrieval",

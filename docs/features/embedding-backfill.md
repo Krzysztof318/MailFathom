@@ -185,6 +185,38 @@ its worker reports outright that it will take no pass — which is also what kee
 from recording a pass nothing would ever reach. The log says the same at `Debug` after every pass, and says at
 `Information` when an act cut a pause short.
 
+## Which replica sweeps
+
+One, and only for as long as a pass lasts. Every replica of a deployment runs this walk's worker, and the walk is one
+walk over one position, so a pass takes the lease `stored-email-embedding` — the name of the position row it resumes
+from — before it reads that position, and gives it back when the pass ends, as
+[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
+decides. Completing a generation and removing a superseded one ride the same pass and so the same lease: none of the
+three runs on two replicas at once, and no passage is embedded, or paid for, twice because two replicas read the same
+position.
+
+A replica refused the lease reads nothing — neither the position nor the generations — and asks again after
+`EmbeddingBackfill:Interval`. The lease is given back between passes, so every pass is contested afresh: whichever
+replica asks first after the last pass ended takes the next one, and a replica that stops gracefully leaves nothing
+held. One that crashed mid-pass keeps the sweep from the others until `EmbeddingBackfill:LeaseDuration` has passed since
+its last renewal.
+
+A running pass renews the lease every `EmbeddingBackfill:LeaseRenewalInterval`. A renewal that is refused, that fails,
+or that is not answered within half the margin between the two settings stops the pass there, the provider call in
+flight included, and what the pass committed stays: vectors are committed per provider call and the position per
+message, so the next holder resumes from the last position committed, and a message the stopped pass had embedded part
+of keeps those vectors and is finished by the next pass.
+
+**The pauses are each replica's.** A replica chooses its next pause from the pass it ran itself, and one refused the
+sweep waits the short interval, so a deployment of several replicas asks for a pass more often than one replica would.
+Nothing is embedded twice for it — every pass resumes from the one committed position, and the spend ceilings are the
+deployment's — but the scan `EmbeddingBackfill:IdleSweepInterval` paces is taken by each replica on its own schedule.
+
+An operator's act follows the same rule. Activating a profile or cancelling a reindex brings forward the pass of the
+replica that served the request, and that replica asks for the lease at once. Where another replica is in the middle of
+a pass, the log says so at `Information` and this replica asks again after the short interval; whichever pass runs
+next reads what the act committed. The `Next pass` line `mfctl embedding status` prints is the answering replica's.
+
 ## What an operator can see
 
 | Signal | What it answers |

@@ -4,6 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using MailFathom.Application.Emails.Extraction;
 
 namespace MailFathom.Host.Configuration.Mail;
@@ -15,7 +16,7 @@ namespace MailFathom.Host.Configuration.Mail;
 /// synchronization. It shares that feature's extraction limits, which are what decide how a message is read.
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
-internal sealed class MailExtractionBackfillOptions
+internal sealed class MailExtractionBackfillOptions : IValidatableObject
 {
     /// <summary>The configuration section these settings are bound from.</summary>
     public const string SectionName = "MailExtractionBackfill";
@@ -39,6 +40,40 @@ internal sealed class MailExtractionBackfillOptions
     /// <summary>Gets or sets how many batches one run processes before it yields until the next interval.</summary>
     [Range(1, 1000)]
     public int MaxBatchesPerRun { get; set; } = 10;
+
+    /// <summary>Gets or sets how long a replica holds the walk from each claim or renewal of its lease while a run lasts.</summary>
+    /// <remarks>
+    /// <para>
+    /// One replica runs the walk at a time: it holds the walk's lease for as long as a run lasts and gives it back when
+    /// the run ends. This is how long every other replica is kept from the walk after a holder is lost rather than
+    /// stopped, because nothing but the expiry frees a crashed replica's lease.
+    /// </para>
+    /// <para>
+    /// Must be longer than <see cref="LeaseRenewalInterval" />. Half the difference between the two is how long a renewal
+    /// may take to be answered, and the other half is how long a run stopped by a renewal that was not has to stop before
+    /// another replica may start one.
+    /// </para>
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:10", "01:00:00")]
+    public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>Gets or sets how long after the last confirmed claim or renewal a running walk renews its lease.</summary>
+    [Range(typeof(TimeSpan), "00:00:01", "00:30:00")]
+    public TimeSpan LeaseRenewalInterval { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <inheritdoc />
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (this.LeaseRenewalInterval >= this.LeaseDuration)
+        {
+            yield return new ValidationResult(
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "MailExtractionBackfill:LeaseRenewalInterval must be shorter than MailExtractionBackfill:LeaseDuration, which is {0}. A lease renewed no sooner than it expires lets a second replica take the walk while the first is still extracting.",
+                    this.LeaseDuration),
+                [nameof(this.LeaseRenewalInterval)]);
+        }
+    }
 
     /// <summary>Reads the two keys one walk is bounded by, beside what the sensitive-content section asks of it.</summary>
     /// <param name="rebuildsStaleDerivedData">

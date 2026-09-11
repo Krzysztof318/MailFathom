@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
 using MailFathom.Common.Observability;
@@ -15,9 +16,17 @@ namespace MailFathom.Host.Hosting.Workers;
 
 /// <summary>Runs the extraction backfill in scoped work units until no stored email awaits extraction.</summary>
 /// <remarks>
+/// <para>
 /// The worker ends itself once a run reports no remaining work, rather than idling on its interval forever. Every email
 /// stored from then on is extracted as it is written, so a completed backfill has nothing left to find and a query per
 /// interval would only be a query per interval.
+/// </para>
+/// <para>
+/// A run happens on one replica at a time, as <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// decides. Each run takes the walk's lease before it reads the position and gives it back when it ends, so a replica
+/// refused it reads nothing and asks again on its next interval, and a replica that ends itself leaves the walk free for
+/// every other replica to find the same answer on its own.
+/// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
 internal sealed partial class MailExtractionBackfillWorker : BackgroundService
@@ -44,10 +53,14 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
     internal const string FailedOutcomeName = MailExtractionBackfillTelemetry.FailedOutcomeName;
     internal const string InterruptedOutcomeName = MailExtractionBackfillTelemetry.InterruptedOutcomeName;
 
+    /// <summary>The scope one run is held under, named after the position row the walk commits its cursor to.</summary>
+    internal static readonly WorkScope WalkScope = WorkScope.Create("stored-email-extraction");
+
     private readonly IServiceScopeFactory scopeFactory;
     private readonly MailExtractionBackfillOptions settings;
     private readonly MailExtractionBackfillTelemetry telemetry;
     private readonly ILogger<MailExtractionBackfillWorker> logger;
+    private readonly ILoggerFactory loggerFactory;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes a new extraction backfill worker.</summary>
@@ -56,6 +69,7 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
         IOptions<MailExtractionBackfillOptions> settings,
         MailExtractionBackfillTelemetry telemetry,
         ILogger<MailExtractionBackfillWorker> logger,
+        ILoggerFactory loggerFactory,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -64,6 +78,7 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
         this.settings = settings.Value;
         this.telemetry = telemetry;
         this.logger = logger;
+        this.loggerFactory = loggerFactory;
         this.timeProvider = timeProvider;
     }
 
@@ -81,12 +96,49 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
 
         do
         {
-            if (!await this.RunOnceAsync(stoppingToken))
+            if (!await this.RunOnceWhereHeldAsync(stoppingToken))
             {
                 return;
             }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
+    }
+
+    /// <summary>Runs one pass where this replica is granted the walk, and reports whether the worker should keep going.</summary>
+    /// <remarks>
+    /// A refusal and a lost hold both keep the worker going, because neither says whether emails still await
+    /// extraction: the walk is another replica's for now, and only a run of this replica's own that found nothing left
+    /// ends it. The hold is given back before that answer is returned, so a worker ending itself frees the walk rather
+    /// than keeping it from the replicas still asking.
+    /// </remarks>
+    private async Task<bool> RunOnceWhereHeldAsync(CancellationToken stoppingToken)
+    {
+        using var hold = await WorkLeaseHold.TryTakeAsync(
+            WalkScope,
+            this.settings.LeaseDuration,
+            this.settings.LeaseRenewalInterval,
+            this.scopeFactory,
+            this.loggerFactory.CreateLogger<WorkLeaseHold>(),
+            this.timeProvider,
+            stoppingToken);
+
+        if (hold is null)
+        {
+            this.LogRunHeldElsewhere(this.settings.Interval);
+
+            return true;
+        }
+
+        try
+        {
+            return await hold.RunWhileHeldAsync(this.RunOnceAsync, stoppingToken);
+        }
+        catch (OperationCanceledException) when (hold.Lost.IsCancellationRequested && !stoppingToken.IsCancellationRequested)
+        {
+            // The hold has said why it was lost, and the run was published as interrupted. What it committed stays
+            // durable, and whichever replica holds the walk next resumes from it.
+            return true;
+        }
     }
 
     /// <summary>Runs one bounded pass and reports whether the worker should keep going.</summary>
@@ -132,8 +184,8 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Shutdown rather than a failure, exactly as an interrupted synchronization cycle is, so a rolling restart
-            // does not read as a backfill that broke.
+            // Shutdown or a lost hold rather than a failure, exactly as an interrupted synchronization cycle is, so a
+            // rolling restart or a handover between replicas does not read as a backfill that broke.
             run?.SetTag(OutcomeTagName, InterruptedOutcomeName);
             this.telemetry.RecordInterrupted(this.timeProvider.GetElapsedTime(startedAt));
 
@@ -162,6 +214,12 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Extracted-text backfill is disabled.")]
     private partial void LogBackfillDisabled();
+
+    /// <summary>Records the ordinary answer for a replica whose walk another one is running, which is why it is not worth more than debug.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Another replica is running the extracted-text backfill, so this one reads nothing and asks again in {Interval}.")]
+    private partial void LogRunHeldElsewhere(TimeSpan interval);
 
     /// <summary>Reports one run in counts only; no subject, address, or fragment of body text may reach a log.</summary>
     [LoggerMessage(

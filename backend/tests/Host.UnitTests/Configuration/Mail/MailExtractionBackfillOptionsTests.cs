@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.ComponentModel.DataAnnotations;
 using MailFathom.Host.Configuration.Mail;
 using Xunit;
 
@@ -39,5 +40,25 @@ public sealed class MailExtractionBackfillOptionsTests
 
         // Assert
         Assert.Equal(rebuildsStaleDerivedData, bounds.RebuildsStaleDerivedData);
+    }
+
+    /// <summary>A lease renewed no sooner than it runs out is one a second replica can take while the first is still extracting.</summary>
+    [Fact]
+    public void Validate_LeaseRenewedNoSoonerThanItExpires_IsRefused()
+    {
+        // Arrange
+        var settings = new MailExtractionBackfillOptions
+        {
+            LeaseDuration = TimeSpan.FromMinutes(1),
+            LeaseRenewalInterval = TimeSpan.FromMinutes(1),
+        };
+        List<ValidationResult> errors = [];
+
+        // Act
+        Validator.TryValidateObject(settings, new ValidationContext(settings), errors, validateAllProperties: true);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Equal([nameof(MailExtractionBackfillOptions.LeaseRenewalInterval)], error.MemberNames);
     }
 }
