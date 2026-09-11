@@ -82,6 +82,25 @@ public sealed class EmbeddingBackfillOptionsTests
         Assert.Contains(errors, error => error.MemberNames.Contains(expectedMember, StringComparer.Ordinal));
     }
 
+    /// <summary>A lease renewed no sooner than it runs out is one a second replica can take while the first is still embedding.</summary>
+    [Fact]
+    public void Validate_LeaseRenewedNoSoonerThanItExpires_IsRefused()
+    {
+        // Arrange
+        var settings = new EmbeddingBackfillOptions
+        {
+            LeaseDuration = TimeSpan.FromMinutes(1),
+            LeaseRenewalInterval = TimeSpan.FromMinutes(1),
+        };
+
+        // Act
+        var errors = ValidateEveryProperty(settings);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Equal([nameof(EmbeddingBackfillOptions.LeaseRenewalInterval)], error.MemberNames);
+    }
+
     /// <summary>Both keys one sweep stops at reach the bounds the walk takes.</summary>
     [Fact]
     public void ToBackfillOptions_ConfiguredSection_CarriesBothKeysTheSweepStopsAt()

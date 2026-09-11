@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
@@ -37,15 +38,32 @@ namespace MailFathom.Host.Hosting.Workers;
 /// the long one. <see cref="EmbeddingBackfillSchedule" /> is where the wait is taken for that reason: the act that
 /// creates the work releases it, and the instant it would otherwise end at is readable while it lasts.
 /// </para>
+/// <para>
+/// A pass runs on one replica at a time, as <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// decides. Each pass takes the sweep's lease before it reads the position and gives it back when it ends, so the next
+/// pass is contested afresh and a replica that stops parks nothing beyond one lease. A replica refused the lease reads
+/// nothing and asks again after the short interval; a pass whose hold is lost stops, and what it committed is where the
+/// next holder resumes. The pause and the schedule stay this process's own, which is why an act that brings a pass
+/// forward reaches the replica it was performed on rather than whichever one ran the last pass.
+/// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
 internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
 {
+    /// <summary>The scope one pass is held under, named after the position row the sweep commits its cursor to.</summary>
+    /// <remarks>
+    /// The walk is one walk over one cursor, so the whole deployment shares one scope. Completing a generation and
+    /// removing a superseded one ride the same pass and so the same hold: none of the three runs anywhere while another
+    /// replica could be running any of them.
+    /// </remarks>
+    internal static readonly WorkScope SweepScope = WorkScope.Create("stored-email-embedding");
+
     private readonly IServiceScopeFactory scopeFactory;
     private readonly EmailEmbeddingBackfillTelemetry telemetry;
     private readonly EmbeddingBackfillSchedule schedule;
     private readonly EmbeddingBackfillOptions settings;
     private readonly ILogger<MailEmbeddingBackfillWorker> logger;
+    private readonly ILoggerFactory loggerFactory;
     private readonly TimeProvider timeProvider;
 
     /// <summary>The period a user's ceiling has already been reported for, so one line is written per period.</summary>
@@ -65,6 +83,7 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
         EmbeddingBackfillSchedule schedule,
         IOptions<EmbeddingBackfillOptions> settings,
         ILogger<MailEmbeddingBackfillWorker> logger,
+        ILoggerFactory loggerFactory,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -74,6 +93,7 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
         this.schedule = schedule;
         this.settings = settings.Value;
         this.logger = logger;
+        this.loggerFactory = loggerFactory;
         this.timeProvider = timeProvider;
     }
 
@@ -93,16 +113,63 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
 
         this.LogWorkerStarted();
 
+        var broughtForward = false;
+
         while (!stoppingToken.IsCancellationRequested)
         {
-            var pause = await this.RunOnceAsync(stoppingToken);
+            var pause = await this.RunOnceWhereHeldAsync(broughtForward, stoppingToken);
 
             this.LogNextPassScheduled(pause);
 
-            if (await this.schedule.WaitForNextPassAsync(pause, stoppingToken))
+            broughtForward = await this.schedule.WaitForNextPassAsync(pause, stoppingToken);
+            if (broughtForward)
             {
                 this.LogNextPassBroughtForward();
             }
+        }
+    }
+
+    /// <summary>Runs one pass where this replica is granted the sweep, and reports how long to wait before asking again.</summary>
+    /// <param name="broughtForward">Whether an operator's act ended the wait before this attempt, which a refusal then owes a word about.</param>
+    /// <param name="stoppingToken">Stops the claim and the pass when the host is stopping.</param>
+    /// <remarks>
+    /// A refusal and a lost hold both wait the short interval, because neither says anything about whether mail awaits
+    /// embedding: the sweep is somebody else's for now, and it is asked for again soon.
+    /// </remarks>
+    private async Task<TimeSpan> RunOnceWhereHeldAsync(bool broughtForward, CancellationToken stoppingToken)
+    {
+        using var hold = await WorkLeaseHold.TryTakeAsync(
+            SweepScope,
+            this.settings.LeaseDuration,
+            this.settings.LeaseRenewalInterval,
+            this.scopeFactory,
+            this.loggerFactory.CreateLogger<WorkLeaseHold>(),
+            this.timeProvider,
+            stoppingToken);
+
+        if (hold is null)
+        {
+            if (broughtForward)
+            {
+                this.LogBroughtForwardPassHeldElsewhere(this.settings.Interval);
+            }
+            else
+            {
+                this.LogPassHeldElsewhere(this.settings.Interval);
+            }
+
+            return this.settings.Interval;
+        }
+
+        try
+        {
+            return await hold.RunWhileHeldAsync(this.RunOnceAsync, stoppingToken);
+        }
+        catch (OperationCanceledException) when (hold.Lost.IsCancellationRequested && !stoppingToken.IsCancellationRequested)
+        {
+            // The hold has said why it was lost. What the pass committed stays durable, and whichever replica holds the
+            // sweep next resumes from it.
+            return this.settings.Interval;
         }
     }
 
@@ -134,6 +201,10 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            // Shutdown or a lost hold rather than a failure, so a rolling restart or a handover between replicas does
+            // not read as a pass that broke.
+            pass.Interrupted();
+
             throw;
         }
         catch (PersistenceConcurrencyConflictException exception)
@@ -302,6 +373,18 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
         Level = LogLevel.Information,
         Message = "Activating or cancelling a generation brought the next embedding backfill pass forward, so it starts now rather than when the pause the last pass chose would have ended.")]
     private partial void LogNextPassBroughtForward();
+
+    /// <summary>Records the ordinary answer for a replica whose sweep another one is running, which is why it is not worth more than debug.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Another replica is running the embedding backfill pass, so this one reads nothing and asks again in {Pause}.")]
+    private partial void LogPassHeldElsewhere(TimeSpan pause);
+
+    /// <summary>Says where an operator's act went when another replica was mid-pass, so the act is not read as lost.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "An embedding backfill pass was asked for while another replica was running one, so this replica asks again in {Pause}; whichever pass runs next reads what the act committed.")]
+    private partial void LogBroughtForwardPassHeldElsewhere(TimeSpan pause);
 
     /// <summary>Reports one run in counts only; no subject, address, passage, or vector may reach a log.</summary>
     [LoggerMessage(

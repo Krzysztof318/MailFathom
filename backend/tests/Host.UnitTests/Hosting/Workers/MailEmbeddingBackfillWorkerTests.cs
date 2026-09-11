@@ -5,6 +5,7 @@
 using System.Collections.Concurrent;
 using MailFathom.Application.Access;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
@@ -21,6 +22,7 @@ using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -438,6 +440,158 @@ public sealed class MailEmbeddingBackfillWorkerTests
                 line => line.Contains("has spent what one period admits for them", StringComparison.Ordinal)));
     }
 
+    /// <summary>
+    /// The walk is one walk over one cursor, so a replica refused the sweep reads no position at all while another one
+    /// moves it, and asks again after the short interval — the sweep is somebody else's for now, not finished.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_AnotherReplicaIsSweeping_ReadsNoPositionAndAsksAgainAfterTheShortInterval()
+    {
+        // Arrange
+        using var world = CreateWorld(new EmbeddingBackfillOptions());
+        world.Leases.HeldElsewhere = true;
+
+        // Act
+        await world.Worker.StartAsync(CancellationToken.None);
+        await world.Logger.WaitForOccurrences(
+            "Another replica is running the embedding backfill pass",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+        await world.Worker.StopAsync(CancellationToken.None);
+
+        // Assert
+        await world.BackfillStore.DidNotReceiveWithAnyArgs().FindResumePositionAsync(CancellationToken.None);
+        Assert.Contains(
+            world.Logger.Messages,
+            line => line.Contains("asks again in 00:00:30", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// An operator's act that reaches this replica while another one is mid-pass cannot start a pass here yet, and it
+    /// says so rather than announcing a pass that is not going to happen on this replica.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_APassBroughtForwardWhileAnotherReplicaSweeps_SaysSoAndReadsNothing()
+    {
+        // Arrange
+        using var world = CreateWorld(new EmbeddingBackfillOptions());
+        world.Leases.HeldElsewhere = true;
+        await world.Worker.StartAsync(CancellationToken.None);
+        await world.Logger.WaitForOccurrences(
+            "Another replica is running the embedding backfill pass",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+
+        // Act
+        world.Schedule.BringForward();
+        await world.Logger.WaitForOccurrences(
+            "was asked for while another replica was running one",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+        await world.Worker.StopAsync(CancellationToken.None);
+
+        // Assert
+        await world.BackfillStore.DidNotReceiveWithAnyArgs().FindResumePositionAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    /// A pass whose hold is lost stops on that renewal, and the position it leaves is the last one it committed — which
+    /// is where whichever replica holds the sweep next resumes, rather than one a pass nobody holds went on to move.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_HoldLostMidPass_StopsThePassAndLeavesTheLastCommittedPosition()
+    {
+        // Arrange
+        var settings = new EmbeddingBackfillOptions { BatchSize = 1, MaxBatchesPerRun = 2 };
+        using var world = CreateWorld(settings);
+        var committed = StoredEmailId.Create(Guid.CreateVersion7());
+        var secondBatchAsked = new TaskCompletionSource();
+        var secondBatchStopped = new TaskCompletionSource();
+
+        // The first message is already current, so the pass commits the position past it and asks for the next batch —
+        // which the database never answers, so the pass is still running when its hold is lost.
+        world.BackfillStore
+            .GetEmailsAwaitingEmbeddingAsync(
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<EmbeddingProfileId>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                _ => Task.FromResult<IReadOnlyList<StoredEmailAwaitingEmbedding>>(
+                    [new StoredEmailAwaitingEmbedding(committed, RequiresChunking: false)]),
+                call => NeverAnswerUntilStoppedAsync(secondBatchAsked, secondBatchStopped, call.Arg<CancellationToken>()));
+        world.EmbeddingStore
+            .GetChunksAwaitingEmbeddingAsync(
+                Arg.Any<StoredEmailId>(),
+                Arg.Any<EmbeddingProfileId>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<EmailChunkAwaitingEmbedding>>([]));
+
+        // Act
+        await world.Worker.StartAsync(CancellationToken.None);
+        await secondBatchAsked.Task.WaitAsync(TestContext.Current.CancellationToken);
+        world.Leases.HeldElsewhere = true;
+        world.TimeProvider.Advance(settings.LeaseRenewalInterval);
+        await secondBatchStopped.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await world.Logger.WaitForOccurrences(
+            "The next embedding backfill pass is due in",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(world.Worker.ExecuteTask!.IsCompleted);
+        await world.Worker.StopAsync(CancellationToken.None);
+        await world.BackfillStore.Received(1).SaveResumePositionAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<StoredEmailId?>(),
+            Arg.Any<CancellationToken>());
+        await world.BackfillStore.Received(1).SaveResumePositionAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Is<StoredEmailId?>(position => position == committed),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A pass gives the sweep back when it ends, so the next pass is contested afresh rather than kept by whoever ran the last.</summary>
+    [Fact]
+    public async Task ExecuteAsync_APassEnds_GivesTheSweepBackBeforeWaitingForTheNext()
+    {
+        // Arrange
+        using var world = CreateWorld(new EmbeddingBackfillOptions());
+
+        // Act
+        await world.Worker.StartAsync(CancellationToken.None);
+        await world.Logger.WaitForOccurrences(
+            "The next embedding backfill pass is due in",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+        await world.Worker.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal([MailEmbeddingBackfillWorker.SweepScope], world.Leases.Releases);
+        Assert.Empty(world.Leases.HeldScopes);
+    }
+
+    /// <summary>Models a read the database never answers, until the pass that asked it is stopped.</summary>
+    private static async Task<IReadOnlyList<StoredEmailAwaitingEmbedding>> NeverAnswerUntilStoppedAsync(
+        TaskCompletionSource asked,
+        TaskCompletionSource stopped,
+        CancellationToken cancellationToken)
+    {
+        asked.TrySetResult();
+
+        try
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        }
+        finally
+        {
+            stopped.TrySetResult();
+        }
+
+        return [];
+    }
+
     private static EmbeddingProfileIdentity CreateIdentity() =>
         EmbeddingProfileIdentity.Create(
             "a-provider",
@@ -511,6 +665,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
 
         var services = new ServiceCollection();
         services.AddSingleton<TimeProvider>(world.TimeProvider);
+        services.AddSingleton<IWorkLeaseStore>(world.Leases);
         services.AddSingleton(world.BackfillStore);
         services.AddSingleton(generationStore);
         services.AddSingleton(world.EmbeddingStore);
@@ -548,6 +703,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
                 world.Schedule,
                 Options.Create(settings),
                 world.Logger,
+                NullLoggerFactory.Instance,
                 world.TimeProvider));
 
         return world;
@@ -562,6 +718,8 @@ public sealed class MailEmbeddingBackfillWorkerTests
         public WorkerWorld() => this.Schedule = new EmbeddingBackfillSchedule(this.TimeProvider);
 
         public AwaitingLogger<MailEmbeddingBackfillWorker> Logger { get; } = new();
+
+        public ScriptedWorkLeaseStore Leases { get; } = new();
 
         public FakeTimeProvider TimeProvider { get; } = new();
 

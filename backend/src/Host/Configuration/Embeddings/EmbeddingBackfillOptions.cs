@@ -4,6 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 
 namespace MailFathom.Host.Configuration.Embeddings;
@@ -22,7 +23,7 @@ namespace MailFathom.Host.Configuration.Embeddings;
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
-internal sealed class EmbeddingBackfillOptions
+internal sealed class EmbeddingBackfillOptions : IValidatableObject
 {
     /// <summary>The configuration section these settings are bound from.</summary>
     public const string SectionName = "EmbeddingBackfill";
@@ -58,6 +59,40 @@ internal sealed class EmbeddingBackfillOptions
     /// <summary>Gets or sets how many batches one run processes before it yields until the next interval.</summary>
     [Range(1, 1000)]
     public int MaxBatchesPerRun { get; set; } = 5;
+
+    /// <summary>Gets or sets how long a replica holds the sweep from each claim or renewal of its lease while a pass runs.</summary>
+    /// <remarks>
+    /// <para>
+    /// One replica runs a pass at a time: it holds the sweep's lease for as long as the pass lasts and gives it back when
+    /// the pass ends. This is how long every other replica is kept from the sweep after a holder is lost rather than
+    /// stopped, because nothing but the expiry frees a crashed replica's lease.
+    /// </para>
+    /// <para>
+    /// Must be longer than <see cref="LeaseRenewalInterval" />. Half the difference between the two is how long a renewal
+    /// may take to be answered, and the other half is how long a pass stopped by a renewal that was not has to end the
+    /// provider call it was making before another replica may start one.
+    /// </para>
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:10", "01:00:00")]
+    public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>Gets or sets how long after the last confirmed claim or renewal a running pass renews the sweep's lease.</summary>
+    [Range(typeof(TimeSpan), "00:00:01", "00:30:00")]
+    public TimeSpan LeaseRenewalInterval { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <inheritdoc />
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (this.LeaseRenewalInterval >= this.LeaseDuration)
+        {
+            yield return new ValidationResult(
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "EmbeddingBackfill:LeaseRenewalInterval must be shorter than EmbeddingBackfill:LeaseDuration, which is {0}. A lease renewed no sooner than it expires lets a second replica take the sweep while the first is still embedding.",
+                    this.LeaseDuration),
+                [nameof(this.LeaseRenewalInterval)]);
+        }
+    }
 
     /// <summary>Reads the two keys one sweep is bounded by.</summary>
     /// <returns>The bounds the sweep stops at.</returns>

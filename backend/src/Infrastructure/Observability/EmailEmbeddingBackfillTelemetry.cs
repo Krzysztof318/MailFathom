@@ -197,7 +197,8 @@ public sealed class EmailEmbeddingBackfillTelemetry
     /// <remarks>
     /// A pass that reached no result is published with an error status and no outcome, which is what an unresolved
     /// concurrency conflict and an unexpected failure both produce. Neither has a word among the outcomes, because
-    /// every one of those is a state the sweep itself reached.
+    /// every one of those is a state the sweep itself reached. A pass stopped from outside is neither, and is published
+    /// through <see cref="Interrupted" /> instead.
     /// </remarks>
     public sealed class PassScope : IDisposable
     {
@@ -231,6 +232,14 @@ public sealed class EmailEmbeddingBackfillTelemetry
                     ? ActivityStatusCode.Error
                     : ActivityStatusCode.Ok);
         }
+
+        /// <summary>Records that the pass was stopped from outside rather than failing: the host shut down, or another replica took the sweep.</summary>
+        /// <remarks>
+        /// The status is left unset rather than marked as an error, because replicas hand the sweep to each other in the
+        /// ordinary course and a rolling restart stops every pass it reaches; publishing either as a failure would fill a
+        /// healthy deployment's traces with errors. No outcome is tagged, because the sweep reached none of its own.
+        /// </remarks>
+        public void Interrupted() => this.reported = true;
 
         /// <inheritdoc />
         public void Dispose()
