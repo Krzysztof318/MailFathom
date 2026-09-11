@@ -111,7 +111,8 @@ export interface MailboxActs {
     readonly deletesPermanently: (messages: readonly ActedMessage[]) => boolean;
 
     /**
-     * Performs an act and reports what it came to through the toast surface.
+     * Performs an act, reports what it was written down for through the toast surface, and hands what it came to to the
+     * pending-changes queue, which says what was refused and follows what was not.
      *
      * Safe to call for an act `refusalOf` refuses: nothing is submitted, so a control that was drawn before the answer
      * arrived cannot file mail into a folder that is not there.

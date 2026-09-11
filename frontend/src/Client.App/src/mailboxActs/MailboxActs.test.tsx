@@ -4,22 +4,32 @@
 
 import type { ReactNode } from 'react';
 import { act, fireEvent, renderHook, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
     ClientRequest,
     ClientSession,
     MailFathomTransport,
     MailMutationOutcome,
+    MailMutationRecordState,
 } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import { PendingChangeLines } from '../pendingChanges/PendingChangeLines';
+import { PendingChangesProvider } from '../pendingChanges/PendingChanges';
+import { followedChangeInterval } from '../pendingChanges/usePendingChanges';
 import { ToastsProvider } from '../toasts/Toasts';
+import { toastLeaving, toastLifetime } from '../toasts/useToasts';
 import { mostMessagesPerMutation } from '@mailfathom/client-backend';
 import { MailboxActsProvider } from './MailboxActs';
-import { useMailboxActs, type ActedMessage, type MailboxActs } from './useMailboxActs';
+import type { MoveDestination } from './mailboxDestinations';
+import { useMailboxActs, type ActedMessage, type MailboxAct, type MailboxActs } from './useMailboxActs';
 
 // The provider is driven the way a control drives it — through the hook — because what is being proven is what the
 // deployment was asked for and what the person was told afterwards. Nothing here reaches a mail server: an act writes
 // a record and answers, so every assertion is about the request that carried it and the toast that reported it.
+//
+// The pending-changes queue is mounted above it as the frame mounts it, because what became of an act beyond being
+// written down — a refusal, a submission that never arrived, a change the account stopped retrying — is the queue's
+// to say, and saying it once for every act is what is being proven alongside the act.
 
 const session: ClientSession = { baseAddress: 'https://mail.example.invalid', authorization: 'Basic dGVzdA==' };
 
@@ -84,12 +94,14 @@ interface Deployment {
  *
  * A recorded message is answered with one record named after it, so a withdrawal or a release can be read back as the
  * records it named. A withdrawal cancels every record except the ones `takenInHand` names, which the deployment has
- * already begun and refuses to cancel; a release leaves each record pending, the answer the route gives.
+ * already begun and refuses to cancel; a release leaves each record pending, the answer the route gives. A record read
+ * back by the queue stands at `standing`.
  */
 function deploymentAnswering(
     outcomes: Readonly<Record<string, MailMutationOutcome>> = {},
     status = 200,
     takenInHand: readonly string[] = [],
+    standing: MailMutationRecordState = 'pending',
 ): Deployment {
     const requests: ClientRequest[] = [];
 
@@ -100,6 +112,21 @@ function deploymentAnswering(
 
             if (request.path.endsWith('/folders')) {
                 return Promise.resolve({ status: 200, body: folders, headers: {} });
+            }
+
+            if (request.path.includes('/mutations?')) {
+                return Promise.resolve({
+                    status: 200,
+                    body: JSON.stringify({
+                        changes: new URL(request.path).searchParams.getAll('record').map((recordId) => ({
+                            recordId,
+                            storedEmailId: recordId.replace('record-', ''),
+                            state: standing,
+                            outcomeUnknown: false,
+                        })),
+                    }),
+                    headers: {},
+                });
             }
 
             if (request.path.endsWith('/withdrawals') || request.path.endsWith('/releases')) {
@@ -158,16 +185,19 @@ function acting(
         return (
             <LocalizationProvider>
                 <ToastsProvider>
-                    <MailboxActsProvider
-                        session={session}
-                        transport={deployment.transport}
-                        online
-                        flags={flags}
-                        moves={moves}
-                        deletes={deletes}
-                    >
-                        {children}
-                    </MailboxActsProvider>
+                    <PendingChangesProvider session={session} transport={deployment.transport}>
+                        <PendingChangeLines />
+                        <MailboxActsProvider
+                            session={session}
+                            transport={deployment.transport}
+                            online
+                            flags={flags}
+                            moves={moves}
+                            deletes={deletes}
+                        >
+                            {children}
+                        </MailboxActsProvider>
+                    </PendingChangesProvider>
                 </ToastsProvider>
             </LocalizationProvider>
         );
@@ -190,6 +220,20 @@ function perform(held: () => MailboxActs, ...asked: Parameters<MailboxActs['perf
         held().perform(...asked);
     });
 }
+
+/** Moves the fake clock on, letting every answer already on its way land first. */
+async function pass(milliseconds: number): Promise<void> {
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(milliseconds);
+    });
+}
+
+/** A folder chosen in the move dialog, which is what asking a move again has to name a second time. */
+const chosen: MoveDestination = { alias: 'work-archive', name: 'Archive', role: 'Archive' };
+
+afterEach(() => {
+    vi.useRealTimers();
+});
 
 /** More messages in the trash than one call may name, which makes deleting them two submissions rather than one. */
 const heapedInTrash: ActedMessage[] = Array.from({ length: mostMessagesPerMutation + 1 }, (_, at) => ({
@@ -524,10 +568,9 @@ describe('MailboxActsProvider', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
 
         await screen.findByText('Put back where it was');
-        await screen.findByText(
-            'Some of those messages were not changed. Your deployment no longer serves them where the list drew them.',
-        );
+        await screen.findByText('One message was not put back.');
 
+        expect(screen.getByText('That mail is no longer in the mailbox this deployment reads.')).toBeDefined();
         expect(screen.getByText('1 message')).toBeDefined();
         await waitFor(() => {
             expect(held().asked.has('message-1')).toBe(false);
@@ -554,9 +597,7 @@ describe('MailboxActsProvider', () => {
 
         perform(held, 'flag', [invoice, receipt]);
 
-        await screen.findByText(
-            'Some of those messages were not changed. Your deployment no longer serves them where the list drew them.',
-        );
+        await screen.findByText('One message was not flagged.');
 
         // Waited for rather than read straight after the toast: what a row draws and what a toast says are two
         // separate things this provider writes, and asserting one the instant the other appears is an assumption about
@@ -569,13 +610,13 @@ describe('MailboxActsProvider', () => {
         expect(screen.getByText('1 message')).toBeDefined();
     });
 
-    it('says why the act failed and claims nothing, rather than leaving a row saying it is being archived', async () => {
+    it('says an act that never reached the deployment changed nothing, and claims nothing about the message', async () => {
         const deployment = deploymentAnswering({}, 403);
         const { held } = acting(deployment);
 
         perform(held, 'flag', [invoice]);
 
-        await screen.findByText('That change was not made: unauthorized.');
+        await screen.findByText('This change did not reach your deployment.');
 
         await waitFor(() => {
             expect(held().asked.has('message-1')).toBe(false);
@@ -624,7 +665,7 @@ describe('MailboxActsProvider', () => {
 
         perform(held, 'flag', spread);
 
-        await screen.findByText('That change was not made: unavailable.');
+        await screen.findByText('This change did not reach your deployment.');
 
         expect(screen.getByText('Flagged')).toBeDefined();
         expect(screen.getByText('200 messages')).toBeDefined();
@@ -634,6 +675,90 @@ describe('MailboxActsProvider', () => {
         });
 
         expect(held().asked.get('message-0')?.act).toBe('flag');
+    });
+
+    it.each<{ named: string; act: MailboxAct; message: ActedMessage; destination?: MoveDestination }>([
+        { named: 'a flag', act: 'flag', message: invoice },
+        { named: 'a flag taken off', act: 'unflag', message: invoice },
+        { named: 'a message marked unread', act: 'markUnread', message: invoice },
+        { named: 'an archive', act: 'archive', message: invoice },
+        { named: 'a delete into the trash', act: 'delete', message: invoice },
+        { named: 'a delete out of the trash', act: 'delete', message: discarded },
+        { named: 'a move', act: 'move', message: invoice, destination: chosen },
+    ])('follows $named it wrote down until the mailbox has taken it', async ({ act, message, destination }) => {
+        const { held } = acting(deploymentAnswering());
+
+        await waitFor(() => {
+            expect(held().refusalOf(act, [message])).toBeNull();
+        });
+
+        perform(held, act, [message], destination);
+
+        expect(await screen.findByText('One change has not reached your mailbox yet.')).toBeDefined();
+    });
+
+    // One sentence per outcome whichever surface asked: the reason is the deployment's answer and the same for every
+    // act, and what did not happen is the act's own.
+    it.each<{ act: MailboxAct; destination?: MoveDestination; said: string }>([
+        { act: 'flag', said: 'One message was not flagged.' },
+        { act: 'unflag', said: 'The flag was not removed from one message.' },
+        { act: 'markUnread', said: 'One message was not marked unread.' },
+        { act: 'archive', said: 'One message was not archived.' },
+        { act: 'delete', said: 'One message was not deleted.' },
+        { act: 'move', destination: chosen, said: 'One message was not filed.' },
+    ])('words a refused $act the way the queue words every refusal', async ({ act, destination, said }) => {
+        const { held } = acting(deploymentAnswering({ 'message-1': 'message-not-found' }));
+
+        await waitFor(() => {
+            expect(held().refusalOf(act, [invoice])).toBeNull();
+        });
+
+        perform(held, act, [invoice], destination);
+
+        expect(await screen.findByText(said)).toBeDefined();
+        expect(screen.getByText('That mail is no longer in the mailbox this deployment reads.')).toBeDefined();
+    });
+
+    // Asking again is the act performed afresh, so a move names the folder it named the first time rather than
+    // whatever a second reading of the account would pick.
+    it('asks a move the account stopped retrying again, into the folder the move first named', async () => {
+        vi.useFakeTimers();
+
+        const deployment = deploymentAnswering({}, 200, [], 'dead-lettered');
+        const { held } = acting(deployment);
+
+        await pass(0);
+        perform(held, 'move', [invoice], chosen);
+        await pass(0);
+        await pass(followedChangeInterval);
+        await pass(toastLifetime + toastLeaving);
+
+        expect(screen.getByText('Filed in another folder')).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Ask again' }));
+        await pass(0);
+
+        const filedInto = { moves: [{ storedEmailId: 'message-1', destinationFolder: 'work-archive' }] };
+
+        expect(submitted(deployment).map(({ body }) => body)).toStrictEqual([filedInto, filedInto]);
+        expect(held().asked.get('message-1')).toStrictEqual({ act: 'move', from: 'work-inbox', leaves: true });
+    });
+
+    it('stops claiming an act the account stopped retrying once the person lets it go', async () => {
+        vi.useFakeTimers();
+
+        const { held } = acting(deploymentAnswering({}, 200, [], 'dead-lettered'));
+
+        await pass(0);
+        perform(held, 'archive', [invoice]);
+        await pass(0);
+        await pass(followedChangeInterval);
+        await pass(toastLifetime + toastLeaving);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Let it go' }));
+
+        expect(held().asked.has('message-1')).toBe(false);
+        expect(screen.queryByText('Archived')).toBeNull();
     });
 
     it('asks a deployment for nothing where the credential may not write what the act writes', () => {

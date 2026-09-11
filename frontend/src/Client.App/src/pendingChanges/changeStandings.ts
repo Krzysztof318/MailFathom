@@ -19,11 +19,12 @@ import type { MailMutationOutcome, MailMutationRecord, MailMutationResult } from
 /**
  * What the client asked a mailbox for, named for the person rather than for the record behind it.
  *
- * One member today because marking a message read is the one mailbox change this client makes. A second act arrives
- * here as a second member with its own sentences beside it, rather than as a free-form label a screen would have to
- * guess the wording for.
+ * One member per act a person performs, each with its own sentences beside it rather than a free-form label a screen
+ * would have to guess the wording for. Marking read is the act opening a message performs; the rest are the acts of the
+ * Mail space, and `putBack` is the reverse move a filing act offers as its way back — a move of its own, named apart
+ * because what did not happen to a message somebody tried to put back is not that it was not filed.
  */
-export type ChangeAct = 'markRead';
+export type ChangeAct = 'markRead' | 'flag' | 'unflag' | 'markUnread' | 'archive' | 'delete' | 'move' | 'putBack';
 
 /** One change the deployment wrote down, which this client follows until the mailbox agrees or somebody decides. */
 export interface PendingChange {
