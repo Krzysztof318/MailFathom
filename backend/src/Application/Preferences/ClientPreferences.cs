@@ -53,8 +53,8 @@ public sealed record ClientPreferences(
     /// <summary>The longest a notification may be asked to stand for.</summary>
     /// <remarks>
     /// Half a minute is past the point where a card in the corner is being read and into the point where it is in the
-    /// way, and it is also what a permanent delete waits out before it reaches the mail server — so a bound above this
-    /// would be a person asking their own mailbox to hold still for as long as they liked.
+    /// way, and a permanent delete waits it out, with a short grace behind it, before it reaches the mail server — so a
+    /// bound above this would be a person asking their own mailbox to hold still for as long as they liked.
     /// </remarks>
     public const int LongestNotificationSeconds = 30;
 
