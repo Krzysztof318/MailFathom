@@ -222,19 +222,15 @@ describe('Space', () => {
 
     // The scroll offset is the platform's rather than this client's: it belongs to the scroller's box, so it survives
     // exactly as long as that box does. jsdom keeps what is written to `scrollTop` without laying anything out, so the
-    // number here says the element was never rebuilt — a space put back would be a new element reading zero. What keeps
-    // the box in a browser is the second assertion: an aside space stands aside by `visibility`, not by leaving the
-    // layout, which is what `display: none` would do and what would take the offset with it.
+    // number here says the element was never rebuilt — a space put back would be a new element reading zero. That the
+    // aside space also keeps its *box*, by standing aside with `visibility` rather than leaving the layout, is a
+    // rendered-layout claim and is the browser suite's rather than this one's.
     it('keeps a space its scroll offset across a visit to another space and back', () => {
         const { rerender } = render(inStrictMode('cases'));
         const region = screen.getByLabelText('Cases');
 
         region.scrollTop = 120;
         rerender(inStrictMode('mail'));
-
-        expect(region.classList.contains('invisible')).toBe(true);
-        expect(region.classList.contains('hidden')).toBe(false);
-
         rerender(inStrictMode('cases'));
 
         expect(screen.getByLabelText('Cases')).toBe(region);
