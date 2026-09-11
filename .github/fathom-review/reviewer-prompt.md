@@ -398,26 +398,22 @@ a missing page: which pages exist is not this change's business.
   Documentation that states something the code does not do is `P1` above and stays
   there. A page that has simply not caught up — a new option it does not mention, a
   limit it does not state — is this level.
-
-  This is the level that decides the verdict on the passes that have one to decide. A
-  change carrying nothing above `P3` is approved with those findings attached, so a `P2` is
-  what holds it — which is exactly why the level is a property of the defect and never a
-  way to make one land harder. **What the posture changes** below says which passes those
-  are, and it is the run's decision rather than yours in either direction.
 - **P3** — something a later change will pay for: a name that misleads, a boundary
   crossed for convenience, a method that hides two responsibilities.
 
 Post nothing below P3, and at most twenty findings; when more clear the bar, keep the
 most severe and say in the summary how many you left out.
 
-The severity you write decides the verdict. A review carrying nothing above `P3` is
-published as an approval with those findings attached rather than as one that holds the
-change, at every pass including the first: a `P3` is paid for later by definition, and a
-round spent on one costs more than it is worth. The finding still arrives, on its line,
-as a thread to answer and resolve. So write the severity the finding actually has.
-Raising a `P3` to `P2` to make it hold the change is the failure this rule is most
-exposed to, and it is the reviewer arranging a verdict rather than reporting one — the
-level is a property of the defect, and the consequence is not yours to steer.
+**Every finding you write withholds approval.** The verdict follows the list rather than
+the levels in it: an empty `findings` array is approved, and anything in it is published
+under `NEEDS CHANGES` whatever severity it carries. So a finding is a round you are asking
+the author for, and the question to hold each one against is whether it is worth one —
+never which heading it would arrive under.
+
+The severity is therefore a property of the defect and nothing else. It ranks the list for
+whoever answers it, and it decides which findings a settling pass is worth writing at all,
+which is **What the posture changes** below. It steers no verdict in either direction, so
+write the level the defect actually has.
 
 Twenty is a ceiling, never a target. A change with two defects gets two findings, and a
 change with none gets none: an entry that exists to fill the list is a defect in the
@@ -438,18 +434,17 @@ it arrives. Everything above holds exactly as written.
 `settling` is the fourth automatic pass and any after it. By then the author is answering
 a review rather than writing the change, and what a pass finds there is measurably not
 what breaks: across the pull requests that reached a fourth pass, seven of every eight P1
-findings had already been raised in the first three. Two things change:
+findings had already been raised in the first three. One thing changes:
 
-- **Report P1 and P2 only.** A P3 is left out entirely — not in `findings`, not as a
-  sentence in the summary, and not folded into the `impact` of a finding that is above the
-  bar. A defect a later change pays for does not earn an author another round this late,
-  and the file is in front of a human reviewer as well.
-- **A P1 alone holds the change.** A settling pass carrying nothing but P2 findings is
-  published as an approval with those findings attached, exactly as a P3 is under `full`.
+**Report P1 only.** A P2 and a P3 are left out entirely — not in `findings`, not as a
+sentence in the summary, and not folded into the `impact` of a finding that is above the
+bar. A defect a rule owes and one a later change pays for do not earn an author another
+round this late, and the file is in front of a human reviewer as well.
 
-Neither of those touches the severity you write, and the paragraph above is the whole
-reason: a P2 is a P2 in either posture, and moving one down to keep it out of a settling
-pass is the same failure as moving one up to hold a change.
+That does not touch the severity you write, and the rule above is the whole reason: a P2 is
+a P2 in either posture, and writing one as a P1 to get it past this bar is the same failure
+as writing a P1 as a P2 to keep it out — both are the reviewer deciding what the pass costs
+instead of reporting what it found.
 
 Nor does either touch the reading. The coverage ledger, every row of `obligations.json`,
 the whole of the change, and every rubric below apply on a settling pass exactly as on a

@@ -2281,8 +2281,8 @@ fathom_review_settles_the_bar_from_the_fourth_pass() {
   run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
 
   assert_contains 'posture=settling' "$step_output_file"
-  # The reason is said in the log beside the decision, because a maintainer reading a run that
-  # approved a change carrying a P2 has to be able to see which bar produced that.
+  # The reason is said in the log beside the decision, because a maintainer reading a pass that
+  # reported nothing has to be able to see which bar produced that.
   assert_contains 'posture: settling after 3 automatic passes' "$output_file"
 }
 
@@ -3338,9 +3338,6 @@ run_fathom_review_submit() {
   # Which marker the published review carries. A push is the ordinary case, and the gate of the next
   # run counts exactly the reviews carrying this one.
   local trigger_marker="${6:-<!-- fathom-review: automatic -->}"
-  # The bar the gate resolved for this pass. `full` is the first three passes and every requested
-  # one, which is what most of these contracts are about; the settling contracts name the other.
-  local posture="${7:-full}"
   local step_script="$test_directory/fathom-review-submit.sh"
   local review_directory="$test_directory/fathom-review-submit-review"
   local coverage_file="$test_directory/fathom-review-submit-coverage"
@@ -3373,7 +3370,6 @@ run_fathom_review_submit() {
     export REVIEW_DIRECTORY="$review_directory"
     export COVERAGE_FILE="$coverage_file"
     export TRIGGER_MARKER="$trigger_marker"
-    export REVIEW_POSTURE="$posture"
     export FAKE_REVIEW_PAYLOAD="$payload_file"
     # The verdict the board job reads. It is written only where a review was posted, so a contract
     # that asserts on an empty file is asserting that nothing was published.
@@ -3402,9 +3398,10 @@ fathom_review_anchors_a_finding_to_its_line() {
   assert_contains 'verdict=changes_requested' "$submit_step_output_file"
 }
 
-# A change settles on what it has, and a P3 never holds it. These three fix that from both sides:
-# what a review carrying only deferred findings does, and what still holds a change beside one.
-fathom_review_approves_a_pass_carrying_only_deferred_findings() {
+# An approval carries no findings, so a finding holds the change whatever its level says about how
+# soon it matters. These two fix that from both sides: the lowest severity alone withholds approval,
+# and so does a severity a settling pass was not supposed to write in the first place.
+fathom_review_holds_a_pass_carrying_only_a_deferred_finding() {
   local output_file="$test_directory/fathom-review-submit-settled-output"
   local payload_file="$test_directory/fathom-review-submit-settled-payload"
 
@@ -3413,14 +3410,11 @@ fathom_review_approves_a_pass_carrying_only_deferred_findings() {
     "$output_file" "$payload_file"
 
   ((submit_status == 0))
-  assert_json '"APPROVE"' '.event' "$payload_file"
-  # The finding is still published, and still on its line: the verdict it arrives under changed,
-  # never whether it arrives. The thread-resolution rule then keeps it answerable.
+  assert_json '"COMMENT"' '.event' "$payload_file"
   assert_json '["backend/src/Sample.cs"]' '[.comments[].path]' "$payload_file"
-  assert_contains '# APPROVED' "$payload_file"
+  assert_contains '# NEEDS CHANGES' "$payload_file"
   assert_contains '**Findings** — P3: 1' "$payload_file"
-  assert_contains 'Nothing above P3 is left' "$payload_file"
-  assert_contains 'verdict=approved' "$submit_step_output_file"
+  assert_contains 'verdict=changes_requested' "$submit_step_output_file"
 }
 
 fathom_review_holds_a_pass_that_still_found_something_owed() {
@@ -3437,74 +3431,24 @@ fathom_review_holds_a_pass_that_still_found_something_owed() {
   assert_contains 'verdict=changes_requested' "$submit_step_output_file"
 }
 
-# The first pass is the one this rule changed. A P3 on a change nobody has reviewed yet used to hold
-# it for three more rounds, and the measurement that removed the threshold is in the workflow beside
-# the branch: of 72 reviews that withheld approval, one carried nothing but P3 findings.
-fathom_review_approves_a_first_pass_carrying_only_deferred_findings() {
-  local output_file="$test_directory/fathom-review-submit-early-output"
-  local payload_file="$test_directory/fathom-review-submit-early-payload"
-
-  run_fathom_review_submit \
-    '{"summary":"First pass.","findings":[{"severity":"P3","path":"backend/src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""}]}' \
-    "$output_file" "$payload_file"
-
-  ((submit_status == 0))
-  assert_json '"APPROVE"' '.event' "$payload_file"
-  assert_json '["backend/src/Sample.cs"]' '[.comments[].path]' "$payload_file"
-  assert_contains 'verdict=approved' "$submit_step_output_file"
-}
-
-# From the fourth pass the same review lands the other way round. A P2 is owed by a rule and still
-# reported, but by then the author is answering threads rather than writing the change, and the
-# measurement in the gate is that 27 of the 33 reviews published that late withheld approval with no
-# P1 among them. So it arrives under an approval, exactly as a P3 does at any pass.
-fathom_review_approves_a_settling_pass_carrying_a_rule_owed_finding() {
+# The posture bounds what the reviewer writes and reaches this step nowhere, so a finding a settling
+# pass should not have written is still published and still holds the change. That is the property
+# worth pinning: no severity and no pass count softens a verdict here, so there is no second bar to
+# come apart from the one the prompt carries.
+fathom_review_holds_a_settling_pass_whatever_the_severity() {
   local output_file="$test_directory/fathom-review-submit-settling-output"
   local payload_file="$test_directory/fathom-review-submit-settling-payload"
 
   run_fathom_review_submit \
     '{"summary":"Fourth pass.","findings":[{"severity":"P2","path":"backend/src/Sample.cs","start_line":null,"line":14,"title":"Bound the sequence","impact":"A remote list is expanded without a ceiling.","correction":"Take the first hundred.","rule":"`AGENTS.md`, \"Reliability, security, and performance\""}]}' \
-    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' 'settling'
+    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->'
 
   ((submit_status == 0))
-  assert_json '"APPROVE"' '.event' "$payload_file"
-  # Reported, anchored, and answerable: what the posture moved is the verdict above the finding, not
-  # whether the finding reaches the author.
+  assert_json '"COMMENT"' '.event' "$payload_file"
   assert_json '["backend/src/Sample.cs"]' '[.comments[].path]' "$payload_file"
-  assert_contains '# APPROVED' "$payload_file"
+  assert_contains '# NEEDS CHANGES' "$payload_file"
   assert_contains '**Findings** — P2: 1' "$payload_file"
-  assert_contains 'This is a settling pass, so nothing below P1 holds the change' "$payload_file"
-  assert_contains 'verdict=approved' "$submit_step_output_file"
-}
-
-fathom_review_holds_a_settling_pass_that_found_something_broken() {
-  local output_file="$test_directory/fathom-review-submit-settling-held-output"
-  local payload_file="$test_directory/fathom-review-submit-settling-held-payload"
-
-  run_fathom_review_submit \
-    '{"summary":"Fourth pass.","findings":[{"severity":"P1","path":"backend/src/Sample.cs","start_line":null,"line":12,"title":"Refuse the empty case","impact":"An empty list reaches the loop and the guard passes.","correction":"Return early when the list is empty.","rule":"`AGENTS.md`, \"Reliability, security, and performance\""},{"severity":"P2","path":"backend/src/Sample.cs","start_line":null,"line":14,"title":"Bound the sequence","impact":"A remote list is expanded without a ceiling.","correction":"Take the first hundred.","rule":"`AGENTS.md`"}]}' \
-    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' 'settling'
-
-  ((submit_status == 0))
-  assert_json '"COMMENT"' '.event' "$payload_file"
-  assert_contains '# NEEDS CHANGES' "$payload_file"
   assert_contains 'verdict=changes_requested' "$submit_step_output_file"
-}
-
-# The posture reaches this step from the gate through two job outputs, so the value arriving empty is
-# a defect in this workflow rather than an attack. It still has a safe reading, and the safe reading
-# is the bar that withholds approval for more rather than for less.
-fathom_review_reads_an_unset_posture_as_the_full_bar() {
-  local output_file="$test_directory/fathom-review-submit-posture-unset-output"
-  local payload_file="$test_directory/fathom-review-submit-posture-unset-payload"
-
-  run_fathom_review_submit \
-    '{"summary":"Unset posture.","findings":[{"severity":"P2","path":"backend/src/Sample.cs","start_line":null,"line":14,"title":"Bound the sequence","impact":"A remote list is expanded without a ceiling.","correction":"Take the first hundred.","rule":"`AGENTS.md`"}]}' \
-    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' ''
-
-  ((submit_status == 0))
-  assert_json '"COMMENT"' '.event' "$payload_file"
-  assert_contains '# NEEDS CHANGES' "$payload_file"
 }
 
 fathom_review_moves_a_finding_with_no_line_into_the_body() {
@@ -3538,6 +3482,10 @@ fathom_review_approves_when_it_finds_nothing() {
   assert_contains '# APPROVED' "$payload_file"
   assert_contains 'nothing above the bar' "$payload_file"
   assert_contains 'verdict=approved' "$submit_step_output_file"
+  # An approval carries no threads, which is the whole of what it means: the payload has no
+  # `comments` key at all, so a reader who sees `APPROVED` is owed nothing further.
+  assert_json 'null' '.comments' "$payload_file"
+  assert_excludes '### Findings with no line to sit on' "$payload_file"
 }
 
 # The marker is what the ceiling counts with, and it is written by the only step that publishes. A
@@ -10238,12 +10186,9 @@ run_test apply_pull_request_labels_posts_the_labels_the_change_earns
 run_test apply_pull_request_labels_posts_nothing_for_an_ordinary_change
 run_test apply_pull_request_labels_reports_a_write_it_was_refused
 run_test fathom_review_anchors_a_finding_to_its_line
-run_test fathom_review_approves_a_pass_carrying_only_deferred_findings
+run_test fathom_review_holds_a_pass_carrying_only_a_deferred_finding
 run_test fathom_review_holds_a_pass_that_still_found_something_owed
-run_test fathom_review_approves_a_first_pass_carrying_only_deferred_findings
-run_test fathom_review_approves_a_settling_pass_carrying_a_rule_owed_finding
-run_test fathom_review_holds_a_settling_pass_that_found_something_broken
-run_test fathom_review_reads_an_unset_posture_as_the_full_bar
+run_test fathom_review_holds_a_settling_pass_whatever_the_severity
 run_test fathom_review_moves_a_finding_with_no_line_into_the_body
 run_test fathom_review_approves_when_it_finds_nothing
 run_test fathom_review_reports_the_files_a_review_never_named

@@ -48,12 +48,14 @@ name: Fathom review
 # workflow token it replaces drops to read-only: the only credential in this file that can write to
 # a pull request is minted from the App's private key, held by one step, and expires with the job.
 #
-# A run that finds nothing above the bar approves the pull request, and one that finds something
-# submits `event: COMMENT`. The verdict is the whole content of an all-clear, so it is said in the
-# one place GitHub renders as a verdict rather than as a wall of threads that each read "this is
-# fine". Either body opens with that verdict as a heading of its own — `APPROVED` or
-# `NEEDS CHANGES` — so what the run concluded is legible before the summary under it is read, and
-# a reader scrolling a long pull request does not have to infer it from whether threads appeared.
+# A run that finds nothing approves the pull request, and one that finds anything at all submits
+# `event: COMMENT`: an approval carries no findings, whatever severity they would have had, so
+# reading the verdict is the whole of reading an approval. The verdict is the content of an
+# all-clear, so it is said in the one place GitHub renders as a verdict rather than as a wall of
+# threads that each read "this is fine". Either body opens with that verdict as a heading of its
+# own — `APPROVED` or `NEEDS CHANGES` — so what the run concluded is legible before the summary
+# under it is read, and a reader scrolling a long pull request does not have to infer it from
+# whether threads appeared.
 #
 # `NEEDS CHANGES` is a heading and nothing more. `REQUEST_CHANGES` is deliberately never used:
 # this reviewer advises and gates nothing, so it must not be able to block a merge either.
@@ -520,11 +522,13 @@ jobs:
             fi
           fi
 
-          # Which bar this pass applies, decided once here and read by three steps that must not
-          # disagree about it: the reader's prompt, the judge's prompt, and the verdict. `full` is
-          # every rubric at the severity the defect actually has. `settling` is the same reading with
-          # a higher bar on what is worth another round — the reviewer reports P1 and P2 only, the
-          # security label's wide sweep is behind it, and a P1 alone withholds approval.
+          # Which bar this pass applies, decided once here and read by the two prompts that must not
+          # disagree about it: the reader's and the judge's. `full` is every rubric at the severity
+          # the defect actually has, and all three severities are worth reporting. `settling` is the
+          # same reading with a higher bar on what is worth another round — the reviewer reports P1
+          # alone and the security label's wide sweep is behind it. The verdict reads neither value:
+          # every finding withholds approval in either posture, so what this decides is what gets
+          # written rather than what it is published under.
           #
           # Three is the threshold because the sharp pass is measurably the early one. Across the 60
           # most recently merged pull requests — 59 reviewed, 187 published reviews — 21 reached a
@@ -536,10 +540,9 @@ jobs:
           # finding what breaks and starts finding what a later change pays for, and the bar moves
           # with it.
           #
-          # This is not #930's threshold returning. That one settled a review carrying nothing but
-          # P3, which the measurement there found was worth one review in 106, and it stays removed:
-          # a P3 withholds approval at no pass, in either posture. What moves here is P2, which is
-          # what the numbers above say actually holds a late change.
+          # The saving is the finding rather than the verdict it would arrive under. A bar that let a
+          # low severity through under an approval would spare the author nothing — the thread is
+          # still there to answer — so what a late pass drops, it drops before it is written.
           #
           # A requested review is always `full`, for the same reason it is always unbounded in scope:
           # a maintainer spending usage on a pass nobody's push asked for wants the reading the first
@@ -2282,11 +2285,6 @@ jobs:
           # submitted a review and when, never what asked for it, and the gate of a later run needs
           # exactly that to count the automatic passes without counting the requested ones.
           TRIGGER_MARKER: ${{ needs.decide.outputs.explicit == 'true' && env.REQUESTED_REVIEW_MARKER || env.AUTOMATIC_REVIEW_MARKER }}
-          # The bar the reviewer was written to, read here for the verdict. The gate resolved it and
-          # the prompt above carried the same value, so what the review was asked for and what it is
-          # published under are one decision. An unset or unrecognized value reads as `full` below,
-          # which is the posture that withholds more rather than less.
-          REVIEW_POSTURE: ${{ needs.decide.outputs.posture }}
         run: |
           set -euo pipefail
 
@@ -2406,59 +2404,17 @@ jobs:
             exit 0
           fi
 
-          # A P3 never withholds approval, at any pass. A P1 breaks something and a P2 is owed by a
-          # rule, so either holds the change however late it arrives; a P3 is paid for later by
-          # definition, and holding a change for one spends a round on work its own severity says can
-          # wait. The findings are still published — as inline comments under the approval, where the
-          # thread-resolution rule the `main` ruleset carries still makes each one answerable — so
-          # nothing is hidden and nothing is postponed silently. What changes is only which verdict
-          # they arrive under.
+          # Every finding withholds approval, whatever severity it carries, so the branch above is
+          # the only one that approves and this one is everything else. A verdict that softened for a
+          # low severity would publish an approval the author still has to open and answer, which is
+          # the one thing a verdict exists to make unnecessary: `APPROVED` says the reviewer found
+          # nothing, and that is the whole of what a reader takes from it.
           #
-          # This used to start at the fourth pass, on the reasoning that an early P3 was worth one
-          # round. The measurement says it was not worth the rule: across 106 published reviews on 36
-          # pull requests, 72 withheld approval and exactly **one** of them carried nothing but P3
-          # findings. What the threshold actually bought was a rule with two states to reason about,
-          # a pass counter threaded into the submission, and a verdict that depended on which round a
-          # finding happened to be noticed in — for one review. P3s themselves are not rare (95 of
-          # 326 findings), which is the other half of the reading: they arrive beside P1s and P2s,
-          # where the verdict was never theirs to decide anyway.
-          #
-          # What this does not change is that the finding is reported. A P3 is a thread the author
-          # answers and resolves like any other, and the ceiling on findings still applies to it.
-          #
-          # What the posture changes is where the line above P3 sits. Under `settling` — a fourth or
-          # later automatic pass, resolved by the gate for the reasons recorded there — a P2 stops
-          # withholding approval too, and a P1 alone holds the change. The measurement is in the gate:
-          # of the 33 reviews published at pass 4 or later across the 60 most recently merged pull
-          # requests, 31 withheld approval and 27 of those carried no P1 at all. Each of those 27 is
-          # a round spent on a defect a rule owes rather than on one that breaks something, at the
-          # point where the author is answering review rather than writing code — and the findings
-          # still arrive, on their lines, as threads the `main` ruleset keeps answerable.
-          #
-          # An unrecognized posture reads as `full`. This is a bar rather than a gate, so the value
-          # arriving empty is a workflow defect rather than an attack, but the safe reading of one is
-          # still the posture that withholds approval for more rather than for less.
-          verdict_event='COMMENT'
-          verdict_heading='# NEEDS CHANGES'
-          verdict_output='changes_requested'
-          settled_note=''
-
-          if [[ "${REVIEW_POSTURE:-full}" == 'settling' ]]; then
-            holding_severities='["P1"]'
-            settled_reason='This is a settling pass, so nothing below P1 holds the change'
-          else
-            holding_severities='["P1", "P2"]'
-            settled_reason='Nothing above P3 is left'
-          fi
-
-          if [[ "$(jq --argjson holding "$holding_severities" \
-                     '[(.findings // [])[] | select(.severity as $severity | $holding | index($severity))] | length' \
-                     "$findings_file")" == '0' ]]; then
-            verdict_event='APPROVE'
-            verdict_heading='# APPROVED'
-            verdict_output='approved'
-            settled_note="${settled_reason}, so the change is approved carrying the findings below rather than held for them."
-          fi
+          # Severity therefore decides nothing here. It ranks the findings for whoever answers them,
+          # and it decides whether a late pass writes one at all — which is the `settling` posture the
+          # gate resolves and the bar the reviewer's prompt carries, where what a round costs is
+          # weighed. This step reads neither: a finding never written needs no threshold to keep it
+          # from holding a change, and a finding written is one the author is being asked to answer.
 
           # Anchors are checked against the same patches the reviewer was given, so a line that has
           # since moved cannot make the API reject the whole review. A finding whose anchor does not
@@ -2482,10 +2438,7 @@ jobs:
              --arg commit "$HEAD_SHA" \
              --arg truncation "$(cat "$REVIEW_DIRECTORY/truncation.txt")" \
              --arg coverage "$(cat "$COVERAGE_FILE" 2>/dev/null || true)" \
-             --arg marker "$TRIGGER_MARKER" \
-             --arg event "$verdict_event" \
-             --arg heading "$verdict_heading" \
-             --arg settled "$settled_note" '
+             --arg marker "$TRIGGER_MARKER" '
             def allowed($path): $lines[0] | map(select(.filename == $path)) | .[0].lines // [];
             def anchored($finding):
               (allowed($finding.path) | index($finding.line)) != null
@@ -2519,12 +2472,11 @@ jobs:
             | ($findings - $kept) as $dropped
             | {
                 commit_id: $commit,
-                event: $event,
+                event: "COMMENT",
                 body: (
-                  [$heading, ""]
+                  ["# NEEDS CHANGES", ""]
                   + [(.summary // "")]
                   + ["", "**Findings** — \(tally($findings))"]
-                  + (if $settled == "" then [] else ["", $settled] end)
                   + (if $truncation == "" then [] else ["", $truncation] end)
                   + (if $coverage == "" then [] else ["", $coverage] end)
                   + (if ($dropped | length) == 0 then [] else
@@ -2555,10 +2507,10 @@ jobs:
           gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews" \
             --method POST --input "$payload_file" --silent
 
-          echo "verdict=${verdict_output}" >> "$GITHUB_OUTPUT"
+          echo 'verdict=changes_requested' >> "$GITHUB_OUTPUT"
 
-          printf 'Posted a %s review with %s inline findings.\n' \
-            "$verdict_event" "$(jq -r '.comments | length' "$payload_file")"
+          printf 'Withheld approval, with %s inline findings.\n' \
+            "$(jq -r '.comments | length' "$payload_file")"
 
       # What this run cost and covered, as numbers a later run can be compared against.
       #
