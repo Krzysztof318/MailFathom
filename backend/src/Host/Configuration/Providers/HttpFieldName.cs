@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.Host.Configuration.Chat;
+namespace MailFathom.Host.Configuration.Providers;
 
 /// <summary>Reads a declared header name against what a field name may be, and against what a request writes for itself.</summary>
 /// <remarks>

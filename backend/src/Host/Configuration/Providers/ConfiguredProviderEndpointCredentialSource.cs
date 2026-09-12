@@ -33,9 +33,9 @@ namespace MailFathom.Host.Configuration.Providers;
 /// the host composes itself and takes a restart to change.
 /// </para>
 /// <para>
-/// What it resolves is everything a request presents rather than the credential alone: a chat model may declare headers
-/// whose values are secret references, and those are resolved here and released with the credential so the two halves
-/// have one lifetime and neither outlives the request.
+/// What it resolves is everything a request presents rather than the credential alone: an endpoint of either section
+/// may declare headers whose values are secret references, and those are resolved here and released with the credential
+/// so the two halves have one lifetime and neither outlives the request.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this credential source.")]
@@ -99,7 +99,7 @@ internal sealed class ConfiguredProviderEndpointCredentialSource(
                 embeddingEndpoint.ApiKey,
                 embeddingEndpoint.EntraCredential,
                 embeddingEndpoint.Unauthenticated,
-                []);
+                [.. embeddingEndpoint.ExtraHeaders]);
         }
 
         return chatSettings.Current.FindModel(endpointAlias) is { } model
@@ -114,7 +114,7 @@ internal sealed class ConfiguredProviderEndpointCredentialSource(
     /// <summary>Resolves every header this endpoint declared, or releases what it had resolved and reports the first that could not be.</summary>
     private async Task<ResolvedHeaders> ResolveHeadersAsync(
         string endpointAlias,
-        IReadOnlyList<ChatModelHeaderOptions> declarations,
+        IReadOnlyList<ProviderEndpointHeaderOptions> declarations,
         CancellationToken cancellationToken)
     {
         if (declarations.Count == 0)
@@ -239,12 +239,12 @@ internal sealed class ConfiguredProviderEndpointCredentialSource(
     private static string? NullWhenEmpty(string value) => value.Trim() is { Length: > 0 } trimmed ? trimmed : null;
 
     /// <summary>The three credential shapes an endpoint of either section chooses between, and whatever else its requests carry, once the section it came from stops mattering.</summary>
-    /// <remarks>The headers are empty for every embedding endpoint, because only a chat model declares them — which is a property of what each section may say rather than a limitation here.</remarks>
+    /// <remarks>Both sections declare headers under the same block, so what reaches this record is the endpoint's list whichever one it was read from.</remarks>
     private sealed record ProviderCredentialDeclaration(
         ConfiguredSecret? ApiKey,
         ProviderEntraCredentialOptions? Entra,
         bool Unauthenticated,
-        IReadOnlyList<ChatModelHeaderOptions> ExtraHeaders);
+        IReadOnlyList<ProviderEndpointHeaderOptions> ExtraHeaders);
 
     /// <summary>The headers of one request, resolved, beside the material each was read from.</summary>
     /// <remarks>Two lists rather than one, because a header value is a string by the time it reaches a request while the buffer it was revealed from is what has to be released afterwards.</remarks>

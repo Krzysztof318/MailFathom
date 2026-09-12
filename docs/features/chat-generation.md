@@ -298,9 +298,14 @@ a gateway reading that header would route the call somewhere else.
 
 **What a header may be called is bounded.** It has to be a field name as RFC 9110 defines one, and it may not be one the
 request writes for itself: `Authorization` is the credential's own, and `Host`, `Content-Length`, `Content-Type`, and
-`Transfer-Encoding` frame the message. Both rules are checked at startup, because the header collections validate on the
-way in and report a bad name as an exception at the point of use — which for a configured value means a start that
-succeeded and a provider call that threw.
+`Transfer-Encoding` frame the message. One name declared twice is refused as well, because a field name is sent once and
+the repetitions would be resolved, paid for, and discarded. All three rules are checked at startup, because the header
+collections validate on the way in and report a bad name as an exception at the point of use — which for a configured
+value means a start that succeeded and a provider call that threw.
+
+The same declaration, with the same rules, is what an embedding endpoint carries, as [embedding generation § An endpoint
+may declare headers of its own](embedding-generation.md#an-endpoint-may-declare-headers-of-its-own) describes. One
+reading of what a header may be governs both.
 
 ## The model and its parameters come from configuration
 
