@@ -270,13 +270,6 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
             // working. There is no text, which is what tells the caller nothing answered.
             return new ChatModelAnswer(failure.EndpointAlias, Text: null);
         }
-        catch (InvalidOperationException)
-        {
-            // The whole of what the credential source publishes: the alias names no endpoint the configuration in
-            // force declares, or the secret behind it did not resolve. It is also the one failure here that leaves no
-            // health record behind, the resilience decorator not yet existing to write one.
-            return null;
-        }
     }
 
     /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
@@ -292,7 +285,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
 
         var endpoint = model.Endpoint;
 
-        using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
+        using var credential = await ChatModelCredential.ResolveAsync(this.credentialSource, endpoint, cancellationToken);
         using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
         using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
 

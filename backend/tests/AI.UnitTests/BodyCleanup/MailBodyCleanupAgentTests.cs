@@ -184,6 +184,39 @@ public sealed class MailBodyCleanupAgentTests
     }
 
     /// <summary>
+    /// A credential nothing could resolve is an endpoint this deployment cannot currently use, which is exactly the
+    /// shape a fallback exists for: a second address under a second credential. It reaches the chain as that model's own
+    /// failure rather than as an exception the chain cannot read, so the fallback is tried.
+    /// </summary>
+    [Fact]
+    public async Task ProposeAsync_AMainModelWhoseCredentialWillNotResolve_ReachesTheFallback()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Answering(Completion(Partition));
+        using var logs = new RecordingLoggerFactory();
+        var chain = ChatDeclarations
+            .Plan()
+            .WithFallback(ChatDeclarations.Plan(ChatDeclarations.Endpoint("standby")));
+
+        var cleaner = provider.CleanerOver(
+            credentialFailure: new InvalidOperationException(
+                "The provider key of AI endpoint 'answering' could not be resolved."),
+            failingAlias: "answering",
+            plan: chain,
+            logger: logs.CreateLogger<MailBodyCleanupAgent>());
+
+        // Act
+        var proposal = await cleaner.ProposeAsync(Outline(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailBodyCleaningWithholding.None, proposal.Withholding);
+
+        var proposed = Assert.Single(logs.Records, record => record.Properties.ContainsKey("SegmentCount"));
+
+        Assert.Equal("standby", proposed.Properties["EndpointAlias"]);
+    }
+
+    /// <summary>
     /// A chain that answered nowhere failed at its last model, so the withholding line names that one. The alias the
     /// pass was configured with has a fallback behind it, and naming it would send whoever reads the line to an
     /// endpoint that may be working.
@@ -344,6 +377,7 @@ public sealed class MailBodyCleanupAgentTests
         public MailBodyCleanupAgent CleanerOver(
             SensitiveContentEgressGuard? egressGuard = null,
             Exception? credentialFailure = null,
+            string? failingAlias = null,
             IMailAnsweringSpendLedger? spendLedger = null,
             ChatGenerationPlan? plan = null,
             MailAnsweringRunBounds? runBounds = null,
@@ -357,7 +391,7 @@ public sealed class MailBodyCleanupAgentTests
             var credentialSource = Substitute.For<IProviderEndpointCredentialSource>();
             credentialSource
                 .ResolveAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-                .Returns(_ => credentialFailure is null
+                .Returns(call => credentialFailure is null || (failingAlias is { } alias && call.Arg<string>() != alias)
                     ? Task.FromResult(ProviderEndpointCredential.FromApiKey("a-configured-key", resolvedMaterial: null))
                     : Task.FromException<ProviderEndpointCredential>(credentialFailure));
 

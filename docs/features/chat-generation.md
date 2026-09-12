@@ -69,6 +69,11 @@ about *that endpoint*, and the fallback is a different address under a different
 it worth the money. What is retried is opening a client and asking, rather than re-sending a message down a connection
 that failed.
 
+A credential that could not be resolved at all is in that second group, and deliberately: an alias naming no declared
+model, or a secret reference nothing provisions, is a model this deployment cannot use until somebody corrects it, which
+is the clearest case there is for asking the one behind it. The fall-through warning names it like any other, and the
+log line about the endpoint says a credential rather than a provider is what an operator has to fix.
+
 **A fallback is asked against its own bounds, not the main model's.** `MaxMessagesPerRequest`,
 `MaxRequestCharacters`, and `MaxRequestImageOctets` belong to the block that declares them, so a conversation the main
 model admits may be wider than the fallback behind it accepts. That call is refused before it is sent rather than sent

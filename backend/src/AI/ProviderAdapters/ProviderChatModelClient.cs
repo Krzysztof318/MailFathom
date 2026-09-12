@@ -202,7 +202,7 @@ internal sealed class ProviderChatModelClient : IChatModelClient
 
         // Resolved per request and released with it, so a rotated key is picked up by the next call and the material
         // exists for one request rather than for process uptime.
-        using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
+        using var credential = await ChatModelCredential.ResolveAsync(this.credentialSource, endpoint, cancellationToken);
 
         Microsoft.Extensions.AI.ChatResponse response;
         try

@@ -234,20 +234,20 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
         }
         catch (ChatGenerationFailedException failure)
         {
-            // The alias the chain's last model failed under rather than the one this composition was asked of, so a
-            // line about the outage names the endpoint that actually refused it.
-            DiscoveryCompositionEvents.LogGenerationFailed(this.logger, failure.EndpointAlias);
+            // Both lines name the alias the chain's last model failed under rather than the one this composition was
+            // asked of, so a reader is sent to the endpoint that actually refused it. A credential kept its own line:
+            // an alias nothing declares and a secret that would not resolve are an operator's to correct, and reporting
+            // them as a provider that did not answer would send them looking at the provider.
+            if (failure.Failure is ChatGenerationFailure.CredentialRejected)
+            {
+                DiscoveryCompositionEvents.LogEndpointUnresolved(this.logger, failure.EndpointAlias);
+            }
+            else
+            {
+                DiscoveryCompositionEvents.LogGenerationFailed(this.logger, failure.EndpointAlias);
+            }
 
             return new ChatModelAnswer(failure.EndpointAlias, Text: null);
-        }
-        catch (InvalidOperationException)
-        {
-            // The whole of what the credential source publishes: the alias names no endpoint the configuration in
-            // force declares, or the secret behind it did not resolve. It is also the one failure here that leaves no
-            // health record behind, the resilience decorator not yet existing to write one.
-            DiscoveryCompositionEvents.LogEndpointUnresolved(this.logger, endpoint.Alias);
-
-            return null;
         }
     }
 
@@ -265,7 +265,7 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
 
         // Opened per composition and released with it, so a rotated key is picked up by the next question and the
         // material exists for one call rather than for process uptime.
-        using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
+        using var credential = await ChatModelCredential.ResolveAsync(this.credentialSource, endpoint, cancellationToken);
         using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
         using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
 

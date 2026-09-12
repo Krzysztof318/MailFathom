@@ -200,7 +200,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
 
         // Resolved per attempt and released with it, so a rotated key is picked up by the next question and the material
         // exists for one attempt rather than for process uptime.
-        using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
+        using var credential = await ChatModelCredential.ResolveAsync(this.credentialSource, endpoint, cancellationToken);
         using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
         using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
         using var resilientClient = new ResilientChatClient(
