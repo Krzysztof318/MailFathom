@@ -1305,16 +1305,18 @@ the others.
 Some values documents are supposed to be refused rather than rendered, and a rendering cannot record that: a
 combination the chart accepts by accident produces a plausible manifest and no golden file shows anything. Those live
 under `ci/refusals/`, each carrying on a `# refuses:` line the wording its refusal has to contain, and the same script
-requires the chart to refuse each one and to name the setting while doing so. Seven are there today. Three of them are
+requires the chart to refuse each one and to name the setting while doing so. Eight are there today. Three of them are
 one refusal reached three ways — more than one replica serving the page, more than one serving the client surface from
 a configuration file, and more than one serving it from the environment block — because what the chart reads to decide
 that is three different values, and a refusal walkable around by configuring the same thing another way is not one. Two
 are replication asked for with nothing to apply it to: over an endpoint the chart does not run, which would render
 exactly what the external document renders, and with the backplane off altogether, which would render exactly what the
-defaults render. The last two are the shapes whose damage is invisible in a rendering rather than absent from it — an
+defaults render. One is a rollout allowed neither a pod below the replica count nor one above it, which would render a
+Deployment that can never replace a pod. The last two are the shapes whose damage is invisible in a rendering rather
+than absent from it — an
 object-store pool asked for without `deploy.tls.certificateAuthoritySecretKey`, which renders every pod correctly and
 produces a pool that never forms, and several database instances named without a writable `Target Session Attributes`,
-which renders a connection string that works for every read and fails on the first write. Each of the seven leaves an
+which renders a connection string that works for every read and fails on the first write. Each of the eight leaves an
 operator having written down an arrangement the deployment does not have.
 
 The `Helm chart` job of `CI` runs the same script on every pull request that touches `deploy/helm/`, which is where a
