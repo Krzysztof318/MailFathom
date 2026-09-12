@@ -6,7 +6,7 @@ import type { IconName } from '../controls/icons';
 import type { MessageKey } from '../localization/en';
 import { drawnUnread, type ReadMarking } from '../readMarking/useReadMarking';
 import type { ActRefusal } from './mailboxDestinations';
-import type { ActedMessage, FlagAct, MailboxAct, MailboxActs } from './useMailboxActs';
+import type { ActedMessage, AskedAct, FlagAct, MailboxAct, MailboxActs } from './useMailboxActs';
 
 // What the acts are called and what they are drawn as, for every surface that offers one. It is here rather than
 // beside the controls that draw them because a fourth surface now does — the toolbar, the selection bar, a row's own
@@ -55,6 +55,22 @@ export const actsOnAStrip: readonly MailboxAct[] = ['archive', 'delete', 'flag',
 export const actsInARowMenu: readonly MailboxAct[] = ['archive', 'flag', 'markUnread', 'move', 'delete'];
 
 /**
+ * What this client has asked of this message *in the folder it is drawn in*, or nothing where it has asked nothing
+ * there.
+ *
+ * One reading for the three rules below, because `useMailboxActs.ts` already draws the row this way — `actPending`
+ * states it as *an act is only pending where it was asked* — and a control that read it the other way would offer to
+ * take a flag off a row it had itself drawn unflagged. The folder is part of the question rather than a detail of it:
+ * an act that files a message elsewhere is finished the moment the message is somewhere else, and the same act name
+ * asked there again is a new act rather than the old one still travelling.
+ */
+function askedHere(acts: MailboxActs, message: ActedMessage): AskedAct | undefined {
+    const asked = acts.asked.get(message.storedEmailId);
+
+    return asked?.from === message.folder ? asked : undefined;
+}
+
+/**
  * Which way the read control goes for these messages, which is the act the `markUnread` slot above actually offers.
  *
  * **Marking read is the default, and one shared state turns it round.** Every message drawn read is offered the act
@@ -72,7 +88,7 @@ export const actsInARowMenu: readonly MailboxAct[] = ['archive', 'flag', 'markUn
  */
 export function readActFor(acts: MailboxActs, marking: ReadMarking, messages: readonly ActedMessage[]): FlagAct {
     function unreadNow(message: ActedMessage): boolean {
-        const asked = acts.asked.get(message.storedEmailId);
+        const asked = askedHere(acts, message);
 
         if (asked?.act === 'markUnread') {
             return true;
@@ -105,7 +121,7 @@ export function readActFor(acts: MailboxActs, marking: ReadMarking, messages: re
  */
 export function flagActFor(acts: MailboxActs, messages: readonly ActedMessage[]): FlagAct {
     function flaggedNow(message: ActedMessage): boolean {
-        const asked = acts.asked.get(message.storedEmailId);
+        const asked = askedHere(acts, message);
 
         if (asked?.act === 'flag') {
             return true;
@@ -132,9 +148,26 @@ export const refusalSaid: Readonly<Record<ActRefusal, MessageKey>> = {
     foldersUnknown: 'act.foldersUnknown',
 };
 
-/** Whether this act is already being carried out for every message the control is about. */
+/**
+ * Whether this act is already being carried out for every message the control is about.
+ *
+ * **An act is only under way where it was asked**, which is the rule `actPending` states and the one a control has to
+ * read the same way: the three acts that file a message elsewhere take it out of the folder they were asked in, and
+ * the message then arrives somewhere else — where that act is finished rather than travelling, whatever this client
+ * has or has not seen the deployment agree to yet.
+ *
+ * Read without that, one act name covers two different things and the second becomes unreachable: filing a message in
+ * the trash is recorded as `delete`, so the message a reader had just put there was the one message in that folder
+ * whose *delete permanently* control drew itself as already on its way and refused to be pressed, while every other
+ * message in the same folder — none of them carrying a remembered act — was destroyed on the first press.
+ */
 export function underway(acts: MailboxActs, act: MailboxAct, messages: readonly ActedMessage[]): boolean {
-    return messages.length > 0 && messages.every((message) => acts.asked.get(message.storedEmailId)?.act === act);
+    return (
+        messages.length > 0 &&
+        messages.every((message) => {
+            return askedHere(acts, message)?.act === act;
+        })
+    );
 }
 
 /**

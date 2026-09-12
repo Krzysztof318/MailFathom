@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { nothingMarkedRead, type MarkedIn, type ReadMarking } from '../readMarking/useReadMarking';
-import { flagActFor, readActFor } from './drawnActs';
+import { flagActFor, readActFor, underway } from './drawnActs';
 import { nothingActed, type ActedMessage, type AskedAct, type MailboxActs } from './useMailboxActs';
 
 const inbox = { account: 'work', folder: 'work-inbox' };
@@ -130,5 +130,62 @@ describe('readActFor', () => {
     // It is refused before it can be pressed, so what this decides is only the name the control wears while it says so.
     it('reads nothing at all the way it reads messages that are all read, so a cleared selection keeps the name', () => {
         expect(readActFor(nothingActed, nothingMarkedRead, [])).toBe('markUnread');
+    });
+});
+
+describe('underway', () => {
+    /** A message drawn in the folder an act filed it into, which is where the reader meets it next. */
+    function arrivedIn(folder: string): ActedMessage {
+        return { storedEmailId: 'message-1', account: 'work', folder, unread: false, flagged: false };
+    }
+
+    /** What a client that asked for this act, out of this folder, carries. */
+    function askedFrom(act: AskedAct['act'], from: string): MailboxActs {
+        return {
+            ...nothingActed,
+            asked: new Map([['message-1', { act, from, leaves: true, destroys: false }]]),
+        };
+    }
+
+    it('reads an act as under way in the folder it was asked in, which is where the row is still waiting', () => {
+        expect(underway(askedFrom('delete', 'work-inbox'), 'delete', [arrivedIn('work-inbox')])).toBe(true);
+    });
+
+    // Filing a message in the trash and destroying it there are one act name and two different things, so a client
+    // that read the first as the second refused to destroy the one message somebody had just put in front of it —
+    // while every other message in that folder, having no act remembered, was destroyed on the first press.
+    it('reads no act as under way where the message has arrived somewhere else, the act being finished there', () => {
+        expect(underway(askedFrom('delete', 'work-inbox'), 'delete', [arrivedIn('work-trash')])).toBe(false);
+    });
+
+    it('reads nothing at all as nothing under way, so a control over an empty selection is refused rather than held', () => {
+        expect(underway(askedFrom('archive', 'work-inbox'), 'archive', [])).toBe(false);
+    });
+});
+
+// The three rules above read a remembered act the way the row itself is drawn, which is what stops a control from
+// offering to undo something the row beside it never showed.
+describe('an act asked in another folder', () => {
+    const inTrash: ActedMessage = {
+        storedEmailId: 'message-1',
+        account: 'work',
+        folder: 'work-trash',
+        unread: false,
+        flagged: false,
+    };
+
+    function askedInTheInbox(act: AskedAct['act']): MailboxActs {
+        return {
+            ...nothingActed,
+            asked: new Map([['message-1', { act, from: 'work-inbox', leaves: true, destroys: false }]]),
+        };
+    }
+
+    it('leaves the flag control pointing the way the row is drawn, rather than at what another folder was asked', () => {
+        expect(flagActFor(askedInTheInbox('flag'), [inTrash])).toBe('flag');
+    });
+
+    it('leaves the read control pointing the way the row is drawn, which is the same rule', () => {
+        expect(readActFor(askedInTheInbox('markUnread'), nothingMarkedRead, [inTrash])).toBe('markUnread');
     });
 });
