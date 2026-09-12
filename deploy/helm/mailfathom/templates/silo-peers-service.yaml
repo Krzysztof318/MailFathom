@@ -1,0 +1,38 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
+{{- if and .Values.contentStorage.objectStorage.deploy.enabled (gt (int .Values.contentStorage.objectStorage.deploy.replicas) 1) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mailfathom.objectStorePeerFullname" . }}
+  labels:
+    {{- include "mailfathom.objectStoreLabels" . | nindent 4 }}
+spec:
+  {{- /*
+    Headless, which is the whole of what it is for: it gives every pod of the pool a DNS name of its own that survives a
+    rescheduling, and that is what the server is given as the pool's members. Nothing reaches the store through this
+    name — the ClusterIP Service beside it is what MailFathom is pointed at, and what the endpoint is derived from.
+
+    It is rendered only where there is a pool, unlike the backplane's, and the reason is the difference between the two
+    workloads: a backplane replica joins a set that was already running, so the name has to exist before replication is
+    turned on, while a pool's width is decided the first time its server starts. There is no shape in which a single
+    node acquires a peer later.
+  */}}
+  clusterIP: None
+  {{- /*
+    Every member has to resolve while all of them are still starting: the server forms the pool before any pod becomes
+    ready, and an endpoint withheld until readiness would leave each of them resolving nothing. It is also what lets an
+    operator reach a pod that has stopped being ready, which is when they most want to.
+  */}}
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "mailfathom.objectStoreSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: s3
+      protocol: TCP
+{{- end }}

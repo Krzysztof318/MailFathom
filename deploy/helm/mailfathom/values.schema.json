@@ -292,7 +292,7 @@
         },
         "host": {
           "type": "string",
-          "description": "The server MailFathom connects to when database.deploy.enabled is false. It needs the vector extension. Leave it empty when the chart deploys the database, which derives the address from the release name."
+          "description": "The server MailFathom connects to when database.deploy.enabled is false. It needs the vector extension. Leave it empty when the chart deploys the database, which derives the address from the release name. A replicated cluster is either one address that follows the primary, such as a CloudNativePG -rw Service, or a comma-separated list of its instances, which then requires Target Session Attributes in extraConnectionParameters."
         },
         "port": {
           "type": "integer",
@@ -309,6 +309,7 @@
         },
         "extraConnectionParameters": {
           "type": "string",
+          "description": "Extra Npgsql keywords appended to the connection string verbatim. Target Session Attributes belongs here, set to primary or read-write, whenever host names more than one instance: MailFathom writes to the instance it connects to, and every other value lets the driver settle on a hot standby.",
           "not": {
             "pattern": "(?i)password",
             "description": "The password arrives as a mounted file. Putting one here would place a credential into a ConfigMap-visible connection string and leave two sources for one secret."
@@ -388,6 +389,7 @@
               "type": "object",
               "required": [
                 "enabled",
+                "replicas",
                 "image",
                 "tls",
                 "rootCredentialSecret",
@@ -403,7 +405,13 @@
               "properties": {
                 "enabled": {
                   "type": "boolean",
-                  "description": "Whether the chart runs a single-node Silo object store beside MailFathom and derives the endpoint from its Service. Off renders no workload, no volume, and no Service, and leaves the endpoint above yours to name."
+                  "description": "Whether the chart runs a Silo object store beside MailFathom and derives the endpoint from its Service. Off renders no workload, no volume, and no Service, and leaves the endpoint above yours to name."
+                },
+                "replicas": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 16,
+                  "description": "How many Silo pods the pool is made of. One is a single node on a single drive with no redundancy of any kind. From 2 to 16 the server forms one erasure set across the pods, one drive each, and an object survives the loss of as many pods as that set has parity. Sixteen is the largest erasure set the server forms, which is why it is the ceiling. The width is fixed when the pool is created: raising this on a running release neither widens the pool nor rebalances anything."
                 },
                 "image": {
                   "type": "object",
@@ -451,12 +459,13 @@
                   "required": [
                     "existingSecret",
                     "certificateSecretKey",
-                    "privateKeySecretKey"
+                    "privateKeySecretKey",
+                    "certificateAuthoritySecretKey"
                   ],
                   "properties": {
                     "existingSecret": {
                       "type": "string",
-                      "description": "A Secret the cluster already holds, carrying the certificate the store answers with. The chart issues none. It has to cover the Service name the endpoint is derived from, because MailFathom refuses a plain http endpoint and validates what it is presented."
+                      "description": "A Secret the cluster already holds, carrying the certificate the store answers with. The chart issues none. It has to cover the Service name the endpoint is derived from, because MailFathom refuses a plain http endpoint and validates what it is presented, and with a pool it has to cover the peer names as well."
                     },
                     "certificateSecretKey": {
                       "type": "string",
@@ -467,6 +476,12 @@
                       "type": "string",
                       "minLength": 1,
                       "description": "The key holding the private key. 'tls.key' for a kubernetes.io/tls Secret."
+                    },
+                    "certificateAuthoritySecretKey": {
+                      "type": "string",
+                      "maxLength": 253,
+                      "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9._-]*$",
+                      "description": "The authority that signed the certificate above, as a key inside the same Secret, mounted where the server looks for a private one. 'ca.crt' is what cert-manager writes it to. Required with replicas above one, whose pods validate each other's certificate; unused with a single node, which talks to no peer."
                     }
                   },
                   "additionalProperties": false
@@ -504,7 +519,7 @@
                         "ReadWriteOnce",
                         "ReadWriteOncePod"
                       ],
-                      "description": "One node owns one pool, so a mode that lets a second node mount it would describe a topology this chart does not render."
+                      "description": "One pod owns one drive, whether the pool is one pod or sixteen, so a mode that lets a second node mount the same claim would describe a topology this chart does not render."
                     },
                     "storageClassName": {
                       "type": "string"

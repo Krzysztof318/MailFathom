@@ -2,7 +2,7 @@
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 # Project repository: https://github.com/Krzysztof318/MailFathom
 #
-# Rendered from deploy/helm/mailfathom with deploy/helm/mailfathom/ci/object-store-values.yaml by scripts/render-helm-manifests.sh.
+# Rendered from deploy/helm/mailfathom with deploy/helm/mailfathom/ci/object-store-pool-values.yaml by scripts/render-helm-manifests.sh.
 # Committed so a change in what the chart produces is visible in the diff rather than only a failure to
 # produce anything. Regenerate with: scripts/render-helm-manifests.sh --update
 ---
@@ -161,6 +161,31 @@ spec:
   selector:
     app.kubernetes.io/name: mailfathom
     app.kubernetes.io/instance: mailfathom
+---
+# Source: mailfathom/templates/silo-peers-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailfathom-silo-peers
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom-silo
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: "RELEASE.2026-08-06T00-00-00Z"
+    app.kubernetes.io/component: object-store
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: mailfathom-silo
+    app.kubernetes.io/instance: mailfathom
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: s3
+      protocol: TCP
 ---
 # Source: mailfathom/templates/silo-service.yaml
 apiVersion: v1
@@ -503,8 +528,9 @@ metadata:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: mailfathom
 spec:
-  replicas: 1
-  serviceName: mailfathom-silo
+  replicas: 4
+  serviceName: mailfathom-silo-peers
+  podManagementPolicy: Parallel
   selector:
     matchLabels:
       app.kubernetes.io/name: mailfathom-silo
@@ -556,7 +582,7 @@ spec:
             readOnlyRootFilesystem: true
           args:
             - server
-            - "/data"
+            - "https://mailfathom-silo-{0...3}.mailfathom-silo-peers.default.svc.cluster.local:9000/data"
             - --certs-dir
             - "/etc/silo/certs"
             - --address
@@ -624,6 +650,8 @@ spec:
                 path: public.crt
               - key: tls.key
                 path: private.key
+              - key: ca.crt
+                path: "CAs/ca.crt"
         - name: credentials
           secret:
             secretName: mailfathom-silo-root

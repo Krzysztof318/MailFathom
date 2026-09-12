@@ -114,7 +114,7 @@ public static class RootSettingsBootstrap
                 resolver,
                 token));
 
-        await using var dataSource = dataSourceBuilder.Build();
+        await using var dataSource = DatabaseHostSet.BuildDataSource(dataSourceBuilder);
 
         return await new RootSettingsDocumentReader(dataSource).ReadAsync(cancellationToken);
     }

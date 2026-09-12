@@ -49,6 +49,18 @@ Repointing a reference or editing the connection string reloads; changing *which
 moving a password out of the connection string into `Persistence:Password`, or back — is refused on reload and needs a
 restart, because the connection pool attaches its password provider once.
 
+**The connection string may name several PostgreSQL instances**, comma separated, which is how a replicated cluster is
+reached without an address in front of it. MailFathom then builds the pool that finds the primary among them and moves
+to the new one after a failover. It requires `Target Session Attributes` set to `primary` or to `read-write`, and
+startup fails without it: every other value the driver accepts permits it to settle on a hot standby, which is an
+instance whose reads all work and whose first write fails. One address that follows the primary — a CloudNativePG
+cluster's `-rw` Service, a proxy, a floating address — is a single host like any other and needs none of this.
+
+**Reads are never served from a replica.** Every session reaches the primary whichever instance that is, so replication
+here is redundancy rather than read capacity; routing a query to a standby is a decision
+[ADR 0001](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md)
+would have to be amended for.
+
 ## `ContentStorage`
 
 Where the raw MIME of the messages this deployment stores next is written. A configuration root of its own rather than a

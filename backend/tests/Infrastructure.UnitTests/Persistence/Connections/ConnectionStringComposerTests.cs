@@ -32,6 +32,29 @@ public sealed class ConnectionStringComposerTests
     }
 
     [Fact]
+    public async Task ComposeAsync_SeveralInstancesPermittingAStandby_RefusesBeforeAnyPoolIsBuilt()
+    {
+        // Act
+        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => ComposeAsync("Host=one.example.test,two.example.test;Database=mailfathom;Username=mailfathom"));
+
+        // Assert
+        Assert.Contains("Target Session Attributes", refusal.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ComposeAsync_SeveralInstancesTargetingThePrimary_ComposesTheSettings()
+    {
+        // Act
+        var composed = await ComposeAsync(
+            "Host=one.example.test,two.example.test;Database=mailfathom;Username=mailfathom;Target Session Attributes=primary");
+
+        // Assert
+        Assert.Equal("one.example.test,two.example.test", composed.ConnectionSettings.Host);
+        Assert.Equal(DatabasePasswordSource.None, composed.PasswordSource);
+    }
+
+    [Fact]
     public async Task ComposeAsync_NoPasswordBlock_LeavesTheConnectionStringUnchanged()
     {
         // Act

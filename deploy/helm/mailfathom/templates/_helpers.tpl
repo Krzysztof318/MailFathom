@@ -177,6 +177,20 @@ not zero.
   {{- if not .Values.database.host -}}
     {{- fail "database.host is not set and database.deploy.enabled is false. Name the PostgreSQL server you operate — it needs the vector extension — or turn database.deploy.enabled on and let the chart run one." -}}
   {{- end -}}
+  {{- /*
+    A replicated cluster named instance by instance rather than through one address in front of it. MailFathom writes to
+    whichever instance the driver settles on, so a target session attribute that permits a hot standby is a deployment
+    that comes up, answers every read, and fails on the first write — hours later, inside a synchronization run. It
+    refuses that at startup too; this one comes from `helm install`, which is the same reasoning the object store's
+    credential refusals carry. The keyword is matched case-insensitively and with its spaces removed, because Npgsql
+    accepts every spelling of it and an operator writing one of them is not writing a different setting.
+  */}}
+  {{- if contains "," .Values.database.host -}}
+    {{- $parameters := lower (nospace .Values.database.extraConnectionParameters) -}}
+    {{- if not (or (contains "targetsessionattributes=primary" $parameters) (contains "targetsessionattributes=read-write" $parameters)) -}}
+      {{- fail "database.host names several PostgreSQL instances while database.extraConnectionParameters does not set Target Session Attributes to primary or to read-write. MailFathom writes to the instance it connects to, so any other value lets the driver settle on a hot standby — a deployment whose reads all work and whose first write fails. Add 'Target Session Attributes=primary;', or name one address that follows the primary, such as a CloudNativePG cluster's -rw Service." -}}
+    {{- end -}}
+  {{- end -}}
 {{- end -}}
 {{- if not .Values.secrets.existingSecret -}}
   {{- fail "secrets.existingSecret is not set. The chart creates no Secret and templates no credential; create one first and name it here." -}}
@@ -242,6 +256,9 @@ the identifier and the secret are the same file.
     {{- end -}}
     {{- if eq $objectStore.rootAccessKeyIdSecretKey $objectStore.rootSecretAccessKeySecretKey -}}
       {{- fail "contentStorage.objectStorage.deploy.rootAccessKeyIdSecretKey and rootSecretAccessKeySecretKey name one key, which would make the identifier and its secret the same file." -}}
+    {{- end -}}
+    {{- if and (gt (int $objectStore.replicas) 1) (not $objectStore.tls.certificateAuthoritySecretKey) -}}
+      {{- fail "contentStorage.objectStorage.deploy.tls.certificateAuthoritySecretKey is not set while contentStorage.objectStorage.deploy.replicas is above one. A pool's pods reach each other over the same https listener MailFathom reaches, and each one validates the certificate the next presents — against the cluster's trust store and this authority, with nothing anywhere to turn that off. Without it the pods start, fail to connect to one another, and never form the pool. Name the key inside deploy.tls.existingSecret holding the authority that signed the certificate; cert-manager writes it to ca.crt in the same Secret." -}}
     {{- end -}}
   {{- else -}}
     {{- if not $objectStorage.endpoint -}}
@@ -564,9 +581,24 @@ two derivations because the daemon speaks a line protocol on a TCP port — ther
 The object store's objects, named after the release with `-silo` appended. The suffix names the server rather than the
 feature, for the reason the analyzer's and the scanner's do: what a listing has to distinguish is which image is in the
 pod.
+
+One name hangs off it. `-silo-peers` is the headless Service a pool's pods get a DNS name of their own from, which is
+what the server is given as the pool's members and what the certificate has to cover.
+
+**This name is derived exactly as it was before the peer Service existed, and deliberately so.** It names a StatefulSet
+and a Service an operator may already have installed, holding a claim named after that StatefulSet, so a derivation that
+shortened it for any release name would rename both on the next `helm upgrade` and orphan the claim — every stored
+payload left behind an object nothing points at. The backplane truncates a shared base because both of its names were
+introduced together; here only the second one is new, so the second one is what gives way. Fifty-two characters leaves
+room for the eleven the longer suffix adds, and the two names cannot collide at any length: one ends in `-silo` and the
+other in `-silo-peers`, which differ in their last five characters wherever both reach 63.
 */}}
 {{- define "mailfathom.objectStoreFullname" -}}
 {{- printf "%s-silo" (include "mailfathom.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "mailfathom.objectStorePeerFullname" -}}
+{{- printf "%s-silo-peers" (include "mailfathom.fullname" . | trunc 52 | trimSuffix "-") -}}
 {{- end -}}
 
 {{- define "mailfathom.objectStoreSelectorLabels" -}}
@@ -617,6 +649,28 @@ read.
 */}}
 {{- define "mailfathom.objectStoreCertificatesDirectory" -}}/etc/silo/certs{{- end -}}
 {{- define "mailfathom.objectStoreCredentialsDirectory" -}}/etc/silo/credentials{{- end -}}
+
+{{/*
+What the server is started against, which is the whole of the difference between one node and a pool.
+
+A single node is given one directory and knows nothing of any peer. A pool is given every member at once, in the
+server's own ellipsis notation — three dots rather than two, which is the form it parses — over the headless Service
+above, so each pod resolves the others by a name a rescheduling does not change. The port is the container's listener
+rather than `service.port`: what the peers reach is the port inside the pod, and the Service's port is what MailFathom
+reaches from outside it.
+
+The name is fully qualified through `.svc.cluster.local`. A search-domain-relative name would resolve for a pod in this
+namespace and be exactly as wrong the moment the cluster's DNS suffix is not the default, and the certificate has to
+carry these names either way.
+*/}}
+{{- define "mailfathom.objectStorePoolArgument" -}}
+{{- $objectStore := .Values.contentStorage.objectStorage.deploy -}}
+{{- if gt (int $objectStore.replicas) 1 -}}
+{{- printf "https://%s-{0...%d}.%s.%s.svc.cluster.local:9000/data" (include "mailfathom.objectStoreFullname" .) (sub (int $objectStore.replicas) 1) (include "mailfathom.objectStorePeerFullname" .) .Release.Namespace -}}
+{{- else -}}
+/data
+{{- end -}}
+{{- end -}}
 
 {{/*
 The backplane's objects, named after the release with `-valkey` appended. The suffix names the server rather than the

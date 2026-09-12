@@ -59,6 +59,10 @@ internal static class ConnectionStringComposer
             resolver,
             cancellationToken);
 
+        // Read here rather than at either pool, so the deployment that names several instances is refused once and the
+        // configuration bootstrap's own single connection is held to the same statement as the long-lived pool.
+        DatabaseHostSet.RefuseAHostSetThatCouldSettleOnAStandby(connectionSettings);
+
         if (configuredPassword is not null)
         {
             // Two sources for one credential leave the effective one decided by implementation order rather than by

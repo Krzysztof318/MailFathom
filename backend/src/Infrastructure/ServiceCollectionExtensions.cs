@@ -366,7 +366,10 @@ public static class ServiceCollectionExtensions
             // stored embedding as an unknown type at the first query instead of failing where the mapping was declared.
             dataSourceBuilder.UseVector();
 
-            return dataSourceBuilder.Build();
+            // Which pool this is depends on how many instances the deployment named, and nothing else is configured for
+            // it: a connection string naming several is a replicated cluster reached without an address in front of it,
+            // and Npgsql builds a different pool for that shape than for one host.
+            return DatabaseHostSet.BuildDataSource(dataSourceBuilder);
         });
         // EnableRetryOnFailure is deliberately not configured, and the reason is what a retry can reach rather than
         // what a setting collides with. A dropped connection takes its transaction with it, so replaying a statement

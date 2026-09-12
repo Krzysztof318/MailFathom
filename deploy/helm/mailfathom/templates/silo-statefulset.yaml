@@ -16,13 +16,35 @@ metadata:
     {{- include "mailfathom.objectStoreLabels" . | nindent 4 }}
 spec:
   {{- /*
-    One replica, and no value to change it, for the reason the database has none. A second pod against a ReadWriteOnce
-    claim is not a replica of anything, and a distributed pool is a topology decided when the pool is created rather
-    than a number raised afterwards. Erasure coding, a second node, and replication are what an object store somebody
-    operates gives you, which is what turning this off and naming an endpoint is for.
+    One pod is a single node on a single drive, and more than one is a distributed pool: the server forms one erasure
+    set across the pods and an object survives the loss of as many of them as that set has parity. This is not the
+    database's `replicas`, which has no value at all — a second PostgreSQL pod against one claim replicates nothing,
+    whereas each pod here owns a drive the pool was built from.
+
+    **The width is decided the first time the server starts against these drives**, so raising this on a running release
+    adds pods the pool does not use rather than widening it. What that actually takes is a second pool and a copy of
+    every object into it, which is an operator's migration; docs/operations/deployment-kubernetes.md says so where they
+    would look.
   */}}
-  replicas: 1
+  replicas: {{ int $objectStore.replicas }}
+  {{- /*
+    The governing Service, and which one it is follows the same decision. A pool's pods have to resolve each other by
+    name, and a pod only gets a name of its own from a *headless* Service, so the pool is governed by the peer Service
+    beside this one. A single node resolves nobody and keeps the ClusterIP Service it has always been governed by —
+    which is what makes turning the pool on a fresh install rather than an upgrade that would have to replace an
+    immutable field on an existing set.
+  */}}
+  {{- if gt (int $objectStore.replicas) 1 }}
+  serviceName: {{ include "mailfathom.objectStorePeerFullname" . }}
+  {{- /*
+    Parallel rather than the default, and a pool does not start without it: the server answers nothing until the pool
+    has quorum, so an `OrderedReady` rollout waits for the first pod to become ready while that pod waits for the pods
+    the rollout has not started yet.
+  */}}
+  podManagementPolicy: Parallel
+  {{- else }}
   serviceName: {{ include "mailfathom.objectStoreFullname" . }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "mailfathom.objectStoreSelectorLabels" . | nindent 6 }}
@@ -31,6 +53,10 @@ spec:
     this one, so removing the release does not remove the payloads it wrote. Deleting them is a deliberate
     `kubectl delete pvc` afterwards — and one that leaves every content row in the database pointing at an object that
     is gone.
+
+    `whenScaled` carries the weight of that for a pool. A drive removed from an erasure set is data the set has to
+    rebuild from parity, and a policy that deleted the claim as the pod went would turn a count lowered by accident into
+    the loss of that rebuild's source.
   */}}
   persistentVolumeClaimRetentionPolicy:
     whenDeleted: Retain
@@ -96,15 +122,16 @@ spec:
             {{- toYaml $objectStore.containerSecurityContext | nindent 12 }}
           {{- /*
             The server's own start command, which every MinIO-derived image takes as arguments rather than as
-            configuration; the image's entrypoint puts the executable in front of them. One directory, which is the
-            single-node single-drive pool this chart supports and the only topology one claim could hold.
+            configuration; the image's entrypoint puts the executable in front of them. What follows `server` is either
+            the one directory a single node owns or every member of the pool in the server's own ellipsis notation, and
+            `mailfathom.objectStorePoolArgument` is where that choice is made.
 
             `--console-address` is present only where the console was asked for. Without it the administrative listener
             does not exist at all, which is a stronger statement than a port nothing routes to.
           */}}
           args:
             - server
-            - /data
+            - {{ include "mailfathom.objectStorePoolArgument" . | quote }}
             - --certs-dir
             - {{ $certificatesDirectory | quote }}
             - --address
@@ -177,8 +204,10 @@ spec:
               mountPath: /data
             {{- /*
               Read-only, and the server tolerates that: it tries to create a `CAs` directory beneath this one while
-              starting and treats a refusal from a mounted directory as nothing to do. There is nothing to put in it
-              either — what has to be trusted here is the store's own certificate, and that trust is MailFathom's.
+              starting and treats a refusal from a mounted directory as nothing to do. A single node needs nothing in
+              it — what has to be trusted there is the store's own certificate, and that trust is MailFathom's. A pool
+              does, because each pod validates the certificate the next one presents, and the authority is mounted into
+              that directory below.
             */}}
             - name: certificates
               mountPath: {{ $certificatesDirectory | quote }}
@@ -197,6 +226,11 @@ spec:
           The certificate the store answers with, under the two names the server reads. A `kubernetes.io/tls` Secret
           carries them as `tls.crt` and `tls.key`, which is why the keys are values rather than constants: what is fixed
           is the file name inside the container, not the key an issuer chose.
+
+          A third item where a pool was asked for: the authority that signed it, landing under `CAs/` because that is
+          where the server reads a private one from. It comes out of this Secret rather than out of
+          `secrets.existingSecret` — which is where MailFathom's own copy of the same authority lives — because the
+          application's Secret carries mailbox passwords and the store is the one process that must never mount it.
         */}}
         - name: certificates
           secret:
@@ -207,6 +241,10 @@ spec:
                 path: public.crt
               - key: {{ $objectStore.tls.privateKeySecretKey }}
                 path: private.key
+              {{- with $objectStore.tls.certificateAuthoritySecretKey }}
+              - key: {{ . }}
+                path: {{ printf "CAs/%s" . | quote }}
+              {{- end }}
         {{- /*
           A Secret of its own, and the direction matters for the reason it does with the database's superuser password:
           the application pod mounts `secrets.existingSecret` whole, because the keys MailFathom reads are named by an
