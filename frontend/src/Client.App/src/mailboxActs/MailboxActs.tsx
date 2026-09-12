@@ -686,16 +686,17 @@ export function MailboxActsProvider({
             // it into the folder it is already in has not taken it out of the list it is drawn in either.
             forget(messages.filter((message) => !written.has(message.storedEmailId)).map((one) => one.storedEmailId));
 
-            // The one thing this client does that a deployment's own records do not already show: the screen had drawn
-            // the act as done and has just put itself back, which somebody using it experiences as the client undoing
-            // their work. It is above the default floor because it is a deployment refusing writes it accepted the
-            // request for, which is a thing to look at rather than a thing to read.
+            // What this adds to what the deployment already wrote down is the screen: it had drawn the act as done and
+            // has just put itself back, which somebody using it experiences as the client undoing their work. That is a
+            // defect report against this client rather than something whoever reads a collector acts on, and the
+            // refusal itself is the deployment's own answer read back to it — so it is the client's account of what it
+            // did and sits at the level the rest of that account does.
             //
             // Counted over the batches the deployment actually answered, and never over one that failed to reach it.
             // A dropped connection or a credential that expired leaves `writtenDown` with nothing from that batch,
             // which is indistinguishable here from a deployment declining every message in it — so counting both
-            // would put every transport failure into the one record an operator reads to find a deployment refusing
-            // writes. `request_failed` already reports that half, at the level a transport failure belongs to.
+            // would put every transport failure into the one record that says a deployment declined a write it had
+            // answered. `request_failed` already reports that half, under the name a reader groups it by.
             const declined = answered
                 .filter(({ answer }) => answer.outcome === 'read')
                 .flatMap(({ messages: batch }) => batch)

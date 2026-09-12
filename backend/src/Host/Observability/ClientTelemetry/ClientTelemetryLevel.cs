@@ -32,7 +32,7 @@ internal enum ClientTelemetryLevel
     /// <summary>The default, and one record per signed-in session: what a collector keeping everything at its own default level would otherwise be filled with.</summary>
     Info = 2,
 
-    /// <summary>Only what an operator would act on, such as a credential a deployment stopped accepting.</summary>
+    /// <summary>Only what an operator would act on and this deployment cannot see for itself, such as a signal hub a client could not reach.</summary>
     Warn = 3,
 
     /// <summary>Only a failure, such as a region of the client that threw while it was being drawn.</summary>

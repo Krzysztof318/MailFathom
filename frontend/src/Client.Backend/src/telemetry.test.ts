@@ -530,6 +530,30 @@ describe('what the whole of this package records', () => {
     });
 });
 
+// What a deployment is charged for when it has asked for nothing is a property of the whole table rather than of any
+// one occurrence, so it is asserted over the table: the next record added to the vocabulary passes these two or it does
+// not go above the floor.
+describe('what this client asks a deployment that asked for nothing to keep', () => {
+    const eventsAt = (keep: (severity: SeverityNumber) => boolean): readonly string[] =>
+        Object.entries(severityOf)
+            .filter(([, severity]) => keep(severity))
+            .map(([event]) => event)
+            .sort();
+
+    it('writes exactly one occurrence at the floor that ships', () => {
+        expect(eventsAt((severity) => severity === SeverityNumber.INFO)).toEqual(['session_started']);
+    });
+
+    // Two tests rather than one: an operator would act on it, and the deployment cannot see it for itself. A refusal
+    // the deployment issued fails the second however serious it reads, which is what keeps this level worth reading.
+    it('writes above it only what the deployment could not have recorded for itself', () => {
+        expect(eventsAt((severity) => severity > SeverityNumber.INFO)).toEqual([
+            'render_failed',
+            'signals_unreachable',
+        ]);
+    });
+});
+
 describe('the level a deployment asks for', () => {
     it('reads every level this client publishes and nothing else', () => {
         for (const level of ['off', 'trace', 'debug', 'info', 'warn', 'error', 'fatal']) {
