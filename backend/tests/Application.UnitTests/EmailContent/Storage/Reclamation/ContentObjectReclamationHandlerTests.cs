@@ -34,7 +34,7 @@ public sealed class ContentObjectReclamationHandlerTests
 
         // Act
         await handler.RunAsync(
-            ReclaimContentObjectsJobPayload.FromTheStart(),
+            ReclaimContentObjectsJobPayload.FromTheStart("sweep-of-the-occasion"),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -55,7 +55,7 @@ public sealed class ContentObjectReclamationHandlerTests
 
         // Act
         await handler.RunAsync(
-            ReclaimContentObjectsJobPayload.FromTheStart(),
+            ReclaimContentObjectsJobPayload.FromTheStart("sweep-of-the-occasion"),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -67,6 +67,41 @@ public sealed class ContentObjectReclamationHandlerTests
                 && ((ReclaimContentObjectsJobPayload)request.Payload).ResumeFrom == "next-page"
                 && ((ReclaimContentObjectsJobPayload)request.Payload).Segment == 1),
             Arg.Is<CancellationToken>(token => token == CancellationToken.None));
+    }
+
+    /// <summary>One leased segment run twice hands the rest of the sweep on under one key, so the sweep stays one chain.</summary>
+    /// <remarks>
+    /// The executor runs one leased row's handler again whenever the work succeeded and the compare-and-set recording it
+    /// did not, and the second attempt meets the same payload. The position it stops at need not be the first one's, so
+    /// what has to agree is the key: a second key would be a second hand-on, and the sweep would fork into two chains
+    /// walking one bucket.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_OneSegmentAttemptedTwice_HandsTheRestOnUnderOneKey()
+    {
+        // Arrange
+        var jobs = JobStoreAccepting();
+        var reclamation = Substitute.For<IContentObjectReclamation>();
+        reclamation.ReclaimAsync(Arg.Any<string?>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(
+                _ => Task.FromResult(new ContentObjectReclamationRun { ResumeFrom = "next-page" }),
+                _ => Task.FromResult(new ContentObjectReclamationRun { ResumeFrom = "a-page-further-on" }));
+
+        var handler = new ContentObjectReclamationHandler(jobs, reclamation);
+        var leased = ReclaimContentObjectsJobPayload.FromTheStart("sweep-of-the-occasion");
+
+        // Act
+        await handler.RunAsync(leased, TestContext.Current.CancellationToken);
+        await handler.RunAsync(leased, TestContext.Current.CancellationToken);
+
+        // Assert
+        var keys = jobs.ReceivedCalls()
+            .Select(call => call.GetArguments()[0])
+            .OfType<JobEnqueueRequest>()
+            .Select(request => request.Key.Value)
+            .Distinct(StringComparer.Ordinal);
+
+        Assert.Single(keys);
     }
 
     /// <summary>The shutdown that stopped a sweep is the one moment the rest of it most needs to be written down.</summary>
@@ -85,7 +120,7 @@ public sealed class ContentObjectReclamationHandlerTests
         await stopped.CancelAsync();
 
         // Act
-        await handler.RunAsync(ReclaimContentObjectsJobPayload.FromTheStart(), stopped.Token);
+        await handler.RunAsync(ReclaimContentObjectsJobPayload.FromTheStart("sweep-of-the-occasion"), stopped.Token);
 
         // Assert
         await jobs.Received(1).EnqueueAsync(
@@ -111,7 +146,7 @@ public sealed class ContentObjectReclamationHandlerTests
         // Act, Assert
         await Assert.ThrowsAsync<JobHandOnRefusedAtCapacityException>(
             () => handler.RunAsync(
-                ReclaimContentObjectsJobPayload.FromTheStart(),
+                ReclaimContentObjectsJobPayload.FromTheStart("sweep-of-the-occasion"),
                 TestContext.Current.CancellationToken));
     }
 
@@ -129,7 +164,7 @@ public sealed class ContentObjectReclamationHandlerTests
 
         // Act
         await handler.RunAsync(
-            ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("half-way", TimeSpan.Zero),
+            ReclaimContentObjectsJobPayload.FromTheStart("sweep-of-the-occasion").ContinuingFrom("half-way", TimeSpan.Zero),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -158,7 +193,7 @@ public sealed class ContentObjectReclamationHandlerTests
 
         // Act
         await handler.RunAsync(
-            ReclaimContentObjectsJobPayload.FromTheStart(),
+            ReclaimContentObjectsJobPayload.FromTheStart("sweep-of-the-occasion"),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -183,7 +218,7 @@ public sealed class ContentObjectReclamationHandlerTests
 
         // Act
         await handler.RunAsync(
-            ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("half-way", TimeSpan.FromDays(9)),
+            ReclaimContentObjectsJobPayload.FromTheStart("sweep-of-the-occasion").ContinuingFrom("half-way", TimeSpan.FromDays(9)),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -206,7 +241,7 @@ public sealed class ContentObjectReclamationHandlerTests
 
         // Act
         await handler.RunAsync(
-            ReclaimContentObjectsJobPayload.FromTheStart(),
+            ReclaimContentObjectsJobPayload.FromTheStart("sweep-of-the-occasion"),
             TestContext.Current.CancellationToken);
 
         // Assert

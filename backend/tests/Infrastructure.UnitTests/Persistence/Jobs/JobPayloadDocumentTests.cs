@@ -42,7 +42,7 @@ public sealed class JobPayloadDocumentTests
         RecurringSendJobPayload.For(
             Account,
             RecurringSendId.Create(Guid.Parse("6f9619ff-8b86-d011-b42d-00c04fc964ff"))),
-        ReclaimContentObjectsJobPayload.FromTheStart(),
+        ReclaimContentObjectsJobPayload.FromTheStart("sweep-of-the-occasion"),
     ];
 
     /// <summary>
@@ -161,7 +161,7 @@ public sealed class JobPayloadDocumentTests
     public void Serialize_ASweepSegment_WritesThePositionAndReadsItBackAsTheSameSegment()
     {
         // Arrange
-        var payload = ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("half-way", TimeSpan.FromDays(9));
+        var payload = ReclaimContentObjectsJobPayload.FromTheStart("sweep-of-the-occasion").ContinuingFrom("half-way", TimeSpan.FromDays(9));
 
         // Act
         var document = JobPayloadDocument.Serialize(payload);
