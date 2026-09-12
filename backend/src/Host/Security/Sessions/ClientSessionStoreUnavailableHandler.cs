@@ -27,11 +27,14 @@ namespace MailFathom.Host.Security.Sessions;
 /// <para>
 /// What reaches the caller is the message the store composed, which names the record and the operator's next step and
 /// carries no connection string, no presented value, and nothing the server said. The provider's own failure stays in
-/// the inner exception, which the framework's own logging records.
+/// the inner exception, and the warning written below is the only record of it: handling an exception here is what
+/// stops the middleware from logging it, so a handler that wrote nothing would answer the whole deployment <c>503</c>
+/// with nothing in the log to act on.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this handler for the exception-handling middleware.")]
-internal sealed class ClientSessionStoreUnavailableHandler : IExceptionHandler
+internal sealed partial class ClientSessionStoreUnavailableHandler(ILogger<ClientSessionStoreUnavailableHandler> logger)
+    : IExceptionHandler
 {
     /// <inheritdoc />
     public async ValueTask<bool> TryHandleAsync(
@@ -46,6 +49,8 @@ internal sealed class ClientSessionStoreUnavailableHandler : IExceptionHandler
             return false;
         }
 
+        this.LogSessionStoreUnavailable(unreachable);
+
         await TypedResults.Problem(
                 unreachable.Message,
                 statusCode: StatusCodes.Status503ServiceUnavailable,
@@ -57,4 +62,9 @@ internal sealed class ClientSessionStoreUnavailableHandler : IExceptionHandler
 
         return true;
     }
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "A client request was refused as unavailable because this deployment's sessions could not be reached.")]
+    private partial void LogSessionStoreUnavailable(Exception failure);
 }

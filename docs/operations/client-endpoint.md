@@ -225,8 +225,11 @@ this and does not wait on the answer: a deployment that never heard still expire
 **A session this deployment is not holding is answered `401`, and a deployment already holding as many sessions as it
 will hold answers `503`. A deployment that could not reach its sessions at all answers `503` as well.** They are three
 different things for a client to do: the first is signed in for again, the second and the third are tried again in a
-moment. The third is why an unreachable database is never reported as a refused credential: a client meets a `401` by
-asking a person for their password, and a database that is briefly away is not a reason to.
+moment. The two `503`s are told apart by the error code the answer carries: `33003` is the database that could not be
+asked, and the ceiling carries none. An operator meeting `33003` is looking for an unreachable database rather than for
+ten thousand live sessions, and the log entry the refusal wrote is where that failure is. The third refusal is also why
+an unreachable database is never reported as a refused credential: a client meets a `401` by asking a person for their
+password, and a database that is briefly away is not a reason to.
 
 **The lifetime is thirty days** and it is not configurable. It is what the client's own sign-in screen states to
 somebody who asked to be kept signed in, so a shorter one here would make that screen promise something this deployment

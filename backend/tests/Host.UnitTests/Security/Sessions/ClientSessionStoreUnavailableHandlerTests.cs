@@ -7,8 +7,10 @@ using MailFathom.Application.Access.Sessions;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Sessions;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Security.Sessions;
@@ -27,10 +29,11 @@ public sealed class ClientSessionStoreUnavailableHandlerTests
     public async Task TryHandleAsync_AStoreThatCouldNotBeReached_AnswersUnavailableWithItsOwnErrorCode()
     {
         // Arrange
+        using var log = new RecordingLoggerFactory();
         var context = RequestWithABody();
 
         // Act
-        var handled = await new ClientSessionStoreUnavailableHandler().TryHandleAsync(
+        var handled = await Handler(log).TryHandleAsync(
             context,
             Unreachable(),
             TestContext.Current.CancellationToken);
@@ -51,10 +54,11 @@ public sealed class ClientSessionStoreUnavailableHandlerTests
     public async Task TryHandleAsync_AStoreThatCouldNotBeReached_NeverAnswersAsUnauthenticated()
     {
         // Arrange
+        using var log = new RecordingLoggerFactory();
         var context = RequestWithABody();
 
         // Act
-        await new ClientSessionStoreUnavailableHandler().TryHandleAsync(
+        await Handler(log).TryHandleAsync(
             context,
             Unreachable(),
             TestContext.Current.CancellationToken);
@@ -68,10 +72,11 @@ public sealed class ClientSessionStoreUnavailableHandlerTests
     public async Task TryHandleAsync_AnyOtherFailure_IsLeftForThePipelineToAnswer()
     {
         // Arrange
+        using var log = new RecordingLoggerFactory();
         var context = RequestWithABody();
 
         // Act
-        var handled = await new ClientSessionStoreUnavailableHandler().TryHandleAsync(
+        var handled = await Handler(log).TryHandleAsync(
             context,
             new InvalidOperationException("Something else went wrong."),
             TestContext.Current.CancellationToken);
@@ -80,6 +85,33 @@ public sealed class ClientSessionStoreUnavailableHandlerTests
         Assert.False(handled);
         Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
     }
+
+    /// <summary>The refusal is written to the log, because handling it here is what stops the middleware from recording it.</summary>
+    /// <remarks>
+    /// It is the one refusal on this surface an operator has to act on, and the status alone does not name it: the
+    /// ceiling on a deployment's sessions answers `503` as well. A handler that returned `true` without writing would
+    /// leave a database outage answering every client of the deployment with nothing in the log to work back from.
+    /// </remarks>
+    [Fact]
+    public async Task TryHandleAsync_AStoreThatCouldNotBeReached_WritesTheOnlyRecordOfWhyTheDatabaseWasNotReached()
+    {
+        // Arrange
+        using var log = new RecordingLoggerFactory();
+        var context = RequestWithABody();
+        var unreachable = Unreachable();
+
+        // Act
+        await Handler(log).TryHandleAsync(context, unreachable, TestContext.Current.CancellationToken);
+
+        // Assert
+        var written = Assert.Single(log.Records);
+
+        Assert.Equal(LogLevel.Warning, written.Level);
+        Assert.Same(unreachable, written.Failure);
+    }
+
+    private static ClientSessionStoreUnavailableHandler Handler(RecordingLoggerFactory log) =>
+        new(new Logger<ClientSessionStoreUnavailableHandler>(log));
 
     private static ClientSessionStoreUnavailableException Unreachable() =>
         new("The deployment's client sessions could not be reached.", new InvalidOperationException("No connection."));

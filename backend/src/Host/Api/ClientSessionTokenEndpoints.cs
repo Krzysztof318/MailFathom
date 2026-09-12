@@ -142,25 +142,33 @@ internal static class ClientSessionTokenEndpoints
     /// <summary>Ends the session the request presented, so the token is refused on the next request rather than at expiry.</summary>
     /// <param name="context">The request, whose <c>Authorization</c> header carries the token to end.</param>
     /// <param name="sessions">Holds the sessions the deployment minted.</param>
-    /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>204</c>, whether or not the request was carrying a session to end.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required service is <see langword="null" />.</exception>
     /// <exception cref="ClientSessionStoreUnavailableException">Thrown when the deployment's sessions could not be reached, which <see cref="ClientSessionStoreUnavailableHandler" /> answers as unavailable — reporting a sign-out as complete against a store that could not be written would leave the token working.</exception>
     /// <remarks>
+    /// <para>
     /// One answer either way, and deliberately so: a client signing out has nothing to do differently on being told
     /// that what it presented was a password rather than a session, and answering differently would let a caller ask
     /// this route which of the two somebody else is holding. Signing out is complete when the head has forgotten what
     /// it kept, which it does whatever this answers.
+    /// </para>
+    /// <para>
+    /// It takes no cancellation token, which is the one route on this surface that does not. The removal is a write
+    /// the caller has already stopped waiting on — a client signing out does not read the answer, and an ordinary
+    /// proxy or network drop ends the connection just as readily — so binding it to the request's own abort would
+    /// leave the row standing for the rest of its thirty days with nobody told, this route answering <c>204</c>
+    /// either way. Every other act that ends a session is indivisible: the disable writes the flag and the removal in
+    /// one transaction, and a deleted credential or an erased user carries its sessions by cascade.
+    /// </para>
     /// </remarks>
     internal static async Task<NoContent> Revoke(
         HttpContext context,
-        [FromServices] ClientSessionTokens sessions,
-        CancellationToken cancellationToken)
+        [FromServices] ClientSessionTokens sessions)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(sessions);
 
-        await sessions.RevokeAsync(PresentedToken(context), cancellationToken);
+        await sessions.RevokeAsync(PresentedToken(context), CancellationToken.None);
 
         return TypedResults.NoContent();
     }

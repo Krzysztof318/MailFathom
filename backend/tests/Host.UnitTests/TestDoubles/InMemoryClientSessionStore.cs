@@ -51,7 +51,7 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
         int mostLiveSessions,
         CancellationToken cancellationToken)
     {
-        this.RefuseWhenUnreachable();
+        this.RefuseWhenUnusable(cancellationToken);
 
         if (this.NoLongerAdmits)
         {
@@ -71,7 +71,7 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
     /// <inheritdoc />
     public Task<HeldClientSession?> FindAsync(string identifier, CancellationToken cancellationToken)
     {
-        this.RefuseWhenUnreachable();
+        this.RefuseWhenUnusable(cancellationToken);
 
         return Task.FromResult(this.held.GetValueOrDefault(identifier));
     }
@@ -84,7 +84,7 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
         DateTimeOffset renewableFrom,
         CancellationToken cancellationToken)
     {
-        this.RefuseWhenUnreachable();
+        this.RefuseWhenUnusable(cancellationToken);
 
         if (this.held.GetValueOrDefault(identifier) is not { } presented
             || !presented.SecretDigest.Span.SequenceEqual(secretDigest.Span)
@@ -109,7 +109,7 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
         ReadOnlyMemory<byte> secretDigest,
         CancellationToken cancellationToken)
     {
-        this.RefuseWhenUnreachable();
+        this.RefuseWhenUnusable(cancellationToken);
 
         if (this.held.GetValueOrDefault(identifier) is not { } presented
             || !presented.SecretDigest.Span.SequenceEqual(secretDigest.Span))
@@ -123,7 +123,7 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
     /// <inheritdoc />
     public Task RemoveExpiredAsync(DateTimeOffset removableFrom, CancellationToken cancellationToken)
     {
-        this.RefuseWhenUnreachable();
+        this.RefuseWhenUnusable(cancellationToken);
 
         this.RemovalCount++;
 
@@ -135,8 +135,16 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
         return Task.CompletedTask;
     }
 
-    private void RefuseWhenUnreachable()
+    /// <summary>Refuses the way the real store refuses: an outage raises, and a cancelled caller stops the write.</summary>
+    /// <remarks>
+    /// The cancellation half matters as much as the outage half. Every statement the PostgreSQL store issues goes
+    /// through Npgsql, which observes the token before it sends anything, so a caller that hands this double a
+    /// cancelled token and is served anyway is being told something a deployment would not do.
+    /// </remarks>
+    private void RefuseWhenUnusable(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (this.Unreachable is { } failure)
         {
             throw failure;

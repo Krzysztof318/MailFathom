@@ -131,9 +131,10 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
     /// <c>READ COMMITTED</c> a statement that waits on a row lock re-reads the locked row and leaves every other table
     /// on the snapshot it started with, so the count would still be the one taken before the winner committed and both
     /// callers would write the hundredth credential. Locking first is what gives the insert a snapshot taken after that
-    /// commit. It is the one write here that opens a transaction, because a ceiling cannot be made idempotent — a
-    /// second attempt from a fresh read is a second credential rather than the same one — so the retry policy has
-    /// nothing to converge on and the decision has to hold the row it was taken against.
+    /// commit. It opens a transaction for a reason of its own: a ceiling cannot be made idempotent — a second
+    /// attempt from a fresh read is a second credential rather than the same one — so the retry policy has nothing to
+    /// converge on and the decision has to hold the row it was taken against. The disable opens one too, for the
+    /// unrelated reason that the flag and the session removal have to be indivisible.
     /// </para>
     /// </remarks>
     public async Task<UserCredentialWriteOutcome> CreateAsync(
@@ -294,7 +295,8 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
     /// two writes have to be indivisible: between an update that committed and a removal that had not, a client would
     /// go on being admitted by a credential an operator was told is off. The exchange and the renewal close the same
     /// window from their own side, taking a share lock on this row and requiring it to still be enabled before they
-    /// write, so a session arriving beside this transaction waits for it and is then removed by it.
+    /// write, so the guarantee holds under either ordering: a disable arriving first leaves the sign-in matching no
+    /// enabled credential and refusing, and one arriving second waits for the sign-in and then removes what it wrote.
     /// </para>
     /// <para>
     /// The order is this row and then the sessions beneath it, which is the order every other path takes:

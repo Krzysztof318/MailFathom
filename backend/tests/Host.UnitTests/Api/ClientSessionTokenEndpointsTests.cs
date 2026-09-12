@@ -312,8 +312,35 @@ public sealed class ClientSessionTokenEndpointsTests
         // Act
         var result = await ClientSessionTokenEndpoints.Revoke(
             RequestCarrying($"Bearer {held.Token!.Value}"),
-            sessions,
-            TestContext.Current.CancellationToken);
+            sessions);
+
+        // Assert
+        Assert.IsType<NoContent>(result);
+        Assert.Null(await sessions.VerifyAsync(held.Token.Value, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>A sign-out whose connection has already gone still removes the row, because a client signing out does not wait on the answer.</summary>
+    /// <remarks>
+    /// The removal is a database write now rather than a dictionary removal, so binding it to the request's own abort
+    /// would let an ordinary proxy or network drop leave the session standing for the rest of its thirty days — and
+    /// this route answers <c>204</c> either way, so nobody would be told. The context here carries an aborted request,
+    /// and the store refuses a cancelled write, so a route that passed the request's token through would fail this
+    /// rather than answering.
+    /// </remarks>
+    [Fact]
+    public async Task Revoke_ARequestWhoseConnectionHasAlreadyGone_StillEndsTheSession()
+    {
+        // Arrange
+        var sessions = Sessions(out _);
+        var held = await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken);
+        var context = RequestCarrying($"Bearer {held.Token!.Value}");
+
+        using var gone = new CancellationTokenSource();
+        await gone.CancelAsync();
+        context.RequestAborted = gone.Token;
+
+        // Act
+        var result = await ClientSessionTokenEndpoints.Revoke(context, sessions);
 
         // Assert
         Assert.IsType<NoContent>(result);
@@ -331,10 +358,7 @@ public sealed class ClientSessionTokenEndpointsTests
         var sessions = Sessions(out _);
 
         // Act
-        var result = await ClientSessionTokenEndpoints.Revoke(
-            RequestCarrying(headerValue),
-            sessions,
-            TestContext.Current.CancellationToken);
+        var result = await ClientSessionTokenEndpoints.Revoke(RequestCarrying(headerValue), sessions);
 
         // Assert
         Assert.IsType<NoContent>(result);
