@@ -585,21 +585,20 @@ pod.
 One name hangs off it. `-silo-peers` is the headless Service a pool's pods get a DNS name of their own from, which is
 what the server is given as the pool's members and what the certificate has to cover.
 
-**The base is truncated rather than the result**, which is the backplane's reasoning applied here: one suffix is a
-prefix of the other, so truncating each finished name at 63 collapses them into one string for any release long enough
-to reach it — two Services with one name, and an install that fails on the duplicate rather than on anything an operator
-wrote. Fifty characters leaves room for the longer suffix and for the `-15` a pod name adds on top of the shorter one.
+**This name is derived exactly as it was before the peer Service existed, and deliberately so.** It names a StatefulSet
+and a Service an operator may already have installed, holding a claim named after that StatefulSet, so a derivation that
+shortened it for any release name would rename both on the next `helm upgrade` and orphan the claim — every stored
+payload left behind an object nothing points at. The backplane truncates a shared base because both of its names were
+introduced together; here only the second one is new, so the second one is what gives way. Fifty-two characters leaves
+room for the eleven the longer suffix adds, and the two names cannot collide at any length: one ends in `-silo` and the
+other in `-silo-peers`, which differ in their last five characters wherever both reach 63.
 */}}
-{{- define "mailfathom.objectStoreBaseName" -}}
-{{- include "mailfathom.fullname" . | trunc 50 | trimSuffix "-" -}}
-{{- end -}}
-
 {{- define "mailfathom.objectStoreFullname" -}}
-{{- printf "%s-silo" (include "mailfathom.objectStoreBaseName" .) -}}
+{{- printf "%s-silo" (include "mailfathom.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "mailfathom.objectStorePeerFullname" -}}
-{{- printf "%s-silo-peers" (include "mailfathom.objectStoreBaseName" .) -}}
+{{- printf "%s-silo-peers" (include "mailfathom.fullname" . | trunc 52 | trimSuffix "-") -}}
 {{- end -}}
 
 {{- define "mailfathom.objectStoreSelectorLabels" -}}
