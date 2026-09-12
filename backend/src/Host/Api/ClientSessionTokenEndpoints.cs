@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Access.Credentials;
+using MailFathom.Application.Access.Sessions;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Sessions;
@@ -21,7 +22,7 @@ namespace MailFathom.Host.Api;
 /// ordinary route on the client group, so the credential presented to it is judged by whichever scheme the surface
 /// routes it to — the password scheme included, with the per-source and per-username attempt bounds that scheme has
 /// always applied. What is different is what the caller does with the answer: it holds a token afterwards, and every
-/// request it makes from then on costs a dictionary lookup instead of a PBKDF2 record sized for authenticating a
+/// request it makes from then on costs one indexed read instead of a PBKDF2 record sized for authenticating a
 /// person.
 /// </para>
 /// <para>
@@ -53,9 +54,9 @@ internal static class ClientSessionTokenEndpoints
     /// <remarks>
     /// Sorted apart from the bound rather than collapsed into it, because a client does two different things with
     /// them: this one signs in again, and the bound is tried again in a moment. Both cases reach it — a presented
-    /// token this process is not holding, which a restart makes the ordinary case rather than the rare one and which
-    /// nothing refuses at authentication on an endpoint requiring no credential, and a credential an operator ended
-    /// while the exchange authenticating against it was in flight.
+    /// token the deployment is not holding, which nothing refuses at authentication on an endpoint requiring no
+    /// credential, and a credential or a user an operator ended, which the write that would have held the session
+    /// finds rather than guesses.
     /// </remarks>
     private static ProblemHttpResult SessionNoLongerAccepted() => TypedResults.Problem(
         "This deployment will hold no session for what this request presented. Sign in again.",
@@ -79,18 +80,21 @@ internal static class ClientSessionTokenEndpoints
     /// <param name="context">The request, whose <c>Authorization</c> header says whether this is a sign-in or a renewal.</param>
     /// <param name="authorization">Reports the user the credential named and what it grants.</param>
     /// <param name="sessions">Mints the token and holds the session until it is revoked or expires.</param>
-    /// <returns><c>200</c> with the token, <c>401</c> where this deployment will hold no session for what was presented, <c>403</c> where an access token is what admitted the request, or <c>503</c> where this process is already holding as many sessions as it will hold.</returns>
+    /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
+    /// <returns><c>200</c> with the token, <c>401</c> where this deployment will hold no session for what was presented, <c>403</c> where an access token is what admitted the request, or <c>503</c> where the deployment is already holding as many sessions as it will hold.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required service is <see langword="null" />.</exception>
+    /// <exception cref="ClientSessionStoreUnavailableException">Thrown when the deployment's sessions could not be reached, which <see cref="ClientSessionStoreUnavailableHandler" /> answers as unavailable rather than as unauthenticated.</exception>
     /// <remarks>
     /// Renewal is recognized from the credential rather than from a second route or a body: a request already
     /// authenticated by a session token is one, and replacing the presented token is what makes one sign-in hold one
     /// live token however long a client stays open. What a renewal carries forward is what the sign-in established, so
     /// the grant on the answer is the grant the exchange resolved.
     /// </remarks>
-    internal static Results<Ok<ClientSessionTokenResponse>, ProblemHttpResult> Exchange(
+    internal static async Task<Results<Ok<ClientSessionTokenResponse>, ProblemHttpResult>> Exchange(
         HttpContext context,
         [FromServices] AccessAuthorization authorization,
-        [FromServices] ClientSessionTokens sessions)
+        [FromServices] ClientSessionTokens sessions,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(authorization);
@@ -108,7 +112,7 @@ internal static class ClientSessionTokenEndpoints
 
         if (presented is not null)
         {
-            return sessions.Renew(presented) is { } renewed
+            return await sessions.RenewAsync(presented, cancellationToken) is { } renewed
                 ? TypedResults.Ok(new ClientSessionTokenResponse(renewed.Value, renewed.ExpiresAt))
                 : SessionNoLongerAccepted();
         }
@@ -118,35 +122,53 @@ internal static class ClientSessionTokenEndpoints
             authorization.RequireUser(),
             [.. MailFathomPermission.All.Where(authorization.Permits)]);
 
-        if (sessions.Mint(admitted) is { } minted)
-        {
-            return TypedResults.Ok(new ClientSessionTokenResponse(minted.Value, minted.ExpiresAt));
-        }
+        // Which of the three the store reports is the whole answer, and nothing here asks a second question about it:
+        // whether the user and the credential still admit a session is decided inside the transaction that would have
+        // written the row, holding both rows while it decides, rather than by a check an operator's act could commit
+        // between.
+        var mint = await sessions.MintAsync(admitted, cancellationToken);
 
-        return sessions.WasEndedRecently(admitted)
-            ? SessionNoLongerAccepted()
-            : TypedResults.Problem(
+        return mint switch
+        {
+            { Outcome: ClientSessionMintOutcome.Minted, Token: { } minted } =>
+                TypedResults.Ok(new ClientSessionTokenResponse(minted.Value, minted.ExpiresAt)),
+            { Outcome: ClientSessionMintOutcome.NoLongerAdmitted } => SessionNoLongerAccepted(),
+            _ => TypedResults.Problem(
                 "This deployment is holding as many client sessions as it will hold; try again in a moment.",
-                statusCode: StatusCodes.Status503ServiceUnavailable);
+                statusCode: StatusCodes.Status503ServiceUnavailable),
+        };
     }
 
     /// <summary>Ends the session the request presented, so the token is refused on the next request rather than at expiry.</summary>
     /// <param name="context">The request, whose <c>Authorization</c> header carries the token to end.</param>
-    /// <param name="sessions">Holds the sessions this process minted.</param>
+    /// <param name="sessions">Holds the sessions the deployment minted.</param>
     /// <returns><c>204</c>, whether or not the request was carrying a session to end.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required service is <see langword="null" />.</exception>
+    /// <exception cref="ClientSessionStoreUnavailableException">Thrown when the deployment's sessions could not be reached, which <see cref="ClientSessionStoreUnavailableHandler" /> answers as unavailable — reporting a sign-out as complete against a store that could not be written would leave the token working.</exception>
     /// <remarks>
+    /// <para>
     /// One answer either way, and deliberately so: a client signing out has nothing to do differently on being told
     /// that what it presented was a password rather than a session, and answering differently would let a caller ask
     /// this route which of the two somebody else is holding. Signing out is complete when the head has forgotten what
     /// it kept, which it does whatever this answers.
+    /// </para>
+    /// <para>
+    /// It takes no cancellation token, which is the one route on this surface that does not. The removal is a write
+    /// the caller has already stopped waiting on — a client signing out does not read the answer, and an ordinary
+    /// proxy or network drop ends the connection just as readily — so binding it to the request's own abort would
+    /// leave the row standing for the rest of its thirty days with nobody told, this route answering <c>204</c>
+    /// either way. Every other act that ends a session is indivisible: the disable writes the flag and the removal in
+    /// one transaction, and a deleted credential or an erased user carries its sessions by cascade.
+    /// </para>
     /// </remarks>
-    internal static NoContent Revoke(HttpContext context, [FromServices] ClientSessionTokens sessions)
+    internal static async Task<NoContent> Revoke(
+        HttpContext context,
+        [FromServices] ClientSessionTokens sessions)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(sessions);
 
-        sessions.Revoke(PresentedToken(context));
+        await sessions.RevokeAsync(PresentedToken(context), CancellationToken.None);
 
         return TypedResults.NoContent();
     }

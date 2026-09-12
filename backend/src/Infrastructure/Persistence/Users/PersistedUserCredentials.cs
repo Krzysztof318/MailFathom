@@ -131,9 +131,10 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
     /// <c>READ COMMITTED</c> a statement that waits on a row lock re-reads the locked row and leaves every other table
     /// on the snapshot it started with, so the count would still be the one taken before the winner committed and both
     /// callers would write the hundredth credential. Locking first is what gives the insert a snapshot taken after that
-    /// commit. It is the one write here that opens a transaction, because a ceiling cannot be made idempotent — a
-    /// second attempt from a fresh read is a second credential rather than the same one — so the retry policy has
-    /// nothing to converge on and the decision has to hold the row it was taken against.
+    /// commit. It opens a transaction for a reason of its own: a ceiling cannot be made idempotent — a second
+    /// attempt from a fresh read is a second credential rather than the same one — so the retry policy has nothing to
+    /// converge on and the decision has to hold the row it was taken against. The disable opens one too, for the
+    /// unrelated reason that the flag and the session removal have to be indivisible.
     /// </para>
     /// </remarks>
     public async Task<UserCredentialWriteOutcome> CreateAsync(
@@ -287,6 +288,28 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// <b>Disabling writes the row and ends that credential's client sessions in one commit</b>, which is what makes it
+    /// an act rather than a race. A session is verified against the sessions table rather than against this row, so the
+    /// two writes have to be indivisible: between an update that committed and a removal that had not, a client would
+    /// go on being admitted by a credential an operator was told is off. The exchange and the renewal close the same
+    /// window from their own side, taking a share lock on this row and requiring it to still be enabled before they
+    /// write, so the guarantee holds under either ordering: a disable arriving first leaves the sign-in matching no
+    /// enabled credential and refusing, and one arriving second waits for the sign-in and then removes what it wrote.
+    /// </para>
+    /// <para>
+    /// The order is this row and then the sessions beneath it, which is the order every other path takes:
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md">ADR 0033</see>
+    /// requires the user row, then the credential row, then the session row over all four of them, and what an
+    /// inversion costs is a deadlock PostgreSQL breaks by aborting a renewal, a disable, or an erasure outright.
+    /// </para>
+    /// <para>
+    /// Enabling takes no transaction and ends nothing. There is no session to end — the credential was not
+    /// authenticating anything — and a credential turned back on is signed in with rather than refused, this table
+    /// having no window to wait out.
+    /// </para>
+    /// </remarks>
     public async Task<UserCredentialWriteOutcome> SetEnabledAsync(
         MailUserId user,
         Guid credentialId,
@@ -296,16 +319,51 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
         var storedUserId = RequireUser(user);
         var storedCredentialId = RequireCredential(credentialId);
 
-        var written = await dbContext.UserCredentials
+        if (enabled)
+        {
+            return OutcomeOf(await SetEnablementAsync(
+                dbContext,
+                storedUserId,
+                storedCredentialId,
+                enabled: true,
+                cancellationToken));
+        }
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var written = await SetEnablementAsync(
+            dbContext,
+            storedUserId,
+            storedCredentialId,
+            enabled: false,
+            cancellationToken);
+
+        if (written == 1)
+        {
+            await dbContext.ClientSessions
+                .Where(session => session.CredentialId == storedCredentialId)
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return OutcomeOf(written);
+    }
+
+    /// <summary>Writes whether one credential authenticates requests, and reports how many rows that named.</summary>
+    private static Task<int> SetEnablementAsync(
+        MailFathomDbContext dbContext,
+        Guid storedUserId,
+        Guid storedCredentialId,
+        bool enabled,
+        CancellationToken cancellationToken) =>
+        dbContext.UserCredentials
             .Where(credential => credential.Id == storedCredentialId && credential.UserId == storedUserId)
             .ExecuteUpdateAsync(
                 setters => setters
                     .SetProperty(credential => credential.Enabled, enabled)
                     .SetProperty(credential => credential.Version, credential => credential.Version + 1),
                 cancellationToken);
-
-        return OutcomeOf(written);
-    }
 
     /// <inheritdoc />
     public async Task<UserCredentialWriteOutcome> DeleteAsync(

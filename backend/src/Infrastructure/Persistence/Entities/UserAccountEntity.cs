@@ -26,6 +26,13 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 [RequiresIntegrationCoverage]
 internal sealed class UserAccountEntity
 {
+    /// <summary>The table these rows live in, named here because a composed statement locks one.</summary>
+    /// <remarks>Stated for the reason <see cref="ClientSessionEntity.TableName" /> is: a session's mint and renewal take a share lock on the user row before they write, and a statement naming this table by a literal would be a second description of where these rows live.</remarks>
+    internal const string TableName = "settings_accounts";
+
+    /// <summary>The key column, named here for the same reason the table is.</summary>
+    internal const string IdColumnName = "Id";
+
     /// <summary>The longest label a user is told apart by, which is what a mail account's identifier is bounded at.</summary>
     /// <remarks>Taken from the application's own statement of the bound, so the column and the rule that judges a declaration carrying a label cannot disagree about it.</remarks>
     public const int MaximumDisplayNameLength = MailUserRecord.MaximumDisplayNameLength;

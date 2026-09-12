@@ -4,9 +4,11 @@
 
 using System.Text.Encodings.Web;
 using MailFathom.Application.Access.Credentials;
+using MailFathom.Application.Access.Sessions;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Security.Sessions;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
@@ -36,8 +38,8 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
     public async Task AuthenticateAsync_ALiveSessionToken_ActsForTheUserTheExchangeResolved()
     {
         // Arrange
-        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
-        var minted = sessions.Mint(Admitted())!;
+        var sessions = Sessions();
+        var minted = (await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken)).Token!;
 
         // Act
         var result = await AuthenticateAsync(sessions, $"Bearer {minted.Value}");
@@ -52,8 +54,8 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
     public async Task AuthenticateAsync_ALiveSessionToken_CarriesTheGrantTheCredentialHeld()
     {
         // Arrange
-        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
-        var minted = sessions.Mint(Admitted())!;
+        var sessions = Sessions();
+        var minted = (await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken)).Token!;
 
         // Act
         var result = await AuthenticateAsync(sessions, $"Bearer {minted.Value}");
@@ -70,9 +72,9 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
     public async Task AuthenticateAsync_ASessionRevokedSinceItWasMinted_IsRefused()
     {
         // Arrange
-        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
-        var minted = sessions.Mint(Admitted())!;
-        sessions.Revoke(minted.Value);
+        var sessions = Sessions();
+        var minted = (await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken)).Token!;
+        await sessions.RevokeAsync(minted.Value, TestContext.Current.CancellationToken);
 
         // Act
         var result = await AuthenticateAsync(sessions, $"Bearer {minted.Value}");
@@ -90,7 +92,7 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
     public async Task AuthenticateAsync_AnythingThatIsNotALiveSession_IsRefused(string headerValue)
     {
         // Arrange
-        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
+        var sessions = Sessions();
 
         // Act
         var result = await AuthenticateAsync(sessions, headerValue);
@@ -99,12 +101,37 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
         Assert.False(result.Succeeded);
     }
 
+    /// <summary>A store that could not be reached leaves the handler rather than becoming a failed authentication, which is what keeps an outage from signing everybody out.</summary>
+    /// <remarks>
+    /// The handler has no answer of its own to give — an authentication result says admitted or not, and the whole
+    /// point is that neither is true — so the failure travels out to the pipeline's exception handler, which answers
+    /// <c>503</c>. Catching it here and reporting a refusal would read as a revoked session on every request the
+    /// outage covered, and a client meets that by asking a person for their password.
+    /// </remarks>
+    [Fact]
+    public async Task AuthenticateAsync_ASessionStoreThatCouldNotBeReached_RaisesRatherThanRefusing()
+    {
+        // Arrange
+        var store = new InMemoryClientSessionStore
+        {
+            Unreachable = new ClientSessionStoreUnavailableException(
+                "The deployment's client sessions could not be reached.",
+                new InvalidOperationException("No connection.")),
+        };
+
+        var sessions = new ClientSessionTokens(store, new FakeTimeProvider(Instant));
+
+        // Act, Assert
+        await Assert.ThrowsAsync<ClientSessionStoreUnavailableException>(
+            () => AuthenticateAsync(sessions, "Bearer mfs_a-session.aGVsbG8"));
+    }
+
     /// <summary>A refusal offers the bare challenge every method on the surface produces, and never asks a person for a password.</summary>
     [Fact]
     public async Task ChallengeAsync_ARequestPresentingNoSession_OffersTheBareChallengeAndNoPasswordChallenge()
     {
         // Arrange
-        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
+        var sessions = Sessions();
         var context = new DefaultHttpContext();
         var handler = await InitializeAsync(sessions, headerValue: string.Empty, context);
 
@@ -116,6 +143,9 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
         Assert.Contains("Bearer", challenges, StringComparison.Ordinal);
         Assert.DoesNotContain("Basic", challenges, StringComparison.Ordinal);
     }
+
+    private static ClientSessionTokens Sessions() =>
+        new(new InMemoryClientSessionStore(), new FakeTimeProvider(Instant));
 
     private static AdmittedUserCredential Admitted() => new(
         CredentialId,

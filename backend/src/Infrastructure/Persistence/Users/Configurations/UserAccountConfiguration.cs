@@ -19,7 +19,7 @@ internal sealed class UserAccountConfiguration : IEntityTypeConfiguration<UserAc
     /// <inheritdoc />
     public void Configure(EntityTypeBuilder<UserAccountEntity> entity)
     {
-        entity.ToTable("settings_accounts");
+        entity.ToTable(UserAccountEntity.TableName);
         entity.HasKey(user => user.Id);
 
         // Provisioned rather than generated on insert: a user's identifier is decided by whoever provisions the

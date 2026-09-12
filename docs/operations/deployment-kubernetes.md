@@ -478,9 +478,13 @@ visible, so the worst a lost signal costs somebody watching the screen is that i
 [The signal channel](client-endpoint.md#the-signal-channel) is what a client does about it, and
 [`SignalBackplane`](configuration-endpoints.md#signalbackplane) is every key the application reads.
 
-**This is necessary above one replica and it is not sufficient.** A signed-in session still lives in the process that
-minted it, so a client served by more than one replica is signed out on most of its requests whatever the backplane
-does. That is tracked separately and the chart says nothing about it.
+**This is what a client's live updates need above one replica, and signing in is no longer beside it.** A signed-in
+session lives in PostgreSQL, so every replica accepts one any other replica minted and honours its revocation, and the
+session routes need no affinity at any replica count. A Discover run is still the replica's own, so a client reattaching
+to one across replicas is answered as though it had ended; that is tracked separately and the chart says nothing about
+it either.
+[Sessions live in PostgreSQL](client-endpoint.md#the-session-token-routes) is where the session half is stated, and
+there is nothing in it for an operator to configure.
 
 ### Replicating the backplane
 

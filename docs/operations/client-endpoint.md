@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -187,7 +187,8 @@ The token is presented as a bearer credential — `Authorization: Bearer mfs_…
 including this one. **That is what the exchange is for.** A password is verified by deriving a PBKDF2 record sized for
 authenticating a person, which is around half a second of the deployment's own processor; a client opens several
 requests to draw one screen, and a surface authenticating each of them that way spends that cost per request rather
-than per sign-in. Verifying a token is a lookup and one fixed-time comparison: no derivation, and no database read.
+than per sign-in. Verifying a token is one indexed read and one fixed-time comparison, and no key derivation at all — which is
+the whole of what the exchange removes.
 
 **Every credential this deployment holds is exchanged here** — a password, an API key, a signed assertion. Nothing else
 changes about them: the bound on guessing a password is the same bound, counted the same way per source and per user
@@ -203,7 +204,8 @@ an access token in the first place.
 
 **A client endpoint requiring no credential still answers the exchange**, so the client's sign-in is one path rather
 than a posture it has to ask about first. The session it mints authenticates nothing, because nothing on such an
-endpoint is authenticated, and no credential stands behind it for an operator to end it by.
+endpoint is authenticated, and no credential stands behind it for an operator to end it by — erasing the user it names
+is what removes it.
 
 **A live token presented here renews it.** The answer is a fresh token, and the presented one stops working — one
 sign-in to one live credential, with no separate renewal credential and no second route. The client renews an hour
@@ -220,37 +222,48 @@ Authorization: Bearer mfs_…
 Answers `204` and the token stops working on the next request rather than at its expiry. The client's sign-out asks for
 this and does not wait on the answer: a deployment that never heard still expires the token on its own.
 
-**A token this process is not holding is answered `401`, and a process already holding as many sessions as it will hold
-answers `503`.** They are two different things for a client to do: the first is signed in for again, and the second is
-tried again in a moment. The first is the ordinary case rather than a rare one — sessions live in this process's memory,
-so a restart is what a client meets when its scheduled renewal presents what it kept.
+**A session this deployment is not holding is answered `401`, and a deployment already holding as many sessions as it
+will hold answers `503`. A deployment that could not reach its sessions at all answers `503` as well.** They are three
+different things for a client to do: the first is signed in for again, the second and the third are tried again in a
+moment. The two `503`s are told apart by the error code the answer carries: `33003` is the database that could not be
+asked, and the ceiling carries none. An operator meeting `33003` is looking for an unreachable database rather than for
+ten thousand live sessions, and the log entry the refusal wrote is where that failure is. The third refusal is also why
+an unreachable database is never reported as a refused credential: a client meets a `401` by asking a person for their
+password, and a database that is briefly away is not a reason to.
 
 **The lifetime is thirty days** and it is not configurable. It is what the client's own sign-in screen states to
 somebody who asked to be kept signed in, so a shorter one here would make that screen promise something this deployment
-does not keep. What bounds the case a person is actually in is renewal rather than the number, and what bounds the
-abandoned case is that the two paragraphs below end a session well before it: ending the credential behind it ends it
-on the next request, and a restart of this process ends every session it is holding. Thirty days is therefore the most
-a session lasts rather than a length an operator can count on.
+does not keep. What bounds the case a person is actually in is
+renewal rather than the number, so somebody who keeps using a client never meets the thirty days at all. An abandoned
+session stands for the whole of them unless an operator ends the credential behind it, which removes it there and then
+rather than waiting for a request nobody is going to make; the sweep is what reaches one nobody ended. Thirty days is
+therefore a length the deployment keeps rather than the most a session could last, which is what a restart used to make
+it.
 
 **An operator revokes sessions by revoking the credential behind them.** Disabling or deleting a user credential over
-[the administrative endpoint](admin-endpoint.md#user-credentials) ends every session that credential minted, on the
-next request each of them makes. Rotating a credential's material does not: rotation changes what may be presented at
+[the administrative endpoint](admin-endpoint.md#user-credentials) removes every session that credential minted, in the
+act itself rather than at the next request each of them makes — so it reaches an abandoned session as readily as an
+active one. Erasing the user does the same for every session of theirs, including one minted where no credential was
+required. Rotating a credential's material does not: rotation changes what may be presented at
 the exchange and says nothing about sessions already exchanged, so an operator ending somebody's sessions disables the
 credential rather than rotating it.
 
-Ending a credential's sessions also refuses a sign-in naming it for the next thirty seconds, and an erasure refuses one
-naming that user for the same window. That is what makes ending them an act rather than a race: an exchange presenting
-a password authenticates against a row that is still enabled, spends around half a second deriving it, and would
-otherwise write its session after the sweep meant to have ended it — a live session the operator was told was gone, and
-one that renews from what the process holds rather than from the row. A credential enabled again inside that window is
-answered `401` until it passes.
+Ending them is an act rather than a race, and PostgreSQL is what makes it one. An exchange presenting a password
+authenticates against a row that is still enabled and spends around half a second deriving it, so it would otherwise
+write its session after the act meant to have ended it. What prevents that is the order the two take their rows in: the
+sign-in holds the user record and then the enabled credential row until it commits, and the disable removes the
+sessions in the same transaction that clears the flag. A disable arriving first therefore leaves the sign-in matching
+no enabled credential and refusing, and one arriving second waits for the sign-in and then removes what it wrote. A
+renewal is ordered the same way, so nobody outlasts the act by renewing across it.
 
-**Sessions live in the process's memory**, which has three consequences an operator sees. A restart signs every client
-out, and each of them meets that as a refused credential and asks for a password again — no mail and no preference is
-lost, because none of it is in the session. A deployment running more than one replica would not share them, which is
-one of the reasons [the chart runs one](https://github.com/Krzysztof318/MailFathom/blob/main/deploy/helm/mailfathom/README.md).
-And the process holds at most ten thousand live sessions: reaching that refuses a new sign-in with `503` rather than
-signing somebody else out, which is a bound on memory behind an authenticated, rate-limited route.
+**Sessions live in PostgreSQL**, which has three consequences an operator sees. A restart signs nobody out, because no
+replica holds anything a restart could lose. Every replica accepts a session any other replica minted and honours its
+revocation, so the endpoint needs no session affinity at any replica count and a deployment is free to scale out.
+And the deployment holds at most ten thousand live sessions, counted by the statement that writes one rather than by
+each replica separately, so raising the replica count does not multiply it: reaching that sweeps what has expired and,
+where that frees nothing, refuses a new sign-in with `503` rather than signing somebody else out.
+[ADR 0033](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md)
+is where that is recorded.
 
 **The token is unguessable and it is not a password.** It is a sixteen-byte identifier and a thirty-two-byte secret,
 both from the platform's cryptographically secure generator, written together after an `mfs_` prefix — the same shape a

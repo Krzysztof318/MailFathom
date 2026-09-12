@@ -462,6 +462,16 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode ClientSignalTicketStoreUnavailable { get; } = new(33002);
 
+    /// <summary>Gets subcategory 3, the anti-replay record: the deployment's client sessions could not be reached, so the request was refused as unavailable.</summary>
+    /// <remarks>
+    /// It shares the subcategory with the two codes above because all three are a client credential the deployment
+    /// remembers rather than derives, and a store that cannot answer refuses rather than serves in every one of them.
+    /// It is a code of its own because it is the only one whose refusal must not look like an authentication failure: a
+    /// client meets <c>401</c> by asking for a password, so a rate of these answered that way would be a deployment-wide
+    /// sign-out rather than an outage the sessions survive.
+    /// </remarks>
+    public static MailFathomErrorCode ClientSessionStoreUnavailable { get; } = new(33003);
+
     /// <summary>Gets subcategory 4, durable jobs: a job payload serialized to more than the enqueue boundary accepts.</summary>
     /// <remarks>
     /// It is a subcategory of its own rather than one more schema-state failure, because nothing about the database is
@@ -1094,6 +1104,7 @@ public readonly record struct MailFathomErrorCode
         DatabaseSchemaTextSearchConfigurationMismatch,
         ClientAssertionSpendUnrecordable,
         ClientSignalTicketStoreUnavailable,
+        ClientSessionStoreUnavailable,
         JobPayloadTooLarge,
         JobHandOnRefusedAtCapacity,
         PersistenceTransientFailure,

@@ -4,6 +4,7 @@
 
 using System.Security.Claims;
 using MailFathom.Application.Access.Credentials;
+using MailFathom.Application.Access.Sessions;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
@@ -11,6 +12,7 @@ using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Mcp;
 using MailFathom.Host.Security.Sessions;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Security.OAuth;
 using MailFathom.Infrastructure.Security.Passwords;
 using MailFathom.Infrastructure.Security.Transport;
@@ -18,6 +20,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -210,6 +213,31 @@ public sealed class ClientTransportSecurityExtensionsTests
         Assert.Equal(["https://agent.example.test"], originPolicy.AllowedOrigins);
     }
 
+    /// <summary>Serving a client surface registers the handler that answers an unreachable session store, which is what turns a database outage into `503` rather than a sign-out.</summary>
+    /// <remarks>
+    /// The handler is reached from the pipeline rather than from a route, so nothing else in the composition says it
+    /// was registered: without it the failure escapes unhandled and the surface answers `500`, with every route test
+    /// still green. It is added here rather than centrally because nothing outside a client endpoint holds a client
+    /// session.
+    /// </remarks>
+    [Fact]
+    public void AddClientTransportSecurity_AClientSurfaceServed_RegistersTheHandlerThatAnswersAnUnreachableSessionStore()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // Act
+        services.AddClientTransportSecurity(EnabledEndpoint());
+
+        using var composed = services.BuildServiceProvider();
+
+        // Assert
+        Assert.Contains(
+            composed.GetServices<IExceptionHandler>(),
+            handler => handler is ClientSessionStoreUnavailableHandler);
+    }
+
     /// <summary>
     /// A page begins holding nothing, and so does every probe of a running deployment. The scheme such a request reaches
     /// has to authenticate nobody so the pipeline can challenge; a scheme forwarding the question elsewhere answers a
@@ -271,7 +299,8 @@ public sealed class ClientTransportSecurityExtensionsTests
     {
         // Arrange
         using var composed = ComposeOAuthOnlyEndpoint();
-        var held = composed.GetRequiredService<ClientSessionTokens>().Mint(AdmittedByACredential())!;
+        var held = (await composed.GetRequiredService<ClientSessionTokens>()
+            .MintAsync(AdmittedByACredential(), TestContext.Current.CancellationToken)).Token!;
 
         var request = new DefaultHttpContext { RequestServices = composed };
         request.Request.Scheme = "https";
@@ -305,7 +334,8 @@ public sealed class ClientTransportSecurityExtensionsTests
         // Arrange
         var hasher = new CountingPasswordHasher();
         using var composed = ComposeEndpointTakingPasswordsAndSessions(hasher);
-        var held = composed.GetRequiredService<ClientSessionTokens>().Mint(AdmittedByACredential())!;
+        var held = (await composed.GetRequiredService<ClientSessionTokens>()
+            .MintAsync(AdmittedByACredential(), TestContext.Current.CancellationToken)).Token!;
 
         var request = new DefaultHttpContext { RequestServices = composed };
         request.Request.Headers[HeaderNames.Authorization] = $"Bearer {held.Value}";
@@ -424,6 +454,7 @@ public sealed class ClientTransportSecurityExtensionsTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSingleton<IClientSessionStore, InMemoryClientSessionStore>();
         alsoRegistering?.Invoke(services);
 
         var endpointSettings = EnabledEndpoint();
@@ -462,6 +493,7 @@ public sealed class ClientTransportSecurityExtensionsTests
 
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSingleton<IClientSessionStore, InMemoryClientSessionStore>();
         services.AddSingleton(credentials);
         services.AddSingleton(passwordHasher);
         services.AddSingleton<TimeProvider>(new FakeTimeProvider());

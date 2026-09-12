@@ -487,6 +487,51 @@ caller's noise into another caller's failed connection. The sweep runs on the mi
 most once per ticket lifetime per replica, so a deployment whose clients stop connecting keeps whatever rows it held at
 that moment until the next mint arrives.
 
+## The signed-in client sessions
+
+`client_sessions` holds the sessions a client signed in with, one row per live token. The
+[exchange](../operations/client-endpoint.md#the-session-token-routes) mints one when a credential authenticates, every
+authenticated request on the client surface is judged against it by one indexed read, and a renewal replaces the row
+with another carrying the same grant.
+
+It is a table rather than a dictionary in a process for the reason the tickets above are one, and for a second reason
+they are not. A load balancer places every request independently, so a session held by the replica that minted it would
+be refused on roughly one request in the replica count, which a client meets as being signed out. And an operator
+disabling a credential would end its sessions on the replica that received the administrative request and leave them
+working on every other one, so an operator told that somebody's access is gone would be told something false.
+[ADR 0033](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md)
+records both halves of that, and records why nothing caches what this table answers.
+
+| Column | What it records |
+|---|---|
+| `Identifier` | The public half of the token, as the minting replica drew it — the base64url of sixteen random bytes — at most 64 characters, and the primary key. It is the only half a statement looks a session up by |
+| `UserId` | Whose session it is. It is the foreign key onto `settings_accounts` with `ON DELETE CASCADE`, which is what an erasure reaches a session by even where no credential stands behind one |
+| `CredentialId` | Which credential admitted the sign-in, nullable, and the foreign key onto `user_credentials` with `ON DELETE CASCADE`. It is null for a session minted on an endpoint requiring no credential, because such a sign-in names no row an operator could act on and a foreign key cannot take a sentinel |
+| `Permissions` | What the credential admitted at the exchange, carried forward unchanged by every renewal. A grant narrowed afterwards reaches the person at their next sign-in rather than at their next renewal |
+| `SecretDigest` | The SHA-256 digest of the token's secret half, 32 bytes. The secret itself is never stored, so a row read out of the database or out of a backup authenticates nothing. Verifying a request reads the row and compares the two digests in fixed time; a renewal and a revocation instead carry the digest in the removing statement's own condition, which is what makes the removal and the judgement one act rather than two a second request could arrive between |
+| `ExpiresAt` | When the token stops working, thirty days after it was minted. It is the one index beside the key and the two foreign keys' own, and the index is what makes the removal proportional to what has expired rather than to everything the deployment holds |
+
+**Nothing here is mail, and a row is written by a sign-in or by a renewal and by nothing else.** A session names a
+generated user identity, a credential identifier, the permissions that credential held, a digest, and an instant — no
+message, no address, no device, and no credential material. A value a client presents reaches this table in one place
+only: as the identifier the read and the two removals are parameterized by.
+
+**An operator's act and a sign-in are ordered rather than raced, and the lock order is what orders them.** A mint and a
+renewal each take the user row and then the enabled credential row before they write the session, holding both until
+they commit; disabling a credential clears the flag and removes that credential's sessions in one transaction. So a
+disable arriving first leaves the sign-in matching no enabled credential, and one arriving second waits for the sign-in
+and then removes what it wrote. The two cascades carry the rest: deleting a credential takes its sessions, and erasing a
+person takes every session of theirs including the ones no credential stands behind.
+
+**It cannot grow without bound, and two things hold it.** The removal of what has expired keeps the table proportional
+to the sessions signed in over the last thirty days rather than to every sign-in ever made, and it runs on the reading
+path as well as the minting one, at most once a day per replica, because abandoned sessions accumulate where nobody is
+signing in. Beside that is a ceiling of ten thousand live sessions, counted in the same statement that writes one — so
+it is the deployment's number rather than one each replica finds room under, and raising the replica count does not
+multiply it. A mint that meets it sweeps and tries once more, and answers `503` rather than growing the table. Reaching
+it is a refusal rather than an eviction, because evicting somebody else's live session would turn one caller's noise
+into another person being signed out.
+
 ## The derived search document
 
 `email_search_documents` is one-to-one with `stored_emails` and holds what lexical search reads: `subject_text`, `participant_addresses`, `body_text`, `body_text_before_trimming`, `text_source`, `extracted_at`, and the generated `search_vector`. [Body text and the lexical index](../features/imap-synchronization.md#body-text-and-the-lexical-index) describes how each of them is derived. Every stored email has one, including a message whose body was never read: that row carries the envelope's subject alone and records its text source as not extracted, so an oversized or unparseable message is still findable rather than absent from search entirely.
@@ -1663,6 +1708,10 @@ account reach these four tables through the same cascade every other table is re
 | `PK_client_signal_tickets` | `(Identifier)`, unique | The single-use rule itself. The spend is one `DELETE ... RETURNING` reaching exactly one row, so two connections presenting one ticket at the same instant are settled here rather than by a check either replica makes between two statements |
 | `ix_client_signal_tickets_expires_at` | `(ExpiresAt)` | The order the unspent tickets are aged out through, indexed for the removal alone for the reason the assertions' expiry is: nothing reads a ticket by its age |
 | `IX_client_signal_tickets_UserId` | `(UserId)` | The foreign key onto the user record, which is what erasing a person reaches their unspent tickets by rather than scanning |
+| `PK_client_sessions` | `(Identifier)`, unique | The one read every authenticated request on the client surface makes, and what both removals reach a row by. A renewal's removal and a revocation's carry the digest in the same statement, so two requests presenting one token leave exactly one live session whichever replica each of them reached |
+| `ix_client_sessions_expires_at` | `(ExpiresAt)` | The order the expired sessions are aged out through, indexed for the removal alone for the reason the tickets' expiry is: nothing reads a session by its age |
+| `IX_client_sessions_UserId` | `(UserId)` | The foreign key onto the user record, which is what erasing a person reaches their sessions by — including the ones naming no credential at all |
+| `IX_client_sessions_CredentialId` | `(CredentialId)` | The foreign key onto the credential, which is what disabling or deleting one reaches its sessions by rather than scanning |
 | `ix_notifications_user_occurred` | `(UserId, OccurredAt, Id)` | The two ways the notification centre is worked: a page of one person's notifications newest first, and the retention sweep that erases the same person's oldest. The identifier is in the key because two notifications raised in one instant need a total order for a keyset page to continue from |
 | `IX_notifications_TargetStoredEmailId` | `(TargetStoredEmailId)` | The foreign key back to the message a notification leads to, which is what erasing that message reaches its notifications by rather than scanning |
 | `IX_stored_content_claims_ExpiresAt` | `(ExpiresAt)` | The sweep every claim statement opens with, which is what keeps the table the size of the payloads currently in flight rather than of every claim a replica ever died holding. Unfiltered, because what an expiry divides the table into changes with the clock rather than with a row |
@@ -1781,6 +1830,8 @@ personal data.
 `spent_client_assertions` is the one table on this page whose classification depends on which credential a row was written under. For a configured key pair the `CredentialKey` column holds the name an operator gave the key, which is MailFathom's own configuration and nobody's data; for a user's registered key it holds that key's 43-character fingerprint, which is a pseudonymous identifier for an identified person and is read as their data. The other two columns are neither in both cases — a value the client minted for one request, and an instant. Nothing cascades into the table, and that is deliberate rather than an omission: the column holds a configured name as readily as a fingerprint and belongs to neither record, so there is nothing for a constraint to point at. What replaces the cascade is the row's own lifetime, which is minutes rather than a retention window somebody has to sweep against — a data-subject erasure is therefore not owed a statement here, because whatever a fingerprint could still identify is gone on its own before such a request could be answered. Neither the fingerprint nor the identifier reaches a log, a metric, a trace, or an error message — a refusal on the user path names the credential's own generated identifier. The configured key name does reach one, in the warnings that say which key presented a replayed or overlong assertion, and it is the column value there as well as in the row; it is MailFathom's own configuration rather than anybody's data, which is why that is the one part of the table a log carries.
 
 `client_signal_tickets` holds a generated user identity, which is a pseudonymous identifier for an identified person and is read as their data; the digest and the instant beside it are neither. It does cascade from the user record, so a data-subject erasure takes whatever it holds without having to know the table exists — and the row's own lifetime of thirty seconds means there is almost never anything for that cascade to reach. The digest is not a credential: it opens nothing, because what a connection presents is the secret it was derived from. Nothing here reaches a log, a metric, a trace, or an error message — a refused connection is counted rather than described, and the one refusal that names anything names the deployment's own inability to reach its database.
+
+`client_sessions` holds a generated user identity and a credential identifier, both pseudonymous identifiers for an identified person and read as their data; the grant, the digest, and the instant beside them are neither. It cascades from the user record and from the credential, so a data-subject erasure takes every session of theirs whether or not a credential stands behind one, and an operator ending a credential takes its sessions in the same transaction. The digest is not a credential: it authenticates nothing, because what a request presents is the secret it was derived from. Nothing about the device is in the row — no address, no user agent, and no name a person gave a session — because a session is not a device register and nothing in MailFathom reads one. Nothing here reaches a log, a metric, a trace, or an error message: a refused request is answered rather than described, and the one refusal that names anything names the deployment's own inability to reach its database.
 
 `embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 

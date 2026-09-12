@@ -20,7 +20,7 @@ internal sealed class UserCredentialConfiguration : IEntityTypeConfiguration<Use
     /// <inheritdoc />
     public void Configure(EntityTypeBuilder<UserCredentialEntity> entity)
     {
-        entity.ToTable("user_credentials");
+        entity.ToTable(UserCredentialEntity.TableName);
         entity.HasKey(credential => credential.Id);
 
         // Provisioned rather than generated on insert, for the reason the user row's identifier is: the administrative

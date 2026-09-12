@@ -81,6 +81,11 @@ internal static class ClientTransportSecurityExtensions
         // would have to ask about before it could sign in at all.
         services.TryAddSingleton<ClientSessionTokens>();
 
+        // Registered with the store rather than with the pipeline, because nothing outside a client endpoint holds a
+        // session: it is what turns an unreachable session store into the 503 the record requires, on the exchange and
+        // on every authenticated request alike, and a deployment serving no client surface raises the failure nowhere.
+        services.AddExceptionHandler<ClientSessionStoreUnavailableHandler>();
+
         if (!endpointSettings.RequiresAuthentication)
         {
             return services;
