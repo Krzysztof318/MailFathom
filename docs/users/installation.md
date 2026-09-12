@@ -97,11 +97,13 @@ what MailFathom asks for — because the replica that noticed a change is routin
 connection.
 The chart refuses to render the combination that would otherwise install, start, and serve every request while telling
 its clients nothing.
-[Signals between replicas](../operations/deployment-kubernetes.md#signals-between-replicas) is the page.
+[Signals between replicas](../operations/deployment-kubernetes.md#signals-between-replicas) is the page, and
+[running more than one replica](../operations/deployment-kubernetes.md#running-more-than-one-replica) is what that
+number gives, what it does not, and what your load balancer owes a client's connection.
 
-Compose and the Quadlet units offer the same server as an opt-in of their own, where it does nothing until a second
-instance exists — a profile in one, a unit you either copy or do not in the other — so a deployment that expects to grow
-can provision it before it needs one. [The signal backplane](../operations/deployment-compose.md#the-signal-backplane)
+Compose and the Quadlet units offer the same server as an opt-in of their own, where on one host it does nothing — a
+profile in one, a unit you either copy or do not in the other — so a deployment that expects to move to the chart can
+provision it before it needs one. [The signal backplane](../operations/deployment-compose.md#the-signal-backplane)
 and [its Quadlet unit](../operations/deployment-quadlet.md#the-signal-backplane) are those two pages.
 
 ## What every shape needs

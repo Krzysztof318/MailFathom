@@ -770,7 +770,14 @@ carries a client signal from the instance that raised it to the instances holdin
 about it, and this directory runs one MailFathom — so every signal already reaches every connection the deployment holds,
 and the server relays each one back to the single subscriber that published it. It is here so that this shape offers the
 same component [the chart](deployment-kubernetes.md) does, and so that a deployment which grows a second instance has the
-piece provisioned before it needs one. Running more than one MailFathom under Quadlet is not supported today.
+piece provisioned before it needs one.
+
+**Running more than one MailFathom under Quadlet is not supported**, and the reason is this shape rather than the
+application. `mailfathom.container` publishes fixed host ports, so a second unit has nothing to bind; nothing here
+balances requests between two of them, holds a client's connection across a restart, or gates one on a readiness probe.
+What the application needs above one instance it already has — its coordination is rows in PostgreSQL, and this
+backplane — so [the chart](deployment-kubernetes.md#running-more-than-one-replica) is where more than one replica is
+supported and stated.
 [`SignalBackplane`](configuration-endpoints.md#signalbackplane) is what the section means, and
 [the signal channel](client-endpoint.md#the-signal-channel) is what a client does when a signal does not arrive.
 

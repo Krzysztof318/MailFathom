@@ -1,0 +1,28 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- include "mailfathom.validate" . -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "mailfathom.fullname" . }}
+  labels:
+    {{- include "mailfathom.labels" . | nindent 4 }}
+spec:
+  {{- /*
+    How many pods may be missing rather than how many must remain, which is the form that reads the same at every
+    replica count: a budget demanding one pod remain would refuse every drain of the single-replica default, and the
+    cluster upgrade that never finishes reports itself as a node that will not cordon rather than as this object.
+
+    What it buys above one replica is that a drain takes the replicas one at a time. Work a replica holds under a lease
+    moves to another when the pod stopping releases it, and a drain taking every holder at once instead leaves each
+    scope waiting out its expiry with nothing running it.
+  */}}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "mailfathom.selectorLabels" . | nindent 6 }}
+{{- end }}

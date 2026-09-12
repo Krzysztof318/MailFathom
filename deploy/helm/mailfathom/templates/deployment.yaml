@@ -12,6 +12,22 @@ metadata:
     {{- include "mailfathom.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  {{- /*
+    Stated rather than left to Kubernetes, because what it decides is whether an upgrade ever has fewer pods serving
+    than `replicaCount` and whether two versions run together. The default keeps a pod serving at every instant, which
+    is what holds the schema order this chart's notes and its page both give: a new pod refuses a schema behind it and
+    never becomes ready, and the pods already serving are still there.
+
+    The `rollingUpdate` block is rendered only beside the type that accepts one. Helm merges a values document into
+    this chart's defaults rather than replacing them, so a deployment selecting `Recreate` would otherwise keep the
+    default's block underneath and produce a Deployment the API server refuses.
+  */}}
+  strategy:
+    type: {{ .Values.strategy.type }}
+    {{- if eq .Values.strategy.type "RollingUpdate" }}
+    rollingUpdate:
+      {{- toYaml .Values.strategy.rollingUpdate | nindent 6 }}
+    {{- end }}
   selector:
     matchLabels:
       {{- include "mailfathom.selectorLabels" . | nindent 6 }}

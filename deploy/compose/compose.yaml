@@ -185,8 +185,13 @@ services:
       #
       # **On one host it changes nothing an operator can observe**, and that is the expected state rather than a
       # misconfiguration: a signal raised here already reaches every client connection this deployment holds, because
-      # there is only one process holding them. What it is for is a second instance, and #1295 is where running one is
-      # decided. Until then this is the same component the chart offers, provisioned ahead of needing it.
+      # there is only one process holding them. What it is for is a second instance, and **this shape runs one**: the
+      # ports below are published on fixed host addresses, so a second container has nothing to bind, and nothing here
+      # balances requests between two of them or holds a client's connection across a replacement. MailFathom itself
+      # asks for nothing further — leases, sessions, and spent assertions are all rows in PostgreSQL — so what stops at
+      # one instance is this deployment shape rather than the application, and the Helm chart is where more than one
+      # replica is supported and stated. The server is here so that this shape offers the same component the chart
+      # does, provisioned ahead of needing it.
       #
       # The reference is a file under ./secrets/mailfathom/ like every other credential MailFathom reads, and what it
       # holds is a whole StackExchange.Redis connection string rather than a bare password: `valkey:6379,password=...`

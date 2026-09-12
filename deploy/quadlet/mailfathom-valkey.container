@@ -12,8 +12,11 @@
 # **On one host it does nothing, and that is the expected state rather than a misconfiguration.** This directory runs one
 # MailFathom, so every signal already reaches every client connection the deployment holds and the server relays each one
 # back to the single subscriber that published it. It is here so that this shape offers the same component the Helm chart
-# does, and so that a deployment which grows a second instance has the piece provisioned before it needs one. Running
-# more than one MailFathom under Quadlet is not supported today; issue #1295 decides whether it will be.
+# does, and so that a deployment which grows a second instance has the piece provisioned before it needs one.
+# **Running more than one MailFathom under Quadlet is not supported**: mailfathom.container publishes fixed host ports,
+# so a second unit has nothing to bind, and nothing here balances requests between two of them. The application asks
+# for nothing further — its coordination is rows in PostgreSQL — so what stops at one instance is this deployment
+# shape, and the Helm chart is where more than one replica is supported.
 #
 # Rootless, like the units beside it, and installed under ~/.config/containers/systemd/.
 

@@ -6,6 +6,27 @@
 # Committed so a change in what the chart produces is visible in the diff rather than only a failure to
 # produce anything. Regenerate with: scripts/render-helm-manifests.sh --update
 ---
+# Source: mailfathom/templates/poddisruptionbudget.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mailfathom
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: "nightly-0.0.0-nightly.1-0000000"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+
+    io.mailfathom/release-channel: nightly
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mailfathom
+      app.kubernetes.io/instance: mailfathom
+---
 # Source: mailfathom/templates/serviceaccount.yaml
 apiVersion: v1
 kind: ServiceAccount
@@ -285,6 +306,11 @@ metadata:
     io.mailfathom/release-channel: nightly
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app.kubernetes.io/name: mailfathom

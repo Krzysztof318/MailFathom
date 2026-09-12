@@ -761,7 +761,66 @@ ingress:
   #      - mailfathom.example.test
 
 ### Workload
+#
+# How many MailFathom processes serve this deployment. One is the default and asks nothing of you; more than one is
+# supported, and what it gives is request capacity and an upgrade with nothing down — never a second copy of any work.
+# A mail account is synchronized by whichever replica holds its lease and by no other, a deployment-wide sweep by
+# whichever holds the sweep's, and a request, a tool call, or a page is answered by whichever replica the Service
+# routed it to.
+#
+# **Two things have to hold above one replica, and the chart refuses the one it can see.** A client's live updates need
+# `signalBackplane` above, because the replica that raised a signal is routinely not the replica holding the connection
+# that has to hear about it — so a values document serving the client surface with more than one replica and no
+# backplane is refused rather than installed. A signed-in session needs nothing at all: it is a row in PostgreSQL, so
+# every replica accepts one any other replica minted and honours its revocation, and no session affinity is asked of
+# whatever balances the traffic. What that load balancer does owe the client's one standing connection — the WebSocket
+# upgrade passed, and no idle timeout shorter than a connection MailFathom keeps alive — is stated on the page named
+# below, because it is a requirement of your ingress rather than a value here.
+#
+# **What several replicas do not give.** They are not availability for the database: one the chart deploys is a single
+# StatefulSet on a ReadWriteOnce claim whatever this number says. They do not divide one account's synchronization,
+# which is one lease and therefore one replica's at a time, so a single large mailbox is not synchronized faster by
+# raising this. And they multiply every ceiling worded as one process's rather than the deployment's —
+# `Jobs:MaxConcurrentJobs`, `MailSynchronization:MaxInFlightRawMimeBytes`, `Embeddings:MaxQueuedEmails`, and
+# `Resilience:AiProviderInvocation:ConcurrencyLimit` are each replica's own, so a deployment of *n* replicas runs up to
+# *n* times them and a provider's concurrency is respected by dividing rather than by restating. Every ceiling worded
+# as the deployment's is a row each replica shares and stays the figure it names; the configuration reference says
+# which of the two each setting is, per setting.
+#
+# docs/operations/deployment-kubernetes.md holds the operator's reading of all of it, under *Running more than one
+# replica*.
 replicaCount: 1
+
+# **How an upgrade replaces the pods, stated by the chart rather than inherited from Kubernetes.** The default below
+# starts a replacement pod before any running pod is taken away and waits for it to pass its probes, so at every
+# instant of a rollout at least `replicaCount` pods are serving — which is what makes the schema step's order hold: a
+# new pod that refuses the schema it finds never becomes ready, and the pods already serving keep serving rather than
+# having been replaced by it.
+#
+# Two versions therefore run together for the length of a rollout, and that is safe rather than tolerated: leased work
+# moves to the replacement when the pod being stopped releases its lease, a claim reaches only the job types the
+# claiming replica's own build registers a handler for, and two replicas reaching one scheduled occasion compose the
+# same idempotency key. `Recreate` is the other type Kubernetes accepts and stops every pod before starting one; the
+# chart renders no `rollingUpdate` block beside it, so selecting it here produces a manifest the API server accepts
+# rather than one it refuses.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
+# **What a drain may take at once.** A PodDisruptionBudget is the only thing that makes a node upgrade evict these pods
+# one at a time; without one, a drain that reaches two nodes takes every replica on them together, and work held under
+# a lease then waits out the lease rather than being handed over — up to `MailSynchronization:LeaseDuration` per
+# account, two minutes by default, with nothing synchronizing in between.
+#
+# It is expressed as how many pods may be missing rather than how many must remain, deliberately: `maxUnavailable: 1`
+# reads the same at every replica count, while a budget demanding one pod remain would block every drain of the
+# single-replica default forever — a cluster upgrade that never finishes, reported as a node that will not cordon.
+# Turn it off where something else in your cluster owns disruption policy for this workload.
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
 
 resources:
   requests:
