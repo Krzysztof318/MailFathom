@@ -163,9 +163,11 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
             this.plan.MaximumRequestCharacters,
             this.plan.MaximumRequestImageOctets);
 
-        if (await this.AskAsync(turn, language, cancellationToken) is not { Text: { } answerText } answer)
+        var answer = await this.AskAsync(turn, language, cancellationToken);
+
+        if (answer is not { Text: { } answerText })
         {
-            return this.Withhold(EmailEnrichmentWithholding.ProviderUnavailable);
+            return this.Withhold(EmailEnrichmentWithholding.ProviderUnavailable, answer?.Alias);
         }
 
         var marks = EmailEnrichmentReading.Read(
@@ -227,9 +229,12 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
                 (model, attemptToken) => this.AskModelAsync(model, turn, language, runLedger, attemptToken),
                 cancellationToken);
         }
-        catch (ChatGenerationFailedException)
+        catch (ChatGenerationFailedException failure)
         {
-            return null;
+            // The alias the chain's last model failed under, which is what a line about this outage has to name: the
+            // model asked first has a fallback behind it, so naming that one sends a reader to an endpoint that may be
+            // working. There is no text, which is what tells the caller nothing answered.
+            return new ChatModelAnswer(failure.EndpointAlias, Text: null);
         }
         catch (MailAnsweringBudgetExhaustedException)
         {
@@ -293,9 +298,15 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
         return new ChatModelAnswer(endpoint.Alias, response.Text);
     }
 
-    private EmailEnrichmentDerivation Withhold(EmailEnrichmentWithholding withholding)
+    /// <summary>Withholds, naming the model this attempt reached where one was reached at all.</summary>
+    /// <remarks>
+    /// A chain that failed outright failed at its last model, and the alias the capability was configured with names
+    /// the one asked first — an endpoint that may be working. Where nothing reached a model, that configured alias is
+    /// the only one there is and is what the line carries.
+    /// </remarks>
+    private EmailEnrichmentDerivation Withhold(EmailEnrichmentWithholding withholding, string? answeringAlias = null)
     {
-        EmailEnrichmentEvents.LogWithheld(this.logger, this.plan.Endpoint.Alias, withholding);
+        EmailEnrichmentEvents.LogWithheld(this.logger, answeringAlias ?? this.plan.Endpoint.Alias, withholding);
 
         return EmailEnrichmentDerivation.Withholding(withholding);
     }

@@ -232,11 +232,13 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
                 (model, attemptToken) => this.AskModelAsync(model, turn, attemptToken),
                 cancellationToken);
         }
-        catch (ChatGenerationFailedException)
+        catch (ChatGenerationFailedException failure)
         {
-            DiscoveryCompositionEvents.LogGenerationFailed(this.logger, endpoint.Alias);
+            // The alias the chain's last model failed under rather than the one this composition was asked of, so a
+            // line about the outage names the endpoint that actually refused it.
+            DiscoveryCompositionEvents.LogGenerationFailed(this.logger, failure.EndpointAlias);
 
-            return null;
+            return new ChatModelAnswer(failure.EndpointAlias, Text: null);
         }
         catch (InvalidOperationException)
         {

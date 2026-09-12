@@ -184,6 +184,38 @@ public sealed class MailBodyCleanupAgentTests
     }
 
     /// <summary>
+    /// A chain that answered nowhere failed at its last model, so the withholding line names that one. The alias the
+    /// pass was configured with has a fallback behind it, and naming it would send whoever reads the line to an
+    /// endpoint that may be working.
+    /// </summary>
+    [Fact]
+    public async Task ProposeAsync_AChainWhoseFallbackAlsoFailed_WithholdsAgainstTheFallbacksAlias()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Refusing(HttpStatusCode.TooManyRequests);
+        using var logs = new RecordingLoggerFactory();
+        var chain = ChatDeclarations
+            .Plan()
+            .WithFallback(ChatDeclarations.Plan(ChatDeclarations.Endpoint("standby")));
+
+        var cleaner = provider.CleanerOver(
+            plan: chain,
+            logger: logs.CreateLogger<MailBodyCleanupAgent>());
+
+        // Act
+        var proposal = await cleaner.ProposeAsync(Outline(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailBodyCleaningWithholding.ProviderUnavailable, proposal.Withholding);
+
+        var withheld = Assert.Single(
+            logs.Records,
+            record => record.Properties.ContainsKey("Withholding"));
+
+        Assert.Equal("standby", withheld.Properties["EndpointAlias"]);
+    }
+
+    /// <summary>
     /// The line an operator reads names the model that actually produced the proposal. The alias the pass was
     /// configured with is the model it asked first, so a fallback answering would otherwise send whoever reads the log
     /// to an endpoint that is working.

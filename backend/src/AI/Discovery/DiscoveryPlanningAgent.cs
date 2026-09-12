@@ -182,9 +182,12 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
                 (model, attemptToken) => this.AskModelAsync(model, turn, attemptToken),
                 cancellationToken);
         }
-        catch (ChatGenerationFailedException)
+        catch (ChatGenerationFailedException failure)
         {
-            return null;
+            // The alias the chain's last model failed under, which is what a line about this outage has to name: the
+            // model asked first has a fallback behind it, so naming that one sends a reader to an endpoint that may be
+            // working. There is no text, which is what tells the caller nothing answered.
+            return new ChatModelAnswer(failure.EndpointAlias, Text: null);
         }
         catch (InvalidOperationException)
         {
