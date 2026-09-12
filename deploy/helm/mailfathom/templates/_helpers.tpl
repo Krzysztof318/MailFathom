@@ -177,6 +177,20 @@ not zero.
   {{- if not .Values.database.host -}}
     {{- fail "database.host is not set and database.deploy.enabled is false. Name the PostgreSQL server you operate — it needs the vector extension — or turn database.deploy.enabled on and let the chart run one." -}}
   {{- end -}}
+  {{- /*
+    A replicated cluster named instance by instance rather than through one address in front of it. MailFathom writes to
+    whichever instance the driver settles on, so a target session attribute that permits a hot standby is a deployment
+    that comes up, answers every read, and fails on the first write — hours later, inside a synchronization run. It
+    refuses that at startup too; this one comes from `helm install`, which is the same reasoning the object store's
+    credential refusals carry. The keyword is matched case-insensitively and with its spaces removed, because Npgsql
+    accepts every spelling of it and an operator writing one of them is not writing a different setting.
+  */}}
+  {{- if contains "," .Values.database.host -}}
+    {{- $parameters := lower (nospace .Values.database.extraConnectionParameters) -}}
+    {{- if not (or (contains "targetsessionattributes=primary" $parameters) (contains "targetsessionattributes=read-write" $parameters)) -}}
+      {{- fail "database.host names several PostgreSQL instances while database.extraConnectionParameters does not set Target Session Attributes to primary or to read-write. MailFathom writes to the instance it connects to, so any other value lets the driver settle on a hot standby — a deployment whose reads all work and whose first write fails. Add 'Target Session Attributes=primary;', or name one address that follows the primary, such as a CloudNativePG cluster's -rw Service." -}}
+    {{- end -}}
+  {{- end -}}
 {{- end -}}
 {{- if not .Values.secrets.existingSecret -}}
   {{- fail "secrets.existingSecret is not set. The chart creates no Secret and templates no credential; create one first and name it here." -}}

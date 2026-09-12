@@ -292,7 +292,7 @@
         },
         "host": {
           "type": "string",
-          "description": "The server MailFathom connects to when database.deploy.enabled is false. It needs the vector extension. Leave it empty when the chart deploys the database, which derives the address from the release name."
+          "description": "The server MailFathom connects to when database.deploy.enabled is false. It needs the vector extension. Leave it empty when the chart deploys the database, which derives the address from the release name. A replicated cluster is either one address that follows the primary, such as a CloudNativePG -rw Service, or a comma-separated list of its instances, which then requires Target Session Attributes in extraConnectionParameters."
         },
         "port": {
           "type": "integer",
@@ -309,6 +309,7 @@
         },
         "extraConnectionParameters": {
           "type": "string",
+          "description": "Extra Npgsql keywords appended to the connection string verbatim. Target Session Attributes belongs here, set to primary or read-write, whenever host names more than one instance: MailFathom writes to the instance it connects to, and every other value lets the driver settle on a hot standby.",
           "not": {
             "pattern": "(?i)password",
             "description": "The password arrives as a mounted file. Putting one here would place a credential into a ConfigMap-visible connection string and leave two sources for one secret."

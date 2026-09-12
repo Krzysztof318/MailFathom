@@ -48,6 +48,27 @@ The two are exclusive and the chart says so rather than preferring one: `databas
 `deploy.enabled` is false, and refused when it is true, where the address is derived from the release name. A
 deployed server is reached at `<release>-postgres` in the release's own namespace.
 
+**A replicated cluster is the second arrangement, and it is named rather than deployed.** The chart runs one PostgreSQL
+and will go on running one; replication, failover, backups, and a major upgrade belong to an operator built for them,
+and on Kubernetes that is [CloudNativePG](https://cloudnative-pg.io/) or an equivalent. What MailFathom needs from such
+a cluster is one of two shapes:
+
+| What you write | When |
+| --- | --- |
+| `host: <cluster>-rw.<namespace>.svc.cluster.local` | The ordinary shape. One address that follows the primary through a failover, which is what CloudNativePG's `-rw` Service is. Nothing else changes, and MailFathom has no setting for it |
+| `host: pg-1,pg-2,pg-3` with `extraConnectionParameters: "Target Session Attributes=primary;"` | Where you would rather not depend on an address in front of the cluster. The driver finds the primary among the instances itself and moves to the new one after a failover |
+
+The second shape is refused without that keyword, by `helm install` and again at startup, and the two values it accepts
+are `primary` and `read-write`. Every other value Npgsql takes — `any`, and both `prefer-` variants — permits the driver
+to settle on a hot standby, which is a deployment that comes up, serves every read, and fails on the first write hours
+later inside a synchronization run. `read-write` is the stronger one and refuses a session that is read-only for any
+reason rather than only a standby.
+
+**Reads are not routed to a replica**, in either shape. Every session MailFathom opens reaches the primary, so a replica
+carries redundancy rather than load. Serving a query from a standby is a decision about read-your-writes and replication
+lag that [ADR 0001](../decisions/0001-application-owned-repositories-for-persistence-ports.md) would have to be amended
+for, and no configuration here approximates it.
+
 The role MailFathom connects as is never a superuser, in either arrangement. When the chart deploys the server, its
 initialization script runs once on the empty data directory, creates the role that owns the database, and installs the
 `vector` extension while a superuser is still connected — which is the same script, and the same reasoning, the Compose

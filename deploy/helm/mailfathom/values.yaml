@@ -125,6 +125,12 @@ database:
   #
   # `host` is required when `deploy.enabled` is off and refused when it is on, where the chart derives it from the
   # release name: two values naming one server is how a deployment ends up connecting somewhere it did not install.
+  #
+  # **A replicated cluster is named here in one of two ways, and the chart deploys neither.** One address that follows
+  # the primary through a failover is the ordinary one — a CloudNativePG cluster's `-rw` Service is exactly that, and
+  # nothing else here changes for it. Or name the instances themselves, comma separated, and let the driver find the
+  # primary among them; that shape survives the address in front of the cluster being unavailable, and it requires
+  # `Target Session Attributes` below. Reads are never sent to a replica in either shape.
   host: ""
   port: 5432
   name: mailfathom
@@ -132,6 +138,12 @@ database:
 
   # Extra Npgsql keywords appended verbatim, for example `SslMode=VerifyFull;`. Keep credentials out of it; the schema
   # rejects a value that names a password.
+  #
+  # `Target Session Attributes=primary;` belongs here whenever `host` above names more than one instance, and the chart
+  # refuses that shape without it. MailFathom writes to the instance it connects to, so `any`, `prefer-primary`, and
+  # `prefer-standby` all permit the driver to settle on a hot standby — a deployment whose reads work and whose first
+  # write fails. `read-write` is the stronger of the two accepted values and refuses a session that is read-only for
+  # any reason, not only a standby.
   extraConnectionParameters: ""
 
   # The key inside the mounted secret holding the password. The reference MailFathom binds is
