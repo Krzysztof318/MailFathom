@@ -490,7 +490,7 @@ services:
     # built on. Any RESP endpoint answers the same protocol — Redis, Garnet, Valkey, or a managed equivalent — which is
     # what makes pointing the setting above at one you already operate the other supported shape, and what makes this
     # server the default rather than a requirement.
-    image: ${MAILFATHOM_VALKEY_IMAGE:-valkey/valkey@sha256:c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1d}
+    image: ${MAILFATHOM_VALKEY_IMAGE:-docker.io/valkey/valkey@sha256:c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1d}
     restart: unless-stopped
     # **The account is stated here because the image states none.** Its entrypoint takes a root branch when nothing
     # else has chosen an account: it chowns the working directory and then re-execs itself as `valkey`. Both halves

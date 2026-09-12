@@ -1,6 +1,6 @@
 # Secret rotation
 
-<!-- describes: backend/src/Infrastructure/Secrets/**, backend/src/Infrastructure/Certificates/** -->
+<!-- describes: backend/src/Infrastructure/Secrets/**, backend/src/Infrastructure/Certificates/**, deploy/helm/mailfathom/templates/valkey-*.yaml, deploy/compose/compose.yaml, deploy/quadlet/mailfathom-valkey.container -->
 
 A rotated mailbox password, trust anchor, database credential, or MCP API key takes effect without restarting MailFathom. Rotation is an ordinary operational act, not a maintenance window, and shortening the window in which any single credential is valid is a security and privacy improvement rather than a cost.
 
@@ -216,7 +216,10 @@ assets that start Valkey from an ACL file give you as well. A Valkey ACL user ho
 `user default on >old >new` with the rest of the line unchanged — and `ACL LOAD` applies an edited document in place,
 both passwords then answering. So on [Compose](deployment-compose.md#the-signal-backplane) the rolling order above
 holds with no restart of the server at all: write the new password into the ACL file beside the old one, `ACL LOAD`,
-restart MailFathom, then remove the old one and reload again. On
+restart MailFathom, then remove the old one and reload again. That page leaves both secret files at mode `444`, which
+refuses a rewrite even from their owner, so `chmod 644` comes first and `chmod 444` last — and each file is rewritten
+in place rather than replaced, because Compose bind-mounts a `file:` secret and a `mv` would leave the container
+reading the old inode. On
 [Quadlet](deployment-quadlet.md#the-signal-backplane) the same order holds with one restart of the backplane unit
 inside it, because systemd materializes the encrypted credential when the unit starts and the running server is reading
 that copy — the point of the two-password document there is that the old credential survives *MailFathom's* restart,

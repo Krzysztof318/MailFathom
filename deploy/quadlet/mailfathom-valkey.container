@@ -30,7 +30,7 @@ After=network-online.target
 # is built on. Any RESP endpoint answers the same protocol — Redis, Garnet, Valkey, or a managed equivalent — which is
 # what makes pointing mailfathom.container at one you already operate the other supported shape, and then no unit is
 # installed here at all.
-Image=valkey/valkey@sha256:c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1d
+Image=docker.io/valkey/valkey@sha256:c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1d
 ContainerName=mailfathom-valkey
 
 # Only the internal network, and no PublishPort= at all. What crosses this server is which mailbox changed and for whom,

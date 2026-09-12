@@ -503,12 +503,12 @@ keeps nothing, so a statement raised while the primary is being replaced is gone
 
 **What it adds is standbys, and nothing that promotes one.** The StatefulSet grows to `replicas + 1` instances, ordinal
 0 is the one the others follow, and the ClusterIP Service keeps naming ordinal 0. A RESP server carries a publication
-from the primary down to its replicas but never back up it, so a `PUBLISH` issued against a replica reaches neither the
+from the primary down to its replicas but never back up, so a `PUBLISH` issued against a replica reaches neither the
 primary nor the other replicas — and since each MailFathom replica publishes and subscribes on the one connection it
 holds, a Service spreading those connections across the set would strand what some of them published.
 
-**A promotion here is yours to make and yours to undo.** Losing ordinal 0 is an operator's act: `REPLICAOF NO ONE`
-against a standby, and that Service's selector repointed at the pod it was run on. **Neither half survives the chart.**
+**A promotion here is yours to make and yours to undo.** Losing ordinal 0 is a failure; recovering from it is the
+operator's act: `REPLICAOF NO ONE` against a standby, and that Service's selector repointed at the pod it was run on. **Neither half survives the chart.**
 The selector is rendered from the templates, so the next `helm upgrade` — an image bump, a values change, anything —
 puts it back on ordinal 0, and the role is in memory only, so a reschedule of the promoted pod re-applies the
 `--replicaof` its template carries and demotes it while the Service may still name it. Both failures look exactly like

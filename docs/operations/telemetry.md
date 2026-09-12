@@ -1531,9 +1531,11 @@ receiver names them rather than under `mailfathom.`: `redis.clients.connected`, 
 `redis.replication.backlog_first_byte_offset`, `redis.slaves.connected`, `redis.rdb.changes_since_last_save`,
 `redis.latest_fork`, `redis.uptime`, `redis.clients.max_input_buffer`, and `redis.clients.max_output_buffer`.
 
-**Three of them are worth an alert and the rest are context.** `redis.clients.connected` is how many MailFathom
-replicas are actually subscribed — a value below the replica count is the fan-out being incomplete, which is the
-failure MailFathom's own counter cannot see from one replica. `redis.slaves.connected` is whether the standbys are
+**Three of them are worth an alert and the rest are context.** `redis.clients.connected` counts client connections
+rather than replicas, and it sits above the replica count rather than equal to it: the client each replica uses holds
+an interactive connection and a subscription connection, and the scrape above is a client on this server too. What is
+worth an alert is the floor rather than the figure — a value below the replica count is the fan-out being incomplete,
+which is the failure MailFathom's own counter cannot see from one replica. `redis.slaves.connected` is whether the standbys are
 following, and it is the one to watch where replication is on, because a set that renders three instances and reports
 none connected is a standby nobody could promote. `redis.memory.used` should stay near flat: this server holds
 subscriptions rather than keys, so a rising line means something is writing to an endpoint that was provisioned to
