@@ -244,12 +244,16 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
         MailUserLanguage language,
         CancellationToken cancellationToken)
     {
+        // One ledger for the whole chain, so a derivation that falls through to the fallback spends the run's
+        // single allowance across both attempts rather than opening a second one behind the first.
+        var runLedger = new MailAnsweringRunLedger(this.runBounds);
+
         try
         {
             return await ChatModelFallThrough.RunAsync(
                 this.plan,
                 this.logger,
-                (model, attemptToken) => this.AskModelAsync(model, turn, language, attemptToken),
+                (model, attemptToken) => this.AskModelAsync(model, turn, language, runLedger, attemptToken),
                 cancellationToken);
         }
         catch (ChatGenerationFailedException)
@@ -277,8 +281,13 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
         ChatGenerationPlan model,
         string turn,
         MailUserLanguage language,
+        MailAnsweringRunLedger runLedger,
         CancellationToken cancellationToken)
     {
+        // Against this model's own bounds rather than the main model's, because a fallback may be declared
+        // narrower and a conversation too wide for it is refused here rather than sent and billed for.
+        ChatRequestBounds.RequireForAttempt([new ChatMessage(ChatRole.User, turn)], model);
+
         var endpoint = model.Endpoint;
 
         using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
@@ -295,10 +304,10 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
 
         // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
         // never reaches the endpoint's circuit, its concurrency budget, or its health record. The run ledger is
-        // this derivation's own — one conversation is one run — and the period ledger is the deployment's.
+        // the derivation's own and is handed in, one conversation being one run however many models it was asked of.
         await using var chatClient = new BudgetedChatClient(
             resilientClient,
-            new MailAnsweringRunLedger(this.runBounds),
+            runLedger,
             this.spendLedger);
 
         var agent = ThreadStateAgentComposition.Compose(

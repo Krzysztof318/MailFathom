@@ -411,6 +411,48 @@ public sealed class ChatModelDeclarationOptionsTests
         Assert.Null(endpoint.Address);
     }
 
+    /// <summary>A header's own rules name a property of the header, so the reported key carries the header's index and not the block's alone.</summary>
+    /// <remarks>
+    /// Without the element's index an operator is sent to <c>Chat:Models:0:Name</c>, which nothing binds — the key they
+    /// actually edit is <c>Chat:Models:0:ExtraHeaders:0:Name</c>.
+    /// </remarks>
+    [Fact]
+    public void FindConfigurationErrors_ASecondHeaderThatIsRefused_NamesTheKeyBelowExtraHeaders()
+    {
+        // Arrange
+        var model = WithHeader("x-tenant", "env:TENANT");
+        model.ExtraHeaders.Add(new ChatModelHeaderOptions
+        {
+            Name = "Authorization",
+            Value = new ConfiguredSecret { SecretReference = "env:OTHER" },
+        });
+
+        // Act
+        var keys = ValidateKeys(model);
+
+        // Assert
+        Assert.Contains("Models:0:ExtraHeaders:1:Name", keys);
+    }
+
+    /// <summary>The whole-collection rules stay keyed to the collection, because a repetition is nothing one element got wrong.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AHeaderDeclaredTwice_NamesTheCollectionRatherThanAnElement()
+    {
+        // Arrange
+        var model = WithHeader("x-tenant", "env:TENANT");
+        model.ExtraHeaders.Add(new ChatModelHeaderOptions
+        {
+            Name = "X-Tenant",
+            Value = new ConfiguredSecret { SecretReference = "env:OTHER" },
+        });
+
+        // Act
+        var keys = ValidateKeys(model);
+
+        // Assert
+        Assert.Contains("Models:0:ExtraHeaders", keys);
+    }
+
     private static ChatModelDeclarationOptions WithHeader(string name, string secretReference)
     {
         var model = DeclaredChatModels.Model();
@@ -427,5 +469,10 @@ public sealed class ChatModelDeclarationOptionsTests
     private static IReadOnlyList<string> Validate(ChatModelDeclarationOptions model) =>
     [
         .. model.FindConfigurationErrors(position: 0).Select(result => result.ErrorMessage ?? string.Empty),
+    ];
+
+    private static IReadOnlyList<string> ValidateKeys(ChatModelDeclarationOptions model) =>
+    [
+        .. model.FindConfigurationErrors(position: 0).SelectMany(result => result.MemberNames),
     ];
 }

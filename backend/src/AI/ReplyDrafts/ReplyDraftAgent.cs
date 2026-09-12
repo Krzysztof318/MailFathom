@@ -282,6 +282,10 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
         MailUserLanguage language,
         CancellationToken cancellationToken)
     {
+        // Against this model's own bounds rather than the main model's, because a fallback may be declared
+        // narrower and a conversation too wide for it is refused here rather than sent and billed for.
+        ChatRequestBounds.RequireForAttempt([new ChatMessage(ChatRole.User, turn)], model);
+
         var endpoint = model.Endpoint;
 
         using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);

@@ -5,6 +5,7 @@
 using System.Net;
 using System.Text;
 using MailFathom.AI.BodyCleanup;
+using MailFathom.AI.Chat;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
@@ -182,6 +183,32 @@ public sealed class MailBodyCleanupAgentTests
         Assert.Equal(1, provider.RequestCount);
     }
 
+    /// <summary>
+    /// One proposal is one run however many models it was asked of, so the fallback attempt spends the run's remaining
+    /// allowance rather than opening a second one. A ceiling of one call is what makes that visible: the main model
+    /// spends it, and the fallback is then refused here rather than reaching the provider and being billed for.
+    /// </summary>
+    [Fact]
+    public async Task ProposeAsync_AFallbackBehindARateLimitedModel_SpendsOneRunsAllowanceAcrossBoth()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Refusing(HttpStatusCode.TooManyRequests);
+        var chain = ChatDeclarations
+            .Plan()
+            .WithFallback(ChatDeclarations.Plan(ChatDeclarations.Endpoint("standby")));
+
+        var cleaner = provider.CleanerOver(
+            plan: chain,
+            runBounds: MailAnsweringRunBounds.Create(maximumRetrievedCharacters: 20_000, maximumProviderCalls: 1, maximumTokens: 80_000));
+
+        // Act
+        var proposal = await cleaner.ProposeAsync(Outline(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, provider.RequestCount);
+        Assert.Equal(MailBodyCleaningWithholding.ProviderUnavailable, proposal.Withholding);
+    }
+
     private static CleanableMailBody Outline() => new(
         "Your receipt",
         "The Shop",
@@ -236,7 +263,9 @@ public sealed class MailBodyCleanupAgentTests
         public MailBodyCleanupAgent CleanerOver(
             SensitiveContentEgressGuard? egressGuard = null,
             Exception? credentialFailure = null,
-            IMailAnsweringSpendLedger? spendLedger = null)
+            IMailAnsweringSpendLedger? spendLedger = null,
+            ChatGenerationPlan? plan = null,
+            MailAnsweringRunBounds? runBounds = null)
         {
             var transportFactory = Substitute.For<IHttpClientFactory>();
             transportFactory
@@ -267,8 +296,8 @@ public sealed class MailBodyCleanupAgentTests
                 });
 
             return new MailBodyCleanupAgent(
-                new MailBodyCleanupPlan(ChatDeclarations.Plan()),
-                MailAnsweringRunBounds.Default,
+                new MailBodyCleanupPlan(plan ?? ChatDeclarations.Plan()),
+                runBounds ?? MailAnsweringRunBounds.Default,
                 spendLedger ?? AdmittingSpendLedger(),
                 credentialSource,
                 new OpenAiCompatibleClientFactory(),

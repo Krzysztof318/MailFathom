@@ -186,6 +186,10 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         MailAnsweringRunLedger runLedger,
         CancellationToken cancellationToken)
     {
+        // Against this model's own bounds rather than the main model's, because a fallback may be declared narrower
+        // and a question too wide for it is refused here rather than sent and billed for.
+        ChatRequestBounds.RequireForAttempt([new ChatMessage(ChatRole.User, question.Text.Value)], model);
+
         var endpoint = model.Endpoint;
 
         // Rewritten per attempt so the run's record names the model that answered it, which is what

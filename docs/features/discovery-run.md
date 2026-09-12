@@ -258,7 +258,7 @@ fallback ended up answering is named as the fallback in the run's own record rat
 Two names go out, and they answer different questions. **The endpoint alias is always published**: it is the operator's
 own name for a configured endpoint, it names nothing outside this deployment, and it is what an operator matches an
 answer against their own configuration by. **The published model name is whatever the operator chose to publish**, and
-it is a setting of its own — `PublishedModel` on the model that answered, described under
+it is a setting of its own — `PublishedModel` on the model the run begins against, described under
 [the AI configuration](../operations/configuration-ai.md) — rather than the routed model name the deployment sends to
 the provider. Those are separate because a routed name can carry a deployment identifier, a tenant, or an internal
 routing label that is nobody's business outside the deployment, and publishing it by default would leak the

@@ -69,6 +69,18 @@ about *that endpoint*, and the fallback is a different address under a different
 it worth the money. What is retried is opening a client and asking, rather than re-sending a message down a connection
 that failed.
 
+**A fallback is asked against its own bounds, not the main model's.** `MaxMessagesPerRequest`,
+`MaxRequestCharacters`, and `MaxRequestImageOctets` belong to the block that declares them, so a conversation the main
+model admits may be wider than the fallback behind it accepts. That call is refused before it is sent rather than sent
+and paid for, and it is refused as the fallback's own failure — the same classification a provider rejecting the request
+would have produced, which is one the chain does not fall through on. Declare a fallback at least as wide as the model
+in front of it where the point is for it to answer everything that model would have.
+
+**One question is one run however many models it was asked of.** The run's allowance — the provider calls and the tokens
+`Ask` bounds a single question by — is spent across the whole chain rather than reopened behind each model, so a
+fallback attempt continues the run instead of starting a second one. A deployment whose allowance is already spent when
+the main model fails gets no fallback attempt, which is the ceiling working rather than the fallback failing.
+
 **The answering run is attributed to the model that answered it.** A question the fallback served names the fallback in
 the run's own record, by alias and by that block's own `PublishedModel`, because a cost record naming a model the
 deployment never called is worse than no record at all.

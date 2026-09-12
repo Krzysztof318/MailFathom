@@ -105,7 +105,7 @@ internal sealed class ProviderChatModelClient : IChatModelClient
 
         try
         {
-            var answer = await this.RequestAnswerAsync(guarded, cancellationToken);
+            var answer = await this.RequestAnswerAsync(conversation, guarded, cancellationToken);
 
             this.healthRecorder.RecordServed(AiProviderRole.Chat);
 
@@ -172,20 +172,32 @@ internal sealed class ProviderChatModelClient : IChatModelClient
         return guarded;
     }
 
+    /// <summary>Runs the chain, measuring each model's bounds against what the caller composed and sending what the guard returned.</summary>
+    /// <remarks>
+    /// Both conversations travel because they answer different questions. The bounds are this deployment's promise about
+    /// what it will send and are measured on the composed turns, for the reason <see cref="GuardedAsync" /> gives; what
+    /// goes on the wire is always the guarded copy.
+    /// </remarks>
     private Task<ChatAnswer> RequestAnswerAsync(
-        IReadOnlyList<ChatMessage> conversation,
+        IReadOnlyList<ChatMessage> composed,
+        IReadOnlyList<ChatMessage> guarded,
         CancellationToken cancellationToken) => ChatModelFallThrough.RunAsync(
             this.plan,
             this.logger,
-            (model, attemptToken) => this.RequestAnswerFromAsync(model, conversation, attemptToken),
+            (model, attemptToken) => this.RequestAnswerFromAsync(model, composed, guarded, attemptToken),
             cancellationToken);
 
     /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
     private async Task<ChatAnswer> RequestAnswerFromAsync(
         ChatGenerationPlan model,
+        IReadOnlyList<ChatMessage> composed,
         IReadOnlyList<ChatMessage> conversation,
         CancellationToken cancellationToken)
     {
+        // Against this model's own bounds rather than the main model's, because a fallback may be declared narrower and
+        // a conversation too wide for it is refused here rather than sent and billed for.
+        ChatRequestBounds.RequireForAttempt(composed, model);
+
         var endpoint = model.Endpoint;
 
         // Resolved per request and released with it, so a rotated key is picked up by the next call and the material

@@ -288,9 +288,23 @@ internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclar
         return results;
     }
 
+    /// <summary>Names a header's own result against the element it came from, so the key reaches the block re-keying complete.</summary>
+    /// <remarks>
+    /// A header's rules name <c>Name</c> or <c>Value</c>, which are properties of the element rather than of this
+    /// block, so the element's index is written in before <see cref="KeyedToThisBlock" /> prefixes the model's. Without
+    /// it an operator is sent to <c>Chat:Models:0:Name</c>, a key nothing binds.
+    /// </remarks>
+    private static ValidationResult KeyedToThisHeader(ValidationResult error, int index) => new(
+        error.ErrorMessage,
+        [.. error.MemberNames.Select(member => $"{nameof(ExtraHeaders)}:{index}:{member}")]);
+
     private IEnumerable<ValidationResult> FindHeaderErrors(string description)
     {
-        foreach (var error in this.ExtraHeaders.SelectMany(header => header.FindConfigurationErrors(description)))
+        var declared = this.ExtraHeaders.SelectMany((header, index) => header
+            .FindConfigurationErrors(description)
+            .Select(error => KeyedToThisHeader(error, index)));
+
+        foreach (var error in declared)
         {
             yield return error;
         }
