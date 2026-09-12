@@ -127,8 +127,11 @@ internal sealed class MailSearchPhraseAgent : IMailSearchPhraseReader
             this.plan.MaximumRequestCharacters,
             this.plan.MaximumRequestImageOctets);
 
-        var answerText = await this.AskAsync(turn, cancellationToken);
-        var reading = MailSearchPhraseDocumentReading.Read(answerText);
+        var answer = await this.AskAsync(turn, cancellationToken);
+        var reading = MailSearchPhraseDocumentReading.Read(answer?.Text);
+
+        // The model that answered where one did, and the model the phrase was put to where none could.
+        var answeringAlias = answer?.Alias ?? endpoint.Alias;
 
         if (reading.WasRead)
         {
@@ -136,13 +139,13 @@ internal sealed class MailSearchPhraseAgent : IMailSearchPhraseReader
 
             MailSearchPhraseEvents.LogPhraseRead(
                 this.logger,
-                endpoint.Alias,
+                answeringAlias,
                 filterCount,
                 reading.Criteria.Count);
         }
         else
         {
-            MailSearchPhraseEvents.LogPhraseUnreadable(this.logger, endpoint.Alias);
+            MailSearchPhraseEvents.LogPhraseUnreadable(this.logger, answeringAlias);
         }
 
         return reading;
@@ -171,52 +174,65 @@ internal sealed class MailSearchPhraseAgent : IMailSearchPhraseReader
     /// withdrawing the search rather than a provider failing to read it.
     /// </para>
     /// </remarks>
-    private async Task<string?> AskAsync(string turn, CancellationToken cancellationToken)
+    private async Task<ChatModelAnswer?> AskAsync(string turn, CancellationToken cancellationToken)
     {
-        var endpoint = this.plan.Endpoint;
-
         try
         {
-            // Opened per reading and released with it, so a rotated key is picked up by the next search and the
-            // material exists for one call rather than for process uptime.
-            using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
-            using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
-            using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
-
-            using var resilientClient = new ResilientChatClient(
-                providerClient,
-                endpoint,
-                this.plan.RequestTimeout,
-                this.operationRunner,
-                this.healthRecorder,
-                this.loggerFactory.CreateLogger<ResilientChatClient>());
-
-            // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
-            // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
-            // this request's and the period's, and a search is charged to the same allowance a question is: what an
-            // operator pays a provider does not change because the call was started from a search field.
-            await using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
-
-            var agent = MailSearchPhraseAgentComposition.Compose(
-                chatClient,
+            return await ChatModelFallThrough.RunAsync(
                 this.plan,
-                this.instructionEnvelope,
-                this.loggerFactory);
-
-            var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
-
-            return response.Text;
+                this.logger,
+                (model, attemptToken) => this.AskModelAsync(model, turn, attemptToken),
+                cancellationToken);
         }
-        catch (ChatGenerationFailedException)
+        catch (ChatGenerationFailedException failure)
         {
-            return null;
+            // The alias the chain's last model failed under, which is what a line about this outage has to name: the
+            // model asked first has a fallback behind it, so naming that one sends a reader to an endpoint that may be
+            // working. There is no text, which is what tells the caller nothing answered.
+            return new ChatModelAnswer(failure.EndpointAlias, Text: null);
         }
-        catch (InvalidOperationException)
-        {
-            // The whole of what the credential source publishes: the alias names no endpoint the configuration in
-            // force declares, or the secret behind it did not resolve. It is also the one failure here that leaves no
-            // health record behind, the resilience decorator not yet existing to write one.
-            return null;
-        }
+    }
+
+    /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
+    private async Task<ChatModelAnswer> AskModelAsync(
+        ChatGenerationPlan model,
+        string turn,
+        CancellationToken cancellationToken)
+    {
+        // Against this model's own bounds rather than the main model's, because a fallback may be declared
+        // narrower and a conversation too wide for it is refused here rather than sent and billed for.
+        ChatRequestBounds.RequireForAttempt([new ChatMessage(ChatRole.User, turn)], model);
+
+        var endpoint = model.Endpoint;
+
+        // Opened per reading and released with it, so a rotated key is picked up by the next search and the
+        // material exists for one call rather than for process uptime.
+        using var credential = await ChatModelCredential.ResolveAsync(this.credentialSource, endpoint, cancellationToken);
+        using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
+        using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
+
+        using var resilientClient = new ResilientChatClient(
+            providerClient,
+            endpoint,
+            model.RequestTimeout,
+            this.operationRunner,
+            this.healthRecorder,
+            this.loggerFactory.CreateLogger<ResilientChatClient>());
+
+        // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
+        // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
+        // this request's and the period's, and a search is charged to the same allowance a question is: what an
+        // operator pays a provider does not change because the call was started from a search field.
+        await using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
+
+        var agent = MailSearchPhraseAgentComposition.Compose(
+            chatClient,
+            model,
+            this.instructionEnvelope,
+            this.loggerFactory);
+
+        var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
+
+        return new ChatModelAnswer(endpoint.Alias, response.Text);
     }
 }

@@ -128,11 +128,10 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         ArgumentNullException.ThrowIfNull(question);
         ArgumentNullException.ThrowIfNull(observation);
 
-        var endpoint = this.plan.Endpoint;
-
         // Recorded before anything that can fail, so a run stopped on its first call is still attributable to the
-        // profile and the policy that produced it rather than leaving both blank in its own record.
-        observation.RecordComposition(endpoint.Alias, MailAnsweringInstructions.Version);
+        // profile and the policy that produced it rather than leaving both blank in its own record. Recorded again per
+        // attempt below, so a run the fallback model answered names that model rather than the one that could not.
+        observation.RecordComposition(this.plan.Endpoint.Alias, MailAnsweringInstructions.Version);
 
         // The question is one turn, so the bound on what one call may carry is the bound on the question. What the
         // retrieval adds beside it is bounded where the passages are built, and the run's instruction is this build's
@@ -152,7 +151,17 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
 
         try
         {
-            return await this.ConductAsync(question, endpoint, retrieval, runLedger, cancellationToken);
+            return await ChatModelFallThrough.RunAsync(
+                this.plan,
+                this.logger,
+                (model, attemptToken) => this.ConductAsync(
+                    question,
+                    model,
+                    observation,
+                    retrieval,
+                    runLedger,
+                    attemptToken),
+                cancellationToken);
         }
         finally
         {
@@ -163,24 +172,41 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         }
     }
 
-    /// <summary>Opens the run's own credential, transport, client, and agent, and answers through them.</summary>
-    /// <remarks>All four are released with the run, which is the same lifetime the single-request chat adapter uses and for the same reasons.</remarks>
+    /// <summary>Opens the run's own credential, transport, client, and agent against one model of the chain, and answers through them.</summary>
+    /// <remarks>
+    /// All four are released with the attempt, which is the same lifetime the single-request chat adapter uses and for
+    /// the same reasons. The attempt is the unit the fallback replaces, so a model that could not be reached costs one
+    /// credential resolution and one transport rather than a run.
+    /// </remarks>
     private async Task<MailAnswer> ConductAsync(
         MailQuestion question,
-        ChatEndpoint endpoint,
+        ChatGenerationPlan model,
+        MailAnsweringRunObservation observation,
         ScopedMailKnowledgeRetrieval retrieval,
         MailAnsweringRunLedger runLedger,
         CancellationToken cancellationToken)
     {
-        // Resolved per run and released with it, so a rotated key is picked up by the next question and the material
-        // exists for one run rather than for process uptime.
-        using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
+        // Against this model's own bounds rather than the main model's, because a fallback may be declared narrower
+        // and a question too wide for it is refused here rather than sent and billed for.
+        ChatRequestBounds.RequireForAttempt([new ChatMessage(ChatRole.User, question.Text.Value)], model);
+
+        var endpoint = model.Endpoint;
+
+        // Rewritten per attempt so the run's record names the model that answered it, which is what
+        // <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
+        // publishes to a client: a run the fallback served is attributable to the fallback rather than to the model it
+        // was asked for first.
+        observation.RecordComposition(endpoint.Alias, MailAnsweringInstructions.Version);
+
+        // Resolved per attempt and released with it, so a rotated key is picked up by the next question and the material
+        // exists for one attempt rather than for process uptime.
+        using var credential = await ChatModelCredential.ResolveAsync(this.credentialSource, endpoint, cancellationToken);
         using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
         using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
         using var resilientClient = new ResilientChatClient(
             providerClient,
             endpoint,
-            this.plan.RequestTimeout,
+            model.RequestTimeout,
             this.operationRunner,
             this.healthRecorder,
             this.loggerFactory.CreateLogger<ResilientChatClient>());
@@ -199,7 +225,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
 
         var agent = MailAnsweringAgentComposition.Compose(
             chatClient,
-            this.plan,
+            model,
             retrieval,
             this.instructionEnvelope,
             this.loggerFactory);

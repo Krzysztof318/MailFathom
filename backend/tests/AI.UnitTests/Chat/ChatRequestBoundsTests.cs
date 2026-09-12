@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.Chat;
+using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.Chat;
 using Xunit;
 
@@ -159,5 +160,67 @@ public sealed class ChatRequestBoundsTests
         // Act, Assert
         Assert.Throws<ArgumentException>(
             () => ChatRequestBounds.Require(conversation, MaximumMessages, MaximumCharacters, maximumImageOctets: 0));
+    }
+
+    /// <summary>A model wide enough for the conversation is asked, which is the ordinary attempt and has to cost nothing.</summary>
+    [Fact]
+    public void RequireForAttempt_AConversationTheModelCanCarry_IsAccepted()
+    {
+        // Arrange
+        IReadOnlyList<ChatMessage> conversation = [new(ChatRole.User, "what did they say")];
+
+        // Act
+        var refusal = Record.Exception(
+            () => ChatRequestBounds.RequireForAttempt(conversation, ChatDeclarations.Plan()));
+
+        // Assert
+        Assert.Null(refusal);
+    }
+
+    /// <summary>
+    /// A fallback declared narrower than the model in front of it is the case this exists for: the conversation was
+    /// admitted against the main model and is too wide for this one, so it is refused here rather than sent and paid for.
+    /// </summary>
+    [Fact]
+    public void RequireForAttempt_AConversationWiderThanTheModelDeclares_IsRefusedAsThatModelsFailure()
+    {
+        // Arrange
+        IReadOnlyList<ChatMessage> conversation = [new(ChatRole.User, new string('a', 200))];
+        var narrow = ChatDeclarations.Plan(
+            ChatDeclarations.Endpoint("standby"),
+            maximumRequestCharacters: 100);
+
+        // Act
+        var refusal = Assert.Throws<ChatGenerationFailedException>(
+            () => ChatRequestBounds.RequireForAttempt(conversation, narrow));
+
+        // Assert
+        Assert.Equal(ChatGenerationFailure.RequestRefused, refusal.Failure);
+        Assert.Contains("standby", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The refusal keeps what was measured, so an operator reads which bound was exceeded rather than only that one was.</summary>
+    [Fact]
+    public void RequireForAttempt_AConversationWiderThanTheModelDeclares_KeepsTheMeasurementAsTheCause()
+    {
+        // Arrange
+        IReadOnlyList<ChatMessage> conversation = [new(ChatRole.User, new string('a', 200))];
+        var narrow = ChatDeclarations.Plan(maximumRequestCharacters: 100);
+
+        // Act
+        var refusal = Assert.Throws<ChatGenerationFailedException>(
+            () => ChatRequestBounds.RequireForAttempt(conversation, narrow));
+
+        // Assert
+        var cause = Assert.IsAssignableFrom<ArgumentException>(refusal.InnerException);
+        Assert.Contains("200", cause.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RequireForAttempt_WithoutAModel_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(
+            () => ChatRequestBounds.RequireForAttempt([new(ChatRole.User, "ask")], null!));
     }
 }

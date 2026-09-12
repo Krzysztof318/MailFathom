@@ -4,7 +4,7 @@
 
 using MailFathom.Host.Configuration.Answering;
 using MailFathom.Host.Configuration.Chat;
-using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Chat;
@@ -92,10 +92,5 @@ public sealed class PassageRelevanceCandidateAgreementTests
         return chat;
     }
 
-    private static ChatModelOptions Declared() => new()
-    {
-        Alias = "answering",
-        Model = "a-chat-model",
-        ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" },
-    };
+    private static ChatModelOptions Declared() => DeclaredChatModels.Section();
 }

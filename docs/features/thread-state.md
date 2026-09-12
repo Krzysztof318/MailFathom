@@ -95,7 +95,7 @@ conversation:
 |---|---|
 | **Not activated** | The deployment has not turned the derivation on. The pass answers before it looks for work, so nothing is queried, nothing is read, and nothing is sent. |
 | **Allowance exhausted** | The answering period has no admission left for another call. |
-| **Provider unavailable** | The endpoint failed, timed out, was unreachable, or its credential would not resolve. |
+| **Provider unavailable** | The model failed, timed out, was unreachable, or its credential would not resolve — and where the deployment declared a fallback behind it, that model could not answer either. |
 
 A spent period today is an ordinary period tomorrow, and the conversation is still waiting. A provider that *answered*
 with something unreadable settles rather than withholds: the call was made and paid for, and asking again buys the same

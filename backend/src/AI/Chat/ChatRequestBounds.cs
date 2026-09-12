@@ -14,6 +14,39 @@ namespace MailFathom.AI.Chat;
 /// </remarks>
 internal static class ChatRequestBounds
 {
+    /// <summary>Refuses a conversation the model about to be asked could not carry, as that model's own failure.</summary>
+    /// <param name="conversation">The turns the caller asked to send.</param>
+    /// <param name="model">The model this attempt is against, whose own declared bounds decide.</param>
+    /// <exception cref="ChatGenerationFailedException">Thrown when the conversation exceeds what this model declares.</exception>
+    /// <remarks>
+    /// Every model of a chain declares its own bounds, so a conversation the main model admits may be wider than a
+    /// fallback behind it accepts. Checking again per attempt keeps <see cref="Require" />'s trade — refused rather
+    /// than sent and billed for — and states the refusal as that model's failure rather than as an argument the caller
+    /// got wrong, because by then the caller's own request was already admitted. <see cref="ChatGenerationFailure.RequestRefused" />
+    /// is the classification a provider rejecting the same request would arrive as, and it is the one a chain does not
+    /// fall through on: a second model is a second endpoint rather than a wider one.
+    /// </remarks>
+    public static void RequireForAttempt(IReadOnlyList<ChatMessage> conversation, ChatGenerationPlan model)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+
+        try
+        {
+            Require(
+                conversation,
+                model.MaximumMessagesPerRequest,
+                model.MaximumRequestCharacters,
+                model.MaximumRequestImageOctets);
+        }
+        catch (ArgumentException refusal)
+        {
+            throw new ChatGenerationFailedException(
+                model.Endpoint.Alias,
+                ChatGenerationFailure.RequestRefused,
+                refusal);
+        }
+    }
+
     /// <summary>Refuses a conversation that is empty, blank in part, or larger than one call sends.</summary>
     /// <param name="conversation">The turns the caller asked to send.</param>
     /// <param name="maximumMessages">The greatest number of turns one request carries.</param>

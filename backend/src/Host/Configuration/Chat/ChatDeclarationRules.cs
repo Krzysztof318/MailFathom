@@ -20,9 +20,9 @@ namespace MailFathom.Host.Configuration.Chat;
 /// </para>
 /// <para>
 /// Several of the rules span sections and neither options type can see both sides, which is why they are reached from
-/// here rather than from <see cref="ChatModelOptions.Validate" />: the alias must not repeat one an embedding endpoint
+/// here rather than from <see cref="ChatModelOptions.Validate" />: an alias must not repeat one an embedding endpoint
 /// declares, the relevance filter must not name more candidates than a retrieval hands over, and a deployment
-/// describing image attachments must declare an endpoint that can carry the conversation one description composes.
+/// describing image attachments must declare a model that can carry the conversation one description composes.
 /// </para>
 /// </remarks>
 internal static class ChatDeclarationRules
@@ -67,9 +67,9 @@ internal static class ChatDeclarationRules
         // is fixed and known. Refused here rather than left to the describer, because what an operator would otherwise
         // meet is a start that succeeds and a background run that faults, or ImageTooLarge stamped on every picture in
         // the mailbox — both of which read as properties of the mail rather than as the declaration they are.
-        if (embeddings?.ImageDescription.Enabled is true)
+        if (embeddings?.ImageDescription.Enabled is true && candidate.FindMainModel() is { } describingModel)
         {
-            errors.AddRange(FindImageDescriptionErrors(candidate));
+            errors.AddRange(FindImageDescriptionErrors(describingModel));
         }
 
         return errors;
@@ -81,27 +81,29 @@ internal static class ChatDeclarationRules
     /// at startup. The alternative is a deployment that starts cleanly and then raises an <c>ArgumentException</c> out
     /// of the chat boundary on every attachment it admitted, against a contract that promises one of nine reasons.
     /// </remarks>
-    private static IEnumerable<string> FindImageDescriptionErrors(ChatModelOptions candidate)
+    private static IEnumerable<string> FindImageDescriptionErrors(ChatModelDeclarationOptions candidate)
     {
         var turnOff =
             $"turn {EmbeddingOptions.SectionName}:{nameof(EmbeddingOptions.ImageDescription)}:{nameof(EmbeddingImageDescriptionOptions.Enabled)} off";
 
+        var model = $"the chat model '{candidate.Alias.Trim()}'";
+
         if (candidate.MaxRequestImageOctets == 0)
         {
             yield return
-                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.MaxRequestImageOctets)} — a chat endpoint declared to carry no image cannot be the one describing image attachments. Either raise this above zero, or {turnOff}.";
+                $"{nameof(ChatModelDeclarationOptions.MaxRequestImageOctets)} on {model} — a model declared to carry no image cannot be the one describing image attachments. Either raise this above zero, or {turnOff}.";
         }
 
         if (candidate.MaxMessagesPerRequest < ImageDescriptionInstructions.TurnsPerRequest)
         {
             yield return
-                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.MaxMessagesPerRequest)} — describing an image sends {ImageDescriptionInstructions.TurnsPerRequest} turns, the instruction and the picture. Either raise this to {ImageDescriptionInstructions.TurnsPerRequest}, or {turnOff}.";
+                $"{nameof(ChatModelDeclarationOptions.MaxMessagesPerRequest)} on {model} — describing an image sends {ImageDescriptionInstructions.TurnsPerRequest} turns, the instruction and the picture. Either raise this to {ImageDescriptionInstructions.TurnsPerRequest}, or {turnOff}.";
         }
 
         if (candidate.MaxRequestCharacters < ImageDescriptionInstructions.SmallestRequestCharacters)
         {
             yield return
-                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.MaxRequestCharacters)} — the instruction an image description carries is {ImageDescriptionInstructions.SmallestRequestCharacters} characters before any picture. Either raise this to at least that, or {turnOff}.";
+                $"{nameof(ChatModelDeclarationOptions.MaxRequestCharacters)} — the instruction an image description carries is {ImageDescriptionInstructions.SmallestRequestCharacters} characters before any picture. Either raise this to at least that on {model}, or {turnOff}.";
         }
     }
 
@@ -132,7 +134,7 @@ internal static class ChatDeclarationRules
         if (candidate.IsConfigured != composed.IsConfigured)
         {
             errors.Add(
-                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.Alias)} — whether this deployment declares a chat endpoint decides which services it registers, so declaring or removing one needs a restart rather than a configuration reload. Everything the endpoint itself says reloads.");
+                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.Models)} — whether this deployment declares a chat model at all decides which services it registers, so declaring the first one or removing the last needs a restart rather than a configuration reload. Every model beside it, and everything each of them says, reloads.");
         }
 
         if (candidate.RelevanceFilter.Enabled != composed.RelevanceFilter.Enabled)

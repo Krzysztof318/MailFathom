@@ -147,10 +147,11 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
             this.plan.MaximumRequestCharacters,
             this.plan.MaximumRequestImageOctets);
 
-        var draft = ReplyDraftReading.Read(
-            await this.AskAsync(turn, brief.Language, cancellationToken),
-            sources.Messages,
-            sources.Participants);
+        var answer = await this.AskAsync(turn, brief.Language, cancellationToken);
+        var draft = ReplyDraftReading.Read(answer?.Text, sources.Messages, sources.Participants);
+
+        // The model that answered where one did, and the model the brief was put to where none could.
+        var answeringAlias = answer?.Alias ?? this.plan.Endpoint.Alias;
 
         if (draft.WasWritten)
         {
@@ -158,7 +159,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
 
             ReplyDraftEvents.LogDrafted(
                 this.logger,
-                this.plan.Endpoint.Alias,
+                answeringAlias,
                 sources.Messages.Count,
                 draft.Claims.Count,
                 unsupportedClaimCount,
@@ -166,7 +167,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
         }
         else
         {
-            ReplyDraftEvents.LogAnswerUnreadable(this.logger, this.plan.Endpoint.Alias);
+            ReplyDraftEvents.LogAnswerUnreadable(this.logger, answeringAlias);
         }
 
         return draft;
@@ -249,54 +250,68 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
     /// the person withdrawing the request rather than a provider failing to answer it.
     /// </para>
     /// </remarks>
-    private async Task<string?> AskAsync(
+    private async Task<ChatModelAnswer?> AskAsync(
         string turn,
         MailUserLanguage language,
         CancellationToken cancellationToken)
     {
-        var endpoint = this.plan.Endpoint;
-
         try
         {
-            using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
-            using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
-            using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
-
-            using var resilientClient = new ResilientChatClient(
-                providerClient,
-                endpoint,
-                this.plan.RequestTimeout,
-                this.operationRunner,
-                this.healthRecorder,
-                this.loggerFactory.CreateLogger<ResilientChatClient>());
-
-            // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
-            // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
-            // this request's and the period's: what an operator pays a provider does not change because the call was
-            // started from a composer.
-            await using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
-
-            var agent = ReplyDraftAgentComposition.Compose(
-                chatClient,
+            return await ChatModelFallThrough.RunAsync(
                 this.plan,
-                language,
-                this.instructionEnvelope,
-                this.loggerFactory);
-
-            var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
-
-            return response.Text;
+                this.logger,
+                (model, attemptToken) => this.AskModelAsync(model, turn, language, attemptToken),
+                cancellationToken);
         }
-        catch (ChatGenerationFailedException)
+        catch (ChatGenerationFailedException failure)
         {
-            return null;
+            // The alias the chain's last model failed under, which is what a line about this outage has to name: the
+            // model asked first has a fallback behind it, so naming that one sends a reader to an endpoint that may be
+            // working. There is no text, which is what tells the caller nothing answered.
+            return new ChatModelAnswer(failure.EndpointAlias, Text: null);
         }
-        catch (InvalidOperationException)
-        {
-            // The whole of what the credential source publishes: the alias names no endpoint the configuration in
-            // force declares, or the secret behind it did not resolve. It is also the one failure here that leaves no
-            // health record behind, the resilience decorator not yet existing to write one.
-            return null;
-        }
+    }
+
+    /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
+    private async Task<ChatModelAnswer> AskModelAsync(
+        ChatGenerationPlan model,
+        string turn,
+        MailUserLanguage language,
+        CancellationToken cancellationToken)
+    {
+        // Against this model's own bounds rather than the main model's, because a fallback may be declared
+        // narrower and a conversation too wide for it is refused here rather than sent and billed for.
+        ChatRequestBounds.RequireForAttempt([new ChatMessage(ChatRole.User, turn)], model);
+
+        var endpoint = model.Endpoint;
+
+        using var credential = await ChatModelCredential.ResolveAsync(this.credentialSource, endpoint, cancellationToken);
+        using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
+        using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
+
+        using var resilientClient = new ResilientChatClient(
+            providerClient,
+            endpoint,
+            model.RequestTimeout,
+            this.operationRunner,
+            this.healthRecorder,
+            this.loggerFactory.CreateLogger<ResilientChatClient>());
+
+        // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
+        // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
+        // this request's and the period's: what an operator pays a provider does not change because the call was
+        // started from a composer.
+        await using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
+
+        var agent = ReplyDraftAgentComposition.Compose(
+            chatClient,
+            model,
+            language,
+            this.instructionEnvelope,
+            this.loggerFactory);
+
+        var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
+
+        return new ChatModelAnswer(endpoint.Alias, response.Text);
     }
 }

@@ -163,9 +163,11 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
             this.plan.MaximumRequestCharacters,
             this.plan.MaximumRequestImageOctets);
 
-        if (await this.AskAsync(turn, language, cancellationToken) is not { } answerText)
+        var answer = await this.AskAsync(turn, language, cancellationToken);
+
+        if (answer is not { Text: { } answerText })
         {
-            return this.Withhold(EmailEnrichmentWithholding.ProviderUnavailable);
+            return this.Withhold(EmailEnrichmentWithholding.ProviderUnavailable, answer?.Alias);
         }
 
         var marks = EmailEnrichmentReading.Read(
@@ -175,13 +177,13 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
 
         if (marks.Count is 0)
         {
-            EmailEnrichmentEvents.LogAnswerUnreadable(this.logger, this.plan.Endpoint.Alias);
+            EmailEnrichmentEvents.LogAnswerUnreadable(this.logger, answer.Alias);
         }
         else
         {
             EmailEnrichmentEvents.LogDerived(
                 this.logger,
-                this.plan.Endpoint.Alias,
+                answer.Alias,
                 marks.Count,
                 email.Passages.Count);
         }
@@ -210,49 +212,29 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
     /// derivation that never reached the endpoint was withheld the same way as one the endpoint refused. A cancellation
     /// stays outside, being the caller withdrawing the work rather than a provider failing to answer.
     /// </remarks>
-    private async Task<string?> AskAsync(
+    private async Task<ChatModelAnswer?> AskAsync(
         string turn,
         MailUserLanguage language,
         CancellationToken cancellationToken)
     {
-        var endpoint = this.plan.Endpoint;
+        // One ledger for the whole chain, so a derivation that falls through to the fallback spends the run's
+        // single allowance across both attempts rather than opening a second one behind the first.
+        var runLedger = new MailAnsweringRunLedger(this.runBounds);
 
         try
         {
-            using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
-            using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
-            using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
-
-            using var resilientClient = new ResilientChatClient(
-                providerClient,
-                endpoint,
-                this.plan.RequestTimeout,
-                this.operationRunner,
-                this.healthRecorder,
-                this.loggerFactory.CreateLogger<ResilientChatClient>());
-
-            // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
-            // never reaches the endpoint's circuit, its concurrency budget, or its health record. The run ledger is
-            // this derivation's own — one message is one run — and the period ledger is the deployment's.
-            await using var chatClient = new BudgetedChatClient(
-                resilientClient,
-                new MailAnsweringRunLedger(this.runBounds),
-                this.spendLedger);
-
-            var agent = EmailEnrichmentAgentComposition.Compose(
-                chatClient,
+            return await ChatModelFallThrough.RunAsync(
                 this.plan,
-                language,
-                this.instructionEnvelope,
-                this.loggerFactory);
-
-            var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
-
-            return response.Text;
+                this.logger,
+                (model, attemptToken) => this.AskModelAsync(model, turn, language, runLedger, attemptToken),
+                cancellationToken);
         }
-        catch (ChatGenerationFailedException)
+        catch (ChatGenerationFailedException failure)
         {
-            return null;
+            // The alias the chain's last model failed under, which is what a line about this outage has to name: the
+            // model asked first has a fallback behind it, so naming that one sends a reader to an endpoint that may be
+            // working. There is no text, which is what tells the caller nothing answered.
+            return new ChatModelAnswer(failure.EndpointAlias, Text: null);
         }
         catch (MailAnsweringBudgetExhaustedException)
         {
@@ -261,18 +243,63 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
             // nothing about the message decided it.
             return null;
         }
-        catch (InvalidOperationException)
-        {
-            // The whole of what the credential source publishes: the alias names no endpoint the configuration in
-            // force declares, or the secret behind it did not resolve. It is also the one failure here that leaves no
-            // health record behind, the resilience decorator not yet existing to write one.
-            return null;
-        }
     }
 
-    private EmailEnrichmentDerivation Withhold(EmailEnrichmentWithholding withholding)
+    /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
+    private async Task<ChatModelAnswer> AskModelAsync(
+        ChatGenerationPlan model,
+        string turn,
+        MailUserLanguage language,
+        MailAnsweringRunLedger runLedger,
+        CancellationToken cancellationToken)
     {
-        EmailEnrichmentEvents.LogWithheld(this.logger, this.plan.Endpoint.Alias, withholding);
+        // Against this model's own bounds rather than the main model's, because a fallback may be declared
+        // narrower and a conversation too wide for it is refused here rather than sent and billed for.
+        ChatRequestBounds.RequireForAttempt([new ChatMessage(ChatRole.User, turn)], model);
+
+        var endpoint = model.Endpoint;
+
+        using var credential = await ChatModelCredential.ResolveAsync(this.credentialSource, endpoint, cancellationToken);
+        using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
+        using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
+
+        using var resilientClient = new ResilientChatClient(
+            providerClient,
+            endpoint,
+            model.RequestTimeout,
+            this.operationRunner,
+            this.healthRecorder,
+            this.loggerFactory.CreateLogger<ResilientChatClient>());
+
+        // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
+        // never reaches the endpoint's circuit, its concurrency budget, or its health record. The run ledger is
+        // the derivation's own and is handed in, one message being one run however many models it was asked of.
+        await using var chatClient = new BudgetedChatClient(
+            resilientClient,
+            runLedger,
+            this.spendLedger);
+
+        var agent = EmailEnrichmentAgentComposition.Compose(
+            chatClient,
+            model,
+            language,
+            this.instructionEnvelope,
+            this.loggerFactory);
+
+        var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
+
+        return new ChatModelAnswer(endpoint.Alias, response.Text);
+    }
+
+    /// <summary>Withholds, naming the model this attempt reached where one was reached at all.</summary>
+    /// <remarks>
+    /// A chain that failed outright failed at its last model, and the alias the capability was configured with names
+    /// the one asked first — an endpoint that may be working. Where nothing reached a model, that configured alias is
+    /// the only one there is and is what the line carries.
+    /// </remarks>
+    private EmailEnrichmentDerivation Withhold(EmailEnrichmentWithholding withholding, string? answeringAlias = null)
+    {
+        EmailEnrichmentEvents.LogWithheld(this.logger, answeringAlias ?? this.plan.Endpoint.Alias, withholding);
 
         return EmailEnrichmentDerivation.Withholding(withholding);
     }

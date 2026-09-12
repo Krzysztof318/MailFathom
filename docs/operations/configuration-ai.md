@@ -380,15 +380,16 @@ the passage and the embedding are delivered and the ranking is not, and no tool 
 **What is sent and what is refused.** The allow-list is deliberately short — PNG, JPEG, WebP, and GIF — and membership
 is decided from the octets rather than from the media type the sender wrote, so a part naming one format and carrying
 another is judged on what it carries. Everything else is refused with a reason recorded against the attachment: a
-format outside the list, a file larger than `Chat:MaxRequestImageOctets`, a grid larger than `MaxPixels`, a header that
+format outside the list, a file larger than the main model's `MaxRequestImageOctets`, a grid larger than `MaxPixels`, a header that
 does not hold the format it claims, and a provider that timed out, was unavailable, or refused.
 
 **A chat endpoint has to be able to carry a description, and three of its own bounds decide that.** Each is a supported
 declaration on its own and a mistake only beside this switch, so writing one here stops the start naming the key rather
-than faulting the background run on every picture: `Chat:MaxRequestImageOctets: 0` declares an endpoint sent no image at
-all, which is right for a model that cannot read one; `Chat:MaxMessagesPerRequest` below two cannot carry the two turns
-a description sends, the instruction and the picture; and `Chat:MaxRequestCharacters` below what the fixed instruction
-occupies refuses the conversation before the picture is even weighed.
+than faulting the background run on every picture: `MaxRequestImageOctets: 0` declares a model sent no image at
+all, which is right for one that cannot read it; `MaxMessagesPerRequest` below two cannot carry the two turns
+a description sends, the instruction and the picture; and `MaxRequestCharacters` below what the fixed instruction
+occupies refuses the conversation before the picture is even weighed. Each is read off the main model, which is the one
+a description is sent to.
 
 **SVG is excluded by name rather than left unsupported.** It is XML a renderer executes as a document, with script and
 external references available to whoever composed it, and nothing here is a renderer with a security team behind it. A
@@ -451,7 +452,7 @@ parser was actually handed, which is narrower than what a walk stepped over: a p
 not parse, and an attachment the declared size already puts past `MaxInputOctets` are each decided from the
 declaration and are charged nothing, so a mailbox of pictures cannot spend the ceiling a mailbox of documents is
 bounded by. Description is charged one call per picture a provider answered, and a picture refused before the call —
-a format outside the list, a grid past `MaxPixels`, a file past `Chat:MaxRequestImageOctets` — is charged nothing,
+a format outside the list, a grid past `MaxPixels`, a file past the main model's `MaxRequestImageOctets` — is charged nothing,
 because nothing was sent. What a picture still costs is the per-message and per-run octet budgets above, which bound
 what a walk reads whichever port ends up with it. Chunking and the lexical index are charged neither: they reach no provider, and what they
 cost is disk, reported as the characters the index grew by rather than bounded by a ceiling.
@@ -525,7 +526,7 @@ file. All three are read again on the next account run, so a provider outage or 
 costs the readings it interrupted a second time rather than losing them — which is what the deadline is worth budgeting
 processor time against, since a document that never parses inside it is re-fetched and re-parsed on every run. Every other refusal settles the message, including the ones a configuration
 change lifts — an image larger than `Embeddings:AttachmentText:MaxInputOctets` or larger than
-`Chat:MaxRequestImageOctets`, a grid larger than `Embeddings:ImageDescription:MaxPixels`, and a picture met while image
+the main model's `MaxRequestImageOctets`, a grid larger than `Embeddings:ImageDescription:MaxPixels`, and a picture met while image
 description was off. The first of those three is this section's own key: it bounds what any attachment costs to read
 before a picture is offered to a provider at all, so a photograph past it is refused here rather than by the chat
 ceiling. Raising any of the three or turning that switch on therefore changes what arrives next rather than what is
@@ -605,68 +606,112 @@ lexical search continues, while without a chat provider search is unaffected and
 being offered. Writing nothing is a supported deployment, exactly as writing no `Embeddings` section is. [Chat
 generation](../features/chat-generation.md) records what a declaration means and what one call may spend.
 
-One endpoint rather than an ordered chain. A fallback embedding endpoint is another route to one vector space and
-startup proves it; nothing proves that of two chat models, so falling through would answer a person in a different
-model's voice with nothing above able to tell. An operator who wants failover puts a gateway in front of the declared
-endpoint.
+**The section is a declared array and the references into it.** What a model is — its address, its credential, its
+parameters, its bounds — is written once under `Chat:Models` beneath an alias of its own, and a capability names that
+alias. A deployment with one model writes one block and nothing else: `Chat:MainModel` may be left unwritten where
+exactly one model is declared, because there is nothing for it to choose between. A deployment with several states
+which one answers questions, and may route a single capability elsewhere — the pass a reader waits in front of onto a
+small fast model while questions go to the one that answers them well.
 
-The endpoint is any service reachable over the OpenAI wire protocol, under the same two rules the embedding chain
-follows and through the same implementation of them: an absolute HTTP or HTTPS address with a plain `http` one refused
-wherever a credential is held, and exactly one of `ApiKey`, `EntraCredential`, and `Unauthenticated`. [Chat generation §
+**A reference may name a fallback, and that is the one place a chain exists.** `Chat:MainModel:Fallback` names a second
+declared alias, and a call the first model could not answer is attempted against it. What is retried is opening a client
+and asking, so the second model is a second address under a second credential — which is the whole reason it is worth
+asking. Two failures are not worth a second model and never fall through: a request the provider *refused*, which a
+second endpoint refuses the same way for a second payment, and an answer that came back empty, which is a call that
+succeeded. A fallback carries no fallback of its own, so a chain is two models and never three, and a model named as its
+own fallback is refused.
+
+**What a run reports is the model that answered.** A question the fallback served is attributed to the fallback — its
+alias, and the `PublishedModel` of its own block — because the alternative is a cost record naming a model the
+deployment did not call.
+
+A model is any service reachable over the OpenAI wire protocol, under the same two rules the embedding chain follows and
+through the same implementation of them: an absolute HTTP or HTTPS address with a plain `http` one refused wherever a
+credential is held, and exactly one of `ApiKey`, `EntraCredential`, and `Unauthenticated`. [Chat generation §
 An endpoint is any service that speaks the OpenAI wire
 protocol](../features/chat-generation.md#an-endpoint-is-any-service-that-speaks-the-openai-wire-protocol) carries a
-worked example of one that is neither OpenAI nor Azure, and `Chat:Api` is the key most often decided by which of the
+worked example of one that is neither OpenAI nor Azure, and `…:Api` is the key most often decided by which of the
 two paths such a service serves. [Provider endpoints](provider-endpoints.md) records which paths each checked service
 was found to serve.
 
+### One model — `Chat:Models:<n>`
+
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `Chat:Alias` | string | *(empty)* | writing one is what configures a chat provider at all; unique across every AI endpoint the deployment declares, embedding endpoints included. A section carrying other settings without it is refused rather than ignored | reload to rename, restart to declare or remove |
-| `Chat:Model` | string | — | required once an alias is written; what a request is routed to, which for a cloud deployment is the deployment's own name rather than the vendor's model identifier | reload |
-| `Chat:PublishedModel` | string | *(empty)* | what a client is told answered a question, on a Discover run's opening event. Written rather than derived from `Chat:Model`, which is a routed name that may carry a deployment, a tenant, or an internal routing label. Empty publishes nothing and a client shows the endpoint alias alone | reload |
-| `Chat:Address` | string | *(empty)* | absolute HTTP or HTTPS; a plain `http` one only for an endpoint declaring `Chat:Unauthenticated`. Empty uses the provider library's default. A cloud resource's OpenAI-compatible address ends in `/openai/v1/` | reload |
-| `Chat:Api` | enum | `ChatCompletions` | `ChatCompletions` or `Responses`; which of the provider's two request APIs a call goes to under the declared address. Declared rather than derived, because the routed model name is the operator's own deployment name and nothing about it says which paths the server serves. State `Responses` for a reasoning model that refuses function tools beside a stated effort; a server that does not serve that path answers *request refused* | reload |
-| `Chat:MaxOutputTokens` | int | `1024` | 1 – 200000; what one answer may occupy. Reaching it is not a failure — the answer arrives marked as cut short | reload |
-| `Chat:Temperature` | float | *(unset)* | 0 – 2; left unset sends nothing, which is required by the models that reject the parameter outright | reload |
-| `Chat:TopP` | float | *(unset)* | 0 – 1; unset the same way, and for the same reason | reload |
-| `Chat:ReasoningEffort` | string | *(unset)* | the level the model documents, written as the provider spells it — `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or whatever a later model adds. Unset sends no reasoning parameter at all, which a model that does not reason requires. `none` is not the same as unset — it states an effort of none and sends it, which is what a provider refusing tools beside an unstated effort asks for. Startup checks the shape and not the vocabulary, because which levels exist belongs to the model; a level this deployment's model does not accept refuses the request rather than falling back | reload |
-| `Chat:MaxMessagesPerRequest` | int | `64` | 1 – 512; the turns one request carries, refused rather than truncated | reload |
-| `Chat:MaxRequestCharacters` | int | `120000` | 1 – 4000000; what those turns may add up to. Stated in characters rather than tokens because counting tokens would mean carrying the model's own tokenizer; set it below what the model's context window allows | reload |
-| `Chat:MaxRequestImageOctets` | int | `4194304` | 0 – 67108864; the octets the images of one request may add up to. `0` declares an endpoint that is sent no image at all, which is right for a model that cannot read one. Providers carry an image base64-encoded, a third larger again, so set this below the figure a provider publishes for itself | reload |
-| `Chat:RequestTimeout` | TimeSpan | `00:02:00` | positive; one request. Longer than an embedding request's by default, because generating an answer takes as long as the answer is | reload |
-| `Chat:ApiKey` | secret block | *(absent)* | the provider key. Exactly one of this, `EntraCredential`, and `Unauthenticated` is declared | reload, value read per request |
-| `Chat:Unauthenticated` | bool | `false` | that this endpoint asks for no credential, so a request presents none — the shape of a model server you run yourself. Written rather than inferred from the other two being absent, because that is what a forgotten key reference looks like | reload |
+| `…:Alias` | string | — | required; unique across every AI endpoint the deployment declares, embedding endpoints included. What a log line, a metric tag, a resilience circuit, a credential lookup, and a failure message call this model, and what every reference names | reload |
+| `…:Model` | string | — | required; what a request is routed to, which for a cloud deployment is the deployment's own name rather than the vendor's model identifier | reload |
+| `…:PublishedModel` | string | *(empty)* | what a client is told answered a question, on a Discover run's opening event. Written rather than derived from `…:Model`, which is a routed name that may carry a deployment, a tenant, or an internal routing label. Empty publishes nothing and a client shows the alias alone | reload |
+| `…:Address` | string | *(empty)* | absolute HTTP or HTTPS; a plain `http` one only for a model declaring `…:Unauthenticated`. Empty uses the provider library's default. A cloud resource's OpenAI-compatible address ends in `/openai/v1/` | reload |
+| `…:Api` | enum | `ChatCompletions` | `ChatCompletions` or `Responses`; which of the provider's two request APIs a call goes to under the declared address. Declared rather than derived, because the routed model name is the operator's own deployment name and nothing about it says which paths the server serves. State `Responses` for a reasoning model that refuses function tools beside a stated effort; a server that does not serve that path answers *request refused* | reload |
+| `…:MaxOutputTokens` | int | `1024` | 1 – 200000; what one answer may occupy. Reaching it is not a failure — the answer arrives marked as cut short | reload |
+| `…:Temperature` | float | *(unset)* | 0 – 2; left unset sends nothing, which is required by the models that reject the parameter outright | reload |
+| `…:TopP` | float | *(unset)* | 0 – 1; unset the same way, and for the same reason | reload |
+| `…:ReasoningEffort` | string | *(unset)* | the level the model documents, written as the provider spells it — `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or whatever a later model adds. Unset sends no reasoning parameter at all, which a model that does not reason requires. `none` is not the same as unset — it states an effort of none and sends it, which is what a provider refusing tools beside an unstated effort asks for. Startup checks the shape and not the vocabulary, because which levels exist belongs to the model; a level this deployment's model does not accept refuses the request rather than falling back | reload |
+| `…:MaxMessagesPerRequest` | int | `64` | 1 – 512; the turns one request carries, refused rather than truncated | reload |
+| `…:MaxRequestCharacters` | int | `120000` | 1 – 4000000; what those turns may add up to. Stated in characters rather than tokens because counting tokens would mean carrying the model's own tokenizer; set it below what the model's context window allows | reload |
+| `…:MaxRequestImageOctets` | int | `4194304` | 0 – 67108864; the octets the images of one request may add up to. `0` declares a model that is sent no image at all, which is right for one that cannot read one. Providers carry an image base64-encoded, a third larger again, so set this below the figure a provider publishes for itself | reload |
+| `…:RequestTimeout` | TimeSpan | `00:02:00` | positive; one request. Longer than an embedding request's by default, because generating an answer takes as long as the answer is | reload |
+| `…:ApiKey` | secret block | *(absent)* | the provider key. Exactly one of this, `EntraCredential`, and `Unauthenticated` is declared | reload, value read per request |
+| `…:Unauthenticated` | bool | `false` | that this model asks for no credential, so a request presents none — the shape of a model server you run yourself. Written rather than inferred from the other two being absent, because that is what a forgotten key reference looks like | reload |
 
-**What a reload changes here, and what it does not.** Everything the declared endpoint says is read again per
-question, so correcting a model the provider refused — the ordinary case, because a wrong model is only discovered from
-a refusal — costs an edit rather than a restart of a process that is synchronizing mailboxes and holding an IMAP IDLE
-connection. A run already in flight keeps the declaration it began with, so a reload landing mid-question changes the
-next question and not that one. A candidate that breaks any rule in the table is refused whole, logged with the key to
-fix, and leaves the previous declaration answering; the process stays up either way. What stays a restart is the six
-settings that decide which services this deployment registered at all: whether `Chat:Alias` names an endpoint, whether
-`Chat:RelevanceFilter:Enabled` turns the second pass on, whether `Chat:Enrichment:Enabled` turns the arrival
-derivation on, whether `Chat:ThreadState:Enabled` turns the conversation derivation on, whether
-`Chat:SearchPhrasing:Enabled` turns the reading of a typed sentence on, and whether
-`Chat:ReplyDrafting:Enabled` turns the drafting of a reply on. The third rendering of a message body is not among them
-because it has no switch of its own: a declared `Chat:Alias` is the whole of what registers it, and which readers want
-it is their own preference rather than a key an operator writes. `Chat:BodyCleanup:Model` reloads, because it names a
-model rather than a service: the pass is already registered and what a reload moves is where its next call is routed. `Chat:ReplyDrafting:StyleFromSentMail` is a restart for
-a reason of its own: it decides nothing about which services exist and is instead read once as the drafting is
-registered, so a reload that changed it would go on reading the mail the composed deployment reads rather than the mail
-the operator has just said it may. Renaming a declared alias
-reloads, because the credential and the resilience circuit are both looked
-up by whatever the declaration in force calls it; going from no chat section to one, or the reverse, does not, and is
-refused with that message rather than silently ignored.
+### An extra header — `Chat:Models:<n>:ExtraHeaders:<n>`
 
-**What the declared model has to be able to do.** `ask_mail` answers by offering the model a retrieval tool and reading mail when the model calls it, so a model that cannot be given function tools cannot answer a question here whatever else is written above. That is what the two settings in the middle of the table exist for: a current reasoning model refuses function tools beside an *unstated* reasoning effort and names the responses API as the way to have both, so such a model needs `Chat:Api` set to `Responses` and `Chat:ReasoningEffort` written — including written as `none`, which states an effort rather than omitting the parameter. A model this deployment cannot use is not detected at startup, because nothing here can ask a provider what a routed name supports without paying for a call; it surfaces as *request refused* on the first question. [Chat generation](../features/chat-generation.md#two-apis-and-the-deployment-says-which) holds the whole reasoning, and [Mail answering](../features/mail-answering.md) describes the run that imposes the requirement.
+The shape a gateway fronting several models asks for: a tenant, a project, or a routing key that decides which model
+answers, sent on every request beside whatever the credential writes. Declared per model rather than once for the
+section, because the gateway one model is reached through is not the server another one is. Empty is the ordinary
+deployment, which reaches its model directly and sends nothing extra.
 
-### Microsoft Entra credential — `Chat:EntraCredential`
+The value is a secret block rather than a string, and that is why this is a pair of keys rather than a dictionary of
+them: what goes in one is a routing token or a tenant identifier — material of the same kind as the key beside it — so
+it is resolved per request from a reference, stays out of the configuration file, and is found by the same secret
+discovery that finds every other credential this deployment holds. A reference nothing provisions takes the model out of
+service rather than sending the request without the header, because a gateway reading it would route the call somewhere
+else.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `…:Name` | string | — | required; a field name as RFC 9110 defines one — letters, digits, and the characters ``!#$%&'*+-.^_`|~`` and nothing else. `Authorization`, `Host`, `Content-Length`, `Content-Type`, and `Transfer-Encoding` are refused, matched without case: the first is the credential's own and the other four frame the message | reload |
+| `…:Value` | secret block | — | required; the reference the value is resolved from, per request | reload, value read per request |
+
+### Microsoft Entra credential — `Chat:Models:<n>:EntraCredential`
 
 The same block, with the same keys, defaults, and rules as
 [`Embeddings:Endpoints:<n>:EntraCredential`](#microsoft-entra-credential--embeddingsendpointsnentracredential) above.
 One credential source resolves both sections, which is why the alias uniqueness rule spans them. Its keys reload here
-and take a restart there, for the reason the table above gives: this section is read again per question and the
+and take a restart there, for the reason the table below gives: this section is read again per question and the
 embedding chain is read once while the host composes itself.
+
+### Which model a capability runs on — `Chat:MainModel` and the references beside it
+
+`Chat:MainModel` names the model questions are answered with, and every capability runs on it unless it names one of
+its own. Today one capability does: [`Chat:BodyCleanup:Model`](#cleaning-a-message-body--chatbodycleanup). Both take
+the same two keys.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `…:Alias` | string | *(empty)* | an alias `Chat:Models` declares. May be left unwritten on `Chat:MainModel` where exactly one model is declared, and must be written where more than one is — a deployment that declared two models and said nothing has not stated which one answers. On a capability's own reference, unwritten means the main model | reload |
+| `…:Fallback` | string | *(empty)* | an alias `Chat:Models` declares, attempted where the model above could not answer. Refused where it names the same model, where it names one nothing declares, and where no `…:Alias` stands in front of it | reload |
+
+**What a reload changes here, and what it does not.** Everything a declared model says is read again per question, so
+correcting a model the provider refused — the ordinary case, because a wrong model is only discovered from a refusal —
+costs an edit rather than a restart of a process that is synchronizing mailboxes and holding an IMAP IDLE connection.
+Declaring a further model, renaming one, and moving which alias a capability names all reload, because a credential and
+a resilience circuit are both looked up by whatever the declaration in force calls a model. A run already in flight
+keeps the declaration it began with, so a reload landing mid-question changes the next question and not that one. A
+candidate that breaks any rule in the tables above is refused whole, logged with the key to fix, and leaves the previous
+declaration answering; the process stays up either way. What stays a restart is the six settings that decide which
+services this deployment registered at all: whether `Chat:Models` declares a model at all — the first one, or the
+removal of the last — whether `Chat:RelevanceFilter:Enabled` turns the second pass on, whether
+`Chat:Enrichment:Enabled` turns the arrival derivation on, whether `Chat:ThreadState:Enabled` turns the conversation
+derivation on, whether `Chat:SearchPhrasing:Enabled` turns the reading of a typed sentence on, and whether
+`Chat:ReplyDrafting:Enabled` turns the drafting of a reply on. The third rendering of a message body is not among them
+because it has no switch of its own: a declared model is the whole of what registers it, and which readers want it is
+their own preference rather than a key an operator writes. `Chat:ReplyDrafting:StyleFromSentMail` is a restart for a
+reason of its own: it decides nothing about which services exist and is instead read once as the drafting is
+registered, so a reload that changed it would go on reading the mail the composed deployment reads rather than the mail
+the operator has just said it may.
+
+**What the declared model has to be able to do.** `ask_mail` answers by offering the model a retrieval tool and reading mail when the model calls it, so a model that cannot be given function tools cannot answer a question here whatever else is written above. That is what the two settings in the middle of the model table exist for: a current reasoning model refuses function tools beside an *unstated* reasoning effort and names the responses API as the way to have both, so such a model needs `…:Api` set to `Responses` and `…:ReasoningEffort` written — including written as `none`, which states an effort rather than omitting the parameter. A model this deployment cannot use is not detected at startup, because nothing here can ask a provider what a routed name supports without paying for a call; it surfaces as *request refused* on the first question. [Chat generation](../features/chat-generation.md#two-apis-and-the-deployment-says-which) holds the whole reasoning, and [Mail answering](../features/mail-answering.md) describes the run that imposes the requirement.
 
 ### Relevance filter — `Chat:RelevanceFilter`
 
@@ -682,7 +727,7 @@ describes what it drops, what it keeps, and what it does when the provider canno
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `Chat:RelevanceFilter:Enabled` | bool | `false` | turning it on requires a declared `Chat:Alias`, and a `Chat:MaxMessagesPerRequest` of at least 2, because a judgement is an instruction and a candidate | restart |
+| `Chat:RelevanceFilter:Enabled` | bool | `false` | turning it on requires a declared model, and a `MaxMessagesPerRequest` of at least 2 on the main model, because a judgement is an instruction and a candidate | restart |
 | `Chat:RelevanceFilter:MaxCandidates` | int | *(unset)* | 1 – [`MailAnswering:MaxPassagesPerRetrieval`](#mailanswering), which is everything one retrieval hands over; a higher value would name candidates that never exist and is refused at startup rather than accepted and never met. Unset judges every passage the retrieval hands over, which is why there is no literal default here: one would go on saying a number of its own after the retrieval it follows was narrowed or widened. The ceiling on what one lookup spends and how long it takes; set below what retrieval returns it buys a weaker filter rather than a shorter result, because a passage nobody judged keeps its place | reload |
 | `Chat:RelevanceFilter:MinimumRelevance` | int | `50` | 1 – 100, on the scale the model answers a judgement on. A threshold of 0 is refused: it would pay for a judgement that can drop nothing | reload |
 
@@ -710,7 +755,7 @@ what withholds a derivation, and what reaches the provider.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `Chat:Enrichment:Enabled` | bool | `false` | turning it on requires a declared `Chat:Alias` | restart |
+| `Chat:Enrichment:Enabled` | bool | `false` | turning it on requires a declared model | restart |
 
 ### A conversation's state — `Chat:ThreadState`
 
@@ -736,7 +781,7 @@ puts a conversation back in the queue, what withholds a derivation, and what rea
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `Chat:ThreadState:Enabled` | bool | `false` | turning it on requires a declared `Chat:Alias` | restart |
+| `Chat:ThreadState:Enabled` | bool | `false` | turning it on requires a declared model | restart |
 
 ### Drafting a reply — `Chat:ReplyDrafting`
 
@@ -765,7 +810,7 @@ reaches the provider, and what a drafting that produced nothing answers with.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `Chat:ReplyDrafting:Enabled` | bool | `true` | it is read only where `Chat:Alias` declares an endpoint, so a deployment without one drafts nothing whatever this says | restart |
+| `Chat:ReplyDrafting:Enabled` | bool | `true` | it is read only where `Chat:Models` declares a model, so a deployment without one drafts nothing whatever this says | restart |
 | `Chat:ReplyDrafting:StyleFromSentMail` | bool | `true` | written off, no sent mail is read and the draft is written from the conversation alone. It changes what leaves the deployment rather than only what the draft reads like, which is why it is an operator's decision rather than a constant | restart |
 
 ### Reading a typed sentence into filters — `Chat:SearchPhrasing`
@@ -792,7 +837,7 @@ the reader's own calendar day, with no tool and no mail, so a search costs the s
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `Chat:SearchPhrasing:Enabled` | bool | `true` | reading a sentence requires a declared `Chat:Alias`; written off, or with no alias declared, the client is told this deployment reads none | restart |
+| `Chat:SearchPhrasing:Enabled` | bool | `true` | reading a sentence requires a declared model; written off, or with none declared, the client is told this deployment reads none | restart |
 
 ### Cleaning a message body — `Chat:BodyCleanup`
 
@@ -801,7 +846,7 @@ reading pane can draw a third rendering: the same reduced document with the navi
 row and the repeated header absent. A block inside `Chat` for the reason the blocks above are: it decides with that
 endpoint and has nowhere to send an outline without one.
 
-**It carries no switch, which is what separates it from every block above.** A declared `Chat:Alias` is the whole of
+**It carries no switch, which is what separates it from every block above.** A declared model is the whole of
 what turns this on, because whether a body is cleaned is the reader's own preference — an answer the client already holds
 per person and this deployment already serves — and a key beside it would be an operator's copy of a decision that is not
 theirs. A deployment that declares no chat endpoint cleans nothing, and a reader who chose the rendering there is shown
@@ -829,7 +874,8 @@ message it is, so a deployment that scans what leaves it for secrets scans this 
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `Chat:BodyCleanup:Model` | string | *(empty)* | what this pass alone is routed to, on the same endpoint, under the same credential, and over the same transport as everything else `Chat` declares. Empty routes it to `Chat:Model`. It is the first per-feature model override under `Chat`, and it exists because this is the one pass a reader waits for in front of a message: an operator can put the decision on a small fast model without moving the one that answers questions | reload |
+| `Chat:BodyCleanup:Model:Alias` | string | *(empty)* | an alias `Chat:Models` declares, which this pass alone is routed to. Empty routes it to `Chat:MainModel`. A model named here is a declaration of its own, so the cheap model this pass runs on may sit at another address, under another credential, with bounds and a timeout of its own — which is what makes it worth naming, this being the one pass a reader waits for in front of a message | reload |
+| `Chat:BodyCleanup:Model:Fallback` | string | *(empty)* | an alias attempted where the model above could not answer, under the rules [`Chat:MainModel:Fallback`](#which-model-a-capability-runs-on--chatmainmodel-and-the-references-beside-it) states. A pass somebody is waiting in front of is exactly the one worth answering from a second model rather than not at all | reload |
 
 ## `MailAnswering`
 

@@ -109,6 +109,24 @@ public sealed class ProviderEndpointCredentialTests
         Assert.DoesNotContain("the-certificate-password", rendered, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A declared header holds resolved secret material like the key beside it, so the default rendering states the
+    /// type and not the value. A record would print both, and one interpolation into a log line or an exception message
+    /// would be enough.
+    /// </summary>
+    [Fact]
+    public void ExtraHeaderToString_NamesNoValue()
+    {
+        // Arrange
+        var header = new ProviderEndpointHeader("X-Tenant", "the-resolved-tenant");
+
+        // Act
+        var rendered = header.ToString();
+
+        // Assert
+        Assert.DoesNotContain("the-resolved-tenant", rendered, StringComparison.Ordinal);
+    }
+
     private sealed class RecordingDisposable : IDisposable
     {
         public bool WasDisposed { get; private set; }

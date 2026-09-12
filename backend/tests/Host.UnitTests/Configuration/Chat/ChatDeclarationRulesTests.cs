@@ -6,7 +6,7 @@ using MailFathom.AI.Descriptions;
 using MailFathom.Host.Configuration.Answering;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.Embeddings;
-using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Chat;
@@ -51,7 +51,7 @@ public sealed class ChatDeclarationRulesTests
     {
         // Arrange
         var candidate = Declared();
-        candidate.MaxRequestImageOctets = 0;
+        candidate.Models[0].MaxRequestImageOctets = 0;
         var embeddings = new EmbeddingOptions { ImageDescription = { Enabled = true } };
 
         // Act
@@ -60,7 +60,7 @@ public sealed class ChatDeclarationRulesTests
         // Assert
         Assert.Contains(
             errors,
-            error => error.StartsWith("Chat:MaxRequestImageOctets", StringComparison.Ordinal));
+            error => error.StartsWith("MaxRequestImageOctets on the chat model 'answering'", StringComparison.Ordinal));
     }
 
     /// <summary>A description sends two turns whatever the picture is, so an endpoint admitting one cannot carry it.</summary>
@@ -69,7 +69,7 @@ public sealed class ChatDeclarationRulesTests
     {
         // Arrange
         var candidate = Declared();
-        candidate.MaxMessagesPerRequest = 1;
+        candidate.Models[0].MaxMessagesPerRequest = 1;
         var embeddings = new EmbeddingOptions { ImageDescription = { Enabled = true } };
 
         // Act
@@ -78,7 +78,7 @@ public sealed class ChatDeclarationRulesTests
         // Assert
         Assert.Contains(
             errors,
-            error => error.StartsWith("Chat:MaxMessagesPerRequest", StringComparison.Ordinal));
+            error => error.StartsWith("MaxMessagesPerRequest on the chat model 'answering'", StringComparison.Ordinal));
     }
 
     /// <summary>The instruction is fixed, so an endpoint admitting fewer characters than it occupies refuses every description.</summary>
@@ -87,7 +87,7 @@ public sealed class ChatDeclarationRulesTests
     {
         // Arrange
         var candidate = Declared();
-        candidate.MaxRequestCharacters = ImageDescriptionInstructions.SmallestRequestCharacters - 1;
+        candidate.Models[0].MaxRequestCharacters = ImageDescriptionInstructions.SmallestRequestCharacters - 1;
         var embeddings = new EmbeddingOptions { ImageDescription = { Enabled = true } };
 
         // Act
@@ -96,7 +96,7 @@ public sealed class ChatDeclarationRulesTests
         // Assert
         Assert.Contains(
             errors,
-            error => error.StartsWith("Chat:MaxRequestCharacters", StringComparison.Ordinal));
+            error => error.StartsWith("MaxRequestCharacters — ", StringComparison.Ordinal));
     }
 
     /// <summary>Each of the three bounds is a legal declaration on its own — a text-only endpoint carries all three — so nothing refuses one where description is off.</summary>
@@ -105,9 +105,9 @@ public sealed class ChatDeclarationRulesTests
     {
         // Arrange
         var candidate = Declared();
-        candidate.MaxRequestImageOctets = 0;
-        candidate.MaxMessagesPerRequest = 1;
-        candidate.MaxRequestCharacters = 1;
+        candidate.Models[0].MaxRequestImageOctets = 0;
+        candidate.Models[0].MaxMessagesPerRequest = 1;
+        candidate.Models[0].MaxRequestCharacters = 1;
         var embeddings = new EmbeddingOptions { ImageDescription = { Enabled = false } };
 
         // Act
@@ -123,7 +123,7 @@ public sealed class ChatDeclarationRulesTests
     {
         // Arrange
         var candidate = Declared();
-        candidate.MaxOutputTokens = 0;
+        candidate.Models[0].MaxOutputTokens = 0;
 
         // Act
         var errors = ChatDeclarationRules.FindDeclarationErrors(candidate, null, new MailAnsweringOptions());
@@ -131,7 +131,7 @@ public sealed class ChatDeclarationRulesTests
         // Assert
         Assert.Contains(
             errors,
-            error => error.StartsWith("Chat:MaxOutputTokens — ", StringComparison.Ordinal));
+            error => error.StartsWith("Chat:Models:0:MaxOutputTokens — ", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public sealed class ChatDeclarationRulesTests
     {
         // Arrange
         var candidate = Declared();
-        candidate.Model = string.Empty;
+        candidate.Models[0].Model = string.Empty;
 
         // Act
         var errors = ChatDeclarationRules.FindDeclarationErrors(candidate, null, new MailAnsweringOptions());
@@ -200,8 +200,8 @@ public sealed class ChatDeclarationRulesTests
     {
         // Arrange
         var candidate = Declared();
-        candidate.Model = "a-corrected-model";
-        candidate.Temperature = 0.4f;
+        candidate.Models[0].Model = "a-corrected-model";
+        candidate.Models[0].Temperature = 0.4f;
 
         // Act
         var errors = ChatDeclarationRules.FindChangesNeedingRestart(candidate, Declared());
@@ -218,7 +218,7 @@ public sealed class ChatDeclarationRulesTests
         var errors = ChatDeclarationRules.FindChangesNeedingRestart(new ChatModelOptions(), Declared());
 
         // Assert
-        Assert.Contains(errors, error => error.StartsWith("Chat:Alias — ", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.StartsWith("Chat:Models — ", StringComparison.Ordinal));
     }
 
     /// <summary>Adopting this silently would report the setting as taken while the tool went on answering nothing.</summary>
@@ -229,7 +229,7 @@ public sealed class ChatDeclarationRulesTests
         var errors = ChatDeclarationRules.FindChangesNeedingRestart(Declared(), new ChatModelOptions());
 
         // Assert
-        Assert.Contains(errors, error => error.StartsWith("Chat:Alias — ", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.StartsWith("Chat:Models — ", StringComparison.Ordinal));
     }
 
     /// <summary>The filter's registration decorates the retrieval, so turning the pass on is a composition decision; its two numbers are not.</summary>
@@ -301,7 +301,7 @@ public sealed class ChatDeclarationRulesTests
     {
         // Arrange
         var candidate = Declared();
-        candidate.BodyCleanup.Model = "a-small-fast-model";
+        candidate.BodyCleanup.Model.Alias = "answering";
 
         // Act
         var errors = ChatDeclarationRules.FindChangesNeedingRestart(candidate, Declared());
@@ -380,10 +380,5 @@ public sealed class ChatDeclarationRulesTests
         Assert.Throws<ArgumentNullException>(() => ChatDeclarationRules.FindChangesNeedingRestart(Declared(), null!));
     }
 
-    private static ChatModelOptions Declared() => new()
-    {
-        Alias = "answering",
-        Model = "a-chat-model",
-        ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" },
-    };
+    private static ChatModelOptions Declared() => DeclaredChatModels.Section();
 }

@@ -105,7 +105,7 @@ internal sealed class ProviderChatModelClient : IChatModelClient
 
         try
         {
-            var answer = await this.RequestAnswerAsync(guarded, cancellationToken);
+            var answer = await this.RequestAnswerAsync(conversation, guarded, cancellationToken);
 
             this.healthRecorder.RecordServed(AiProviderRole.Chat);
 
@@ -113,7 +113,7 @@ internal sealed class ProviderChatModelClient : IChatModelClient
         }
         catch (ChatGenerationFailedException failure)
         {
-            ChatProviderEvents.LogCallFailed(this.logger, this.plan.Endpoint.Alias, failure.Failure);
+            ChatProviderEvents.LogCallFailed(this.logger, failure.EndpointAlias, failure.Failure);
 
             this.RecordFailure(failure);
 
@@ -172,15 +172,37 @@ internal sealed class ProviderChatModelClient : IChatModelClient
         return guarded;
     }
 
-    private async Task<ChatAnswer> RequestAnswerAsync(
+    /// <summary>Runs the chain, measuring each model's bounds against what the caller composed and sending what the guard returned.</summary>
+    /// <remarks>
+    /// Both conversations travel because they answer different questions. The bounds are this deployment's promise about
+    /// what it will send and are measured on the composed turns, for the reason <see cref="GuardedAsync" /> gives; what
+    /// goes on the wire is always the guarded copy.
+    /// </remarks>
+    private Task<ChatAnswer> RequestAnswerAsync(
+        IReadOnlyList<ChatMessage> composed,
+        IReadOnlyList<ChatMessage> guarded,
+        CancellationToken cancellationToken) => ChatModelFallThrough.RunAsync(
+            this.plan,
+            this.logger,
+            (model, attemptToken) => this.RequestAnswerFromAsync(model, composed, guarded, attemptToken),
+            cancellationToken);
+
+    /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
+    private async Task<ChatAnswer> RequestAnswerFromAsync(
+        ChatGenerationPlan model,
+        IReadOnlyList<ChatMessage> composed,
         IReadOnlyList<ChatMessage> conversation,
         CancellationToken cancellationToken)
     {
-        var endpoint = this.plan.Endpoint;
+        // Against this model's own bounds rather than the main model's, because a fallback may be declared narrower and
+        // a conversation too wide for it is refused here rather than sent and billed for.
+        ChatRequestBounds.RequireForAttempt(composed, model);
+
+        var endpoint = model.Endpoint;
 
         // Resolved per request and released with it, so a rotated key is picked up by the next call and the material
         // exists for one request rather than for process uptime.
-        using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
+        using var credential = await ChatModelCredential.ResolveAsync(this.credentialSource, endpoint, cancellationToken);
 
         Microsoft.Extensions.AI.ChatResponse response;
         try
@@ -190,7 +212,7 @@ internal sealed class ProviderChatModelClient : IChatModelClient
             response = await this.operationRunner.RunAsync(
                 OutboundDependency.AiProviderInvocation,
                 endpoint.Alias,
-                attemptToken => this.SendAsync(credential, conversation, attemptToken),
+                attemptToken => this.SendAsync(model, credential, conversation, attemptToken),
                 cancellationToken);
         }
         catch (MailFathomException rejection) when (ChatCallFailureMapping.IsEndpointNotCalled(rejection))
@@ -198,7 +220,7 @@ internal sealed class ProviderChatModelClient : IChatModelClient
             throw ChatCallFailureMapping.ToEndpointNotCalledFailure(rejection, endpoint.Alias);
         }
 
-        return this.MapAnswer(response);
+        return this.MapAnswer(model, response);
     }
 
     /// <summary>Sends one request and returns exactly what the provider answered.</summary>
@@ -209,21 +231,22 @@ internal sealed class ProviderChatModelClient : IChatModelClient
     /// per-attempt client also costs nothing.
     /// </remarks>
     private async Task<Microsoft.Extensions.AI.ChatResponse> SendAsync(
+        ChatGenerationPlan model,
         ProviderEndpointCredential credential,
         IReadOnlyList<ChatMessage> conversation,
         CancellationToken cancellationToken)
     {
-        var endpoint = this.plan.Endpoint;
+        var endpoint = model.Endpoint;
 
         // The deadline is this deployment's and is applied here rather than left to the client, so one attempt is
         // bounded whichever provider library is underneath and whatever it defaults to.
         using var attemptDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        attemptDeadline.CancelAfter(this.plan.RequestTimeout);
+        attemptDeadline.CancelAfter(model.RequestTimeout);
 
         using var transport = this.transportFactory.CreateClient(TransportName);
         using var client = this.clientFactory.OpenChatClient(endpoint, credential, transport);
 
-        var options = ChatGenerationParameterMapping.ToChatOptions(this.plan);
+        var options = ChatGenerationParameterMapping.ToChatOptions(model);
 
         try
         {
@@ -254,9 +277,9 @@ internal sealed class ProviderChatModelClient : IChatModelClient
     /// truncation and a content filter are reported through the stop reason, which is what keeps either from ever being
     /// repeated as though it were a transport fault.
     /// </remarks>
-    private ChatAnswer MapAnswer(Microsoft.Extensions.AI.ChatResponse response)
+    private ChatAnswer MapAnswer(ChatGenerationPlan model, Microsoft.Extensions.AI.ChatResponse response)
     {
-        var endpoint = this.plan.Endpoint;
+        var endpoint = model.Endpoint;
         var stop = ToGenerationStop(response.FinishReason);
 
         if (string.IsNullOrWhiteSpace(response.Text))

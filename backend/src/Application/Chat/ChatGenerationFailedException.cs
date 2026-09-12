@@ -26,15 +26,21 @@ public sealed class ChatGenerationFailedException : MailFathomException
     /// <param name="failure">What kind of failure ended the request.</param>
     /// <param name="cause">The failure this one was raised for.</param>
     public ChatGenerationFailedException(string endpointAlias, ChatGenerationFailure failure, Exception cause)
-        : base(DescribeFailure(endpointAlias, failure), cause) =>
+        : base(DescribeFailure(endpointAlias, failure), cause)
+    {
+        this.EndpointAlias = endpointAlias;
         this.Failure = failure;
+    }
 
     /// <summary>Initializes a failure naming the endpoint alias and what kind of failure it was.</summary>
     /// <param name="endpointAlias">The deployment's own configured name for the endpoint that failed.</param>
     /// <param name="failure">What kind of failure ended the request.</param>
     public ChatGenerationFailedException(string endpointAlias, ChatGenerationFailure failure)
-        : base(DescribeFailure(endpointAlias, failure)) =>
+        : base(DescribeFailure(endpointAlias, failure))
+    {
+        this.EndpointAlias = endpointAlias;
         this.Failure = failure;
+    }
 
     /// <inheritdoc />
     /// <remarks>
@@ -49,6 +55,15 @@ public sealed class ChatGenerationFailedException : MailFathomException
         ChatGenerationFailure.AnswerEmpty => MailFathomErrorCode.ChatAnswerEmpty,
         _ => MailFathomErrorCode.ChatProviderUnavailable,
     };
+
+    /// <summary>Gets the deployment's own configured name for the endpoint this failure is about.</summary>
+    /// <remarks>
+    /// Carried beside the message rather than left inside it, because a chain that fell through raises this from the
+    /// model that was tried last: a caller logging the alias it was configured with would name the model asked first and
+    /// send whoever reads the line to an endpoint that may be working. An alias names nothing outside this deployment,
+    /// which is what makes it the one part of an endpoint safe to publish.
+    /// </remarks>
+    public string EndpointAlias { get; }
 
     /// <summary>Gets what kind of failure ended the request.</summary>
     public ChatGenerationFailure Failure { get; }

@@ -13,12 +13,13 @@ namespace MailFathom.AI.Chat;
 /// revalidates and holds no defaulting logic of its own.
 /// </para>
 /// <para>
-/// One endpoint rather than a chain, which is the deliberate difference from the embedding declaration. A fallback
-/// embedding endpoint is another route to one vector space — startup proves every endpoint of a chain declares the same
-/// geometry, so it cannot change what a vector means. Nothing proves that of two chat models: falling through would
-/// silently answer a person in a different model's voice, with different capabilities and different refusals, and
-/// nothing above this boundary could tell it had happened. An operator who wants failover puts a gateway in front of one
-/// declared endpoint, where the substitution is theirs and is visible to them.
+/// At most two models rather than a chain of any length, and the second one only where the deployment named it. The
+/// difference from the embedding chain is what a fall-through can change: every embedding endpoint of a chain declares
+/// the same geometry, so a fallback cannot change what a vector means, while two chat models answer in different voices
+/// with different capabilities and different refusals. That is why the second model is named by the operator in the
+/// reference that selects the first, and why the run reports which one answered — the substitution is declared and
+/// visible rather than inferred here. A call the first model *refused* is not repeated against the second, because a
+/// second endpoint refuses a malformed request the same way and the attempt would be paid for twice.
 /// </para>
 /// <para>
 /// Deliberately holds no credential and no secret reference. What proves the deployment's identity to the endpoint is
@@ -41,9 +42,11 @@ public sealed partial class ChatGenerationPlan
         int maximumMessagesPerRequest,
         int maximumRequestCharacters,
         int maximumRequestImageOctets,
-        TimeSpan requestTimeout)
+        TimeSpan requestTimeout,
+        ChatGenerationPlan? fallback)
     {
         this.Endpoint = endpoint;
+        this.Fallback = fallback;
         this.MaximumOutputTokens = maximumOutputTokens;
         this.Temperature = temperature;
         this.TopP = topP;
@@ -56,6 +59,34 @@ public sealed partial class ChatGenerationPlan
 
     /// <summary>Gets the endpoint every request is sent to.</summary>
     public ChatEndpoint Endpoint { get; }
+
+    /// <summary>Gets the model a call this one could not have answered is attempted against, or <see langword="null" /> where the deployment named none.</summary>
+    /// <remarks>
+    /// The whole of what a fallback is: a second declared model, named by the operator, with its own address, its own
+    /// credential, and its own parameters. It is never a model this deployment chose on anybody's behalf, which is what
+    /// separates the arrangement from the one this type used to refuse — a substitution nobody declared answers a
+    /// person in another model's voice without either of them knowing, while this one is written in the configuration
+    /// and reported by the run that used it.
+    /// </remarks>
+    public ChatGenerationPlan? Fallback { get; }
+
+    /// <summary>Gets this plan and the fallback behind it, in the order a call tries them.</summary>
+    /// <remarks>
+    /// One or two elements and never more: a fallback is named by the reference that selects a model, and a model
+    /// declaration carries no reference of its own, so the chain cannot grow a third link or close into a cycle.
+    /// </remarks>
+    public IEnumerable<ChatGenerationPlan> Chain
+    {
+        get
+        {
+            yield return this;
+
+            if (this.Fallback is { } fallback)
+            {
+                yield return fallback;
+            }
+        }
+    }
 
     /// <summary>Gets the greatest number of tokens one answer may occupy.</summary>
     /// <remarks>
@@ -187,7 +218,49 @@ public sealed partial class ChatGenerationPlan
             maximumMessagesPerRequest,
             maximumRequestCharacters,
             maximumRequestImageOctets,
-            requestTimeout);
+            requestTimeout,
+            fallback: null);
+    }
+
+    /// <summary>Builds the same plan with a second model behind it.</summary>
+    /// <param name="fallback">The model a call this one could not have answered is attempted against.</param>
+    /// <returns>The plan carrying the fallback.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="fallback" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when the fallback is this plan's own endpoint, or already carries a fallback of its own.</exception>
+    /// <remarks>
+    /// Separate from <see cref="Create" /> rather than a tenth parameter on it, because a fallback is chosen by the
+    /// reference that names the model rather than declared by the model, and every caller that builds a plan from one
+    /// declaration alone would otherwise have to say it has none.
+    /// </remarks>
+    public ChatGenerationPlan WithFallback(ChatGenerationPlan fallback)
+    {
+        ArgumentNullException.ThrowIfNull(fallback);
+
+        if (string.Equals(fallback.Endpoint.Alias, this.Endpoint.Alias, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "A model cannot be its own fallback: the second attempt would reach the endpoint that had just failed.",
+                nameof(fallback));
+        }
+
+        if (fallback.Fallback is not null)
+        {
+            throw new ArgumentException(
+                "A fallback carries no fallback of its own, so a chain is two models and never three.",
+                nameof(fallback));
+        }
+
+        return new ChatGenerationPlan(
+            this.Endpoint,
+            this.MaximumOutputTokens,
+            this.Temperature,
+            this.TopP,
+            this.ReasoningEffort,
+            this.MaximumMessagesPerRequest,
+            this.MaximumRequestCharacters,
+            this.MaximumRequestImageOctets,
+            this.RequestTimeout,
+            fallback);
     }
 
     /// <summary>Refuses a sampling parameter outside the range providers accept.</summary>

@@ -22,10 +22,10 @@ namespace MailFathom.Host.Configuration.Chat;
 /// </para>
 /// <para>
 /// <b>It is the first block under <c>Chat</c> that routes one feature to a model of its own.</b> Every other one runs on
-/// <c>Chat:Model</c>, because what each of them does is the same kind of work a question is. This is not: deciding which
-/// blocks of an outline to keep is a judgement a small fast model makes well and quickly, and a reader is waiting for it
-/// in front of a message — so an operator can put this pass on a cheaper model without moving the one that answers
-/// questions. Left empty it routes to <c>Chat:Model</c> like everything else.
+/// <c>Chat:MainModel</c>, because what each of them does is the same kind of work a question is. This is not: deciding
+/// which blocks of an outline to keep is a judgement a small fast model makes well and quickly, and a reader is waiting
+/// for it in front of a message — so an operator can put this pass on a cheaper model without moving the one that
+/// answers questions. Left empty it routes to <c>Chat:MainModel</c> like everything else.
 /// </para>
 /// <para>
 /// There are no numbers here. What a deployment may spend on provider calls in total is declared once, in
@@ -36,12 +36,13 @@ namespace MailFathom.Host.Configuration.Chat;
 /// </remarks>
 internal sealed class BodyCleanupOptions
 {
-    /// <summary>Gets or sets the model identifier this pass is routed to, and empty to route it to <c>Chat:Model</c>.</summary>
+    /// <summary>Gets or sets which declared model this pass is routed to, and empty to route it to <c>Chat:MainModel</c>.</summary>
     /// <remarks>
-    /// Read the same way <c>Chat:Model</c> is: for a cloud deployment this is the name the operator gave the deployment
-    /// rather than the vendor's model identifier, because that is the string the endpoint recognizes. It names a model on
-    /// the same endpoint, under the same credential and over the same transport — a second provider would be a second
-    /// endpoint declaration, which this block is not.
+    /// An alias out of <c>Chat:Models</c> rather than a routed model name, which is what changed when the section became
+    /// an array: a model named here is a declaration of its own, so the cheap model this pass runs on may sit at another
+    /// address, under another credential, with bounds and a timeout of its own. It carries a <c>Fallback</c> like any
+    /// other reference, because a pass a reader is waiting in front of is exactly the one worth answering from a second
+    /// model rather than not at all.
     /// </remarks>
-    public string Model { get; set; } = string.Empty;
+    public ChatModelReferenceOptions Model { get; set; } = new();
 }

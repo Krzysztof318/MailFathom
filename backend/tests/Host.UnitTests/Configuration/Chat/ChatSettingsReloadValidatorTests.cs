@@ -30,7 +30,7 @@ public sealed class ChatSettingsReloadValidatorTests
     {
         // Arrange
         var candidate = Declared();
-        candidate.Model = "a-corrected-model";
+        candidate.Models[0].Model = "a-corrected-model";
 
         // Act
         var errors = await ValidatorOver(Declared())
@@ -46,14 +46,14 @@ public sealed class ChatSettingsReloadValidatorTests
     {
         // Arrange
         var candidate = Declared();
-        candidate.ApiKey = new ConfiguredSecret { Name = "chat-key", SecretReference = "env:NOTHING_PROVISIONS_THIS" };
+        candidate.Models[0].ApiKey = new ConfiguredSecret { Name = "chat-key", SecretReference = "env:NOTHING_PROVISIONS_THIS" };
 
         // Act
         var errors = await ValidatorOver(Declared())
             .FindConfigurationErrorsAsync(candidate, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Contains(errors, error => error.Contains("Chat:ApiKey", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("Chat:Models:0:ApiKey", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -61,14 +61,14 @@ public sealed class ChatSettingsReloadValidatorTests
     {
         // Arrange
         var candidate = Declared();
-        candidate.MaxMessagesPerRequest = 0;
+        candidate.Models[0].MaxMessagesPerRequest = 0;
 
         // Act
         var errors = await ValidatorOver(Declared())
             .FindConfigurationErrorsAsync(candidate, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Contains(errors, error => error.StartsWith("Chat:MaxMessagesPerRequest — ", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.StartsWith("Chat:Models:0:MaxMessagesPerRequest — ", StringComparison.Ordinal));
     }
 
     /// <summary>Which services exist was decided while the host composed itself, so removing the endpoint is a restart rather than a reload.</summary>
@@ -97,7 +97,7 @@ public sealed class ChatSettingsReloadValidatorTests
         });
 
         var candidate = Declared();
-        candidate.Alias = "indexing";
+        candidate.Models[0].Alias = "indexing";
 
         // Act
         var errors = await ValidatorOver(Declared(), embeddings)
@@ -142,10 +142,12 @@ public sealed class ChatSettingsReloadValidatorTests
             new RecordingLogger<SecretConfigurationValidator>());
     }
 
-    private static ChatModelOptions Declared() => new()
+    private static ChatModelOptions Declared()
     {
-        Alias = "answering",
-        Model = "a-chat-model",
-        ApiKey = new ConfiguredSecret { Name = "chat-key", SecretReference = "plaintext:the-chat-key" },
-    };
+        var settings = DeclaredChatModels.Section();
+
+        settings.Models[0].ApiKey = new ConfiguredSecret { Name = "chat-key", SecretReference = "plaintext:the-chat-key" };
+
+        return settings;
+    }
 }

@@ -6,7 +6,6 @@ using MailFathom.AI.Chat;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
-using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.EmailContent.Cleaning;
 using MailFathom.Application.Resilience;
@@ -41,6 +40,12 @@ namespace MailFathom.AI.BodyCleanup;
 /// model other than the one questions run on. Everything else in it is the endpoint's.
 /// </para>
 /// <para>
+/// That is also why a proposal writes no provider health. The chat role's state answers whether this deployment can
+/// answer questions, and a cleaning endpoint an operator declared separately says nothing about that — recording it
+/// there would report <c>ask_mail</c> degraded on the strength of an endpoint no question is ever sent to.
+/// <see cref="UnreportedProviderHealth" /> carries the rest of that reasoning.
+/// </para>
+/// <para>
 /// Each proposal opens its own credential, transport, chat client, and agent, and releases all four with it. That is the
 /// same lifetime every other agent here uses and for the same reasons: a rotated key is picked up by the next open rather
 /// than at the next restart, and one message's outline cannot outlive the call that sent it.
@@ -55,7 +60,6 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
     private readonly OpenAiCompatibleClientFactory clientFactory;
     private readonly IHttpClientFactory transportFactory;
     private readonly IOutboundOperationRunner operationRunner;
-    private readonly IAiProviderHealthRecorder healthRecorder;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly IAgentInstructionEnvelope instructionEnvelope;
     private readonly ILoggerFactory loggerFactory;
@@ -69,7 +73,6 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
     /// <param name="clientFactory">Opens the provider client.</param>
     /// <param name="transportFactory">Supplies the named outbound transport that client speaks over.</param>
     /// <param name="operationRunner">Applies this deployment's outbound resilience to the call.</param>
-    /// <param name="healthRecorder">Records what the endpoint did, so the availability gate can read it.</param>
     /// <param name="egressGuard">Withholds from the provider whatever this deployment withholds.</param>
     /// <param name="instructionEnvelope">The preamble and postamble every agent here carries.</param>
     /// <param name="loggerFactory">The factory the composed agent and the resilience decorator log through.</param>
@@ -83,7 +86,6 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
         OpenAiCompatibleClientFactory clientFactory,
         IHttpClientFactory transportFactory,
         IOutboundOperationRunner operationRunner,
-        IAiProviderHealthRecorder healthRecorder,
         SensitiveContentEgressGuard egressGuard,
         IAgentInstructionEnvelope instructionEnvelope,
         ILoggerFactory loggerFactory,
@@ -96,7 +98,6 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
         ArgumentNullException.ThrowIfNull(clientFactory);
         ArgumentNullException.ThrowIfNull(transportFactory);
         ArgumentNullException.ThrowIfNull(operationRunner);
-        ArgumentNullException.ThrowIfNull(healthRecorder);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(instructionEnvelope);
         ArgumentNullException.ThrowIfNull(loggerFactory);
@@ -109,7 +110,6 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
         this.clientFactory = clientFactory;
         this.transportFactory = transportFactory;
         this.operationRunner = operationRunner;
-        this.healthRecorder = healthRecorder;
         this.egressGuard = egressGuard;
         this.instructionEnvelope = instructionEnvelope;
         this.loggerFactory = loggerFactory;
@@ -144,22 +144,24 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
             this.plan.MaximumRequestCharacters,
             this.plan.MaximumRequestImageOctets);
 
-        if (await this.AskAsync(turn, cancellationToken) is not { } answerText)
+        var answer = await this.AskAsync(turn, cancellationToken);
+
+        if (answer is not { Text: { } answerText })
         {
-            return this.Withhold(MailBodyCleaningWithholding.ProviderUnavailable);
+            return this.Withhold(MailBodyCleaningWithholding.ProviderUnavailable, answer?.Alias);
         }
 
         var segments = MailBodyCleanupReading.Read(answerText);
 
         if (segments.Count == 0)
         {
-            MailBodyCleanupEvents.LogAnswerUnreadable(this.logger, this.plan.Endpoint.Alias, body.Blocks.Count);
+            MailBodyCleanupEvents.LogAnswerUnreadable(this.logger, answer.Alias, body.Blocks.Count);
         }
         else
         {
             MailBodyCleanupEvents.LogProposed(
                 this.logger,
-                this.plan.Endpoint.Alias,
+                answer.Alias,
                 segments.Count,
                 body.Blocks.Count);
         }
@@ -217,52 +219,33 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
             [.. body.Blocks.Select((block, index) => block with { Opening = openings[index] })]);
     }
 
-    /// <summary>Makes the one provider call, answering with nothing where it failed.</summary>
+    /// <summary>Makes the provider call, against the fallback model too where the first could not answer, and answers with nothing where none could.</summary>
     /// <remarks>
     /// A failure is swallowed here rather than raised because the caller already has an outcome for that case, and the
     /// endpoint's own health record — which the resilience decorator wrote before this returned — is what a deployment's
     /// availability gate reads. A cancellation stays outside, being the reader withdrawing the wait rather than a provider
     /// failing to answer.
     /// </remarks>
-    private async Task<string?> AskAsync(string turn, CancellationToken cancellationToken)
+    private async Task<ChatModelAnswer?> AskAsync(string turn, CancellationToken cancellationToken)
     {
-        var endpoint = this.plan.Endpoint;
+        // One ledger for the whole chain, so a proposal that falls through to the fallback spends the run's
+        // single allowance across both attempts rather than opening a second one behind the first.
+        var runLedger = new MailAnsweringRunLedger(this.runBounds);
 
         try
         {
-            using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
-            using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
-            using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
-
-            using var resilientClient = new ResilientChatClient(
-                providerClient,
-                endpoint,
-                this.plan.RequestTimeout,
-                this.operationRunner,
-                this.healthRecorder,
-                this.loggerFactory.CreateLogger<ResilientChatClient>());
-
-            // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
-            // never reaches the endpoint's circuit, its concurrency budget, or its health record. The run ledger is this
-            // proposal's own — one open is one run — and the period ledger is the deployment's.
-            await using var chatClient = new BudgetedChatClient(
-                resilientClient,
-                new MailAnsweringRunLedger(this.runBounds),
-                this.spendLedger);
-
-            var agent = MailBodyCleanupAgentComposition.Compose(
-                chatClient,
+            return await ChatModelFallThrough.RunAsync(
                 this.plan,
-                this.instructionEnvelope,
-                this.loggerFactory);
-
-            var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
-
-            return response.Text;
+                this.logger,
+                (model, attemptToken) => this.AskModelAsync(model, turn, runLedger, attemptToken),
+                cancellationToken);
         }
-        catch (ChatGenerationFailedException)
+        catch (ChatGenerationFailedException failure)
         {
-            return null;
+            // The alias the chain's last model failed under, which is what a line about this outage has to name: the
+            // model asked first has a fallback behind it, so naming that one sends a reader to an endpoint that may be
+            // working. There is no text, which is what tells the caller nothing answered.
+            return new ChatModelAnswer(failure.EndpointAlias, Text: null);
         }
         catch (MailAnsweringBudgetExhaustedException)
         {
@@ -271,18 +254,61 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
             // about the message decided it.
             return null;
         }
-        catch (InvalidOperationException)
-        {
-            // The whole of what the credential source publishes: the alias names no endpoint the configuration in force
-            // declares, or the secret behind it did not resolve. It is also the one failure here that leaves no health
-            // record behind, the resilience decorator not yet existing to write one.
-            return null;
-        }
     }
 
-    private MailBodyCleaningProposal Withhold(MailBodyCleaningWithholding withholding)
+    /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
+    private async Task<ChatModelAnswer> AskModelAsync(
+        ChatGenerationPlan model,
+        string turn,
+        MailAnsweringRunLedger runLedger,
+        CancellationToken cancellationToken)
     {
-        MailBodyCleanupEvents.LogWithheld(this.logger, this.plan.Endpoint.Alias, withholding);
+        // Against this model's own bounds rather than the main model's, because a fallback may be declared
+        // narrower and a conversation too wide for it is refused here rather than sent and billed for.
+        ChatRequestBounds.RequireForAttempt([new ChatMessage(ChatRole.User, turn)], model);
+
+        var endpoint = model.Endpoint;
+
+        using var credential = await ChatModelCredential.ResolveAsync(this.credentialSource, endpoint, cancellationToken);
+        using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
+        using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
+
+        using var resilientClient = new ResilientChatClient(
+            providerClient,
+            endpoint,
+            model.RequestTimeout,
+            this.operationRunner,
+            UnreportedProviderHealth.Instance,
+            this.loggerFactory.CreateLogger<ResilientChatClient>());
+
+        // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
+        // never reaches the endpoint's circuit, its concurrency budget, or its health record. The run ledger is
+        // the proposal's own and is handed in, one open being one run however many models it was asked of.
+        await using var chatClient = new BudgetedChatClient(
+            resilientClient,
+            runLedger,
+            this.spendLedger);
+
+        var agent = MailBodyCleanupAgentComposition.Compose(
+            chatClient,
+            model,
+            this.instructionEnvelope,
+            this.loggerFactory);
+
+        var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
+
+        return new ChatModelAnswer(endpoint.Alias, response.Text);
+    }
+
+    /// <summary>Withholds, naming the model this attempt reached where one was reached at all.</summary>
+    /// <remarks>
+    /// A chain that failed outright failed at its last model, and the alias the capability was configured with names
+    /// the one asked first — an endpoint that may be working. Where nothing reached a model, that configured alias is
+    /// the only one there is and is what the line carries.
+    /// </remarks>
+    private MailBodyCleaningProposal Withhold(MailBodyCleaningWithholding withholding, string? answeringAlias = null)
+    {
+        MailBodyCleanupEvents.LogWithheld(this.logger, answeringAlias ?? this.plan.Endpoint.Alias, withholding);
 
         return MailBodyCleaningProposal.Withheld(withholding);
     }

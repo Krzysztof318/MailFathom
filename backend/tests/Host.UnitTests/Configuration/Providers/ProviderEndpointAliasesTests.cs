@@ -5,6 +5,7 @@
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Configuration.Providers;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Providers;
@@ -74,7 +75,7 @@ public sealed class ProviderEndpointAliasesTests
         // Act
         var reused = ProviderEndpointAliases.FindReusedAlias(
             EmbeddingsDeclaring("indexing"),
-            new ChatModelOptions { Model = "a-chat-model" });
+            DeclaredChatModels.Section(DeclaredChatModels.Model(alias: string.Empty)));
 
         // Assert
         Assert.Null(reused);
@@ -104,9 +105,6 @@ public sealed class ProviderEndpointAliasesTests
         return settings;
     }
 
-    private static ChatModelOptions ChatDeclaring(string alias) => new()
-    {
-        Alias = alias,
-        Model = "a-chat-model",
-    };
+    private static ChatModelOptions ChatDeclaring(string alias) =>
+        DeclaredChatModels.Section(DeclaredChatModels.Model(alias));
 }

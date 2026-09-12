@@ -131,14 +131,14 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
             plan.Intent,
             await this.GuardAsync(sources, cancellationToken));
 
-        var answerText = await this.AskAsync(turn, cancellationToken);
-        var composed = DiscoveryCompositionReading.Read(answerText, plan, sources, evidence, coverage);
+        var answer = await this.AskAsync(turn, cancellationToken);
+        var composed = DiscoveryCompositionReading.Read(answer?.Text, plan, sources, evidence, coverage);
 
-        if (answerText is not null)
+        if (answer is { Text: not null })
         {
             DiscoveryCompositionEvents.LogResultComposed(
                 this.logger,
-                this.plan.Endpoint.Alias,
+                answer.Alias,
                 composed.Blocks.Count,
                 composed.Citations.Count,
                 composed.Blocks[0].Evidence.Support);
@@ -201,7 +201,7 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
     /// be a composition that failed, which is the one thing this one does not do.
     /// </para>
     /// </remarks>
-    private async Task<string?> AskAsync(string turn, CancellationToken cancellationToken)
+    private async Task<ChatModelAnswer?> AskAsync(string turn, CancellationToken cancellationToken)
     {
         var endpoint = this.plan.Endpoint;
 
@@ -226,56 +226,77 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
 
         try
         {
-            // Opened per composition and released with it, so a rotated key is picked up by the next question and the
-            // material exists for one call rather than for process uptime.
-            using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
-            using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
-            using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
-
-            using var resilientClient = new ResilientChatClient(
-                providerClient,
-                endpoint,
-                this.plan.RequestTimeout,
-                this.operationRunner,
-                this.healthRecorder,
-                this.loggerFactory.CreateLogger<ResilientChatClient>());
-
-            // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
-            // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
-            // the run's and the period's: this call is one of the two a Discover run makes, and both are charged.
-            await using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
-
-            var agent = DiscoveryCompositionAgentComposition.Compose(
-                chatClient,
+            return await ChatModelFallThrough.RunAsync(
                 this.plan,
-                this.instructionEnvelope,
-                this.loggerFactory);
-
-            var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
-
-            if (string.IsNullOrWhiteSpace(response.Text))
+                this.logger,
+                (model, attemptToken) => this.AskModelAsync(model, turn, attemptToken),
+                cancellationToken);
+        }
+        catch (ChatGenerationFailedException failure)
+        {
+            // Both lines name the alias the chain's last model failed under rather than the one this composition was
+            // asked of, so a reader is sent to the endpoint that actually refused it. A credential kept its own line:
+            // an alias nothing declares and a secret that would not resolve are an operator's to correct, and reporting
+            // them as a provider that did not answer would send them looking at the provider.
+            if (failure.Failure is ChatGenerationFailure.CredentialRejected)
             {
-                DiscoveryCompositionEvents.LogResultUnreadable(this.logger, endpoint.Alias);
-
-                return null;
+                DiscoveryCompositionEvents.LogEndpointUnresolved(this.logger, failure.EndpointAlias);
+            }
+            else
+            {
+                DiscoveryCompositionEvents.LogGenerationFailed(this.logger, failure.EndpointAlias);
             }
 
-            return response.Text;
+            return new ChatModelAnswer(failure.EndpointAlias, Text: null);
         }
-        catch (ChatGenerationFailedException)
-        {
-            DiscoveryCompositionEvents.LogGenerationFailed(this.logger, endpoint.Alias);
+    }
 
-            return null;
-        }
-        catch (InvalidOperationException)
-        {
-            // The whole of what the credential source publishes: the alias names no endpoint the configuration in
-            // force declares, or the secret behind it did not resolve. It is also the one failure here that leaves no
-            // health record behind, the resilience decorator not yet existing to write one.
-            DiscoveryCompositionEvents.LogEndpointUnresolved(this.logger, endpoint.Alias);
+    /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
+    private async Task<ChatModelAnswer> AskModelAsync(
+        ChatGenerationPlan model,
+        string turn,
+        CancellationToken cancellationToken)
+    {
+        // Against this model's own bounds rather than the main model's, because a fallback may be declared
+        // narrower and a conversation too wide for it is refused here rather than sent and billed for.
+        ChatRequestBounds.RequireForAttempt([new ChatMessage(ChatRole.User, turn)], model);
 
-            return null;
+        var endpoint = model.Endpoint;
+
+        // Opened per composition and released with it, so a rotated key is picked up by the next question and the
+        // material exists for one call rather than for process uptime.
+        using var credential = await ChatModelCredential.ResolveAsync(this.credentialSource, endpoint, cancellationToken);
+        using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
+        using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
+
+        using var resilientClient = new ResilientChatClient(
+            providerClient,
+            endpoint,
+            model.RequestTimeout,
+            this.operationRunner,
+            this.healthRecorder,
+            this.loggerFactory.CreateLogger<ResilientChatClient>());
+
+        // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
+        // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
+        // the run's and the period's: this call is one of the two a Discover run makes, and both are charged.
+        await using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
+
+        var agent = DiscoveryCompositionAgentComposition.Compose(
+            chatClient,
+            model,
+            this.instructionEnvelope,
+            this.loggerFactory);
+
+        var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(response.Text))
+        {
+            DiscoveryCompositionEvents.LogResultUnreadable(this.logger, endpoint.Alias);
+
+            return new ChatModelAnswer(endpoint.Alias, Text: null);
         }
+
+        return new ChatModelAnswer(endpoint.Alias, response.Text);
     }
 }

@@ -453,6 +453,39 @@ public sealed class ProviderChatModelClientTests
         Assert.Contains(written, entry => entry.Contains("answering", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The failure line names the endpoint that actually failed. A chain that fell through raises from the model tried
+    /// last, so logging the alias the capability was configured with would name a model whose failure was already
+    /// reported and send whoever reads it to the wrong endpoint.
+    /// </summary>
+    [Fact]
+    public async Task AnswerAsync_AChainWhoseFallbackAlsoFailed_LogsTheFallbacksAlias()
+    {
+        // Arrange
+        using var recordingLoggers = new RecordingLoggerProvider();
+        using var provider = ScriptedProvider.Refusing(HttpStatusCode.TooManyRequests);
+
+        var chain = ChatDeclarations
+            .Plan()
+            .WithFallback(ChatDeclarations.Plan(ChatDeclarations.Endpoint("standby")));
+
+        var client = provider.ClientOver(
+            chain,
+            logger: recordingLoggers.CreateLogger(typeof(ProviderChatModelClient).FullName!));
+
+        // Act
+        await Record.ExceptionAsync(() => client.AnswerAsync(
+            [new(ChatRole.User, "what did they say")],
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        var failed = Assert.Single(
+            recordingLoggers.Records,
+            record => record.Level == LogLevel.Error);
+
+        Assert.Equal("standby", failed.Properties["EndpointAlias"]);
+    }
+
     /// <summary>The parameters are the deployment's, so a request carries the declared budget rather than the library's default.</summary>
     [Fact]
     public async Task AnswerAsync_ADeclaredOutputBudget_ReachesTheRequest()

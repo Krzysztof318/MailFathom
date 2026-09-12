@@ -19,6 +19,7 @@
     <Compile Include="..\shared\FakeHttpMessageHandler.cs" Link="FakeHttpMessageHandler.cs" />
     <Compile Include="..\shared\RecordedHttpRequest.cs" Link="RecordedHttpRequest.cs" />
     <Compile Include="..\shared\RecordingLoggerProvider.cs" Link="RecordingLoggerProvider.cs" />
+    <Compile Include="..\shared\RecordingLoggerFactory.cs" Link="RecordingLoggerFactory.cs" />
     <Compile Include="..\shared\SyntheticMailUser.cs" Link="SyntheticMailUser.cs" />
     <!-- Every boundary holding a guarded egress point asserts the same three states of the guard, so the three are
          built once and linked into each suite that has one. -->

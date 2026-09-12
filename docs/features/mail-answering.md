@@ -648,7 +648,7 @@ One entry per account in the run's scope, so a question asked across two mailbox
 identifier and naming only its own account's mail. An entry carries:
 
 - the emails of that account the run retrieved, in the order it first reached each, and which of them the answer cited;
-- the chat endpoint alias the run was conducted through, and the version of the instruction it was conducted under;
+- the alias of the chat model the run was conducted through — the fallback where the declared model could not answer and a fallback did — and the version of the instruction it was conducted under;
 - when the run began and when it ended;
 - how it ended, and how it degraded.
 

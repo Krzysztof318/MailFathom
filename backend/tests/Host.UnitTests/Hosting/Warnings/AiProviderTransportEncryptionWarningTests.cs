@@ -118,14 +118,13 @@ public sealed class AiProviderTransportEncryptionWarningTests
         Assert.Empty(logs.Records);
     }
 
-    /// <summary>A chat section carrying an address but no alias declares no endpoint, so there is no hop to describe.</summary>
+    /// <summary>A chat section declaring no model has no hop to describe, which is the deployment that generates nothing.</summary>
     [Fact]
     public async Task StartAsync_AChatSectionDeclaringNoEndpoint_SaysNothing()
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var chat = new ChatModelOptions { Address = "http://model-server:8000/v1" };
-        var warning = WarningOver(new EmbeddingOptions(), chat, logs);
+        var warning = WarningOver(new EmbeddingOptions(), new ChatModelOptions(), logs);
 
         // Act
         await warning.StartAsync(TestContext.Current.CancellationToken);
@@ -171,13 +170,8 @@ public sealed class AiProviderTransportEncryptionWarningTests
         return settings;
     }
 
-    private static ChatModelOptions ChatReachedAt(string alias, string address) => new()
-    {
-        Alias = alias,
-        Model = "a-chat-model",
-        Address = address,
-        Unauthenticated = true,
-    };
+    private static ChatModelOptions ChatReachedAt(string alias, string address) =>
+        DeclaredChatModels.Section(DeclaredChatModels.Model(alias, address: address, authenticated: false));
 
     private static AiProviderTransportEncryptionWarning WarningOver(
         EmbeddingOptions embeddings,

@@ -160,7 +160,7 @@ nine refusals where none did. The stored row names whichever word applies beside
 | `NotActivated` | `Embeddings:ImageDescription:Enabled` is off, so no octets left this deployment | Turn it on, having read what it sends and to whom |
 | `FormatNotSupported` | The octets are not one of the raster formats a request may carry | Nothing; the attachment is not a picture this can send |
 | `FormatExcluded` | The octets are a markup document — an SVG among them — rather than a raster picture | Nothing; rendering one is executing a document somebody else composed |
-| `ImageTooLarge` | The attachment holds more octets than one of the two ceilings it passes: `Embeddings:AttachmentText:MaxInputOctets`, which bounds what any attachment may cost to read, or `Chat:MaxRequestImageOctets`, which bounds what one request may carry | Raise whichever of the two refused it — the attachment ceiling is checked first, and neither constrains the other — deliberately, having seen what one request then costs |
+| `ImageTooLarge` | The attachment holds more octets than one of the two ceilings it passes: `Embeddings:AttachmentText:MaxInputOctets`, which bounds what any attachment may cost to read, or the answering model's `MaxRequestImageOctets`, which bounds what one request may carry | Raise whichever of the two refused it — the attachment ceiling is checked first, and neither constrains the other — deliberately, having seen what one request then costs |
 | `PixelGridTooLarge` | The image's header declares a grid larger than `Embeddings:ImageDescription:MaxPixels` | Raise the ceiling, or treat a file declaring an enormous grid as one worth looking at |
 | `ImageUnreadable` | The octets name a supported format and do not hold one | Nothing; truncated and malformed pictures are expected of real mail |
 | `ProviderTimedOut` | The request outlived the time one chat call is allowed | Raise the timeout, or accept that the message is read again on a later run |
@@ -260,7 +260,7 @@ for a bill nothing extracted. What a picture still costs is `MaxInputOctetsPerEm
 which bound what a walk reads whichever port ends up with it.
 
 **A picture refused before the call is charged nothing.** A format outside the allow-list, a grid past `MaxPixels`, a
-file past `Chat:MaxRequestImageOctets`, and a header that does not hold the format it claims are all decided here, so
+file past the answering model's `MaxRequestImageOctets`, and a header that does not hold the format it claims are all decided here, so
 no request leaves and no unit is spent. A provider that timed out, was unavailable, or refused *is* charged one call,
 because the request was made and a provider bills for having been asked.
 

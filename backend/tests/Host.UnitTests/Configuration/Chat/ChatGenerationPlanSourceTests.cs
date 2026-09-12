@@ -94,9 +94,6 @@ public sealed class ChatGenerationPlanSourceTests
         Assert.Contains("declared at registration", refusal.Message, StringComparison.Ordinal);
     }
 
-    private static ChatModelOptions Declaring(string model) => new()
-    {
-        Alias = "answering",
-        Model = model,
-    };
+    private static ChatModelOptions Declaring(string model) =>
+        DeclaredChatModels.Section(DeclaredChatModels.Model(model: model));
 }

@@ -59,7 +59,7 @@ internal sealed class OpenAiCompatibleClientFactory
         ArgumentNullException.ThrowIfNull(credential);
         ArgumentNullException.ThrowIfNull(transport);
 
-        var options = BuildClientOptions(endpoint.Address, transport);
+        var options = BuildClientOptions(endpoint.Address, transport, credential);
 
         // OPENAI001 marks the authentication-policy constructor as evaluation-only. It is nonetheless the supported
         // shape: it is what Microsoft's own Azure OpenAI guidance shows for a Microsoft Entra credential, and the
@@ -116,7 +116,7 @@ internal sealed class OpenAiCompatibleClientFactory
         ProviderEndpointCredential credential,
         HttpClient transport)
     {
-        var options = BuildClientOptions(endpoint.Address, transport);
+        var options = BuildClientOptions(endpoint.Address, transport, credential);
 
 #pragma warning disable OPENAI001
         var client = credential.Kind is ProviderEndpointCredentialKind.ApiKey
@@ -141,7 +141,7 @@ internal sealed class OpenAiCompatibleClientFactory
         ProviderEndpointCredential credential,
         HttpClient transport)
     {
-        var options = BuildResponsesClientOptions(endpoint.Address, transport);
+        var options = BuildResponsesClientOptions(endpoint.Address, transport, credential);
 
         // The whole responses surface carries the evaluation-only marker in this release of the client library, the
         // adapter that publishes it as a chat client included, so the suppression covers the construction and the
@@ -210,11 +210,14 @@ internal sealed class OpenAiCompatibleClientFactory
             .Build();
 
     /// <summary>Builds the options a chat completions or embedding client is constructed with.</summary>
-    private static OpenAIClientOptions BuildClientOptions(Uri? address, HttpClient transport)
+    private static OpenAIClientOptions BuildClientOptions(
+        Uri? address,
+        HttpClient transport,
+        ProviderEndpointCredential credential)
     {
         var options = new OpenAIClientOptions();
 
-        ApplyPipeline(options, transport);
+        ApplyPipeline(options, transport, credential);
 
         if (address is not null)
         {
@@ -230,11 +233,14 @@ internal sealed class OpenAiCompatibleClientFactory
     /// with an <c>Endpoint</c> of their own each rather than as one type with a common base carrying it.
     /// </remarks>
 #pragma warning disable OPENAI001 // The responses option type is evaluation-only in this release of the client library.
-    private static ResponsesClientOptions BuildResponsesClientOptions(Uri? address, HttpClient transport)
+    private static ResponsesClientOptions BuildResponsesClientOptions(
+        Uri? address,
+        HttpClient transport,
+        ProviderEndpointCredential credential)
     {
         var options = new ResponsesClientOptions();
 
-        ApplyPipeline(options, transport);
+        ApplyPipeline(options, transport, credential);
 
         if (address is not null)
         {
@@ -245,15 +251,28 @@ internal sealed class OpenAiCompatibleClientFactory
     }
 #pragma warning restore OPENAI001
 
-    /// <summary>Puts every client of either role and either API on this deployment's transport, and takes its own retries away.</summary>
+    /// <summary>Puts every client of either role and either API on this deployment's transport, takes its own retries away, and writes whatever headers the endpoint declared.</summary>
     /// <remarks>
     /// Zero retries rather than a smaller number: the pipeline around the call owns repetition entirely, and a library
     /// layer beneath it would be invisible to the classification that decides what may be repeated.
+    /// <para>
+    /// The declared headers are added here rather than beside each construction, so both roles and both chat APIs carry
+    /// them by the same route the transport and the retry opt-out take. An endpoint that declared none adds no policy at
+    /// all, which keeps the common deployment's pipeline exactly what it was.
+    /// </para>
     /// </remarks>
-    private static void ApplyPipeline(ClientPipelineOptions options, HttpClient transport)
+    private static void ApplyPipeline(
+        ClientPipelineOptions options,
+        HttpClient transport,
+        ProviderEndpointCredential credential)
     {
         options.Transport = new HttpClientPipelineTransport(transport);
         options.RetryPolicy = new ClientRetryPolicy(maxRetries: 0);
+
+        if (credential.ExtraHeaders.Count > 0)
+        {
+            options.AddPolicy(new DeclaredRequestHeadersPolicy(credential.ExtraHeaders), PipelinePosition.PerCall);
+        }
     }
 
     /// <summary>Resolves the policy every request to one endpoint is sent under, for each shape that is not a key.</summary>

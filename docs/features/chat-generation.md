@@ -25,10 +25,10 @@ An instance may reasonably have one and not the other, so a single "AI is config
 directions. Writing neither section is a supported deployment: nothing is generated, no provider is called, no
 credential is needed, and every read path serves as it always did.
 
-A section carrying a model and a key but no `Alias` is the one shape startup refuses rather than passes over. It reads
-to an operator as a configured provider while nothing would ever call it.
+A section carrying a capability's settings and no model at all is the one shape startup refuses rather than passes
+over. It reads to an operator as a configured provider while nothing would ever call it.
 
-One declared endpoint serves more than one capability. Beside answering a question, it is what judges retrieved
+One declared model serves more than one capability. Beside answering a question, it is what judges retrieved
 candidates for relevance where a deployment turns that pass on — a block inside this section, off by default, described
 in [Mail answering § An optional second
 pass](mail-answering.md#an-optional-second-pass-the-model-decides-what-answers). It is also what reads a sentence
@@ -36,33 +36,85 @@ somebody typed into a search field into filters they can see and correct, which
 [Email search § A typed sentence becomes filters](email-search.md#a-typed-sentence-becomes-filters-rather-than-a-search-of-its-own)
 describes and [AI configuration § `Chat:SearchPhrasing`](../operations/configuration-ai.md#reading-a-typed-sentence-into-filters--chatsearchphrasing)
 turns off. Each capability is a separate decision
-over one endpoint, and every call any of them makes carries the parameters, the deadline, and the budget declared here.
+over the models declared here, and every call any of them makes carries the parameters, the deadline, and the budget the
+model it runs on declares.
 
-## One endpoint, not a chain
+## Declared models, and the references into them
+
+`Chat:Models` is an array. Each block is one model — its address, its credential, its parameters, its bounds — under an
+alias of its own, and a capability names that alias rather than restating any of it. Two capabilities routed to one
+model therefore share one declaration instead of two copies of it that can drift, and a deployment that wants the pass a
+reader waits in front of on a small fast model writes a second block rather than an override.
+
+**A deployment with one model writes one block and nothing else.** `Chat:MainModel` may be left unwritten where exactly
+one is declared, because there is nothing for it to choose between; where several are, it has to be written, since a
+section declaring two models and saying nothing has not stated which one answers.
+
+## A reference may name a fallback, and that is the whole of the chain
 
 The embedding declaration is an ordered chain because a fallback embedding endpoint is another route to *one vector
 space*: startup proves every endpoint of the chain declares the same geometry, so falling through cannot change what a
-vector means.
+vector means. Nothing proves that of two chat models, and this is the release that decided the trade differently
+anyway: a question answered by a second model in a second voice is better than a question not answered at all, and what
+makes it honest is that the run says which model answered.
 
-Nothing proves that of two chat models. Falling through would silently answer a person in a different model's voice,
-with different capabilities and different refusals, and nothing above this boundary could tell it had happened. So the
-chat declaration names one endpoint. An operator who wants failover puts a gateway in front of it, where the
-substitution is theirs and is visible to them.
+So a *reference* may carry a `Fallback` naming a second declared alias — never the model declaration itself, which is
+what bounds a chain at two links and makes a cycle unwritable. A model named as its own fallback is refused, and so is
+one that carries a fallback of its own.
 
-## The endpoint's name is what everything else calls it
+**Two failures are never worth a second model.** A request the provider *refused* is refused the same way by a second
+endpoint, for a second payment; an answer that came back empty is a call that succeeded and a model that had nothing to
+say. Everything else — a credential the endpoint rejected, a rate limit, a timeout, a faulted transport — is a statement
+about *that endpoint*, and the fallback is a different address under a different credential, which is what makes asking
+it worth the money. What is retried is opening a client and asking, rather than re-sending a message down a connection
+that failed.
 
-`Alias` is the deployment's own name for the endpoint. Everything else in the declaration is an address or a
-credential, and neither may be written down — an address identifies a tenant and a resource — so the alias is what a log
+A credential that could not be resolved at all is in that second group, and deliberately: an alias naming no declared
+model, or a secret reference nothing provisions, is a model this deployment cannot use until somebody corrects it, which
+is the clearest case there is for asking the one behind it. The fall-through warning names it like any other, and the
+log line about the endpoint says a credential rather than a provider is what an operator has to fix.
+
+**A fallback is asked against its own bounds, not the main model's.** `MaxMessagesPerRequest`,
+`MaxRequestCharacters`, and `MaxRequestImageOctets` belong to the block that declares them, so a conversation the main
+model admits may be wider than the fallback behind it accepts. That call is refused before it is sent rather than sent
+and paid for, and it is refused as the fallback's own failure — the same classification a provider rejecting the request
+would have produced, which is one the chain does not fall through on. Declare a fallback at least as wide as the model
+in front of it where the point is for it to answer everything that model would have.
+
+**One question is one run however many models it was asked of.** The run's allowance — the provider calls and the tokens
+`Ask` bounds a single question by — is spent across the whole chain rather than reopened behind each model, so a
+fallback attempt continues the run instead of starting a second one. A deployment whose allowance is already spent when
+the main model fails gets no fallback attempt, which is the ceiling working rather than the fallback failing.
+
+**The answering run is attributed to the model that answered it.** A question the fallback served names the fallback in
+the run's own record, by alias and by that block's own `PublishedModel`, because a cost record naming a model the
+deployment never called is worse than no record at all.
+
+**Every capability's outcome line names the model that answered it**, not the alias the capability was configured
+with. A fallback producing a cleaning proposal, an enrichment mark, a reply draft, a search reading, a thread state, a
+Discover plan or a Discover composition is named as the fallback in the line that reports it, and a chat call that
+failed is reported against the endpoint that failed rather than the one asked first.
+
+**A Discover run's opening event is the one place that still names the model the run *began* against.** It is sent
+before anything has been composed — which is the point of it, a person waiting for an answer being told which model is
+about to produce one — so it cannot know that the model would fail and the fallback would answer. What shows that is
+the warning written on the fall-through, and the run's own record.
+
+## A model's name is what everything else calls it
+
+`Alias` is the deployment's own name for a model. Everything else in a block is an address or a credential, and neither
+may be written down — an address identifies a tenant and a resource — so the alias is what a log
 line, a metric tag, a resilience circuit, and a failure message carry instead.
 
-**An alias names one endpoint across the whole deployment.** A chat endpoint reusing an embedding endpoint's alias is
-refused at startup and again on every reloaded declaration, because the alias is what a credential is resolved by, what
-a resilience circuit is keyed by, and what every log line naming an endpoint carries. Two endpoints answering to one
-name would share all three, so a chat outage would open the circuit the embeddings were being served through.
+**An alias names one endpoint across the whole deployment.** A chat model reusing another chat model's alias, or an
+embedding endpoint's, is refused at startup and again on every reloaded declaration, because the alias is what a
+credential is resolved by, what a resilience circuit is keyed by, and what every log line naming an endpoint carries.
+Two endpoints answering to one name would share all three, so a chat outage would open the circuit the embeddings were
+being served through.
 
 ## An endpoint is any service that speaks the OpenAI wire protocol
 
-The declared endpoint is reached through the same client construction the embedding adapter uses, and nothing in the
+Each declared model is reached through the same client construction the embedding adapter uses, and nothing in a
 declaration is a compile-time constant: the model, the address, the API, the output budget, and the sampling parameters
 are all read from configuration. Pointing this deployment at a different service is therefore a configuration entry
 rather than a feature request.
@@ -103,25 +155,70 @@ The names are placeholders, and nothing in the declaration is matched against a 
 ```json
 {
   "Chat": {
-    "Alias": "house-chat",
-    "Model": "example-chat-2",
-    "Api": "ChatCompletions",
-    "Address": "https://chat.example.test/v1",
-    "MaxOutputTokens": 2048,
-    "ApiKey": {
-      "Name": "house-chat-key",
-      "SecretReference": "file:/etc/mailfathom/secrets/house-chat-key"
+    "Models": [
+      {
+        "Alias": "house-chat",
+        "Model": "example-chat-2",
+        "Api": "ChatCompletions",
+        "Address": "https://chat.example.test/v1",
+        "MaxOutputTokens": 2048,
+        "ApiKey": {
+          "Name": "house-chat-key",
+          "SecretReference": "file:/etc/mailfathom/secrets/house-chat-key"
+        }
+      }
+    ]
+  }
+}
+```
+
+Read across it: `Alias` is what every log line, metric tag, and circuit calls this model, and it may not repeat an
+alias another model or an embedding endpoint declared, because one credential source resolves both sections; `Model` is
+what the request routes on, written as the service knows it rather than as a vendor's catalogue spells it; `Address`
+carries the whole base path the service documents for its OpenAI-compatible surface, including any version segment;
+`Api` says which path under that address a request goes to, and it is the setting most likely to need changing for a
+service that serves only one of the two; and `MaxOutputTokens` bounds what a single answer may cost, which no provider
+default does. Nothing names `Chat:MainModel`, because one model is declared and there is nothing to choose between.
+
+### A worked example: a second model behind the first
+
+The second block is an ordinary declaration — its own address, its own credential, its own bounds — and what makes it a
+fallback is the reference rather than anything in the block:
+
+```json
+{
+  "Chat": {
+    "Models": [
+      {
+        "Alias": "house-chat",
+        "Model": "example-chat-2",
+        "Address": "https://chat.example.test/v1",
+        "ApiKey": { "SecretReference": "file:/etc/mailfathom/secrets/house-chat-key" },
+        "ExtraHeaders": [
+          {
+            "Name": "X-Tenant",
+            "Value": { "SecretReference": "file:/etc/mailfathom/secrets/house-chat-tenant" }
+          }
+        ]
+      },
+      {
+        "Alias": "standby-chat",
+        "Model": "example-chat-1",
+        "Address": "https://standby.example.test/v1",
+        "ApiKey": { "SecretReference": "file:/etc/mailfathom/secrets/standby-chat-key" }
+      }
+    ],
+    "MainModel": {
+      "Alias": "house-chat",
+      "Fallback": "standby-chat"
     }
   }
 }
 ```
 
-Read across it: `Alias` is what every log line, metric tag, and circuit calls this endpoint, and it may not repeat an
-alias an embedding endpoint declared, because one credential source resolves both sections; `Model` is what the request
-routes on, written as the service knows it rather than as a vendor's catalogue spells it; `Address` carries the whole
-base path the service documents for its OpenAI-compatible surface, including any version segment; `Api` says which path
-under that address a request goes to, and it is the setting most likely to need changing for a service that serves only
-one of the two; and `MaxOutputTokens` bounds what a single answer may cost, which no provider default does.
+A question the first model could not answer — a rejected credential, a rate limit, a timeout, a faulted transport — is
+asked of the second, and the run reports that the second answered it. A question the first model *refused*, or answered
+with nothing, ends there.
 
 Whether such an endpoint can serve `ask_mail` at all is a separate question from whether it answers: the run offers the
 model function tools and the model calls them when it decides it needs mail, so a service or model that cannot be given
@@ -186,6 +283,25 @@ shapes](embedding-generation.md#authentication-has-three-shapes) states them in 
 written rather than left out. One credential source resolves both sections, keyed by the alias, which is what the
 deployment-wide uniqueness rule above exists to make safe.
 
+## A model may declare headers of its own
+
+`ExtraHeaders` is a list of name and value pairs a model sends on every request beside whatever the credential writes.
+It is the shape a gateway fronting several models asks for: a tenant, a project, or a routing key that decides which
+model answers. It is declared per model rather than once for the section, because the gateway one model is reached
+through is not the server another one is, and it is empty for the ordinary deployment that reaches its model directly.
+
+**The value is a secret reference rather than a string.** What goes in one of these is a routing token or a tenant
+identifier — material of the same kind as the key beside it — so it is resolved per request, kept out of the
+configuration file, and found by the same secret discovery that finds every other credential this deployment holds. A
+reference nothing provisions takes the model out of service rather than sending the request without the header, because
+a gateway reading that header would route the call somewhere else.
+
+**What a header may be called is bounded.** It has to be a field name as RFC 9110 defines one, and it may not be one the
+request writes for itself: `Authorization` is the credential's own, and `Host`, `Content-Length`, `Content-Type`, and
+`Transfer-Encoding` frame the message. Both rules are checked at startup, because the header collections validate on the
+way in and report a bad name as an exception at the point of use — which for a configured value means a start that
+succeeded and a provider call that threw.
+
 ## The model and its parameters come from configuration
 
 None of them is a compile-time constant, so changing model is an edit rather than a rebuild and a model released after
@@ -237,22 +353,24 @@ What that means in practice:
 - **The next question uses the edited declaration.** Every key of the endpoint is in this — the model, the address, the
   API, the parameters, the bounds, the deadline, the credential reference, and the relevance filter's two numbers.
 - **A question already in flight keeps the declaration it began with.** A run resolves the declaration once and holds it
-  until it answers, so a reload landing mid-run cannot answer half of one question in one model's voice and half in
-  another's — which is the same thing the one-endpoint rule above exists to prevent.
+  until it answers, so a reload landing mid-run cannot answer half of one question against one declaration and half
+  against another.
 - **A candidate that breaks a rule is refused whole.** Everything startup checks is checked again: the bounds, the
   section's own rules, the deployment-wide alias uniqueness, the filter's agreement with what a retrieval hands over,
   and whether the credential reference still resolves. A refused candidate is logged with the key an operator has to
   fix, the previous declaration goes on answering, and the process stays up — which is what makes correcting a mistake
   in a correction possible at all.
-- **Five things still take a restart**, because each decided which services this deployment registered: whether `Alias`
-  names an endpoint at all, whether the relevance filter runs, whether arriving mail is derived from — the switch
+- **Six things still take a restart**, because each decided which services this deployment registered: whether
+  `Chat:Models` declares a model at all, whether the relevance filter runs, whether arriving mail is derived from — the switch
   [message enrichment](message-enrichment.md) is turned on with — whether a correspondence is derived from, the switch
-  [a conversation's state](thread-state.md) is turned on with, and whether a typed sentence is read into filters, the
+  [a conversation's state](thread-state.md) is turned on with, whether a typed sentence is read into filters, the
   switch [AI configuration § `Chat:SearchPhrasing`](../operations/configuration-ai.md#reading-a-typed-sentence-into-filters--chatsearchphrasing)
-  describes. Going from no chat section to one is therefore a restart, and so is turning the second pass, either
-  derivation, or the sentence reading on or off. Each is refused with that message
-  rather than adopted and quietly ignored. *Renaming* a declared alias is not one of them — the credential and the circuit are looked up by
-  whatever the declaration in force calls the endpoint.
+  describes, and whether a reply is drafted, which `Chat:ReplyDrafting:Enabled` decides. Going from no chat section to
+  one is therefore a restart, and so is turning the second pass, either derivation, the sentence reading, or the reply
+  drafting on or off. Each is refused with that message
+  rather than adopted and quietly ignored. Declaring a *further* model, renaming one, and moving which alias a capability
+  names are none of them — the credential and the circuit are looked up by whatever the declaration in force calls a
+  model.
 
 [ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md)
 classifies this group as reloadable for new operations and states the rules a reloadable group follows;
@@ -362,6 +480,20 @@ right — so an *answer empty* failure records `Serving` rather than moving the 
 because it is the one case where a failing capability leaves a healthy-looking provider: a deployment whose model
 answers with nothing every time reports `Serving` indefinitely, and what shows the problem is the failures themselves
 in the log, not this state. Every other classification in the table above moves the state.
+
+**A fallback answering leaves the role healthy, and that is the right answer for the question the state is asked.**
+Health is recorded per role rather than per alias, so a deployment whose main model could not be reached and whose
+fallback answered records `Serving`: the deployment *can* answer questions, which is what withholds or offers
+`ask_mail`. What the state does not show is that the first model is failing, and the warning written on every
+fall-through — naming both aliases and the failure that caused it — is what does.
+
+**The body-cleanup pass records nothing, because the state it would write is not about it.** `Chat:BodyCleanup:Model`
+may name a model of its own, at its own address and under its own credential, and the chat role's state is what decides
+whether `ask_mail` is offered. A cleaning endpoint failing says nothing about whether questions can be answered, so
+recording it there would take a working `ask_mail` out of service on the strength of an endpoint no question is ever
+sent to. What shows a cleaning endpoint failing is the failures themselves in the log, and the reader being shown the
+message uncleaned and told so. Where the pass names the answering model anyway, that endpoint's state is already
+written by the questions themselves.
 
 **Nothing probes a provider to find out.** A paid call made to answer a health check would spend an operator's money on
 every scrape, and the answer would be about a request nobody asked for. What is reported is the outcome of the last real
