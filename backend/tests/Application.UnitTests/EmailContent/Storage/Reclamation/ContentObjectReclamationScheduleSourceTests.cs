@@ -31,9 +31,14 @@ public sealed class ContentObjectReclamationScheduleSourceTests
         Assert.Same(recurrence, declared.Recurrence);
     }
 
-    /// <summary>The dispatched segment begins the listing, and the chain after it is what carries the rest.</summary>
+    /// <summary>The dispatched segment begins the listing and already names the sweep the chain after it carries.</summary>
+    /// <remarks>
+    /// Naming it here is what keeps the identity out of the attempt. The document the enqueue commits is what every
+    /// execution of that leased segment reads, so a repeated attempt hands the rest of the sweep on under one key
+    /// instead of minting a second sweep and forking the chain.
+    /// </remarks>
     [Fact]
-    public async Task ReadSchedulesAsync_AConfiguredInterval_DispatchesTheSegmentThatBeginsTheListing()
+    public async Task ReadSchedulesAsync_AConfiguredInterval_DispatchesTheSegmentThatBeginsTheListingAndNamesItsSweep()
     {
         // Arrange
         var recurrence = RecurrenceOf("Every 06:00:00");
@@ -45,7 +50,25 @@ public sealed class ContentObjectReclamationScheduleSourceTests
         // Assert
         var payload = Assert.IsType<ReclaimContentObjectsJobPayload>(schedules[0].Payload);
         Assert.Null(payload.ResumeFrom);
-        Assert.Null(payload.SweepId);
+        Assert.Equal(0, payload.Segment);
+        Assert.NotEmpty(payload.SweepId);
+    }
+
+    /// <summary>Two occasions are two sweeps, or one would be answered with the chain the other was already walking.</summary>
+    [Fact]
+    public async Task ReadSchedulesAsync_ReadTwice_NamesASweepOfItsOwnEachTime()
+    {
+        // Arrange
+        var source = new ContentObjectReclamationScheduleSource(RecurrenceOf("Every 06:00:00"));
+
+        // Act
+        var one = await source.ReadSchedulesAsync(TestContext.Current.CancellationToken);
+        var another = await source.ReadSchedulesAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotEqual(
+            ((ReclaimContentObjectsJobPayload)one[0].Payload).SweepId,
+            ((ReclaimContentObjectsJobPayload)another[0].Payload).SweepId);
     }
 
     /// <summary>The identity keys the schedule's durable state, so it has to mean the same thing on every instance.</summary>

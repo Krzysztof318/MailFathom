@@ -26,7 +26,9 @@ namespace MailFathom.Application.EmailContent.Storage.Reclamation;
 /// <para>
 /// Running it twice with one payload is the same as running it once. Removing an object nothing holds succeeds, and the
 /// decision the run makes about each object is read from the endpoint and the database at the moment it makes it, so a
-/// second attempt over one segment removes what the first did not reach and nothing else.
+/// second attempt over one segment removes what the first did not reach and nothing else. The hand-on is the same
+/// either way: the sweep and the place in it are read from the payload the enqueue committed rather than composed here,
+/// so a repeated attempt enqueues the key the first one did and is answered with the segment already waiting.
 /// </para>
 /// <para>
 /// A deployment that stores content in the database has no bucket and reclaims nothing. The job type is still known to

@@ -42,7 +42,7 @@ public sealed class JobPayloadDocumentTests
         RecurringSendJobPayload.For(
             Account,
             RecurringSendId.Create(Guid.Parse("6f9619ff-8b86-d011-b42d-00c04fc964ff"))),
-        ReclaimContentObjectsJobPayload.FromTheStart(),
+        ReclaimContentObjectsJobPayload.FromTheStart("sweep-of-the-occasion"),
     ];
 
     /// <summary>
@@ -161,7 +161,7 @@ public sealed class JobPayloadDocumentTests
     public void Serialize_ASweepSegment_WritesThePositionAndReadsItBackAsTheSameSegment()
     {
         // Arrange
-        var payload = ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("half-way", TimeSpan.FromDays(9));
+        var payload = ReclaimContentObjectsJobPayload.FromTheStart("sweep-of-the-occasion").ContinuingFrom("half-way", TimeSpan.FromDays(9));
 
         // Act
         var document = JobPayloadDocument.Serialize(payload);
@@ -170,6 +170,24 @@ public sealed class JobPayloadDocumentTests
         // Assert
         Assert.Equal(payload, restored);
         Assert.Contains("\"resumeFrom\":\"half-way\"", document, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A segment naming no sweep is refused rather than resolved, which is what keeps a repeated attempt from handing
+    /// the rest of a sweep on under a name nobody dispatched.
+    /// </summary>
+    /// <remarks>
+    /// The shape a previous release wrote for the segment a schedule dispatched, which carried the position and no
+    /// sweep at all. The refusal costs one reclamation interval and no unswept object, because the occasion after it
+    /// dispatches a sweep of its own; resolving it instead would put the identity back inside the attempt.
+    /// </remarks>
+    [Fact]
+    public void Deserialize_ASweepSegmentNamingNoSweep_IsRefusedRatherThanResolved()
+    {
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() => JobPayloadDocument.Deserialize(
+            JobType.ReclaimContentObjects,
+            """{"segment":0}"""));
     }
 
     /// <summary>Every declared type is one this store can write, or a job of it is enqueueable and unstorable.</summary>

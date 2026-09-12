@@ -819,6 +819,14 @@ so a queue already at its configured depth ends the attempt rather than being re
 segment is attempted again once the queue has drained. Two runs overlapping cannot delete an object twice or
 miss one — the job's lease admits one worker, and removing an object already gone is not an error.
 
+**A sweep is named by the occasion that dispatched it, and the name is what keeps a chain one chain.** The schedule
+writes the identity into the first segment's own record at the moment it enqueues it, so every segment of that chain is
+keyed by a sweep the deployment can point at rather than by one an attempt invented. That matters because an attempt can
+run twice over one segment — the work succeeds and the record of it does not — and a name minted inside the attempt
+would differ between the two, hand the same position to two keys, and leave two chains walking one bucket. Reading it
+from the record instead means the repeat composes the key the first attempt already used and is answered with the
+segment that is waiting. Two occasions are two names, so consecutive sweeps are never answered with each other's work.
+
 Three things bound what it may touch, and each is deliberate:
 
 - **The configured key prefix is its whole authority.** It lists beneath `ContentStorage:ObjectStorage:KeyPrefix` and
