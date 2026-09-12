@@ -54,7 +54,7 @@ message eventually wants durability and an upgrade path that a claim does not pr
 database.deploy.enabled=false and name a server you operate when it does.
 {{ end }}
 {{ if .Values.contentStorage.objectStorage.deploy.enabled }}
-The object store is this release's own: one Silo node on one claim, retained when the release is uninstalled.
+The object store is this release's own: {{ if gt (int .Values.contentStorage.objectStorage.deploy.replicas) 1 }}a pool of {{ int .Values.contentStorage.objectStorage.deploy.replicas }} Silo pods, one claim each, whose width is fixed now rather than raised later{{ else }}one Silo node on one claim{{ end }}, retained when the release is uninstalled.
 {{- if .Values.contentStorage.objectStorage.deploy.console.enabled }}
 Its console is served, on a Service port no Ingress publishes: reach it with a deliberate port-forward, and know that
 what authenticates at it is the root credential, which is the whole store rather than the one bucket.

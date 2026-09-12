@@ -123,8 +123,8 @@ and [its Quadlet unit](../operations/deployment-quadlet.md#the-signal-backplane)
   runs no object store, and the endpoint needs an `https` address and a credential of its own — an access key identifier
   and its secret, both provisioned as [secret references](../operations/secret-provisioning.md) like every other
   credential. The endpoint can be one you rent, one you already run, or one the deployment starts beside MailFathom:
-  each of the three shapes can run a single-node store for you, off unless you ask. Its bucket exists before the first
-  start either way; nothing here creates one.
+  each of the three shapes can run a single-node store for you, and the Kubernetes one can run a pool of them, off
+  unless you ask. Its bucket exists before the first start either way; nothing here creates one.
   [Choosing where message content lives](#choosing-where-message-content-lives) is the rest of it.
 - **An IMAP account to synchronize** and its password or app password, provisioned as a
   [secret reference](../operations/secret-provisioning.md) rather than written into configuration. The account itself
@@ -251,7 +251,9 @@ does not already run object storage would otherwise have nothing to name, so eve
 [Silo](https://github.com/pgsty/silo) beside the product — a switch in the chart's values, a Compose profile, an extra
 Quadlet unit — off in every default, and one node on one volume rather than anything replicated. It answers over TLS
 with a certificate you supply, its administrative console is not served, and the bucket and the access key MailFathom
-presents are created once by you rather than by any of it.
+presents are created once by you rather than by any of it. The Kubernetes shape goes one step further and will run it
+as a pool of up to sixteen pods, which is erasure coding across them rather than one drive; the other two stay one
+container on one volume, and an operator wanting more than that there runs the store themselves.
 [Kubernetes](../operations/deployment-kubernetes.md#running-the-object-store-beside-mailfathom),
 [Compose](../operations/deployment-compose.md#running-an-object-store-beside-mailfathom), and
 [Quadlet](../operations/deployment-quadlet.md#running-an-object-store-beside-mailfathom) each state what that takes.

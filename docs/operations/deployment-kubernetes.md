@@ -11,7 +11,7 @@ operates the cluster, and the chart is written so that it cannot pretend otherwi
 | Deployment, Service, ConfigMap, ServiceAccount | Any `Secret` |
 | A PostgreSQL StatefulSet, its Service, and its initialization script, unless `database.deploy.enabled` is false | Any certificate material |
 | A personal-data analyzer Deployment and Service, and a SpamAssassin Deployment and Service, only when the section that owns each is enabled and left to deploy its own | Any schema step |
-| A Silo object-store StatefulSet, its claim, and its Service, only when `contentStorage.objectStorage.deploy.enabled` is true | Any bucket, or any access key inside one |
+| A Silo object-store StatefulSet, a claim per pod, its Service, and a headless Service of its own where it runs as a pool, only when `contentStorage.objectStorage.deploy.enabled` is true | Any bucket, or any access key inside one |
 | A Valkey StatefulSet and two Services for the signal backplane, only when `signalBackplane.enabled` and `.valkey.deploy` are both true | |
 | A PodDisruptionBudget for the application pods, at any replica count, unless `podDisruptionBudget.enabled` is false | Any HorizontalPodAutoscaler, or any metric-driven scaling |
 | An optional Ingress | |
@@ -680,8 +680,11 @@ rather than whichever one the Service names.
 a restart brings nothing back; the two volumes each pod carries are memory-backed scratch the server needs.
 
 **What this does not give you.** Valkey Cluster is not offered and is not on the roadmap here: the backplane holds
-subscriptions rather than a keyspace, so there is nothing to shard. Neither PostgreSQL nor the object store the chart
-runs is made highly available by any of this; both stay one instance under the posture their own sections state.
+subscriptions rather than a keyspace, so there is nothing to shard. PostgreSQL is not made highly available by any of
+this and stays one instance under the posture its own section states. The object store is the one exception among the
+three, and it is its own setting rather than this one:
+[running it as a pool](#running-the-object-store-as-a-pool) gives it erasure coding across several pods, and the
+backplane's replication has nothing to do with that.
 
 ## Security defaults
 
@@ -839,8 +842,10 @@ application pod may restart a few times before the scanner is ready. `resources`
 The raw MIME of every message lives in PostgreSQL beside the metadata unless `contentStorage.backend` says otherwise.
 Setting it to `objectStorage` writes new payloads into an S3-compatible bucket instead; the metadata, the indexes, the
 embeddings, and every job still run through PostgreSQL, so this is a decision about payload bytes and about nothing
-else. The endpoint is one you operate or rent, or — since the chart can run one beside MailFathom — the one
-[the next section](#running-the-object-store-beside-mailfathom) installs. Either way the bucket exists before
+else. There are three shapes and you pick one: an endpoint you already operate or rent, which is what this section
+describes and what the chart does by default; one Silo node the chart runs beside MailFathom, which
+[the next section](#running-the-object-store-beside-mailfathom) installs; or a pool of Silo pods the chart runs, which
+[the section after it](#running-the-object-store-as-a-pool) installs. Whichever it is, the bucket exists before
 MailFathom writes to it: nothing in the chart creates one.
 
 Off is the default, and the chart writes nothing at all on it — a rendering that sets none of this is byte for byte a
@@ -889,18 +894,18 @@ longer names leaves the pod unready rather than the mail unreadable, which is th
 ### Running the object store beside MailFathom
 
 An operator who wants payload bytes out of PostgreSQL and does not already run object storage has nothing to point the
-setting above at. `contentStorage.objectStorage.deploy.enabled` is that answer: the chart installs one
-[Silo](https://github.com/pgsty/silo) node on a retained claim, with a Service of its own, and derives the endpoint from
-it. Silo is PGSTY's maintained fork of the open-source MinIO server, keeping one release line alive after upstream ended
+setting above at. `contentStorage.objectStorage.deploy.enabled` is that answer: the chart installs
+[Silo](https://github.com/pgsty/silo) on retained claims, with a Service of its own, and derives the endpoint from it.
+Silo is PGSTY's maintained fork of the open-source MinIO server, keeping one release line alive after upstream ended
 community distribution — the same image, at the same pin, that the Compose deployment, the Quadlet units, and the
 [integration suite](local-development.md#the-object-storage-endpoint) use, so what runs here is the server the S3
 adapter was verified against.
 
-**One node, one volume, and that is the whole of it.** No erasure coding, no second node, no replication, no failover.
-What it protects against is a pod being replaced; a disk that fails takes the payloads with it, which is what makes
-[the backup order below](#what-you-now-back-up-and-in-which-order) the thing standing between this and losing them. Once
-durability, replication, or a growth path past one volume is somebody's job, this is the arrangement to leave behind —
-exactly as `database.deploy.enabled` is for PostgreSQL.
+**By default it is one node on one volume, and that is the whole of it.** No erasure coding, no second node, no
+replication, no failover. What it protects against is a pod being replaced; a disk that fails takes the payloads with
+it, which is what makes [the backup order below](#what-you-now-back-up-and-in-which-order) the thing standing between
+this and losing them. [Running it as a pool](#running-the-object-store-as-a-pool) is the other shape the chart renders,
+and an endpoint somebody else operates stays the third.
 
 ```yaml
 contentStorage:
@@ -1021,6 +1026,67 @@ cluster pulls from PGSTY's own registry. Silo is AGPL-3.0-or-later, which
 together with the reading it is used under. Its own lifecycle — upgrades, its configuration, its users beyond the one
 above — is yours; MailFathom manages none of it and the chart runs no job against it.
 
+### Running the object store as a pool
+
+`contentStorage.objectStorage.deploy.replicas` is how many Silo pods the pool is made of. One is the single node the
+section above describes. Anything from two to sixteen is a distributed pool: the server forms one erasure set across
+the pods, one drive each, and an object survives the loss of as many pods as that set has parity. Sixteen is the
+largest erasure set the server forms, which is why it is the ceiling rather than a preference.
+
+**Four is where a pool starts being worth having.** Below it the set carries one parity drive, so losing a pod leaves
+the store readable and not writable — which for MailFathom means reads of stored mail keep working while nothing new is
+written, and the pod reports itself unready. From four the set carries two, and the store stays writable through the
+first loss. Two and three are accepted because the server accepts them, not because the count buys what it suggests.
+
+```yaml
+contentStorage:
+  backend: objectStorage
+  objectStorage:
+    bucket: mailfathom-content
+    trustAnchorSecretKey: mailfathom-object-storage-trust-anchor
+    deploy:
+      enabled: true
+      replicas: 4
+      tls:
+        existingSecret: mailfathom-silo-tls
+        certificateAuthoritySecretKey: ca.crt
+      rootCredentialSecret: mailfathom-silo-root
+      persistence:
+        size: 200Gi
+```
+
+**The width of a pool is decided the first time its server starts against these drives.** Raising `replicas` on a
+running release adds pods the pool does not use; it widens nothing and rebalances nothing, because the erasure set was
+already formed. Deciding it afterwards is a second pool with claims of its own and a copy of every object into it,
+which is your migration to run rather than a value the chart changes for you — so pick the count when you install the
+store, and size `persistence` as what each pod gets rather than as what the pool holds.
+
+**The certificate has to cover the peer names.** Every pod reaches every other over the same HTTPS listener MailFathom
+reaches, so the three names in the table above are joined by one more:
+
+| Name | Reached from |
+| --- | --- |
+| `*.<release>-silo-peers.<namespace>.svc.cluster.local` | Each pod of the pool, reaching the others |
+
+That is a `dnsNames` entry in the same cert-manager `Certificate` as the rest, and one wildcard covers the pool at any
+count. The authority that signed it also has to be readable by the server itself, which is what
+`deploy.tls.certificateAuthoritySecretKey` names: a key inside the store's own TLS Secret, mounted where the server
+reads a private authority from, and `ca.crt` is where cert-manager writes it in that same Secret. It is deliberately
+not the `trustAnchorSecretKey` MailFathom reads, which lives in `secrets.existingSecret` — the store never mounts that
+one, because it carries mailbox passwords and the store is the one process that parses no configuration of yours.
+`helm install` refuses a pool without it rather than leaving you pods that come up, fail to reach one another, and
+never form the pool.
+
+**Spread the pods across nodes.** `deploy.affinity` is where that is written, and without it a pool whose pods land on
+one node survives a lost drive and not a lost node — which is most of what the pool was for. Nothing in the chart
+writes a default there, because what a topology key is worth is your cluster's fact rather than the chart's.
+
+Everything else is the single node's, unchanged: one bucket and one scoped access key, provisioned once with the
+commands above against any pod of the pool; the console off; the restricted Pod Security Standard; the claims retained
+when the release is removed and when the set is scaled. MailFathom itself needs no configuration for this and has none
+to give: it is pointed at the same `<release>-silo` Service either way, and a pool answering behind it is the same
+endpoint to the S3 adapter as one pod.
+
 ### What you now back up, and in which order
 
 **A `pg_dump` stops being a complete backup the moment the object backend is on.** The rows point at objects in the
@@ -1120,10 +1186,12 @@ contentStorage:
         tag: RELEASE.<newer>
 ```
 
-Three things are worth knowing before the rollout. **It is a StatefulSet with one replica on a ReadWriteOnce claim**, so
-the old pod is terminated before the new one starts: the store is unreachable for the length of that, and MailFathom
-reports itself unready and stores nothing new for the same window rather than failing a read of what is already in
-PostgreSQL. **Back the bucket up first**, for the reason any upgrade of a store holding data is preceded by a backup —
+Three things are worth knowing before the rollout. **A single node goes offline for the length of it**: one replica on
+a ReadWriteOnce claim means the old pod is terminated before the new one starts, so the store is unreachable for that
+window, and MailFathom reports itself unready and stores nothing new during it rather than failing a read of what is
+already in PostgreSQL. A pool is rolled a pod at a time and keeps answering throughout, provided its erasure set has the
+parity to serve a missing drive — which is another reason to pick the count when the pool is created.
+**Back the bucket up first**, for the reason any upgrade of a store holding data is preceded by a backup —
 the on-disk format is the server's, and a version that will not start against it leaves the payloads reachable only by
 going back. And **going back is a values change and a rollback of the same shape**, which works because nothing in the
 release ties the store's version to MailFathom's; what would not work is going back after a newer server has rewritten
@@ -1189,13 +1257,16 @@ and exist so that a change in what the chart produces appears in a diff rather t
 anything. A rendering is normalized before it is compared — trailing whitespace and the blank lines Helm leaves between
 documents go — so the Helm version a machine happens to carry does not decide the verdict.
 
-Eight values documents are what the chart is held against, and each renders a shape the others do not.
+Nine values documents are what the chart is held against, and each renders a shape the others do not.
 `release-values.yaml` names an external database, an external analyzer, and an external spam scanner, and turns the
 ingress on. `nightly-values.yaml` selects the unsupported channel with its acknowledgement and renders the analyzer and
-the scanner the chart deploys itself. `content-storage-values.yaml` selects the object backend against an endpoint
-somebody else operates, and `object-store-values.yaml` selects it against the store the chart runs itself — between them
+the scanner the chart deploys itself. Three do the content backend. `content-storage-values.yaml` selects it against an
+endpoint somebody else operates, `object-store-values.yaml` against the one node the chart runs itself — between them
 both branches of `contentStorage.objectStorage.deploy.enabled`, with the console off in the second, which is what makes
-the committed manifest the record that no console listener is produced by default.
+the committed manifest the record that no console listener is produced by default — and `object-store-pool-values.yaml`
+against a pool of four, which is both branches of `deploy.replicas` and the one rendering carrying the headless Service,
+the parallel pod management, and the server started against every member of the pool. A document under `ci/refusals/`
+covers the pool asked for without the authority its pods validate each other with, which no rendering could show.
 Three documents do the same for the backplane, all at two replicas with the client surface served:
 `signal-backplane-valkey-values.yaml` renders the one instance the chart runs by default,
 `signal-backplane-external-values.yaml` renders no workload at all while configuring the application identically, and

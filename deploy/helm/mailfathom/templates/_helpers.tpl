@@ -243,6 +243,9 @@ the identifier and the secret are the same file.
     {{- if eq $objectStore.rootAccessKeyIdSecretKey $objectStore.rootSecretAccessKeySecretKey -}}
       {{- fail "contentStorage.objectStorage.deploy.rootAccessKeyIdSecretKey and rootSecretAccessKeySecretKey name one key, which would make the identifier and its secret the same file." -}}
     {{- end -}}
+    {{- if and (gt (int $objectStore.replicas) 1) (not $objectStore.tls.certificateAuthoritySecretKey) -}}
+      {{- fail "contentStorage.objectStorage.deploy.tls.certificateAuthoritySecretKey is not set while contentStorage.objectStorage.deploy.replicas is above one. A pool's pods reach each other over the same https listener MailFathom reaches, and each one validates the certificate the next presents — against the cluster's trust store and this authority, with nothing anywhere to turn that off. Without it the pods start, fail to connect to one another, and never form the pool. Name the key inside deploy.tls.existingSecret holding the authority that signed the certificate; cert-manager writes it to ca.crt in the same Secret." -}}
+    {{- end -}}
   {{- else -}}
     {{- if not $objectStorage.endpoint -}}
       {{- fail "contentStorage.objectStorage.endpoint is not set while contentStorage.backend is 'objectStorage'. MailFathom reaches the endpoint at an address the deployment states and resolves none from the node, so name the absolute https address of the S3-compatible service holding your mail — or turn contentStorage.objectStorage.deploy.enabled on and let the chart run one beside it." -}}
@@ -564,9 +567,25 @@ two derivations because the daemon speaks a line protocol on a TCP port — ther
 The object store's objects, named after the release with `-silo` appended. The suffix names the server rather than the
 feature, for the reason the analyzer's and the scanner's do: what a listing has to distinguish is which image is in the
 pod.
+
+One name hangs off it. `-silo-peers` is the headless Service a pool's pods get a DNS name of their own from, which is
+what the server is given as the pool's members and what the certificate has to cover.
+
+**The base is truncated rather than the result**, which is the backplane's reasoning applied here: one suffix is a
+prefix of the other, so truncating each finished name at 63 collapses them into one string for any release long enough
+to reach it — two Services with one name, and an install that fails on the duplicate rather than on anything an operator
+wrote. Fifty characters leaves room for the longer suffix and for the `-15` a pod name adds on top of the shorter one.
 */}}
+{{- define "mailfathom.objectStoreBaseName" -}}
+{{- include "mailfathom.fullname" . | trunc 50 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "mailfathom.objectStoreFullname" -}}
-{{- printf "%s-silo" (include "mailfathom.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-silo" (include "mailfathom.objectStoreBaseName" .) -}}
+{{- end -}}
+
+{{- define "mailfathom.objectStorePeerFullname" -}}
+{{- printf "%s-silo-peers" (include "mailfathom.objectStoreBaseName" .) -}}
 {{- end -}}
 
 {{- define "mailfathom.objectStoreSelectorLabels" -}}
@@ -617,6 +636,28 @@ read.
 */}}
 {{- define "mailfathom.objectStoreCertificatesDirectory" -}}/etc/silo/certs{{- end -}}
 {{- define "mailfathom.objectStoreCredentialsDirectory" -}}/etc/silo/credentials{{- end -}}
+
+{{/*
+What the server is started against, which is the whole of the difference between one node and a pool.
+
+A single node is given one directory and knows nothing of any peer. A pool is given every member at once, in the
+server's own ellipsis notation — three dots rather than two, which is the form it parses — over the headless Service
+above, so each pod resolves the others by a name a rescheduling does not change. The port is the container's listener
+rather than `service.port`: what the peers reach is the port inside the pod, and the Service's port is what MailFathom
+reaches from outside it.
+
+The name is fully qualified through `.svc.cluster.local`. A search-domain-relative name would resolve for a pod in this
+namespace and be exactly as wrong the moment the cluster's DNS suffix is not the default, and the certificate has to
+carry these names either way.
+*/}}
+{{- define "mailfathom.objectStorePoolArgument" -}}
+{{- $objectStore := .Values.contentStorage.objectStorage.deploy -}}
+{{- if gt (int $objectStore.replicas) 1 -}}
+{{- printf "https://%s-{0...%d}.%s.%s.svc.cluster.local:9000/data" (include "mailfathom.objectStoreFullname" .) (sub (int $objectStore.replicas) 1) (include "mailfathom.objectStorePeerFullname" .) .Release.Namespace -}}
+{{- else -}}
+/data
+{{- end -}}
+{{- end -}}
 
 {{/*
 The backplane's objects, named after the release with `-valkey` appended. The suffix names the server rather than the

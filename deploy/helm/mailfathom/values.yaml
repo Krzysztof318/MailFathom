@@ -212,15 +212,41 @@ contentStorage:
     # and no Service: an opt-in you did not take pulls no image and holds no disk. The endpoint above is then yours to
     # name, which is the ordinary shape — a bucket you rent, or a store you already run.
     #
-    # **One node, one volume, and that is the whole of it.** No erasure coding, no second node, no replication: what
-    # this protects against is a container being replaced, and nothing else. A disk that fails takes the payloads with
-    # it, so the backup order in docs/operations/deployment-kubernetes.md is what stands between this and losing them.
+    # **One node on one volume by default, and a pool where `replicas` below says so.** A single node has no erasure
+    # coding and no redundancy of any kind: what it protects against is a container being replaced, and a disk that
+    # fails takes the payloads with it, so the backup order in docs/operations/deployment-kubernetes.md is what stands
+    # between that shape and losing them.
     #
     # Silo is PGSTY's maintained fork of the open-source MinIO server, keeping one release line alive after upstream
     # ended community distribution. It is AGPL-3.0-or-later; the chart names an image your cluster pulls from PGSTY's
     # own registry and carries no part of it, which THIRD_PARTY_LICENSES.md records as the reading it is used under.
     deploy:
       enabled: false
+
+      # **How many Silo pods the pool is made of, and it is decided once.** One is a single node on a single drive,
+      # which is what a default install gets and what the paragraph above describes. Anything from 2 to 16 is a
+      # distributed pool: the server forms one erasure set across the pods, one drive each, and an object survives the
+      # loss of as many pods as the set has parity — which is what makes this different from running the same image
+      # more times.
+      #
+      # **The width of a pool is fixed when the pool is created.** Raising this on a running release does not widen the
+      # pool and does not rebalance anything, because the erasure set was decided the first time the server started
+      # against these drives. Deciding it afterwards means a second pool with its own claims and a copy of every object
+      # into it, which is an operator's migration rather than a value this chart changes for you.
+      #
+      # Above one, three things follow and the chart renders each of them: the pods are started in parallel rather than
+      # in order, because none of them becomes ready until the pool has quorum; a headless Service gives each pod a
+      # name of its own that a rescheduling does not change; and the peers reach each other over the same HTTPS
+      # listener MailFathom reaches, which is what `tls.certificateAuthoritySecretKey` below is for.
+      #
+      # Sixteen is the largest erasure set the server forms, so it is the ceiling here rather than a preference. **Four
+      # is where a pool starts being worth having**: below it the set carries one parity drive, so a lost pod leaves the
+      # store readable and not writable, while from four the set carries two and stays writable through the first loss.
+      # Two and three are allowed because the server allows them, not because they buy what the count above suggests.
+      #
+      # Spread the pods over nodes with `affinity` below — a pool whose pods share one node survives the loss of a drive
+      # and not the loss of that node.
+      replicas: 1
 
       # An immutable tag, like every dependency the deployment operates rather than a version it chooses. It is the same
       # pin the Compose deployment, the Quadlet units, and the integration suite carry, so a server the suite verified
@@ -243,10 +269,26 @@ contentStorage:
       # a private issuer with those names in a `Certificate`. The chart templates no certificate and issues none. The
       # authority that signed it is what `trustAnchorSecretKey` above names, as a key inside `secrets.existingSecret`,
       # because that is the Secret MailFathom's own process mounts.
+      #
+      # **A pool needs two more things of the same certificate.** Every pod talks to every other over this listener, so
+      # the certificate has to cover the peer names as well as the Service name —
+      #
+      #   *.<release>-silo-peers.<namespace>.svc.cluster.local
+      #
+      # covers all of them, and cert-manager takes that as a `dnsNames` entry like any other. And the authority that
+      # signed it has to be readable by the server itself, which is what the key below is for: a peer's certificate is
+      # validated against the cluster's trust store and this authority, and nothing anywhere turns that off.
+      #
+      # `certificateAuthoritySecretKey` names a key inside `tls.existingSecret` rather than inside
+      # `secrets.existingSecret`, because the store never mounts the application's Secret — that one carries mailbox
+      # passwords, and the object store is the process that must not be able to read them. `ca.crt` is the key
+      # cert-manager writes the issuing authority to in the same Secret, so an issued certificate usually already
+      # carries it. It is required with `replicas` above one and unused with a single node, which talks to nobody.
       tls:
         existingSecret: ""
         certificateSecretKey: tls.crt
         privateKeySecretKey: tls.key
+        certificateAuthoritySecretKey: ""
 
       # **The store's root credential, in a Secret of its own that the application never mounts** — the line the
       # database's superuser password is on the other side of, and for the same reason. `secrets.existingSecret` is
@@ -264,10 +306,12 @@ contentStorage:
       rootAccessKeyIdSecretKey: silo-root-access-key-id
       rootSecretAccessKeySecretKey: silo-root-secret-access-key
 
-      # Where the payloads land. The claim outlives the release, like the database's: `helm uninstall` deletes neither,
-      # so removing the release does not remove the mail. Size it against what the mailboxes hold — this is the raw MIME
-      # of every message written while the object backend is selected, and it is the same volume of bytes PostgreSQL
-      # would otherwise have carried.
+      # Where the payloads land, as one claim per pod. The claim outlives the release, like the database's:
+      # `helm uninstall` deletes neither, so removing the release does not remove the mail, and neither does scaling the
+      # set down. Size it against what the mailboxes hold — this is the raw MIME of every message written while the
+      # object backend is selected, and it is the same volume of bytes PostgreSQL would otherwise have carried. A pool
+      # spreads that across its pods and spends part of it on parity, so `size` is what each pod gets rather than what
+      # the pool holds.
       persistence:
         size: 20Gi
         accessMode: ReadWriteOnce
