@@ -20,7 +20,85 @@
     },
     "replicaCount": {
       "type": "integer",
-      "minimum": 0
+      "minimum": 0,
+      "description": "How many MailFathom processes serve this deployment. More than one gives request capacity and an upgrade with nothing down, and divides no single account's synchronization, which one lease holds at a time. Above one the chart's own validation refuses a values document serving the client surface with no signal backplane; nothing else about several replicas is a refusal, and every ceiling worded as one process's multiplies with this number."
+    },
+    "strategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "RollingUpdate",
+            "Recreate"
+          ],
+          "description": "How an upgrade replaces the pods. 'RollingUpdate' with the chart's defaults keeps a pod serving at every instant, which is what makes a new pod that refuses the schema it finds harmless. 'Recreate' stops every pod before starting one, and the chart renders no rollingUpdate block beside it."
+        },
+        "rollingUpdate": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Rendered only beside the type that accepts one, so selecting 'Recreate' leaves nothing here to refuse. Both halves are named here rather than passed through, because a misspelled key would otherwise reach the API server as a rollout with the chart's defaults silently still in force.",
+          "properties": {
+            "maxUnavailable": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]?|100)%$"
+                }
+              ],
+              "description": "How many pods below the replica count a rollout may go, as a count or a percentage. The chart's default is 0, which is what keeps a pod serving at every instant of an upgrade. A percentage above 100 is refused here because Kubernetes refuses one too: more than every pod cannot be taken away."
+            },
+            "maxSurge": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)%$"
+                }
+              ],
+              "description": "How many pods above the replica count a rollout may start, as a count or a percentage. Either half may be zero on its own, and both being zero is a rollout that can never take a step: the chart's own validation refuses that pair, in either form, rather than leaving it to the API server to reject the Deployment after a release is already being applied."
+            }
+          }
+        }
+      }
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "maxUnavailable"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether a PodDisruptionBudget is rendered for the application pods. On, a drain takes them one at a time, so leased work is handed over rather than waiting out an expiry. Off renders no object, for a cluster where something else owns disruption policy for this workload."
+        },
+        "maxUnavailable": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "string",
+              "pattern": "^([1-9][0-9]?|100)%$"
+            }
+          ],
+          "description": "How many pods a voluntary disruption may take at once, as a count or a percentage. Zero is refused in either form: a budget permitting no disruption at all blocks every drain rather than pacing one, and reports itself as a node that will not cordon. The budget is deliberately not expressible as how many pods must remain, which would refuse every drain of the single-replica default."
+        }
+      }
     },
     "image": {
       "type": "object",

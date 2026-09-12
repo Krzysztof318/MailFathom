@@ -106,3 +106,15 @@ ingress:
     - secretName: mailfathom-tls
       hosts:
         - mailfathom.example.test
+
+# The other branch of both workload decisions, matching every other choice this file renders the far side of. `Recreate`
+# is the rollout type that accepts no `rollingUpdate` block, so this document proves the chart renders none beside it —
+# Helm merges a values document into the chart's defaults rather than replacing them, and the block left underneath
+# would be a Deployment the API server refuses. The budget is off, which renders no PodDisruptionBudget at all, for the
+# deployment whose disruption policy belongs to something else in its cluster. Every other document here renders the
+# defaults: the rolling type with its block, and the budget.
+strategy:
+  type: Recreate
+
+podDisruptionBudget:
+  enabled: false

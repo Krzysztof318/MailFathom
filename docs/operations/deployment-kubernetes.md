@@ -13,6 +13,7 @@ operates the cluster, and the chart is written so that it cannot pretend otherwi
 | A personal-data analyzer Deployment and Service, and a SpamAssassin Deployment and Service, only when the section that owns each is enabled and left to deploy its own | Any schema step |
 | A Silo object-store StatefulSet, its claim, and its Service, only when `contentStorage.objectStorage.deploy.enabled` is true | Any bucket, or any access key inside one |
 | A Valkey StatefulSet and two Services for the signal backplane, only when `signalBackplane.enabled` and `.valkey.deploy` are both true | |
+| A PodDisruptionBudget for the application pods, at any replica count, unless `podDisruptionBudget.enabled` is false | Any HorizontalPodAutoscaler, or any metric-driven scaling |
 | An optional Ingress | |
 
 ## What you supply
@@ -379,6 +380,130 @@ Two more things belong to the same decision:
 **Authorization is unchanged.** A browser is an untrusted client wherever it was served from, so whatever
 `ClientEndpoint:Authentication` requires is still required of it. Serving the page grants nobody anything; what it
 exposes is the application's own code, which is published under AGPL-3.0-only in this repository.
+
+## Running more than one replica
+
+`replicaCount` is a value like any other, and raising it is supported:
+
+```yaml
+replicaCount: 3
+```
+
+**What it gives is capacity and an upgrade with nothing down, and never a second copy of any work.** Every request, tool
+call, and page is answered by whichever replica the Service routed it to, and that is the whole of the gain on the
+serving side. On the working side a scope is held by one replica at a time under a lease row — one mail account's
+synchronization, one deployment-wide sweep, one operator-asked re-derivation, the stored-content move — so three
+replicas divide the accounts between themselves rather than each synchronizing all of them.
+[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
+is that mechanism, and the administrative surface answers who holds what.
+
+**What one replica does that several do not** is worth reading before raising the number, because two of the three are
+not about MailFathom at all:
+
+- **A single account is not synchronized faster.** Its supervision is one lease, so the parallelism is between accounts
+  and never inside one. A deployment with one large mailbox gains nothing here.
+- **The database is not made available.** One the chart deploys is a single-replica StatefulSet on a ReadWriteOnce
+  claim whatever this number says, so a node taking that pod takes the deployment with it. Point the chart at a server
+  somebody operates before the replica count is what your availability rests on.
+- **Every ceiling worded as one process's multiplies.** `Jobs:MaxConcurrentJobs`,
+  `MailSynchronization:MaxInFlightRawMimeBytes`, `Embeddings:MaxQueuedEmails`,
+  `Resilience:AiProviderInvocation:ConcurrencyLimit`, and every endpoint's `RateLimiting` are each replica's own,
+  deliberately: what they bound is that
+  process's threads, memory, and sockets. A deployment of *n* replicas runs up to *n* times them, so a provider's own
+  concurrency is respected by dividing the figure rather than by restating it. Every ceiling worded as the
+  deployment's — the two content-storage ceilings, the paced request rates, the answering spend — is a row each replica
+  shares and stays the figure it names. The [configuration reference](configuration-reference.md) says which of the two
+  each setting is, per setting.
+
+**No guarantee is weakened by several replicas, and one budget is multiplied by them.** A client assertion is spendable
+once for the whole deployment, because the record of a spent identifier is a row under a unique constraint rather than a
+dictionary in one process — so an identifier any replica served is refused by every replica, and there is no window to
+route around. It is a shared store rather than affinity for a reason worth stating: affinity is honoured by the client,
+and the client here is whoever captured the assertion.
+[The assertions this deployment has already served](../architecture/stored-email-schema.md#the-assertions-this-deployment-has-already-served)
+is the table.
+
+**The endpoint rate limiters are the exception, and they are a bound rather than a guarantee.**
+`McpEndpoint:RateLimiting`, `AdminEndpoint:RateLimiting`, and `ClientEndpoint:RateLimiting` each count in one process,
+so a deployment of *n* replicas admits up to *n* times what one of them declares. What `TokenCapacity` is the burst of
+differs by surface: one caller's, at one replica, on the MCP and client surfaces, and **the whole endpoint's** on the
+administrative one, where the credential is judged behind the limiter so an administrative request is still anonymous
+when it is counted and every caller shares one bucket. That is the surface where this matters most, because the limiter
+is what stands between an API key and unbounded guessing — so divide the figure when the replica count is raised rather
+than leaving it as it was sized for one process.
+[Rate limiting](configuration-endpoints.md#rate-limiting) is every value and which of the two it is, and
+[the administrative endpoint's own](admin-endpoint.md#rate-limiting) is why its bucket is not partitioned.
+
+**A signed-in session needs nothing either.** It is a row in PostgreSQL, so every replica accepts a session any other
+replica minted and honours its revocation the moment it is written;
+[the session token routes](client-endpoint.md#the-session-token-routes) is that half. What a client's live updates need
+is [the backplane below](#signals-between-replicas), which is the one thing above one replica the chart refuses to
+install without.
+
+### What your load balancer owes the client's connection
+
+The signal channel is a WebSocket and it never negotiates a fallback, so whatever routes traffic to these pods owes it
+three things. They are the ingress controller's, the mesh's, or the cloud load balancer's settings rather than chart
+values, which is why they are stated here and templated nowhere:
+
+- **Pass the WebSocket upgrade.** A proxy that strips `Connection` and `Upgrade`, or answers the handshake itself,
+  leaves the client with no channel and a screen that updates only on its own re-read.
+- **Keep no idle timeout shorter than a standing connection.** The connection carries a keep-alive frame rather than
+  traffic, so a timeout measured on bytes closes a healthy channel; the client reconnects and re-reads, which costs a
+  request per timeout and a gap per reconnect.
+- **Use no session affinity.** It is not needed for anything — the session is a row, the ticket redeeming the handshake
+  is a row, and a signal crosses replicas over the backplane — and turning it on concentrates connections rather than
+  balancing them.
+
+### What the chart renders for the rollout and the drain
+
+Two objects an operator would otherwise have to add themselves, both from values:
+
+```yaml
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+```
+
+**The rollout keeps a pod serving at every instant**, because `maxUnavailable: 0` starts the replacement and waits for
+its probes before anything is taken away. That is what makes the schema order above hold on an upgrade as well as on an
+install: a new pod that refuses a schema behind it never becomes ready, and the pods already serving are still there
+rather than having been replaced by it. It also means **two versions run together for the length of a rollout**, which
+is safe rather than tolerated — a claim reaches only the job types the claiming replica's own build registers a handler
+for, so work a newer replica introduced waits for one instead of failing on an older one; two replicas reaching one
+scheduled occasion compose the same idempotency key; and a leased scope is released by the pod being stopped and
+claimed by whichever replica takes it next. `Recreate` is the other type Kubernetes accepts, and the chart renders no
+`rollingUpdate` block beside it, so choosing it produces a Deployment the API server accepts — but it stops every pod
+before starting one, so an upgrade under it has a window with nothing serving whatever order the schema is applied in.
+The order [upgrading](#upgrading-rolling-back-and-uninstalling) gives is the one with no such window, and that holds
+under the rolling default rather than under this type.
+
+Either half of `rollingUpdate` may be zero and both may not, and the chart refuses that pair rather than letting the
+API server reject the Deployment while a release is being applied. The refusal exists because a values document is
+merged into the chart's defaults rather than replacing them: writing `maxSurge: 0` alone — which is what a tight quota
+asks for — keeps `maxUnavailable: 0` underneath, and a rollout allowed neither a pod below the replica count nor a pod
+above it can never replace anything.
+
+**A rolling upgrade hands leased work over rather than parking it.** A pod stopping releases every lease it holds, so
+the account it was synchronizing is claimable immediately. The release is an optimization of the ordinary case and
+nothing rests on it: a replica that was killed rather than stopped leaves its scopes held until they expire, which is
+`MailSynchronization:LeaseDuration` for an account and two minutes by default. Raise
+`terminationGracePeriodSeconds` and `MailSynchronization:ShutdownDrainTimeout` together if a drain has to wait for
+longer work — the grace period shorter than the drain kills the process with the drain still running.
+
+**The PodDisruptionBudget is what makes a node drain pace itself.** Without one, a drain reaching two nodes evicts every
+replica on them at once, and each scope those replicas held then waits out its expiry with nothing running it — which
+for a deployment carrying leases is an outage of synchronization rather than a handover. It is expressed as how many
+pods may be missing rather than how many must remain, which reads the same at every replica count: a budget demanding
+one pod remain would refuse every drain of the single-replica default, and a cluster upgrade that never finishes
+reports itself as a node that will not cordon. Turn it off where something else in your cluster owns disruption policy
+for this workload.
 
 ## Signals between replicas
 
@@ -947,7 +1072,9 @@ derived — the answering audit trail and the embeddings.
 
 `nodeSelector`, `tolerations`, `affinity`, `topologySpreadConstraints`, `priorityClassName`, `resources`,
 `podAnnotations`, `podLabels`, `service.type`, `service.annotations`, and `terminationGracePeriodSeconds` are all
-values. Nothing requires editing a template.
+values. Nothing requires editing a template. `strategy` and `podDisruptionBudget` are values as well, and
+[what the chart renders for the rollout and the drain](#what-the-chart-renders-for-the-rollout-and-the-drain) is what
+each of them decides.
 
 `terminationGracePeriodSeconds` defaults to 60 against a 10-second `MailSynchronization:ShutdownDrainTimeout`. Raise
 them together: a grace period shorter than the drain kills the process with the drain still running.
@@ -958,7 +1085,9 @@ Back up the database — and the bucket beside it where `contentStorage.backend`
 [what you now back up](#what-you-now-back-up-and-in-which-order) gives — and apply the new release's
 `mailfathom-schema-<version>.sql` **before** the upgrade. The new pod
 refuses to start against a schema that is behind it, and the old pod keeps serving against a schema that is ahead — so
-that order is the one with no window in which nothing serves.
+that order is the one with no window in which nothing serves. That last part is the rolling default's:
+`strategy.type: Recreate` stops every pod before starting one, so an upgrade under it has a window whatever order the
+schema is applied in.
 
 ```bash
 helm upgrade mailfathom deploy/helm/mailfathom --namespace mailfathom --values values.yaml

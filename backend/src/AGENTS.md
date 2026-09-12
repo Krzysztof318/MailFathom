@@ -2,6 +2,60 @@
 
 These instructions apply under `backend/src/` in addition to `backend/AGENTS.md` and the repository root instructions.
 
+## Several replicas run this code, and every design decision here is made against that
+
+**MailFathom is a product that runs as *n* independent processes against one database, and `n` is the operator's to
+choose.** The Helm chart takes a `replicaCount`, raising it is supported and documented, and
+`docs/operations/deployment-kubernetes.md` § *Running more than one replica* is what an operator reads before doing it.
+So the deployment this code is written for is not one process that happens to be alone today: it is several processes
+on different nodes, sharing nothing but PostgreSQL and an optional RESP backplane, started and stopped independently,
+and — for the length of every rolling upgrade — **running two different builds of this repository at once**. Write every
+feature against that deployment from the first line, because the shape that has to change afterwards is never one
+method: it is wherever a guarantee was quietly resting on being the only process in the world.
+
+- **In-process state belongs to one replica and is invisible to the others.** A `static` field, a `SemaphoreSlim`, a
+  `lock`, an `IMemoryCache`, a `Channel`, a dictionary on a singleton, a counter, a set of seen identifiers — each of
+  those is one process's, and a deployment of *n* replicas has *n* of them that never meet. That is not a detail to
+  document later; it decides whether the thing being built works at all.
+- **A guarantee may never rest on in-process state, and a bound may.** Uniqueness, once-only execution, anti-replay,
+  and "this runs on exactly one replica" are guarantees: they are a row in PostgreSQL or they do not exist, because the
+  replica that would have refused the second attempt is not the replica the second attempt reaches. A ceiling on
+  threads, sockets, or memory is a bound, and a bound is legitimately one process's — but then say so where an operator
+  meets it, in the configuration reference, as `× replicaCount`. ADR 0031 records both halves and the asymmetry between
+  them.
+- **Work that must not run twice takes a lease, through `IWorkLeaseRunner`.** That is the seam, and it is the seam
+  because taking a lease is more than claiming one: the renewal while the work runs, the persistence scope each
+  statement against the store needs of its own, and the release once the work ends are all the host's, so the work is
+  handed in rather than the lease handed out and no caller can forget the release. `IWorkLeaseStore` is the store
+  beneath it and `WorkLeaseHolder` names one hold rather than one process, which is what makes every write against a
+  leased scope conditional on the holder still matching; the hold the runner takes cancels the work on the first
+  renewal that does not complete, strictly before the lease could expire and another replica take the scope. The unit
+  of exclusion is the scope of the row that already records the work's progress, so a new singleton worker keys its
+  lease that way rather than inventing coordination beside it, and
+  [ADR 0031](../../docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) holds the
+  reasoning, including why a PostgreSQL advisory lock was not chosen.
+- **A row a competing replica may already have written is claimed, never adopted.** Take it under
+  `FOR UPDATE SKIP LOCKED` or with a compare-and-set on the state the claim was resolved over, and report a conflict and
+  re-resolve rather than writing on the strength of a key. Two replicas reaching one scheduled occasion is the
+  ordinary case, not the race to treat as unlikely.
+- **A rolling upgrade runs two builds against one database.** So a schema change is additive and the older build keeps
+  serving against it; a new job type is claimed only by a replica whose build registers a handler for it, which is what
+  leaves work an older replica cannot run for a newer one; and nothing may assume every replica knows about a concept
+  this change introduced. A migration or a contract that requires every process to move at once has no window in which
+  to do it.
+- **A client's connection is held by one replica and a signal is raised by another.** Anything a client has to be told
+  crosses replicas over the signal backplane rather than reaching whoever raised it, and a client's session and its
+  connection ticket are rows precisely so that no request needs affinity.
+  [ADR 0032](../../docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md) and
+  [ADR 0033](../../docs/decisions/0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md) are those two
+  answers.
+- **An instrument measures its own process.** A meter, a gauge, and a counter are per replica, so a dashboard sums what
+  is additive and takes the maximum of what is a level; `docs/operations/telemetry.md` states which is which per
+  instrument, and a new instrument states it there as well.
+- **The test for coordination is the second replica.** A behaviour that claims, leases, or spends states what happens
+  to the attempt that lost — refused, conflicted, or asked again next interval — and a unit test asserts that outcome
+  rather than only the happy path of the replica that won.
+
 ## Service conventions
 
 `backend/AGENTS.md` holds the .NET and C# conventions, the asynchronous return types, and the service's architecture boundaries, and they govern this directory like every other under `backend/`. What follows is what is true of the production code alone.

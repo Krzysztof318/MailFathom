@@ -142,6 +142,24 @@ run supplies one — see Chart.yaml.
   {{- fail (printf "image.tag is %q but this chart documents application version %q. Deploying a different version than the chart describes is allowed, but it has to be said: set image.allowVersionMismatch=true." .Values.image.tag .Chart.AppVersion) -}}
 {{- end -}}
 
+{{/*
+A rollout that can never take a step. Each half is a legitimate zero on its own — no pod below the replica count, or no
+pod above it — and the pair is what the API server refuses, so this is the helper's to catch rather than the schema's.
+It is refused here rather than left to the cluster because of how a values document reaches this chart: Helm merges it
+into these defaults, so an operator who writes `maxSurge: 0` alone under a tight quota keeps `maxUnavailable: 0`
+underneath and installs a Deployment that is rejected after the release is already being applied. Both forms of zero
+are read, a count and a percentage, and an absent half is left alone: Kubernetes then applies its own default, which is
+not zero.
+*/}}
+{{- if eq .Values.strategy.type "RollingUpdate" -}}
+  {{- $rollingUpdate := .Values.strategy.rollingUpdate | default dict -}}
+  {{- $unavailable := printf "%v" (dig "maxUnavailable" "unset" $rollingUpdate) -}}
+  {{- $surge := printf "%v" (dig "maxSurge" "unset" $rollingUpdate) -}}
+  {{- if and (has $unavailable (list "0" "0%")) (has $surge (list "0" "0%")) -}}
+    {{- fail (printf "strategy.rollingUpdate.maxUnavailable is %v and strategy.rollingUpdate.maxSurge is %v. A rollout allowed neither a pod below the replica count nor a pod above it can never replace anything, and the API server refuses the Deployment rather than stalling it. Raise one of the two: maxSurge 1 keeps every replica serving and needs room for one more pod, and maxUnavailable 1 needs no extra room and takes one replica out while it is replaced." $unavailable $surge) -}}
+  {{- end -}}
+{{- end -}}
+
 {{- if .Values.database.deploy.enabled -}}
   {{- if .Values.database.host -}}
     {{- fail (printf "database.host is %q while database.deploy.enabled is true. The chart is deploying the server and derives its address from the release name, so a second address here would name somewhere the release did not install. Clear it, or turn database.deploy.enabled off to use a server you already operate." .Values.database.host) -}}

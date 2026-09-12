@@ -18,6 +18,7 @@ MailFathom synchronizes your IMAP accounts into a PostgreSQL database you run, i
 | A SpamAssassin Deployment and Service, only when `spamScanning.enabled` and `.scanner.deploy` are both true | |
 | A Silo object-store StatefulSet, its claim, and its Service, only when `contentStorage.objectStorage.deploy.enabled` is true | Any bucket, or any access key inside one |
 | A Valkey StatefulSet and two Services for the signal backplane, only when `signalBackplane.enabled` and `.valkey.deploy` are both true | |
+| A PodDisruptionBudget for the application pods, and the Deployment's rollout strategy, both from values | Any HorizontalPodAutoscaler, or any metric-driven scaling |
 | An optional Ingress | |
 
 Both scanners are off, and off means nothing is rendered for them: an opt-in nobody took pulls no image and holds no memory. Take either deliberately — they are the two pods in this release that receive mail content in the clear, and the spam scanner's container adds `SETUID` and `SETGID` back to the capabilities the application pod drops entirely. Neither is given a service-account token.
@@ -66,6 +67,34 @@ chart deliberately offers none, because the RESP client the SignalR backplane pa
 a line Valkey no longer writes and refuses the connection outright. Read what replication is worth before turning it
 on: the client's own re-read is the guarantee, so this shortens a gap rather than making a signal reliable.
 [Replicating the backplane](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html#replicating-the-backplane)
+is the page.
+
+## Running more than one replica
+
+`replicaCount` is supported above 1, and what it gives is request capacity and an upgrade with nothing down — never a
+second copy of any work. A mail account is synchronized by whichever replica holds its lease and by no other, so
+replicas divide the accounts rather than each taking all of them, and a single large mailbox is no faster for it.
+Neither is the database more available: one the chart deploys is a single-replica StatefulSet on a ReadWriteOnce claim
+whatever this number says. A signed-in session is a row in PostgreSQL, so every replica accepts one any other replica
+minted; a client assertion is spent in a row as well, so an identifier any replica served is refused by every replica.
+Every ceiling worded as one process's — `Jobs:MaxConcurrentJobs`, `MailSynchronization:MaxInFlightRawMimeBytes`,
+`Embeddings:MaxQueuedEmails`, `Resilience:AiProviderInvocation:ConcurrencyLimit`, and every endpoint's
+`RateLimiting` — multiplies by the replica count, and every ceiling worded as the deployment's is a row the replicas
+share. The administrative endpoint's is the one to divide first: its bucket is the whole endpoint's rather than one
+caller's, and the limiter is what stands between an API key and unbounded guessing.
+
+**The chart renders two things for it**, both from values and both stated rather than inherited. The rollout keeps a pod
+serving at every instant (`strategy.rollingUpdate.maxUnavailable: 0`), which is what makes a new pod that refuses a
+schema behind it harmless and what puts two versions in service for the length of a rollout — safe, because a leased
+scope is released by the pod stopping and claimed by whoever takes it next. And a PodDisruptionBudget
+(`podDisruptionBudget.maxUnavailable: 1`, turned off with `podDisruptionBudget.enabled: false`) makes a node drain take
+the replicas one at a time, so leased work is handed over instead of waiting out an expiry with nothing running it.
+
+**Three things are your load balancer's**, because the client's signal channel is a WebSocket that never negotiates a
+fallback: pass the upgrade, keep no idle timeout shorter than a standing connection, and use no session affinity — none
+is needed, since the session, the handshake's ticket, and the signal all live outside the process. And more than one
+replica serving the client surface needs the backplane above; the chart refuses that combination without it.
+[Running more than one replica](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html#running-more-than-one-replica)
 is the page.
 
 ## Installing

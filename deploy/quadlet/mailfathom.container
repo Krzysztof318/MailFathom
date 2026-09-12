@@ -227,7 +227,11 @@ Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom
 #
 # **On one host it changes nothing an operator can observe**, and that is the expected state: a signal raised here
 # already reaches every client connection this deployment holds, because one process holds them all. What it is for is a
-# second instance, and running one under Quadlet is not supported today — issue #1295 decides whether it will be.
+# second instance, and **running one under Quadlet is not supported**: the PublishPort= lines above name fixed host
+# addresses, so a second unit has nothing to bind, and nothing here balances requests between two of them or holds a
+# client's connection across a restart. MailFathom asks for nothing further — leases, sessions, and spent assertions
+# are rows in PostgreSQL — so what stops at one instance is this deployment shape rather than the application, and the
+# Helm chart is where more than one replica is supported.
 #
 # The reference is a systemd credential like the database password, so it needs a LoadCredentialEncrypted= line in the
 # [Service] section below. What it holds is a whole StackExchange.Redis connection string rather than a bare password:
