@@ -2,9 +2,13 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Rendering.Document;
 using MailFathom.Application.Emails.GetEmailContent;
+using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.EmailContent.Cleaning;
@@ -46,18 +50,35 @@ public sealed class MailBodyCleaning
 
     private readonly EmailContentReader content;
     private readonly IMailBodyCleaner cleaner;
+    private readonly MailboxScopeResolver scopeResolver;
+    private readonly SensitiveContentEgressGuard egressGuard;
+    private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the pass over the read it cleans and the producer that proposes the cleaning.</summary>
     /// <param name="content">Reads the message from the local copy, under the acting caller's own grant.</param>
     /// <param name="cleaner">Proposes which blocks to keep, or says why it proposed nothing.</param>
+    /// <param name="scopeResolver">Answers whose mail this pass is reading, which is the posture the outline is scanned under.</param>
+    /// <param name="egressGuard">Names that user for the whole flow, so every text of the outline is guarded under their own posture.</param>
+    /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    public MailBodyCleaning(EmailContentReader content, IMailBodyCleaner cleaner)
+    public MailBodyCleaning(
+        EmailContentReader content,
+        IMailBodyCleaner cleaner,
+        MailboxScopeResolver scopeResolver,
+        SensitiveContentEgressGuard egressGuard,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(content);
         ArgumentNullException.ThrowIfNull(cleaner);
+        ArgumentNullException.ThrowIfNull(scopeResolver);
+        ArgumentNullException.ThrowIfNull(egressGuard);
+        ArgumentNullException.ThrowIfNull(authorization);
 
         this.content = content;
         this.cleaner = cleaner;
+        this.scopeResolver = scopeResolver;
+        this.egressGuard = egressGuard;
+        this.authorization = authorization;
     }
 
     /// <summary>Cleans one of the acting caller's messages, or says why the reduced document is what came back.</summary>
@@ -70,6 +91,11 @@ public sealed class MailBodyCleaning
         bool retainRemoteImageReferences,
         CancellationToken cancellationToken)
     {
+        // The grant is asked for here as well as at the transport boundary, because what this spends is the deployment's
+        // provider allowance rather than a local read: an entrypoint added later that holds only the reading grant would
+        // otherwise reach a chat call through a use case that never checked.
+        this.authorization.RequirePermission(MailFathomPermission.MailAsk);
+
         var request = GetEmailContentRequest.Create([storedEmailId]) with
         {
             IncludeMailDocument = true,
@@ -96,6 +122,11 @@ public sealed class MailBodyCleaning
         }
 
         var outline = MailBodyCleaningOutline.Describe(document, message.Headers.Subject, SenderOf(message.Headers));
+
+        // The read above opened a scope of its own and closed it again, so the outline would otherwise be guarded on a
+        // flow acting for nobody — which a deployment scanning anybody refuses outright rather than degrading. The user
+        // is named here instead, where the payload that leaves the deployment is composed.
+        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
 
         return await this.ProposedAsync(outline, document, cancellationToken);
     }

@@ -188,6 +188,12 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
     /// </remarks>
     private async Task<CleanableMailBody> GuardedAsync(CleanableMailBody body, CancellationToken cancellationToken)
     {
+        // One outline is one payload, so it is reported as one operation: what an operator waits on is the whole of what
+        // leaves before a message can be drawn, which a percentile over each block opening cannot say.
+        using var scan = this.egressGuard.BeginGuardedOperation(
+            SensitiveContentEgressPoint.ChatPrompt,
+            cancellationToken);
+
         var subject = await this.egressGuard.GuardOptionalAsync(
             SensitiveContentEgressPoint.ChatPrompt,
             body.Subject,
@@ -202,6 +208,8 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
             SensitiveContentEgressPoint.ChatPrompt,
             [.. body.Blocks.Select(block => block.Opening)],
             cancellationToken);
+
+        scan.Completed();
 
         return new CleanableMailBody(
             subject,

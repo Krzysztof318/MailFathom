@@ -631,6 +631,32 @@ describe('Message and the cleaned rendering', () => {
         expect(screen.getByText('A drawn message.')).toBeDefined();
     });
 
+    // The sentence replaces a wait that was announced, and arrives just as late, so a reader who has moved past the top
+    // of the message is told about it the same way rather than only shown it.
+    it('announces the reason it fell back rather than only drawing it', async () => {
+        answeringCleaning('ProviderUnavailable', null);
+
+        render(readingUnder('cleaned'));
+
+        const said = await screen.findByText(
+            'The model this deployment asks did not answer, so the simplified version is shown.',
+        );
+
+        expect(said.getAttribute('role')).toBe('status');
+    });
+
+    // The reduced document is drawn and readable while the derivation runs, so the line above it holds its place for as
+    // long as the rendering is in force: a sentence that appeared and then vanished would move the message twice under
+    // the cursor of somebody already reading it.
+    it('holds the line above the message open once a cleaning it says nothing about has been drawn', async () => {
+        answeringCleaning('Cleaned');
+
+        render(readingUnder('cleaned'));
+        await screen.findByText('Only the part worth reading.');
+
+        expect(screen.getByRole('status').textContent).toBe('');
+    });
+
     it('states a cleaning that could not be read at all, and draws the reduced document', async () => {
         answer = (path) =>
             Promise.resolve(path.includes('/body/cleaned') ? { status: 503, body: '' } : bodyAnswering(false));

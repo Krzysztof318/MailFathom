@@ -153,24 +153,31 @@ public sealed class ClientMailCleanedBodyEndpointTests
         readTelemetry.BeginRead(Arg.Any<MailboxReadOperation>(), Arg.Any<CancellationToken>())
             .Returns(Substitute.For<IMailboxReadScope>());
 
+        var scopeResolver = new MailboxScopeResolver(
+            Substitute.For<ICallerMailAccountCatalog>(),
+            StubMailFolderParticipation.Nothing,
+            StubJunkMailFolderCatalog.None,
+            StubMailFolderMappings.ResolvingNothing);
+
         var content = new EmailContentReader(
             summaries,
             Substitute.For<IEmailThreadReader>(),
             Substitute.For<IEmailContentStore>(),
             Substitute.For<IEmailContentRenderer>(),
             Substitute.For<IEmailContentRepairRequestStore>(),
-            new MailboxScopeResolver(
-                Substitute.For<ICallerMailAccountCatalog>(),
-                StubMailFolderParticipation.Nothing,
-                StubJunkMailFolderCatalog.None,
-                StubMailFolderMappings.ResolvingNothing),
+            scopeResolver,
             Substitute.For<IAttachmentDownloadLinkIssuer>(),
             SensitiveContentEgressGuards.Inactive(),
             new EmailContentReadOptions(),
             readTelemetry,
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
 
-        return new MailBodyCleaning(content, new UnaskableMailBodyCleaner());
+        return new MailBodyCleaning(
+            content,
+            new UnaskableMailBodyCleaner(),
+            scopeResolver,
+            SensitiveContentEgressGuards.Inactive(),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead, MailFathomPermission.MailAsk));
     }
 
     private static MailDocument DocumentSaying(string text) => MailDocument.Reduced(

@@ -4,6 +4,7 @@
 
 using System.Security.Cryptography;
 using System.Text;
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Cleaning;
@@ -14,6 +15,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -35,6 +37,9 @@ public sealed class MailBodyCleaningTests
     private static readonly byte[] StoredRawMime = Encoding.UTF8.GetBytes("From: sender@example.test\r\n\r\nBody");
 
     private static readonly StoredEmailId Message = StoredEmailId.Create(Guid.Parse("3f1a0d6e-0000-4000-8000-000000000001"));
+
+    /// <summary>The literal a scanning deployment's detector reports, which is what makes a redaction provable.</summary>
+    private const string RedactedMarker = "AKIAEXAMPLEKEY";
 
     [Fact]
     public async Task CleanAsync_AProposalThatPartitionsTheDocument_KeepsExactlyTheBlocksItNamed()
@@ -222,6 +227,55 @@ public sealed class MailBodyCleaningTests
     }
 
     /// <summary>
+    /// The outline is somebody's mail leaving the deployment, so it is scanned under their own posture — which only
+    /// happens where this pass names the user itself. The read before it opens a scope of its own and closes it again,
+    /// so a pass leaning on that one would guard the outline acting for nobody and be refused outright.
+    /// </summary>
+    [Fact]
+    public async Task CleanAsync_ASwitchedOnScanner_GuardsTheOutlineUnderTheReadersOwnPosture()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(RedactedMarker, TimeProvider.System);
+        var document = DocumentSaying($"Your code is {RedactedMarker}", "Unsubscribe");
+        var cleaner = new GuardingMailBodyCleaner(egress.Guard);
+
+        // Act
+        await CleaningOver(SummaryOf(), document, cleaner, egress.Guard).CleanAsync(
+            Message,
+            retainRemoteImageReferences: false,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["Your code is [redacted:CloudKey]", "Unsubscribe"], cleaner.Guarded);
+    }
+
+    /// <summary>
+    /// What this spends is the deployment's provider allowance rather than a local read, so the grant that pays for a
+    /// question is what pays for a cleaning — asked here as well as at the transport boundary, so an entrypoint added
+    /// later cannot reach a chat call holding the reading grant alone.
+    /// </summary>
+    [Fact]
+    public async Task CleanAsync_ACallerHoldingOnlyTheReadingGrant_RefusesRatherThanSpendingTheAllowance()
+    {
+        // Arrange
+        var cleaner = ScriptedMailBodyCleaner.Keeping(new MailBodyCleaningSegment(0, 0, Keep: true));
+
+        var cleaning = CleaningOver(
+            SummaryOf(),
+            DocumentSaying("A message"),
+            cleaner,
+            granted: [MailFathomPermission.MailRead]);
+
+        // Act and assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => cleaning.CleanAsync(
+            Message,
+            retainRemoteImageReferences: false,
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(cleaner.Asked);
+    }
+
+    /// <summary>
     /// A read this caller's grant does not reach is nothing rather than a refusal of its own, which is the same answer
     /// the body route gives: a message somebody does not hold does not exist as far as this surface is concerned.
     /// </summary>
@@ -229,8 +283,9 @@ public sealed class MailBodyCleaningTests
     public async Task CleanAsync_AMessageThisCallerDoesNotHold_AnswersNothing()
     {
         // Arrange
-        var cleaning = new MailBodyCleaning(
-            ReaderOver(summary: null, document: null),
+        var cleaning = CleaningOver(
+            summary: null,
+            document: null,
             ScriptedMailBodyCleaner.Keeping(new MailBodyCleaningSegment(0, 0, Keep: true)));
 
         // Act
@@ -244,7 +299,45 @@ public sealed class MailBodyCleaningTests
     }
 
     private static MailBodyCleaning CleaningOf(MailDocument? document, IMailBodyCleaner cleaner) =>
-        new(ReaderOver(SummaryOf(), document), cleaner);
+        CleaningOver(SummaryOf(), document, cleaner);
+
+    /// <summary>
+    /// Builds the pass over one read, with the scope resolver the read itself uses. It is the same instance in both
+    /// places on purpose: the user the outline is guarded under has to be the user whose mail was read, and a second
+    /// resolver would let the two disagree without any test saying so.
+    /// </summary>
+    private static MailBodyCleaning CleaningOver(
+        EmailSummary? summary,
+        MailDocument? document,
+        IMailBodyCleaner cleaner,
+        SensitiveContentEgressGuard? egressGuard = null,
+        MailFathomPermission[]? granted = null)
+    {
+        var scopeResolver = ScopeResolverOver(summary);
+
+        return new MailBodyCleaning(
+            ReaderOver(summary, document, scopeResolver),
+            cleaner,
+            scopeResolver,
+            egressGuard ?? SensitiveContentEgressGuards.Inactive(),
+            AccessAuthorizations.ForCallerGranted(
+                granted ?? [MailFathomPermission.MailRead, MailFathomPermission.MailAsk]));
+    }
+
+    private static MailboxScopeResolver ScopeResolverOver(EmailSummary? summary)
+    {
+        var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
+        accountCatalog.OwnedAccounts.Returns(
+            [SyntheticServedAccount.Of(MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId))]);
+
+        return new MailboxScopeResolver(
+            accountCatalog,
+            StubMailFolderParticipation.Mapping(summary is null
+                ? []
+                : [new MailFolderIdentity(summary.AccountId, summary.FolderAlias)]),
+            StubJunkMailFolderCatalog.None,
+            StubMailFolderMappings.ResolvingNothing);
+    }
 
     private static EmailSummary SummaryOf() => SyntheticEmailSummaries.Create() with { StoredEmailId = Message };
 
@@ -260,7 +353,10 @@ public sealed class MailBodyCleaningTests
         undrawnInlineImageCount: 0,
         truncated: false);
 
-    private static EmailContentReader ReaderOver(EmailSummary? summary, MailDocument? document)
+    private static EmailContentReader ReaderOver(
+        EmailSummary? summary,
+        MailDocument? document,
+        MailboxScopeResolver scopeResolver)
     {
         var summaries = Substitute.For<IStoredEmailSummaryReader>();
         summaries.FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(summary));
@@ -270,23 +366,13 @@ public sealed class MailBodyCleaningTests
             .Returns(Task.FromResult<StoredEmailContent?>(
                 new StoredEmailContent(StoredRawMime, StoredRawMime.Length, SHA256.HashData(StoredRawMime))));
 
-        var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
-        accountCatalog.OwnedAccounts.Returns(
-            [SyntheticServedAccount.Of(MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId))]);
-
         return new EmailContentReader(
             summaries,
             new StubEmailThreadReader(),
             contentStore,
             RendererReturning(document),
             new RecordingEmailContentRepairRequestStore(),
-            new MailboxScopeResolver(
-                accountCatalog,
-                StubMailFolderParticipation.Mapping(summary is null
-                    ? []
-                    : [new MailFolderIdentity(summary.AccountId, summary.FolderAlias)]),
-                StubJunkMailFolderCatalog.None,
-                StubMailFolderMappings.ResolvingNothing),
+            scopeResolver,
             new RecordingAttachmentDownloadLinkIssuer(),
             SensitiveContentEgressGuards.Inactive(),
             new EmailContentReadOptions(),

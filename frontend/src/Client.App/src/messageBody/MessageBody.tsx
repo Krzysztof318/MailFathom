@@ -188,9 +188,15 @@ export function MessageBody({
 // one is not what is being drawn. Nothing is said while a cleaning that happened is on the screen, which is the case
 // a reader needs no sentence about.
 //
-// The wait is a live region rather than a line that only appears, because it arrives after the document did: somebody
-// reading with a screen reader is already past the top of the message when it changes, and a note nobody is told about
-// is a wait in silence.
+// It is a live region rather than a line that only appears, because it arrives after the document did: somebody reading
+// with a screen reader is already past the top of the message when it changes, and a note nobody is told about is a wait
+// in silence. That holds for the sentence that replaces the wait exactly as it holds for the wait, so the region is one
+// element whose text changes rather than two that swap.
+//
+// The slot is held open for as long as the cleaned view is in force, whatever it currently says. The reduced document is
+// already drawn and being read while the derivation runs, so a line that appeared, changed length and then vanished
+// would move the message under the cursor of somebody who is reading it — three times, for a rendering whose whole
+// promise is that the pane never goes empty.
 function Cleaning({
     cleaned,
     cleaning,
@@ -200,24 +206,25 @@ function Cleaning({
 }) {
     const { translate } = useLocalization();
 
-    if (cleaning) {
-        return (
-            <p className="text-sm text-muted" role="status">
-                {translate('body.cleaning')}
-            </p>
-        );
-    }
-
-    if (cleaned === null) {
-        return null;
-    }
-
     // A read that failed outright is one sentence rather than five: the four reasons a body read separates matter
     // because each has a different way out, and the way out of a cleaning that did not arrive is the document already
     // on the screen.
-    const why = cleaned.outcome === 'read' ? cleaningFellBack[cleaned.value.cleaning] : 'body.cleaningNotRead';
+    const settled =
+        cleaned === null
+            ? null
+            : cleaned.outcome === 'read'
+              ? cleaningFellBack[cleaned.value.cleaning]
+              : 'body.cleaningNotRead';
 
-    return why === null ? null : <p className="text-sm text-muted">{translate(why)}</p>;
+    if (!cleaning && cleaned === null) {
+        return null;
+    }
+
+    return (
+        <p className="min-h-5 text-sm text-muted" role="status">
+            {cleaning ? translate('body.cleaning') : settled === null ? '' : translate(settled)}
+        </p>
+    );
 }
 
 // What the message says, with the conversation it quoted either under the words or one gesture away from them. The
