@@ -1401,6 +1401,14 @@ bundle over `http://tauri.localhost` answers exactly as one serving from a schem
 it is written at is fixed by the occurrence rather than chosen at the call site — so a dashboard grouping on that
 attribute reads the same shape from every client, and the floor below can be reasoned about from this table alone.
 
+**Two records sit above `INFO`, and the rule that keeps it to two is worth reading before the table.** A record above
+the default floor passes two tests rather than one: an operator would act on it, *and* this deployment cannot see it
+for itself. The second is the one usually failed. A deployment already records every refusal it issued, so a client
+telling it that a credential was declined or a write refused is a second copy of something nobody can act on any better
+for having twice — those are the client's own account of what it did and sit at `DEBUG` with the rest of it. What
+passes both is what never reached the deployment at all, and what happened where it cannot see: a signal hub that
+refused until the client had nothing but its own interval left, and a region that threw while it was being drawn.
+
 | Severity | Record | When it is written |
 | --- | --- | --- |
 | `INFO` | `session_started` | A signed-in session begins |
@@ -1408,12 +1416,14 @@ attribute reads the same shape from every client, and the floor below can be rea
 | `DEBUG` | `deployment_read` | The session route answered, carrying `mailfathom.client.deployment.version`, the size of the grant as `…deployment.permissions`, and the level as `…deployment.telemetry` |
 | `DEBUG` | `signed_in` | A sign-in produced a credential, with `mailfathom.client.kept` saying whether it was kept |
 | `DEBUG` | `sign_in_refused` | A sign-in did not, with `mailfathom.client.refusal` naming which of the closed set of reasons |
+| `DEBUG` | `credential_no_longer_accepted` | The deployment stopped taking the credential a session held |
 | `DEBUG` | `request_failed` | A request produced no answer the client could act on, with the same `mailfathom.client.request`, `…outcome`, and `…failure` the span beside it carries, and `…request.duration_ms` |
 | `DEBUG` | `signals_opened` | A connection to the signal hub stands |
 | `DEBUG` | `signals_dropped` | One ended |
 | `DEBUG` | `signals_refused` | One could not be opened, with `mailfathom.client.attempt` counting the attempt |
 | `DEBUG` | `signal_refused` | The hub sent a payload this client does not act on |
 | `DEBUG` | `act_asked` | The client asked the deployment to change something, with `mailfathom.client.act` naming which act and `…messages` counting them |
+| `DEBUG` | `act_refused` | The deployment refused a change the client had already drawn, and the client put the screen back |
 | `DEBUG` | `message_sent` | The client asked the deployment to send a message somebody wrote in it, with `mailfathom.client.send` naming how that ended and `…refusal` naming which refusal where it was refused |
 | `DEBUG` | `send_withdrawn` | Somebody asked for a send back before the deployment had let it go, with `mailfathom.client.withdrawal` naming what the deployment answered — `withdrawn`, `alreadyBeingSent`, `pastRecall`, or `noSuchSend`, and `failed` where the request produced no answer |
 | `DEBUG` | `preferences_stated` | A preference write went out, with `mailfathom.client.stated` saying whether the deployment held it or refused it — never which preference moved or what it was set to |
@@ -1421,9 +1431,7 @@ attribute reads the same shape from every client, and the floor below can be rea
 | `TRACE` | `request_completed` | A request produced an answer, with the same attributes `request_failed` carries minus the failure |
 | `TRACE` | `signal_received` | The hub said something changed, with `mailfathom.client.signal` naming the kind |
 | `TRACE` | `navigated` | Somebody moved to another space, with `mailfathom.client.space` and `…navigation.duration_ms` |
-| `WARN` | `credential_no_longer_accepted` | The deployment stopped taking the credential a session held |
 | `WARN` | `signals_unreachable` | The hub refused every attempt for long enough that the client is reading on its own interval alone |
-| `WARN` | `act_refused` | The deployment refused a change the client had already drawn, and the client put the screen back |
 | `ERROR` | `render_failed` | A region threw while it was being drawn and the boundary around it contained the failure — `FATAL` where that region is the whole application, which is a client nobody can use rather than a part nobody can see |
 
 **A deployment states how much of that it wants, and the client stops writing the rest.**
@@ -1437,8 +1445,8 @@ records the buffer exists for within seconds of somebody opening a folder.
 conservative: a deployment serving hundreds of clients pays for every record each of them sends, so what ships by
 default is the line that says a session exists, and everything a defect report actually needs is turned on for as long
 as the report takes. `debug` is the level to ask for then — it adds the sign-in, the deployment read, the signal hub,
-the acts, the sends and the withdrawals, the preference writes, the notification answer, and the failed requests, and
-leaves out the two per-request and per-move streams that `trace` adds.
+the acts, the sends and the withdrawals, the preference writes, the notification answer, the failed requests, and the
+two refusals the deployment issued itself, and leaves out the two per-request and per-move streams that `trace` adds.
 
 **A record made before the deployment answers is held at `info` too.** The client has no level until the session route
 has answered, and the alternative to standing on the default there is picking between recording a `TRACE` stream into a

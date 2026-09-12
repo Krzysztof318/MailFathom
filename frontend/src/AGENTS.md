@@ -73,6 +73,45 @@ Four things may never cross, in either direction:
 - Bound what a screen asks for. A route that can answer with a mailbox-sized collection is called with the window the
   screen actually shows, and the client refuses an answer larger than it asked for rather than rendering it.
 
+## What the client records about itself, and at which level
+
+The occurrences this client may record are a closed set declared once in `Client.Backend/src/telemetry.ts`, beside the
+severity each one is written at, and both halves of the client write into it. A severity is therefore a property of the
+occurrence rather than of the call site: a new record is added in that file with its level argued there, and a screen
+passes no level of its own. What an operator then reads is
+[Telemetry](../../docs/operations/telemetry.md#what-the-client-publishes-about-itself), and the floor beneath the whole
+vocabulary is the deployment's own answer rather than anything decided here.
+
+Which level a record takes is the answer to _who is this for_, and the levels are not a scale of how much the
+occurrence mattered.
+
+- **`INFO` is the level nobody asked for.** It is the floor a deployment ships with, so what sits there is what every
+  collector is charged for by every signed-in client at once. Exactly one occurrence is there — a session beginning —
+  and it stays the only one: anything that happens more than once a session belongs below it, however much the screen
+  reporting it matters to whoever is in front of it.
+- **`DEBUG` is the client's own account of what it did**, and it is where nearly everything belongs. It is what an
+  operator lowers the floor to while somebody's report is open, so the bar is that it would help read that report
+  rather than that it is worth keeping.
+- **`TRACE` is the stream beneath that** — a record per request and one per move between screens — which is only ever
+  worth having from one client at a time.
+- **`WARN` and above pass two tests rather than one: an operator would act on it, _and_ the deployment cannot see it
+  for itself.** The second is the one usually failed, and failing it is not a matter of degree. A deployment already
+  writes down every refusal it issued, so a client record of a credential it declined or a write it refused is a second
+  copy of something nobody can act on any better for having twice — both are the client's own account and sit at
+  `DEBUG` with the rest of it. What passes both is what never reached the deployment, or what happened where it cannot
+  see: a signal hub that refused until the client had nothing but its own interval left, and a region that threw while
+  it was being drawn.
+- **`FATAL` says the client is unusable**, rather than that a failure was severe. One call site reaches it — the
+  containment boundary around the whole application, where `ERROR` would report a client nobody can use as a region
+  nobody can see.
+
+Two things follow that a diff makes easy to miss. A record is never raised a level because what it reports matters to
+the person using the client: what they are owed is a notice on the screen, which § _UX_ already requires, and the record
+is for whoever reads a collector hours later. And **the browser console is not this vocabulary** — what is written
+there is for somebody with the developer tools open, it reaches no deployment, and it neither substitutes for a record
+nor relaxes what a record may carry. `main.tsx` is the one place that writes to it, so that React's own account of a
+failed render survives a handler being stated at all.
+
 ## State: what is stored, what is derived, and where an effect is wrong
 
 - **Where a setting is kept follows one rule rather than whichever module was open first.** What a person sets

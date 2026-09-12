@@ -145,10 +145,14 @@ export type ClientEvent =
  * at once, so exactly one occurrence is written there — a session beginning — and everything that happens more than
  * once a session sits below it. `DEBUG` is the client's own account of what it did, which is what an operator lowers
  * the floor to when somebody reports something; `TRACE` is the stream beneath that, a record per request and one per
- * move between screens, which is only ever worth having for one client at a time. Above `INFO` is what an operator
- * would act on rather than read: a credential a deployment stopped accepting, a hub that has been unreachable for long
- * enough that the interval is all a client has left, and an act a deployment refused after the screen had already drawn
- * it as done.
+ * move between screens, which is only ever worth having for one client at a time.
+ *
+ * Above `INFO` an occurrence passes two tests rather than one: an operator would act on it, *and* the deployment cannot
+ * see it for itself. The second is what keeps that level worth reading, because a deployment already holds its own
+ * record of every refusal it issued — so a client record of the same refusal is a second copy of something nobody can
+ * act on any better for having twice. Two occurrences pass both. A hub that has refused for long enough that the
+ * interval is all a client has left never reached the deployment to be recorded there, and a region that threw while it
+ * was being drawn happened somewhere the deployment cannot see at all.
  */
 export const severityOf: Readonly<Record<ClientEvent, SeverityNumber>> = {
     session_started: SeverityNumber.INFO,
@@ -157,12 +161,24 @@ export const severityOf: Readonly<Record<ClientEvent, SeverityNumber>> = {
     deployment_read: SeverityNumber.DEBUG,
     signed_in: SeverityNumber.DEBUG,
     sign_in_refused: SeverityNumber.DEBUG,
+
+    // The deployment declining a credential it issued, which it has already written down as a refusal of its own. It is
+    // also the ordinary end of a session rather than a fault: a machine asleep past the renewal margin wakes holding a
+    // token nobody renewed, and one record per client per weekend is what putting this above the default floor buys.
+    credential_no_longer_accepted: SeverityNumber.DEBUG,
+
     request_failed: SeverityNumber.DEBUG,
     signals_opened: SeverityNumber.DEBUG,
     signals_dropped: SeverityNumber.DEBUG,
     signals_refused: SeverityNumber.DEBUG,
     signal_refused: SeverityNumber.DEBUG,
     act_asked: SeverityNumber.DEBUG,
+
+    // The deployment declining writes it answered, which is again its own answer read back to it. What the client adds
+    // is that the screen had drawn them as done and has put itself back, and that is a defect report against a client
+    // rather than something whoever is reading a collector can act on.
+    act_refused: SeverityNumber.DEBUG,
+
     message_sent: SeverityNumber.DEBUG,
     send_withdrawn: SeverityNumber.DEBUG,
     preferences_stated: SeverityNumber.DEBUG,
@@ -172,9 +188,7 @@ export const severityOf: Readonly<Record<ClientEvent, SeverityNumber>> = {
     signal_received: SeverityNumber.TRACE,
     navigated: SeverityNumber.TRACE,
 
-    credential_no_longer_accepted: SeverityNumber.WARN,
     signals_unreachable: SeverityNumber.WARN,
-    act_refused: SeverityNumber.WARN,
 
     render_failed: SeverityNumber.ERROR,
 };

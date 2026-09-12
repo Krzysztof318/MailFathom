@@ -186,15 +186,23 @@ describe('clientTelemetryForThisApplication', () => {
         expect(record?.attributes).toEqual({ 'mailfathom.client.event': 'session_started' });
     });
 
-    it('records a credential the deployment stopped accepting as a warning', async () => {
+    // Both of these are a refusal the deployment issued and has already written down for itself, so what is asserted is
+    // that this client's copy of one sits with the rest of its own account rather than above a floor nobody asked for.
+    it('records a refusal the deployment itself issued as the client’s own account of what it did', async () => {
         const telemetry = clientTelemetryForThisApplication();
 
+        telemetry.exportFor(session, true, 'debug');
         telemetry.happened('credential_no_longer_accepted');
+        telemetry.happened('act_refused', { 'mailfathom.client.act': 'archive', 'mailfathom.client.messages': 2 });
 
-        const [record] = await written(() => records.getFinishedLogRecords());
+        await vi.waitFor(() => {
+            expect(records.getFinishedLogRecords().length).toBe(2);
+        });
 
-        expect(record?.severityNumber).toBe(SeverityNumber.WARN);
-        expect(record?.attributes).toEqual({ 'mailfathom.client.event': 'credential_no_longer_accepted' });
+        expect(records.getFinishedLogRecords().map((record) => record.severityNumber)).toEqual([
+            SeverityNumber.DEBUG,
+            SeverityNumber.DEBUG,
+        ]);
     });
 
     it('records a failure a boundary contained as an error, naming the region and what was thrown', async () => {
@@ -292,11 +300,11 @@ describe('clientTelemetryForThisApplication', () => {
 
             telemetry.exportFor(session, true, 'warn');
             telemetry.happened('session_started');
-            telemetry.happened('credential_no_longer_accepted');
+            telemetry.renderFailed('reading_pane', new TypeError('A message this pane cannot draw.'));
 
             const [only, ...rest] = await written(() => records.getFinishedLogRecords());
 
-            expect(only?.attributes['mailfathom.client.event']).toBe('credential_no_longer_accepted');
+            expect(only?.attributes['mailfathom.client.event']).toBe('render_failed');
             expect(rest).toEqual([]);
         });
 
