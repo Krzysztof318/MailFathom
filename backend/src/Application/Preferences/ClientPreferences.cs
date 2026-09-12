@@ -10,7 +10,7 @@ namespace MailFathom.Application.Preferences;
 /// <param name="OpenMailInTabs">Whether opening a message opens a tab rather than replacing what is on the screen.</param>
 /// <param name="MarkReadOnOpen">Whether opening a message in the client marks it read on the user's own mail server.</param>
 /// <param name="ExpandWholeThread">Whether opening a conversation draws every message in it rather than the one it was opened at.</param>
-/// <param name="EmbeddedHtmlMessages">Whether an open message draws the sender's own markup inline rather than the reduced text.</param>
+/// <param name="MessageView">Which of the three renderings an open message is drawn on.</param>
 /// <param name="AiFiltersShown">Whether the folder tree carries the standing views of what a derivation read in the mail.</param>
 /// <param name="NotificationSeconds">How long one of the client's own notifications stands before it takes itself away.</param>
 /// <remarks>
@@ -42,7 +42,7 @@ public sealed record ClientPreferences(
     bool OpenMailInTabs,
     bool MarkReadOnOpen,
     bool ExpandWholeThread,
-    bool EmbeddedHtmlMessages,
+    ClientMessageView MessageView,
     bool AiFiltersShown,
     int NotificationSeconds)
 {
@@ -81,5 +81,5 @@ public sealed record ClientPreferences(
     /// deployment nobody has asked behaves as it did before this preference existed.
     /// </remarks>
     public static ClientPreferences Unset { get; } =
-        new(true, ClientThemeChoice.System, false, true, false, false, true, 5);
+        new(true, ClientThemeChoice.System, false, true, false, ClientMessageView.Reduced, true, 5);
 }

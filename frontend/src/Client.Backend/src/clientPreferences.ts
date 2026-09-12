@@ -17,6 +17,17 @@ export type ClientThemePreference = 'system' | 'light' | 'dark';
 const themePreferences: readonly ClientThemePreference[] = ['system', 'light', 'dark'];
 
 /**
+ * Which of the three renderings a message opens on, as the deployment names it.
+ *
+ * `reduced` is the closed document tree the service reduces a body to and is what an unset preference reads as.
+ * `cleaned` is that same tree with what the sender wrapped it in dropped, derived per open by a model that answers in
+ * block indices. `embeddedHtml` is the sender's own markup, with everything that runs or reports removed.
+ */
+export type ClientMessageView = 'reduced' | 'cleaned' | 'embeddedHtml';
+
+const messageViews: readonly ClientMessageView[] = ['reduced', 'cleaned', 'embeddedHtml'];
+
+/**
  * What one person set about their own client, held on the deployment so it follows them between machines.
  *
  * Every preference is answered whether or not it was ever set, so a screen renders one shape rather than one per
@@ -34,8 +45,8 @@ export interface ClientPreferences {
     /** Whether opening a conversation draws every message in it rather than the one it was opened at. */
     readonly expandWholeThread: boolean;
 
-    /** Whether an open message draws the sender's own markup inline rather than the reduced text this client reduces to. */
-    readonly embeddedHtmlMessages: boolean;
+    /** Which of the three renderings an open message is drawn on. */
+    readonly messageView: ClientMessageView;
 
     /** Whether the folder tree carries the standing views of what a derivation read in the mail. */
     readonly aiFiltersShown: boolean;
@@ -68,7 +79,7 @@ export const unsetClientPreferences: ClientPreferences = {
     openMailInTabs: false,
     markReadOnOpen: true,
     expandWholeThread: false,
-    embeddedHtmlMessages: false,
+    messageView: 'reduced',
     aiFiltersShown: true,
     notificationSeconds: 5,
 };
@@ -161,7 +172,7 @@ function parsePreferences(body: string): ClientPreferences | null {
     const openMailInTabs = record['openMailInTabs'];
     const markReadOnOpen = record['markReadOnOpen'];
     const expandWholeThread = record['expandWholeThread'];
-    const embeddedHtmlMessages = record['embeddedHtmlMessages'];
+    const messageView = record['messageView'];
     const aiFiltersShown = record['aiFiltersShown'];
     const notificationSeconds = record['notificationSeconds'];
 
@@ -174,13 +185,12 @@ function parsePreferences(body: string): ClientPreferences | null {
         typeof openMailInTabs !== 'boolean' ||
         typeof markReadOnOpen !== 'boolean' ||
         typeof expandWholeThread !== 'boolean' ||
-        typeof embeddedHtmlMessages !== 'boolean' ||
         typeof aiFiltersShown !== 'boolean'
     ) {
         return null;
     }
 
-    if (!isThemePreference(theme)) {
+    if (!isThemePreference(theme) || !isMessageView(messageView)) {
         return null;
     }
 
@@ -190,7 +200,7 @@ function parsePreferences(body: string): ClientPreferences | null {
         openMailInTabs,
         markReadOnOpen,
         expandWholeThread,
-        embeddedHtmlMessages,
+        messageView,
         aiFiltersShown,
         notificationSeconds,
     };
@@ -198,6 +208,10 @@ function parsePreferences(body: string): ClientPreferences | null {
 
 function isThemePreference(value: unknown): value is ClientThemePreference {
     return typeof value === 'string' && themePreferences.includes(value as ClientThemePreference);
+}
+
+function isMessageView(value: unknown): value is ClientMessageView {
+    return typeof value === 'string' && messageViews.includes(value as ClientMessageView);
 }
 
 /**

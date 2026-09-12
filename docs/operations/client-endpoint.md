@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -72,6 +72,7 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `GET /api/client/threads/{threadId}/state` | `mailfathom.mail.read` |
 | `GET /api/client/messages/{storedEmailId}` | `mailfathom.mail.read` |
 | `GET /api/client/messages/{storedEmailId}/body` | `mailfathom.mail.read` |
+| `GET /api/client/messages/{storedEmailId}/body/cleaned` | `mailfathom.mail.ask` |
 | `GET /api/client/messages/{storedEmailId}/attachments/{position}` | `mailfathom.mail.read` |
 | `POST /api/client/citations/resolution` | `mailfathom.mail.read` |
 | `GET /api/client/mutations` | `mailfathom.mail.read` |
@@ -1291,6 +1292,77 @@ exactly as it applies to what a model reads.
 [The mail document](../features/email-content.md) holds the reasoning for every paragraph above, and states what a
 client is left to render.
 
+### The cleaned message body route
+
+```http
+GET /api/client/messages/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90/body/cleaned
+```
+
+It answers the same message as the third rendering: the document above with the blocks a model decided were the sender's
+frame rather than their message absent, and every block it keeps identical to what the body route already served.
+
+```jsonc
+{
+  "storedEmailId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+  "cleaning": "Cleaned",
+  "document": {
+    "schemaVersion": 1,
+    "refusal": "None",
+    "removedRemoteReferenceCount": 2,
+    "retainedRemoteImageCount": 0,
+    "inlineImageCount": 1,
+    "undrawnInlineImageCount": 0,
+    "truncated": false,
+    "blocks": [ /* the blocks the cleaning kept, in the order they were in */ ]
+  }
+}
+```
+
+**`cleaning` says what happened, and `document` is what to draw whichever value it carries.**
+
+| Value | What it means |
+| --- | --- |
+| `Cleaned` | A model answered, the answer described the document, and `document` is the rendering |
+| `NothingToClean` | There was nothing to clean: no document, a reduction that refused the body, or a document of no blocks |
+| `NotActivated` | This deployment declares no chat endpoint, so it cleans no bodies |
+| `AllowanceExhausted` | The period's `MailAnswering` ceilings are spent, so nothing was asked of the provider |
+| `ProviderUnavailable` | The provider was asked and did not answer |
+| `AnswerRejected` | Two answers arrived and neither described the document |
+
+**A route of its own rather than a query on the body route, because what it costs is different in kind.** The body route
+reads a local copy and is published under `mailfathom.mail.read`; this one sends an outline to a chat provider and is
+charged to the period allowance a question is charged to, so it is published under **`mailfathom.mail.ask`** — a reading
+grant is not a way to spend a deployment's provider budget. A caller holds both, the read behind this needing the reading
+grant as every read does.
+
+**It never answers an empty pane, and it never fails the read to report a cost.** A spent allowance is `200` with the
+ordinary reduced document and `AllowanceExhausted` beside it rather than `429`: the message is on the screen either way,
+and taking it away to report a cost would be the worse answer. That is the difference from
+[the reply drafting routes](#the-reply-drafting-routes), where somebody pressed a button and has nothing at all unless
+the call is made.
+
+**The model is sent an outline and answers in block indices.** What leaves the deployment is each block's kind, its link
+count and the opening of its text, beside the envelope sender and the subject — never the source markup and never the
+message whole — and what comes back is ranges of block indices. An answer whose ranges overlap, leave a gap, reach past
+the last block, arrive renumbered, or carry any message text is refused; the body is put once more and a second refusal
+answers `AnswerRejected`. That is what makes the rendering incapable of rewriting a word.
+
+**It is asked per open and remembered nowhere.** Nothing is derived when a message arrives, nothing is stored, and opening
+the message again asks again — which is why the reader's own answer about remote pictures travels here too: a cleaning
+composed out of a different read would disagree with the body on their screen about what the message asked to fetch.
+
+| Parameter | Accepts | Default |
+| --- | --- | --- |
+| `storedEmailId` | The message's identifier, as a list row or a conversation published it | required, in the path |
+| `remoteImages` | `true` where the body on the reader's screen was read with the sender's pictures | `false` |
+
+**A message this user does not hold is answered `404`**, under the same rule the body route states, and a credential whose
+grant does not carry `mailfathom.mail.ask` is answered `403`. Nothing here contacts a mail server, so no screen waits on
+IMAP and no read can set the remote `\Seen` flag.
+
+[AI configuration § Cleaning a message body](configuration-ai.md#cleaning-a-message-body--chatbodycleanup) holds what an
+declared chat endpoint turns this on, which model the decision is routed to, and what it spends.
+
 ### The attachment route
 
 ```http
@@ -1786,7 +1858,7 @@ and somebody who set the client up the way they work should not have to set it u
   "openMailInTabs": false,
   "markReadOnOpen": true,
   "expandWholeThread": false,
-  "embeddedHtmlMessages": false,
+  "messageView": "reduced",
   "aiFiltersShown": true,
   "notificationSeconds": 5
 }
@@ -1795,17 +1867,17 @@ and somebody who set the client up the way they work should not have to set it u
 **It holds eight preferences and nothing else.** Whether this deployment may be told what the person's client is doing;
 what the client is painted in, which is `system`, `light`, or `dark`; whether opening a message opens a tab rather
 than replacing what is on the screen; whether opening a message marks it read on the person's own mail server; whether
-opening a conversation draws every message in it rather than the one it was opened at; whether an open message
-draws the sender's own markup rather than the reduced text; whether the client offers the standing views of the
-mailbox beneath its folder tree; and how long one of the client's own notifications stands before it takes itself
+opening a conversation draws every message in it rather than the one it was opened at; which of the three renderings an
+open message is drawn as, which is `reduced`, `cleaned`, or `embeddedHtml`; whether the client offers the standing views
+of the mailbox beneath its folder tree; and how long one of the client's own notifications stands before it takes itself
 away. Each of them says how
 somebody wants to work, which is why it belongs to the person. The language does not, and stays on the device: it is
 resolved for somebody who has not signed in and may never get a session. Neither does the width a person drags the
 message list to, which describes the screen in front of them.
 
 **Unset reads as telemetry on, the theme following the machine, tabs off, marking read on, a conversation opening at
-the message it was opened at, a message read as the reduced text, the standing views drawn, and a notification standing
-for five seconds.** A person who has set nothing is answered a
+the message it was opened at, a message read as the reduced document, the standing views drawn, and a notification
+standing for five seconds.** A person who has set nothing is answered a
 document rather than a refusal, so a first run draws a screen. The theme is still resolved on the device
 before sign-in — the client cannot wait on the network to paint itself, and there is no session to read this over above
 the sign-in screen — and what this answers replaces that device value once a session exists.
@@ -1825,15 +1897,35 @@ what the client does, and what a reader who came from a search result wants. Wit
 with all of them drawn. It is read when a conversation opens rather than watched while one is on the screen, so moving
 the switch changes the next conversation rather than the one being read, and the control is still there either way.
 
-**`embeddedHtmlMessages` decides which of the two renderings an open message is drawn as.** With it unset or off, a
-message is the reduced document tree
-[ADR 0024](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0024-rendering-mail-in-the-client-as-a-closed-document-tree.md)
-takes, and the sender's own markup is one control away on the message head. With it on, every open message draws that
-markup inline instead and the control on the head goes, having nowhere left to take anybody. It changes what a read
-asks for rather than only what is drawn: a client in the reduced view never asks for the self-contained
-representation, so turning this on is what puts `fullHtml=true` on
-[the body route](#the-message-body-route). A message whose markup this deployment holds none of, or served cut short, falls
-back to the reduced tree with the reason named rather than to an empty frame.
+**`messageView` decides which of the three renderings an open message is drawn as.** It replaces the
+`embeddedHtmlMessages` switch that decided between two of them, and a document written under that key reads as `reduced`
+rather than being translated: a switch that was on says nothing about which of the two other renderings it now means.
+
+- **`reduced`**, which is what an unset document answers, is the closed document tree
+  [ADR 0024](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0024-rendering-mail-in-the-client-as-a-closed-document-tree.md)
+  takes. The other two are each one control away — the cleaned one in the settings, the sender's own markup on the
+  message head.
+- **`cleaned`** is that same tree with the blocks a model decided were the sender's frame rather than their message
+  absent, and every block it keeps identical to what `reduced` would have drawn. It is derived per open by
+  [the cleaned body route](#the-cleaned-message-body-route) below, which is what makes it the one rendering a reader
+  waits for. A deployment that does not clean bodies, a spent allowance, and an answer that could not be used each serve
+  the ordinary reduced document with the reason named.
+- **`embeddedHtml`** draws the sender's own markup inline and takes the control on the message head away, having nowhere
+  left to take anybody. It changes what a read asks for rather than only what is drawn: a client in either of the other
+  two never asks for the self-contained representation, so choosing this is what puts `fullHtml=true` on
+  [the body route](#the-message-body-route). A message whose markup this deployment holds none of, or served cut short,
+  falls back to the reduced tree with the reason named rather than to an empty frame.
+
+**The two renderings drawn from the document tree are drawn in the client's own colours.** A colour the tree carries was
+picked by the sender against the white page their composer drew, so reproducing it is how a reading pane ends up with
+every message in a different colour, each of them legible by luck and several of them invisible under a dark theme. What
+survives of a sender's own presentation on those two surfaces is their formatting — bold, italic, underline, monospace, a
+strikethrough, the alignment and the structure — because each of those says something a decorative colour does not. One
+distinction is kept: a colour a sender used to step *back* from their own body text draws as the client's own small
+print, so a disclaimer stays a disclaimer rather than competing with the message above it, and a cell they filled keeps
+that it was filled in the one fill the client states for both themes. `embeddedHtml` is where a sender's colours are
+still shown, that being what that surface is for. The document itself is unchanged by any of this — the colour crosses
+the wire exactly as before, and what it decides is a rendering question the client answers.
 
 **`aiFiltersShown` decides whether the client draws the standing views beneath the folder tree.** With it unset or on,
 the tree carries a section offering three of them — the mail a significance was recorded on, the mail a commitment was,

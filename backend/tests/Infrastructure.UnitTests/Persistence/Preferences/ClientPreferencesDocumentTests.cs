@@ -22,11 +22,11 @@ public sealed class ClientPreferencesDocumentTests
     {
         // Act
         var document = ClientPreferencesDocument.Render(
-            new ClientPreferences(false, ClientThemeChoice.Dark, true, false, true, true, false, 12));
+            new ClientPreferences(false, ClientThemeChoice.Dark, true, false, true, ClientMessageView.Cleaned, false, 12));
 
         // Assert
         Assert.Equal(
-            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false,"expandWholeThread":true,"embeddedHtmlMessages":true,"aiFiltersShown":false,"notificationSeconds":12}""",
+            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false,"expandWholeThread":true,"messageView":"cleaned","aiFiltersShown":false,"notificationSeconds":12}""",
             document);
     }
 
@@ -39,7 +39,7 @@ public sealed class ClientPreferencesDocumentTests
 
         // Assert
         Assert.Equal(
-            """{"telemetryEnabled":true,"theme":"system","openMailInTabs":false,"markReadOnOpen":true,"expandWholeThread":false,"embeddedHtmlMessages":false,"aiFiltersShown":true,"notificationSeconds":5}""",
+            """{"telemetryEnabled":true,"theme":"system","openMailInTabs":false,"markReadOnOpen":true,"expandWholeThread":false,"messageView":"reduced","aiFiltersShown":true,"notificationSeconds":5}""",
             document);
     }
 
@@ -47,7 +47,7 @@ public sealed class ClientPreferencesDocumentTests
     public void Parse_ADocumentThisBuildWrote_ReadsBackWhatWasWritten()
     {
         // Arrange
-        var chosen = new ClientPreferences(false, ClientThemeChoice.Light, true, false, true, true, false, 30);
+        var chosen = new ClientPreferences(false, ClientThemeChoice.Light, true, false, true, ClientMessageView.EmbeddedHtml, false, 30);
 
         // Act
         var read = ClientPreferencesDocument.Parse(ClientPreferencesDocument.Render(chosen));
@@ -74,7 +74,7 @@ public sealed class ClientPreferencesDocumentTests
         var read = ClientPreferencesDocument.Parse("""{"theme":"dark"}""");
 
         // Assert
-        Assert.Equal(new ClientPreferences(true, ClientThemeChoice.Dark, false, true, false, false, true, 5), read);
+        Assert.Equal(new ClientPreferences(true, ClientThemeChoice.Dark, false, true, false, ClientMessageView.Reduced, true, 5), read);
     }
 
     /// <summary>A stored value outside the bound is a row an earlier build or a hand edit wrote, and is read as unset.</summary>
@@ -103,16 +103,33 @@ public sealed class ClientPreferencesDocumentTests
         Assert.Equal(stored, read.NotificationSeconds);
     }
 
-    /// <summary>The reduced text is what the client drew before the message view was a preference, so a row written then reads as that rather than as the sender's own markup.</summary>
+    /// <summary>The reduced document is what the client drew before the message view was a preference, so a row written then reads as that rather than as either of the other two.</summary>
     [Fact]
-    public void Parse_ARowWrittenBeforeTheMessageViewWasAPreference_AnswersItAsTheReducedText()
+    public void Parse_ARowWrittenBeforeTheMessageViewWasAPreference_AnswersItAsTheReducedDocument()
     {
         // Act
         var read = ClientPreferencesDocument.Parse(
             """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":true,"expandWholeThread":true}""");
 
         // Assert
-        Assert.False(read.EmbeddedHtmlMessages);
+        Assert.Equal(ClientMessageView.Reduced, read.MessageView);
+    }
+
+    /// <summary>
+    /// The preference that decided between two renderings is gone and the one naming three has replaced it, so a row
+    /// written under the old key reads as the reduced document: a person who had chosen the sender's own markup chooses
+    /// it again. It is the break this change takes, and it is taken here rather than translated, because a switch that
+    /// was on says nothing about which of the two other renderings it now means.
+    /// </summary>
+    [Fact]
+    public void Parse_ARowCarryingTheKeyTheMessageViewReplaced_AnswersItAsTheReducedDocument()
+    {
+        // Act
+        var read = ClientPreferencesDocument.Parse(
+            """{"telemetryEnabled":false,"theme":"dark","embeddedHtmlMessages":true}""");
+
+        // Assert
+        Assert.Equal(ClientMessageView.Reduced, read.MessageView);
     }
 
     /// <summary>
@@ -124,7 +141,7 @@ public sealed class ClientPreferencesDocumentTests
     {
         // Act
         var read = ClientPreferencesDocument.Parse(
-            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":true,"expandWholeThread":true,"embeddedHtmlMessages":true}""");
+            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":true,"expandWholeThread":true,"messageView":"cleaned"}""");
 
         // Assert
         Assert.True(read.AiFiltersShown);

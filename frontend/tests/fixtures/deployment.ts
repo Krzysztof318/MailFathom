@@ -62,7 +62,7 @@ export const clientPreferences = {
     openMailInTabs: false,
     markReadOnOpen: true,
     expandWholeThread: false,
-    embeddedHtmlMessages: false,
+    messageView: 'reduced',
     aiFiltersShown: true,
     notificationSeconds: 5,
 };

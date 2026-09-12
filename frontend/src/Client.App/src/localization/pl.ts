@@ -190,8 +190,11 @@ export const pl: Catalogue = {
     'settings.profileHeld':
         'Imię, nazwisko i zdjęcie przechowuje wdrożenie, na które się logujesz, więc idą za Tobą między maszynami. Żadne z nich nie trafia na Twój serwer poczty.',
     'settings.messageView': 'Widok wiadomości',
+    'settings.messageViewCleaned': 'Uproszczony przez AI',
     'settings.messageViewReduced': 'Uproszczony',
     'settings.messageViewHtml': 'Oryginał',
+    'settings.messageViewCleanedExplanation':
+        'To samo deterministyczne oczyszczanie co w widoku uproszczonym, a AI decyduje wyłącznie o tym, co zostawić, a co pominąć — nie przepisuje ani jednego słowa, więc tekst zostaje dokładnie taki, jaki napisał nadawca; zmienia się tylko sposób wyświetlenia. Zwykle czystszy niż zwykły uproszczony, szczególnie przy newsletterach i długich wątkach odpowiedzi.',
     'settings.messageViewReducedExplanation':
         'Wiadomości pokazują oczyszczony tekst; oryginał otwierasz ikoną przy nagłówku.',
     'settings.messageViewHtmlExplanation':
@@ -791,6 +794,15 @@ export const pl: Catalogue = {
     'body.markupFitting': 'Dopasowywanie wysokości do treści…',
     'body.markupIsolated': 'Treść HTML nadawcy w izolacji — skrypty i zdalne zasoby zablokowane',
     'body.markupNotMeasured': 'Nie udało się zmierzyć wysokości treści — ta jedna ramka przewija się osobno',
+    'body.cleaning': 'Ustalamy, co zostawić z tej wiadomości…',
+    'body.cleaningNotActivated': 'To wdrożenie nie upraszcza wiadomości modelem, więc pokazujemy wersję uproszczoną.',
+    'body.cleaningAllowanceExhausted':
+        'Limit tego wdrożenia na bieżący okres został wyczerpany, więc pokazujemy wersję uproszczoną.',
+    'body.cleaningProviderUnavailable':
+        'Model, o który pyta to wdrożenie, nie odpowiedział, więc pokazujemy wersję uproszczoną.',
+    'body.cleaningAnswerRejected': 'Odpowiedź modelu nie dała się wykorzystać, więc pokazujemy wersję uproszczoną.',
+    'body.cleaningNotRead': 'Nie udało się uprościć tej wiadomości, więc pokazujemy wersję uproszczoną.',
+
     'body.markupAbsent': 'Nadawca nie napisał sformatowanej wersji tej wiadomości, więc pokazujemy wersję uproszczoną.',
     'body.markupTruncated':
         'Ta wiadomość jest dłuższa, niż zwraca jeden odczyt, więc zamiast wersji nadawcy pokazujemy uproszczoną.',

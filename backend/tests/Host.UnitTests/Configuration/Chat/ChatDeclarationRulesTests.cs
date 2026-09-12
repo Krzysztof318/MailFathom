@@ -292,6 +292,25 @@ public sealed class ChatDeclarationRulesTests
     }
 
     /// <summary>
+    /// The model the body cleaning routes to is read per proposal out of the snapshot in force, so moving it is a reload
+    /// an instance takes rather than a restart it needs. The block carries nothing else: whether a body is cleaned is the
+    /// reader's own preference, so there is no switch here for a reload to have to refuse.
+    /// </summary>
+    [Fact]
+    public void FindChangesNeedingRestart_TheBodyCleaningModelMoved_IsTaken()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.BodyCleanup.Model = "a-small-fast-model";
+
+        // Act
+        var errors = ChatDeclarationRules.FindChangesNeedingRestart(candidate, Declared());
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>
     /// Whether a reply is drafted is decided while the container is built, and the composer asks the deployment once.
     /// A reload that flipped it would report the setting as taken while every composer went on offering a draft this
     /// deployment had stopped writing, or withholding one it had started writing.

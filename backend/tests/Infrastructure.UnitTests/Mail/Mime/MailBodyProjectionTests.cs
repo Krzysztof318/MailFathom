@@ -474,6 +474,90 @@ public sealed class MailBodyProjectionTests
         Assert.Equal("Readable", TextOf(document));
     }
 
+    /// <summary>A wrapper row whose outer cells are empty gutters is the layout it would be with one cell.</summary>
+    /// <remarks>
+    /// The shape most of a real corpus is framed in: mail centres a message by putting it in the middle cell of three and
+    /// leaving the outer two holding nothing. A row of cells that genuinely hold something is the same markup and has to
+    /// stay a table, which is the second half of this test rather than a separate one.
+    /// </remarks>
+    [Fact]
+    public async Task ProduceAsync_WrapperRowWhoseOuterCellsAreEmptyGutters_IsUnwrappedIntoWhatItHeld()
+    {
+        // Arrange
+        const string Wrapper = """
+            <table><tr><td>&nbsp;</td><td><p>Readable</p></td><td></td></tr></table>
+            """;
+
+        const string DataTable = """
+            <table><tr><td><p>Item</p></td><td><p>10</p></td></tr></table>
+            """;
+
+        // Act
+        var unwrapped = await DocumentOf(Wrapper);
+        var kept = await DocumentOf(DataTable);
+
+        // Assert
+        Assert.Equal([nameof(MailParagraphBlock)], unwrapped.Blocks.Select(block => block.GetType().Name));
+        Assert.Equal("Readable", TextOf(unwrapped));
+        Assert.IsType<MailTableBlock>(Assert.Single(kept.Blocks));
+    }
+
+    /// <summary>A wrapper whose one cell opens with a centring element is a box around content like any other.</summary>
+    [Fact]
+    public async Task ProduceAsync_WrapperCellOpeningWithCenter_IsUnwrappedIntoWhatItHeld()
+    {
+        // Arrange
+        const string Wrapper = """
+            <table><tr><td><center><p>Readable</p></center></td></tr></table>
+            """;
+
+        const string DataTable = """
+            <table><tr><td><center>Item</center></td><td><center>10</center></td></tr></table>
+            """;
+
+        // Act
+        var unwrapped = await DocumentOf(Wrapper);
+        var kept = await DocumentOf(DataTable);
+
+        // Assert
+        Assert.Equal("Readable", TextOf(unwrapped));
+        Assert.DoesNotContain(nameof(MailTableBlock), unwrapped.Blocks.Select(block => block.GetType().Name));
+        Assert.IsType<MailTableBlock>(Assert.Single(kept.Blocks));
+    }
+
+    /// <summary>A table whose every cell reduced to nothing is no block, rather than a row of empty bordered boxes.</summary>
+    /// <remarks>
+    /// The row of pictures a newsletter draws from remote references: every reference is removed while the tree is built,
+    /// so what used to survive was a table of cells holding nothing. A cell that is blank beside siblings that are not is
+    /// a different thing and keeps its place, which is what lines a data table's columns up.
+    /// </remarks>
+    [Fact]
+    public async Task ProduceAsync_TableEveryCellOfWhichReducedToNothing_IsEmittedAsNoBlock()
+    {
+        // Arrange
+        const string PictureRow = """
+            <p>Readable</p>
+            <table>
+              <tr><td><img src="https://tracker.test/a.gif"></td><td><img src="https://tracker.test/b.gif"></td></tr>
+            </table>
+            """;
+
+        const string DataTableWithABlankCell = """
+            <table><tr><td>Item</td><td></td><td>10</td></tr></table>
+            """;
+
+        // Act
+        var withoutTheRow = await DocumentOf(PictureRow);
+        var kept = await DocumentOf(DataTableWithABlankCell);
+
+        // Assert
+        Assert.Equal([nameof(MailParagraphBlock)], withoutTheRow.Blocks.Select(block => block.GetType().Name));
+        Assert.Equal("Readable", TextOf(withoutTheRow));
+
+        var table = Assert.IsType<MailTableBlock>(Assert.Single(kept.Blocks));
+        Assert.Equal(3, Assert.Single(table.Rows).Cells.Count);
+    }
+
     /// <summary>A layout table is walked under the same bounds a drawn one is, so unwrapping buys no free walk.</summary>
     /// <remarks>
     /// A wrapper is layout by being nested alone, so the rows inside one are a stranger's choice — and removing the

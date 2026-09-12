@@ -8,6 +8,7 @@ import {
     readClientPreferences,
     unsetClientPreferences,
     writeClientPreferences,
+    type ClientMessageView,
     type ClientPreferences,
     type ClientSession,
     type MailFathomTransport,
@@ -60,12 +61,12 @@ export interface ClientPreferencesInForce {
     readonly expandWholeThread: boolean;
 
     /**
-     * Whether an open message draws the sender's own markup inline rather than the reduced text.
+     * Which of the three renderings an open message is drawn on.
      *
-     * Unset reads as off, which is what this client has always drawn: the closed document tree ADR 0024 takes, with the
-     * sender's own markup on the second surface one control away.
+     * Unset reads as the reduced document, which is what this client has always drawn: the closed document tree
+     * ADR 0024 takes, with the cleaned rendering and the sender's own markup each one control away.
      */
-    readonly embeddedHtmlMessages: boolean;
+    readonly messageView: ClientMessageView;
 
     /**
      * Whether the folder tree carries the standing views of what a derivation read in the mail.
@@ -90,7 +91,7 @@ export interface ClientPreferencesInForce {
     readonly chooseTabMode: (openMailInTabs: boolean) => void;
     readonly chooseTelemetry: (telemetryEnabled: boolean) => void;
     readonly chooseThreadExpansion: (expandWholeThread: boolean) => void;
-    readonly chooseMessageView: (embeddedHtmlMessages: boolean) => void;
+    readonly chooseMessageView: (messageView: ClientMessageView) => void;
     readonly chooseAiFilters: (aiFiltersShown: boolean) => void;
 
     /**
@@ -248,7 +249,7 @@ export function useClientPreferences(
         // being taken once there is one.
         telemetryEnabled: inForce.session === null ? rememberedTelemetry(person) : inForce.preferences.telemetryEnabled,
         expandWholeThread: inForce.preferences.expandWholeThread,
-        embeddedHtmlMessages: inForce.preferences.embeddedHtmlMessages,
+        messageView: inForce.preferences.messageView,
         aiFiltersShown: inForce.preferences.aiFiltersShown,
         notificationSeconds: inForce.preferences.notificationSeconds,
         notStated: inForce.notStated,
@@ -265,8 +266,8 @@ export function useClientPreferences(
         chooseThreadExpansion: (expandWholeThread) => {
             state({ ...composedFrom(), expandWholeThread });
         },
-        chooseMessageView: (embeddedHtmlMessages) => {
-            state({ ...composedFrom(), embeddedHtmlMessages });
+        chooseMessageView: (messageView) => {
+            state({ ...composedFrom(), messageView });
         },
         chooseAiFilters: (aiFiltersShown) => {
             state({ ...composedFrom(), aiFiltersShown });

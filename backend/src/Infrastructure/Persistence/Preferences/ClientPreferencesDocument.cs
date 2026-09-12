@@ -14,7 +14,7 @@ namespace MailFathom.Infrastructure.Persistence.Preferences;
 /// <param name="OpenMailInTabs">What they said about tabs, or nothing where they never said.</param>
 /// <param name="MarkReadOnOpen">What they said about opening a message marking it read, or nothing where they never said.</param>
 /// <param name="ExpandWholeThread">What they said about a conversation opening expanded, or nothing where they never said.</param>
-/// <param name="EmbeddedHtmlMessages">What they said about a message drawing the sender's own markup, or nothing where they never said.</param>
+/// <param name="MessageView">Which of the three renderings they chose a message to open on, or nothing where they never chose.</param>
 /// <param name="AiFiltersShown">What they said about the tree carrying the standing views, or nothing where they never said.</param>
 /// <param name="NotificationSeconds">How long they asked a notification to stand for, or nothing where they never asked.</param>
 /// <remarks>
@@ -41,7 +41,7 @@ internal sealed record ClientPreferencesDocument(
     bool? OpenMailInTabs,
     bool? MarkReadOnOpen,
     bool? ExpandWholeThread,
-    bool? EmbeddedHtmlMessages,
+    ClientMessageView? MessageView,
     bool? AiFiltersShown,
     int? NotificationSeconds)
 {
@@ -72,7 +72,7 @@ internal sealed record ClientPreferencesDocument(
             preferences.OpenMailInTabs,
             preferences.MarkReadOnOpen,
             preferences.ExpandWholeThread,
-            preferences.EmbeddedHtmlMessages,
+            preferences.MessageView,
             preferences.AiFiltersShown,
             preferences.NotificationSeconds);
 
@@ -97,7 +97,7 @@ internal sealed record ClientPreferencesDocument(
             document.OpenMailInTabs ?? ClientPreferences.Unset.OpenMailInTabs,
             document.MarkReadOnOpen ?? ClientPreferences.Unset.MarkReadOnOpen,
             document.ExpandWholeThread ?? ClientPreferences.Unset.ExpandWholeThread,
-            document.EmbeddedHtmlMessages ?? ClientPreferences.Unset.EmbeddedHtmlMessages,
+            document.MessageView ?? ClientPreferences.Unset.MessageView,
             document.AiFiltersShown ?? ClientPreferences.Unset.AiFiltersShown,
             // Bounded on the way out as well as at the boundary a person writes through, because a row written by an
             // earlier build or edited by hand is not one this build has checked: a stored value outside the bound is

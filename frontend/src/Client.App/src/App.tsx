@@ -53,7 +53,7 @@ import { usePanelSwipe } from './notifications/usePanelSwipe';
 import { useNotificationCentre } from './notifications/useNotificationCentre';
 import { PendingChangesProvider } from './pendingChanges/PendingChanges';
 import { AiFiltersShownContext } from './preferences/aiFilters';
-import { EmbeddedHtmlMessagesContext } from './preferences/messageView';
+import { MessageViewContext } from './preferences/messageView';
 import { useClientPreferences } from './preferences/useClientPreferences';
 import { useOwnProfile } from './profile/useOwnProfile';
 import { ReadMarkingProvider } from './readMarking/ReadMarking';
@@ -711,7 +711,7 @@ export function App({
                                 {/* Above the frame for the same reason again: whether the tree carries the standing views is
                                 read by a section three components under the mail space, behind a space and a column
                                 that have nothing to do with the setting. */}
-                                <EmbeddedHtmlMessagesContext value={preferences.embeddedHtmlMessages}>
+                                <MessageViewContext value={preferences.messageView}>
                                     {/* Above the frame for the reason the marking is, and above the acts because the acts read it: what the
             list has drawn is where a message belongs, and every act on one has to name that. It holds nothing that is
             drawn, so nothing below re-renders because of it. */}
@@ -986,7 +986,7 @@ export function App({
                                             </MailboxActsProvider>
                                         </FolderMaintenanceProvider>
                                     </ListedMailProvider>
-                                </EmbeddedHtmlMessagesContext>
+                                </MessageViewContext>
                             </AiFiltersShownContext>
                         </ReadMarkingProvider>
                     </PendingChangesProvider>

@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { mailBodyRoute, readMailBody } from './mailBody';
+import { cleanedMailBodyRoute, mailBodyRoute, readCleanedMailBody, readMailBody } from './mailBody';
 import type { ClientSession } from './session';
 import type { ClientRequest, ClientResponse, MailFathomTransport } from './transport';
 
@@ -806,5 +806,154 @@ describe('readMailBody refusing a malformed answer', () => {
         ['a link that is neither absent nor an object', paragraph(run('x', { link: 'https://example.invalid/' }))],
     ])('refuses %s', async (_, block) => {
         expect(await refusing([block])).toBe('failed');
+    });
+});
+describe('cleanedMailBodyRoute', () => {
+    it('asks for the cleaned rendering beneath the message own body', () => {
+        expect(cleanedMailBodyRoute(storedEmailId, false)).toBe(`/messages/${storedEmailId}/body/cleaned`);
+    });
+
+    it('carries the reader ask for remote pictures, so the cleaned document matches what is on the screen', () => {
+        expect(cleanedMailBodyRoute(storedEmailId, true)).toBe(
+            `/messages/${storedEmailId}/body/cleaned?remoteImages=true`,
+        );
+    });
+
+    it('escapes an identifier rather than writing it into the path as it arrived', () => {
+        expect(cleanedMailBodyRoute('../accounts', false)).toBe('/messages/..%2Faccounts/body/cleaned');
+    });
+});
+
+describe('readCleanedMailBody', () => {
+    function cleanedBody(overrides: Readonly<Record<string, unknown>> = {}): string {
+        return JSON.stringify({
+            storedEmailId,
+            cleaning: 'Cleaned',
+            document: documentWith([paragraph(run('Your code is 558132.'))]),
+            ...overrides,
+        });
+    }
+
+    async function reading(body: string, remoteImages = false) {
+        return readCleanedMailBody(session, answering({ status: 200, body }), storedEmailId, remoteImages);
+    }
+
+    it('reads the cleaned route under the caller own credential', async () => {
+        const { transport, requests } = recording({ status: 200, body: cleanedBody() });
+
+        await readCleanedMailBody(session, transport, storedEmailId, false);
+
+        expect(requests[0]?.method).toBe('GET');
+        expect(requests[0]?.path).toBe(
+            `https://mail.example.invalid/api/client/messages/${storedEmailId}/body/cleaned`,
+        );
+        expect(requests[0]?.headers['Authorization']).toBe('Basic dGVzdA==');
+    });
+
+    it('reads the cleaned document the deployment composed', async () => {
+        const answer = await reading(cleanedBody());
+
+        expect(answer.outcome).toBe('read');
+        expect(answer.outcome === 'read' && answer.value.cleaning).toBe('Cleaned');
+        expect(answer.outcome === 'read' && answer.value.document?.blocks).toHaveLength(1);
+    });
+
+    // Every one of these is a sentence the pane says over the ordinary reduced document, which is why the reason
+    // travels as itself rather than as an absence somebody has to interpret.
+    it.each(['NothingToClean', 'NotActivated', 'AllowanceExhausted', 'ProviderUnavailable', 'AnswerRejected'])(
+        'reads %s as the reason the cleaning did not happen',
+        async (cleaning) => {
+            const answer = await reading(cleanedBody({ cleaning }));
+
+            expect(answer.outcome === 'read' && answer.value.cleaning).toBe(cleaning);
+        },
+    );
+
+    it('reads a message that carried no document at all as an absence rather than refusing it', async () => {
+        const answer = await reading(cleanedBody({ cleaning: 'NothingToClean', document: null }));
+
+        expect(answer.outcome === 'read' && answer.value.document).toBeNull();
+    });
+
+    it('holds the document to the walk the body read holds one to', async () => {
+        const malformed = documentWith([{ type: 'paragraph', version: 1, content: {}, alignment: 'Start' }]);
+        const answer = await reading(cleanedBody({ document: malformed }));
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    it('admits a retained remote picture only where the reader asked for one', async () => {
+        const withPicture = documentWith(
+            [
+                {
+                    type: 'image',
+                    version: 1,
+                    image: {
+                        source: 'https://sender.invalid/banner.png',
+                        alternativeText: null,
+                        width: null,
+                        height: null,
+                    },
+                    link: null,
+                    alignment: 'Start',
+                },
+            ],
+            { retainedRemoteImageCount: 1 },
+        );
+
+        const declined = await reading(cleanedBody({ document: withPicture }), false);
+        const asked = await reading(cleanedBody({ document: withPicture }), true);
+
+        expect(declined.outcome).toBe('failed');
+        expect(asked.outcome).toBe('read');
+    });
+
+    // The pane is never empty, and that is held from the parser down rather than by each screen checking for itself.
+    it('refuses a cleaning that reports itself as done and carries nothing to draw', async () => {
+        const answer = await reading(cleanedBody({ document: documentWith([]) }));
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    it('refuses a cleaning that reports itself as done and carries no document', async () => {
+        const answer = await reading(cleanedBody({ document: null }));
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    it.each([
+        ['a body that is not JSON', 'not json'],
+        ['a body that is not an object', '"Cleaned"'],
+        [
+            'an outcome this build does not publish',
+            JSON.stringify({ storedEmailId, cleaning: 'Tidied', document: null }),
+        ],
+        ['an outcome that is not a string', JSON.stringify({ storedEmailId, cleaning: 3, document: null })],
+        ['an answer naming no message', JSON.stringify({ cleaning: 'NotActivated', document: null })],
+    ])('refuses %s as unreadable', async (_, body) => {
+        const answer = await reading(body);
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    it('reports a deployment that did not answer as unavailable rather than throwing', async () => {
+        const answer = await readCleanedMailBody(
+            session,
+            () => Promise.reject(new Error('nothing there')),
+            storedEmailId,
+            false,
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: null } });
+    });
+
+    it.each([
+        [401, 'unauthenticated'],
+        [403, 'unauthorized'],
+        [500, 'unavailable'],
+    ])('reports status %i as %s', async (status, reason) => {
+        const answer = await readCleanedMailBody(session, answering({ status, body: '' }), storedEmailId, false);
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason, status } });
     });
 });

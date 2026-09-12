@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type {
     MailBlockAlignment,
     MailDocumentBlock,
@@ -17,7 +17,7 @@ import type {
 } from '@mailfathom/client-backend';
 import { useLocalization } from '../localization/useLocalization';
 import { MessageLink } from './MessageLink';
-import { readableRunColour, type ReadableRunColour } from './senderColour';
+import { senderColourRole } from './senderColour';
 
 // The whole of what a message may draw, which is the closed catalogue the service reduces every body to. Each block is
 // an ordinary element of the application's own document: nothing here is handed markup, nothing here writes any, and
@@ -158,15 +158,18 @@ function MessageTable({ block }: { readonly block: MailTableBlock }) {
                                 return (
                                     <Cell
                                         key={cellPosition}
+                                        // A cell the sender filled keeps the fact that they filled it and loses the
+                                        // colour they filled it with, which is the rule a coloured run follows: a total
+                                        // row stands out from the rows above it, in the one fill this client draws on
+                                        // both panels rather than in a value picked against a white page. The weight is
+                                        // the header's alone — a sender who filled a cell said it stands out, not that
+                                        // it labels the column, and drawing it bold would be this client claiming so.
                                         className={`border-e border-line px-3 py-2.25 align-top last:border-e-0 ${
                                             row.isHeader ? 'bg-sunken font-semibold text-text' : ''
-                                        } ${alignments[cell.alignment]}`}
+                                        } ${cell.background === null ? '' : 'bg-sunken'} ${alignments[cell.alignment]}`}
                                         colSpan={cell.columnSpan}
                                         rowSpan={cell.rowSpan}
                                         scope={row.isHeader ? 'col' : undefined}
-                                        style={
-                                            cell.background === null ? undefined : { backgroundColor: cell.background }
-                                        }
                                     >
                                         <MessageBlocks blocks={cell.blocks} />
                                     </Cell>
@@ -299,25 +302,12 @@ function MessageRun({ run }: { readonly run: MailInlineRun }) {
     // `MailInlineRun` states — so a signature, a postal address, and a poem are all line breaks this has to keep.
     const emphasized = emphasize(run, <span className="whitespace-pre-line">{run.text}</span>);
 
-    // Both readings of the sender's colour, because neither this component nor any other asks which theme is in force.
-    // A colour this client cannot read answers `null` and the run is drawn in the theme's own text colour, which is
-    // readable by construction — dropping a colour is never worse than drawing one nobody can see.
-    const readable = run.foreground === null ? null : readableRunColour(run.foreground);
+    // The sender's colour decides which of this client's own two it is drawn in rather than what it is drawn in, for the
+    // reason `messageBody/senderColour.ts` holds: a reading surface is drawn in the reader's theme, and what survives
+    // of the sender's own presentation is the emphasis above, which means something a colour does not.
+    const receding = run.foreground !== null && senderColourRole(run.foreground) === 'receding';
 
-    return readable === null ? (
-        emphasized
-    ) : (
-        <span data-sender-colour="" style={senderColour(readable)}>
-            {emphasized}
-        </span>
-    );
-}
-
-// React writes a property whose name begins with two dashes straight through to the element, but `CSSProperties` names
-// the properties CSS itself declares and a custom property is spellable in none of them — so the assertion here is
-// about what that type can express rather than about the two values, which are colours this module computed.
-function senderColour({ onLight, onDark }: ReadableRunColour): CSSProperties {
-    return { '--sender-colour-light': onLight, '--sender-colour-dark': onDark } as CSSProperties;
+    return receding ? <span className="text-muted">{emphasized}</span> : emphasized;
 }
 
 // Emphasis is drawn with the elements that mean it rather than with a class, so the meaning survives a stylesheet and

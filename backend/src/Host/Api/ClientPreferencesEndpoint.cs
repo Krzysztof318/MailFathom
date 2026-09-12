@@ -95,7 +95,7 @@ internal static class ClientPreferencesEndpoint
     /// <param name="preferences">The acting person's own preferences.</param>
     /// <param name="request">The whole document, with an omitted preference stored as its unset answer.</param>
     /// <param name="cancellationToken">Cancels the commit.</param>
-    /// <returns><c>200</c> with what is now stored, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the body names a theme this build does not publish or a notification time outside the bound.</returns>
+    /// <returns><c>200</c> with what is now stored, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the body names a theme or a message view this build does not publish, or a notification time outside the bound.</returns>
     internal static async Task<Results<Ok<ClientPreferencesResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> SaveAsync(
         [FromServices] OwnClientPreferences preferences,
         [FromBody] ClientPreferencesRequest request,
@@ -114,8 +114,7 @@ internal static class ClientPreferencesEndpoint
 
         if (request.Stated() is not { } stated)
         {
-            return Refusal(
-                $"A theme is one of {string.Join(", ", ClientThemeChoice.All.Select(choice => choice.Name))}.");
+            return Refusal(request.Unpublished());
         }
 
         return await preferences.SaveAsync(stated, cancellationToken)
@@ -137,7 +136,7 @@ internal static class ClientPreferencesEndpoint
 /// <param name="OpenMailInTabs">Whether opening a message opens a tab, or nothing for the unset answer.</param>
 /// <param name="MarkReadOnOpen">Whether opening a message marks it read on their mail server, or nothing for the unset answer.</param>
 /// <param name="ExpandWholeThread">Whether a conversation opens with every message drawn, or nothing for the unset answer.</param>
-/// <param name="EmbeddedHtmlMessages">Whether an open message draws the sender's own markup inline, or nothing for the unset answer.</param>
+/// <param name="MessageView">The name of which of the three renderings an open message is drawn on, or nothing for the unset answer.</param>
 /// <param name="AiFiltersShown">Whether the folder tree carries the standing views of what a derivation read, or nothing for the unset answer.</param>
 /// <param name="NotificationSeconds">How long one of the client's own notifications stands, in whole seconds, or nothing for the unset answer.</param>
 /// <remarks>
@@ -161,17 +160,24 @@ internal sealed record ClientPreferencesRequest(
     bool? OpenMailInTabs = null,
     bool? MarkReadOnOpen = null,
     bool? ExpandWholeThread = null,
-    bool? EmbeddedHtmlMessages = null,
+    string? MessageView = null,
     bool? AiFiltersShown = null,
     int? NotificationSeconds = null)
 {
     /// <summary>Reads the request as the whole set the write commits.</summary>
-    /// <returns>The preferences, with every one the body omitted answered as unset, or <see langword="null" /> when the body names a theme this build does not publish.</returns>
+    /// <returns>The preferences, with every one the body omitted answered as unset, or <see langword="null" /> when the body names a theme or a message view this build does not publish.</returns>
     internal ClientPreferences? Stated()
     {
         var theme = ClientPreferences.Unset.Theme;
 
         if (this.Theme is not null && !ClientThemeChoice.TryParse(this.Theme, out theme))
+        {
+            return null;
+        }
+
+        var messageView = ClientPreferences.Unset.MessageView;
+
+        if (this.MessageView is not null && !ClientMessageView.TryParse(this.MessageView, out messageView))
         {
             return null;
         }
@@ -182,10 +188,21 @@ internal sealed record ClientPreferencesRequest(
             this.OpenMailInTabs ?? ClientPreferences.Unset.OpenMailInTabs,
             this.MarkReadOnOpen ?? ClientPreferences.Unset.MarkReadOnOpen,
             this.ExpandWholeThread ?? ClientPreferences.Unset.ExpandWholeThread,
-            this.EmbeddedHtmlMessages ?? ClientPreferences.Unset.EmbeddedHtmlMessages,
+            messageView,
             this.AiFiltersShown ?? ClientPreferences.Unset.AiFiltersShown,
             this.NotificationSeconds ?? ClientPreferences.Unset.NotificationSeconds);
     }
+
+    /// <summary>Says what is on offer for whichever name <see cref="Stated" /> refused.</summary>
+    /// <returns>The refusal's detail, naming the published set the body missed.</returns>
+    /// <remarks>
+    /// Two names travel as names rather than as their own types, so a refusal has to say which of the two was the one
+    /// this build does not publish — a body naming a rendering that does not exist, answered with the three themes, is a
+    /// refusal a client cannot act on.
+    /// </remarks>
+    internal string Unpublished() => this.Theme is not null && !ClientThemeChoice.TryParse(this.Theme, out _)
+        ? $"A theme is one of {string.Join(", ", ClientThemeChoice.All.Select(choice => choice.Name))}."
+        : $"A message view is one of {string.Join(", ", ClientMessageView.All.Select(view => view.Name))}.";
 }
 
 /// <summary>What the client endpoint reports about one person's own client preferences.</summary>
@@ -194,7 +211,7 @@ internal sealed record ClientPreferencesRequest(
 /// <param name="OpenMailInTabs">Whether opening a message opens a tab rather than replacing what is on the screen.</param>
 /// <param name="MarkReadOnOpen">Whether opening a message marks it read on the user's own mail server.</param>
 /// <param name="ExpandWholeThread">Whether a conversation opens with every message drawn rather than at the one it was opened at.</param>
-/// <param name="EmbeddedHtmlMessages">Whether an open message draws the sender's own markup inline rather than the reduced text.</param>
+/// <param name="MessageView">The name of which of the three renderings an open message is drawn on.</param>
 /// <param name="AiFiltersShown">Whether the folder tree carries the standing views of what a derivation read in the mail.</param>
 /// <param name="NotificationSeconds">How long one of the client's own notifications stands before it takes itself away.</param>
 /// <remarks>
@@ -209,7 +226,7 @@ internal sealed record ClientPreferencesResponse(
     bool OpenMailInTabs,
     bool MarkReadOnOpen,
     bool ExpandWholeThread,
-    bool EmbeddedHtmlMessages,
+    string MessageView,
     bool AiFiltersShown,
     int NotificationSeconds)
 {
@@ -227,7 +244,7 @@ internal sealed record ClientPreferencesResponse(
             preferences.OpenMailInTabs,
             preferences.MarkReadOnOpen,
             preferences.ExpandWholeThread,
-            preferences.EmbeddedHtmlMessages,
+            preferences.MessageView.Name,
             preferences.AiFiltersShown,
             preferences.NotificationSeconds);
     }
