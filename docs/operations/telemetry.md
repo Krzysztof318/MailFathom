@@ -1300,7 +1300,7 @@ answer and records into the buffer described below, so an answer of off empties 
 it. Turning it back on begins at that moment and reaches back over nothing.
 
 **A deployment that forwards no telemetry offers no switch.** It answers
-[`"telemetry": false` on the session route](client-endpoint.md#the-session-route); the client stops recording the moment
+[`"telemetry": "off"` on the session route](client-endpoint.md#the-session-route); the client stops recording the moment
 it reads that and throws away what it had held, and the settings screen says so in place of a control that would decide
 nothing. Until a deployment has said either way the client records, because a deployment nobody has reached yet is
 every cold start and every failed sign-in — which is what the buffer below exists to keep. The screen says that too,
@@ -1397,14 +1397,57 @@ than against the client population as a whole. Nothing in the client branches on
 asked is whether the document's own origin is the deployment the session is signed in to, which a shell serving the
 bundle over `http://tauri.localhost` answers exactly as one serving from a scheme of its own does.
 
-**Three log records, and no others.** `session_started` at `INFO` when a signed-in session begins,
-`credential_no_longer_accepted` at `WARN` when the deployment stops taking the credential a session held, and
-`render_failed` at `ERROR` when a part of the client throws while it is being drawn and the boundary around it contains
-the failure. Each carries `mailfathom.client.event` naming which it is. There is no record per request and none per
-screen: a client open on somebody's desk would make a deployment's log unreadable within a day, which is the same
-reasoning the relay above applies to itself.
+**Twenty-two log records, and no others.** Each carries `mailfathom.client.event` naming which it is, and the severity
+it is written at is fixed by the occurrence rather than chosen at the call site — so a dashboard grouping on that
+attribute reads the same shape from every client, and the floor below can be reasoned about from this table alone.
 
-**`render_failed` carries two attributes beside that one, and both are bounded.** `mailfathom.client.region` names
+| Severity | Record | When it is written |
+| --- | --- | --- |
+| `INFO` | `session_started` | A signed-in session begins |
+| `DEBUG` | `session_ended` | A session ends and the client stops exporting for it |
+| `DEBUG` | `deployment_read` | The session route answered, carrying `mailfathom.client.deployment.version`, the size of the grant as `…deployment.permissions`, and the level as `…deployment.telemetry` |
+| `DEBUG` | `signed_in` | A sign-in produced a credential, with `mailfathom.client.kept` saying whether it was kept |
+| `DEBUG` | `sign_in_refused` | A sign-in did not, with `mailfathom.client.refusal` naming which of the closed set of reasons |
+| `DEBUG` | `request_failed` | A request produced no answer the client could act on, with the same `mailfathom.client.request`, `…outcome`, and `…failure` the span beside it carries, and `…request.duration_ms` |
+| `DEBUG` | `signals_opened` | A connection to the signal hub stands |
+| `DEBUG` | `signals_dropped` | One ended |
+| `DEBUG` | `signals_refused` | One could not be opened, with `mailfathom.client.attempt` counting the attempt |
+| `DEBUG` | `signal_refused` | The hub sent a payload this client does not act on |
+| `DEBUG` | `act_asked` | The client asked the deployment to change something, with `mailfathom.client.act` naming which act and `…messages` counting them |
+| `DEBUG` | `message_sent` | The client asked the deployment to send a message somebody wrote in it, with `mailfathom.client.send` naming how that ended and `…refusal` naming which refusal where it was refused |
+| `DEBUG` | `send_withdrawn` | Somebody asked for a send back before the deployment had let it go, with `mailfathom.client.withdrawal` naming what the deployment answered — `withdrawn`, `alreadyBeingSent`, `pastRecall`, or `noSuchSend`, and `failed` where the request produced no answer |
+| `DEBUG` | `preferences_stated` | A preference write went out, with `mailfathom.client.stated` saying whether the deployment held it or refused it — never which preference moved or what it was set to |
+| `DEBUG` | `notifications_asked` | The head was asked whether it may raise a system notification, with `mailfathom.client.standing` naming what it answered |
+| `TRACE` | `request_completed` | A request produced an answer, with the same attributes `request_failed` carries minus the failure |
+| `TRACE` | `signal_received` | The hub said something changed, with `mailfathom.client.signal` naming the kind |
+| `TRACE` | `navigated` | Somebody moved to another space, with `mailfathom.client.space` and `…navigation.duration_ms` |
+| `WARN` | `credential_no_longer_accepted` | The deployment stopped taking the credential a session held |
+| `WARN` | `signals_unreachable` | The hub refused every attempt for long enough that the client is reading on its own interval alone |
+| `WARN` | `act_refused` | The deployment refused a change the client had already drawn, and the client put the screen back |
+| `ERROR` | `render_failed` | A region threw while it was being drawn and the boundary around it contained the failure — `FATAL` where that region is the whole application, which is a client nobody can use rather than a part nobody can see |
+
+**A deployment states how much of that it wants, and the client stops writing the rest.**
+[`ClientEndpoint:TelemetryLevel`](configuration-endpoints.md#clientendpoint) is that statement, and the session route
+publishes it as [`telemetry`](client-endpoint.md#the-session-route) — one of `trace`, `debug`, `info`, `warn`, `error`,
+`fatal`, or `off`. A record below the level is never written at all, rather than written and then discarded: the hold
+buffer below is bounded at 512 records, so a per-request `TRACE` stream that reached it would evict the cold-start
+records the buffer exists for within seconds of somebody opening a folder.
+
+**The default is `info`, which is one record per session and nothing else.** That is deliberate rather than
+conservative: a deployment serving hundreds of clients pays for every record each of them sends, so what ships by
+default is the line that says a session exists, and everything a defect report actually needs is turned on for as long
+as the report takes. `debug` is the level to ask for then — it adds the sign-in, the deployment read, the signal hub,
+the acts, the sends and the withdrawals, the preference writes, the notification answer, and the failed requests, and
+leaves out the two per-request and per-move streams that `trace` adds.
+
+**A record made before the deployment answers is held at `info` too.** The client has no level until the session route
+has answered, and the alternative to standing on the default there is picking between recording a `TRACE` stream into a
+bounded buffer for every client that never signs in and recording nothing over exactly the cold starts and failed
+sign-ins the buffer exists to keep. The switch is stronger than the level in the other direction: somebody who declined
+is `off`, whatever the deployment asked for.
+
+**`render_failed` carries two attributes beside `mailfathom.client.event`, and both are bounded.**
+`mailfathom.client.region` names
 which part of the client the failure was contained in — `reading_pane` for the surface that draws a document assembled
 out of mail somebody else sent, and `application` for the last resort around everything, including a failure raised
 before there was anything to draw into. `mailfathom.client.error` names the class of what was thrown, refused back to
@@ -1416,11 +1459,12 @@ rather than something a log line answers.
 
 **Nothing the client sends carries what was on the screen.** No address, no subject, no correspondent, no search text,
 no message identifier, no folder name, and no part of the credential reaches a span name, an attribute, a measurement,
-or a log record. The route templates and the space names above are the whole of the vocabulary, and both are closed
-sets. That is a test rather than a claim: the client's unit suite drives every operation the wire package can make with
-mail in each argument that takes one, asserts that none of those values reaches a record, and asserts the stronger form
-beside it — that every request the client names itself is a method and a route template whose segments are literals or
-`{placeholder}` holes, which is what holds for a value nobody thought to forbid.
+or a log record. Every attribute value above is a name out of a closed set — a route template, an outcome, a failure
+reason, a space, a signal kind, an act, an event — or a plain count, and there is no third kind. That is a test rather
+than a claim: the client's unit suite drives every operation the wire package can make with mail in each argument that
+takes one, asserts that none of those values reaches a span, a measurement, or a log record, and asserts the stronger
+form beside it — that every request the client names itself is a method and a route template whose segments are
+literals or `{placeholder}` holes, which is what holds for a value nobody thought to forbid.
 
 ### What a client-originated trace contains
 

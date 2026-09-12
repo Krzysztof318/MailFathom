@@ -314,6 +314,18 @@ export {
     type SignalStreamSchedule,
     type SignalTicket,
 } from './signals';
-export { telemetryEndpoints, telemetryName } from './telemetry';
+export {
+    defaultTelemetryLevel,
+    isDeploymentTelemetryLevel,
+    recordDownTo,
+    severityOf,
+    telemetryEndpoints,
+    telemetryName,
+    worthRecording,
+    writeClientEvent,
+    type ClientEvent,
+    type ClientEventRecord,
+    type DeploymentTelemetryLevel,
+} from './telemetry';
 export { reachDeployment, signIn, type DeploymentGreeting, type SignInOutcome, type SignInRefusal } from './signIn';
 export { longestResponseBody, type ClientRequest, type ClientResponse, type MailFathomTransport } from './transport';

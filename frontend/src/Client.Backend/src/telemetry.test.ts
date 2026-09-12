@@ -4,6 +4,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { metrics, SpanStatusCode, trace } from '@opentelemetry/api';
+import { logs, SeverityNumber } from '@opentelemetry/api-logs';
+import { InMemoryLogRecordExporter, LoggerProvider, SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import {
     AggregationTemporality,
     InMemoryMetricExporter,
@@ -33,7 +35,18 @@ import { changeOwnDisplayName, readOwnDisplayName } from './ownDisplayName';
 import { readOwnPortrait, removeOwnPortrait, replaceOwnPortrait } from './ownPortrait';
 import type { ClientSession } from './session';
 import { reachDeployment, signIn } from './signIn';
-import { reported, spanned, telemetryEndpoints, telemetryName } from './telemetry';
+import {
+    defaultTelemetryLevel,
+    isDeploymentTelemetryLevel,
+    recordDownTo,
+    reported,
+    severityOf,
+    spanned,
+    telemetryEndpoints,
+    telemetryName,
+    worthRecording,
+    writeClientEvent,
+} from './telemetry';
 import type { ClientRequest, MailFathomTransport } from './transport';
 
 // The SDK is here and nowhere in this package's source: what a test needs is somewhere to read a span and a
@@ -43,8 +56,10 @@ import type { ClientRequest, MailFathomTransport } from './transport';
 
 let spans: InMemorySpanExporter;
 let measurements: InMemoryMetricExporter;
+let records: InMemoryLogRecordExporter;
 let traces: BasicTracerProvider;
 let meters: MeterProvider;
+let loggers: LoggerProvider;
 
 // Everything is built per test rather than once for the file, and that is not tidiness: shutting a provider down
 // stops the exporter behind it for good, so a second test sharing one would read an empty exporter and report that
@@ -57,15 +72,26 @@ beforeEach(() => {
         readers: [new PeriodicExportingMetricReader({ exporter: measurements, exportIntervalMillis: 2_147_483_647 })],
     });
 
+    records = new InMemoryLogRecordExporter();
+    loggers = new LoggerProvider({ processors: [new SimpleLogRecordProcessor({ exporter: records })] });
+
     trace.setGlobalTracerProvider(traces);
     metrics.setGlobalMeterProvider(meters);
+    logs.setGlobalLoggerProvider(loggers);
+
+    // The floor is module state, so a test that lowered it would otherwise decide what the next one records. Every
+    // test states what it wants, and the file begins where a client that has heard from no deployment begins.
+    recordDownTo(defaultTelemetryLevel);
 });
 
 afterEach(async () => {
     trace.disable();
     metrics.disable();
+    logs.disable();
+    recordDownTo(defaultTelemetryLevel);
     await traces.shutdown();
     await meters.shutdown();
+    await loggers.shutdown();
 });
 
 async function recordedMeasurements(): Promise<readonly MetricData[]> {
@@ -435,12 +461,18 @@ describe('what the whole of this package records', () => {
         ['a search somebody typed', searchText],
         ['the credential', credential],
         ['the deployment it is signed in to', 'mail.example.invalid'],
-    ])('carries no %s into a span or a measurement', async (_, forbidden) => {
+    ])('carries no %s into a span, a measurement, or a log record', async (_, forbidden) => {
+        // At the lowest floor there is, so the assertion is made over everything this package can write rather than
+        // over the part a default deployment happens to keep. A record refused before it was composed would pass this
+        // by never existing, which is the way a redaction test quietly stops asserting anything.
+        recordDownTo('trace');
+
         await driveTheWholeSurface();
 
         const recorded = JSON.stringify([
             spans.getFinishedSpans().map((span) => [span.name, span.attributes, span.status.message]),
             await recordedMeasurements(),
+            records.getFinishedLogRecords().map((one) => [one.body, one.attributes]),
         ]);
 
         expect(recorded).not.toContain(forbidden);
@@ -474,5 +506,112 @@ describe('what the whole of this package records', () => {
             .filter((span) => span.attributes['mailfathom.client.request'] !== span.name);
 
         expect(disagreeing).toEqual([]);
+    });
+
+    // The same claim read from the other end, and the one that survives an attribute nobody thought to forbid: every
+    // value a record here carries is a closed-set name, a route template, or a plain count, so anything that is none of
+    // the three is a value that reached a record from somewhere it should not have.
+    it('writes no attribute that is not a closed-set name, a route template, or a count', async () => {
+        recordDownTo('trace');
+
+        await driveTheWholeSurface();
+
+        const written = records.getFinishedLogRecords();
+        const loose = written
+            .flatMap((one) => Object.entries(one.attributes))
+            .filter(([, value]) => typeof value !== 'number')
+            .filter(
+                ([, value]) =>
+                    typeof value !== 'string' || (!/^[a-z][a-z_]*$/.test(value) && !routeTemplate.test(value)),
+            );
+
+        expect(written.length).toBeGreaterThan(0);
+        expect(loose).toEqual([]);
+    });
+});
+
+describe('the level a deployment asks for', () => {
+    it('reads every level this client publishes and nothing else', () => {
+        for (const level of ['off', 'trace', 'debug', 'info', 'warn', 'error', 'fatal']) {
+            expect(isDeploymentTelemetryLevel(level)).toBe(true);
+        }
+
+        for (const notALevel of ['verbose', 'Info', '', true, null, undefined, 3]) {
+            expect(isDeploymentTelemetryLevel(notALevel)).toBe(false);
+        }
+    });
+
+    it('admits a record at the floor and refuses one below it', () => {
+        recordDownTo('warn');
+
+        expect(worthRecording(SeverityNumber.WARN)).toBe(true);
+        expect(worthRecording(SeverityNumber.ERROR)).toBe(true);
+        expect(worthRecording(SeverityNumber.INFO)).toBe(false);
+        expect(worthRecording(SeverityNumber.DEBUG)).toBe(false);
+    });
+
+    // The client begins where a collector begins, so a deployment that has not answered — every cold start, and every
+    // sign-in that failed before one could — holds what an ordinary deployment would have asked for anyway.
+    it('stands at the level a collector keeps by default until a deployment has answered', () => {
+        expect(defaultTelemetryLevel).toBe('info');
+        expect(worthRecording(SeverityNumber.INFO)).toBe(true);
+        expect(worthRecording(SeverityNumber.DEBUG)).toBe(false);
+    });
+
+    it('refuses every record where the deployment forwards none', () => {
+        recordDownTo('off');
+        writeClientEvent({ event: 'render_failed', severity: SeverityNumber.FATAL });
+
+        expect(worthRecording(SeverityNumber.FATAL)).toBe(false);
+        expect(records.getFinishedLogRecords()).toEqual([]);
+    });
+
+    it('writes the occurrence, its sentence, and the attributes it was given', () => {
+        recordDownTo('trace');
+        writeClientEvent({ event: 'signals_refused', attributes: { 'mailfathom.client.attempt': 3 }, at: 1_700_000 });
+
+        const [only] = records.getFinishedLogRecords();
+
+        expect(only?.severityNumber).toBe(severityOf.signals_refused);
+        expect(only?.body).toBe('A connection to the deployment signal hub could not be opened.');
+        expect(only?.attributes).toEqual({
+            'mailfathom.client.event': 'signals_refused',
+            'mailfathom.client.attempt': 3,
+        });
+    });
+});
+
+describe('a request the client made', () => {
+    it('is recorded at the quietest level there is, so an ordinary deployment is told about none of them', async () => {
+        recordDownTo('debug');
+        await spanned('GET /folders', () => Promise.resolve(read('a directory')));
+
+        expect(records.getFinishedLogRecords()).toEqual([]);
+    });
+
+    it('is recorded once it reports as read, naming the route template and the outcome', async () => {
+        recordDownTo('trace');
+        await spanned('GET /folders', () => Promise.resolve(read('a directory')));
+
+        const [only] = records.getFinishedLogRecords();
+
+        expect(only?.severityNumber).toBe(SeverityNumber.TRACE);
+        expect(only?.attributes['mailfathom.client.event']).toBe('request_completed');
+        expect(only?.attributes['mailfathom.client.request']).toBe('GET /folders');
+        expect(only?.attributes['mailfathom.client.outcome']).toBe('read');
+    });
+
+    // One level above the stream around it, because a failure is rare enough to be worth having without it: an
+    // operator lowering the floor to the client's own account of what it did gets the requests that went wrong and not
+    // the ones that did not.
+    it('is recorded a level higher where it failed, naming which failure it was', async () => {
+        recordDownTo('debug');
+        await spanned('GET /folders', () => Promise.resolve(failed('unavailable', 503)));
+
+        const [only] = records.getFinishedLogRecords();
+
+        expect(only?.severityNumber).toBe(SeverityNumber.DEBUG);
+        expect(only?.attributes['mailfathom.client.event']).toBe('request_failed');
+        expect(only?.attributes['mailfathom.client.failure']).toBe('unavailable');
     });
 });

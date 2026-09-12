@@ -9,6 +9,7 @@ using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Signals;
 using MailFathom.Versioning;
+using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Api;
 
@@ -122,10 +123,18 @@ internal static class ClientApiEndpoints
         // whether it is refused, and a switch over a deployment that forwards nothing is a control deciding nothing.
         var forwardsTelemetry = endpoints.ServiceProvider.GetService<ClientTelemetryDestination>() is not null;
 
+        // Read beside it and at the same moment, because the two make one answer: a deployment that forwards nothing
+        // asks a client for nothing whatever level it configured, and the level is what a deployment that does forward
+        // asks for.
+        var telemetryLevel = endpoints.ServiceProvider
+            .GetRequiredService<IOptions<ClientEndpointOptions>>()
+            .Value
+            .TelemetryLevel;
+
         // TypedResults rather than Results, so the response type reaches the endpoint's metadata and the generated
         // OpenAPI document describes what this answers with rather than an untyped 200.
         api.MapGet(SessionRoute, (IAuthorizedPrincipalSource principals) =>
-                TypedResults.Ok(ClientSessionResponse.For(principals.Current, forwardsTelemetry)))
+                TypedResults.Ok(ClientSessionResponse.For(principals.Current, forwardsTelemetry, telemetryLevel)))
             .RequireNoPermission();
 
         api.MapClientSessionTokens();
@@ -162,7 +171,7 @@ internal static class ClientApiEndpoints
 /// <param name="Service">The product this is, so a client can tell it reached MailFathom rather than something else answering the port.</param>
 /// <param name="Version">The running version, which is what tells a client which contract it is talking to.</param>
 /// <param name="Permissions">The published names of what this caller's grant carries, in the order this repository publishes them, and empty for a credential granted nothing.</param>
-/// <param name="Telemetry">Whether this deployment forwards a client's own telemetry, which is the same answer for every caller because it is a deployment's configuration rather than a grant.</param>
+/// <param name="Telemetry">The least severe log record this deployment asks a client to write, or <c>off</c> where it forwards none at all — the same answer for every caller, because it is a deployment's configuration rather than a grant.</param>
 /// <remarks>
 /// <para>
 /// It names no credential, which is the one way it differs from what the administrative surface answers. That surface's
@@ -182,22 +191,36 @@ internal static class ClientApiEndpoints
 /// client can say there is nothing behind its own telemetry switch instead of offering a control that decides nothing
 /// — the alternative being to export a batch and read the <c>404</c>, which is finding out by doing the thing.
 /// </para>
+/// <para>
+/// It answers the level rather than a yes, and <c>off</c> is where the yes used to be a no. One field carries both
+/// because they are one question — how much this deployment wants from a client, of which none is a value — and two
+/// fields would be a way for a configured level to contradict a deployment that forwards nothing. What a client does
+/// with the level is refuse to write a record below it, so the floor costs nothing on the wire rather than being
+/// filtered off it.
+/// </para>
 /// </remarks>
 internal sealed record ClientSessionResponse(
     string Service,
     string Version,
     IReadOnlyList<string> Permissions,
-    bool Telemetry)
+    string Telemetry)
 {
+    /// <summary>What the route answers where the deployment named no collector, which is the whole of what stops a client exporting.</summary>
+    private const string NoTelemetry = "off";
+
     /// <summary>Describes what the credential that reached this route was granted.</summary>
     /// <param name="principal">What the application layer was told admitted this request, or nothing where the transport established none.</param>
     /// <param name="forwardsTelemetry">Whether this deployment serves the telemetry routes, which it does where it named a collector of its own.</param>
+    /// <param name="telemetryLevel">The least severe record this deployment asks a client to write, read where the routes are mapped.</param>
     /// <returns>The response body.</returns>
-    internal static ClientSessionResponse For(AuthorizedPrincipal? principal, bool forwardsTelemetry) => new(
+    internal static ClientSessionResponse For(
+        AuthorizedPrincipal? principal,
+        bool forwardsTelemetry,
+        ClientTelemetryLevel telemetryLevel) => new(
         "MailFathom",
         StampedAssemblyVersion.ReadFrom(typeof(ClientSessionResponse).Assembly).Version,
         GrantOf(principal),
-        forwardsTelemetry);
+        forwardsTelemetry ? telemetryLevel.Published() : NoTelemetry);
 
     /// <summary>Names what the caller holds, in the order this repository publishes the set.</summary>
     /// <remarks>The published order rather than the grant's own, so two credentials granted the same permissions are reported identically whichever order an operator wrote them in.</remarks>

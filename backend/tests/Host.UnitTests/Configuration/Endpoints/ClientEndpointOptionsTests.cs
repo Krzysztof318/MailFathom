@@ -6,6 +6,7 @@ using System.Text;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Secrets.Discovery;
@@ -603,6 +604,53 @@ public sealed class ClientEndpointOptionsTests
         });
 
         return settings;
+    }
+
+    /// <summary>
+    /// The default is what a collector keeps anyway, so a deployment that wrote nothing is told what it would have
+    /// been told before the level existed — one record per signed-in session and nothing per request.
+    /// </summary>
+    [Fact]
+    public void ReadFrom_ADeploymentThatNamedNoTelemetryLevel_AsksItsClientsForWhatACollectorKeepsByDefault() =>
+        Assert.Equal(
+            ClientTelemetryLevel.Info,
+            ClientEndpointOptions.ReadFrom(new ConfigurationBuilder().Build()).TelemetryLevel);
+
+    /// <summary>The spellings include a capitalized one, because that is what an operator writes and what the binder reads case-insensitively.</summary>
+    [Fact]
+    public void ReadFrom_AConfiguredTelemetryLevel_AsksItsClientsForExactlyThat()
+    {
+        // Arrange
+        string[] written = ["trace", "Debug", "warn", "fatal"];
+
+        // Act
+        var asked = written.Select(level => ClientEndpointOptions
+            .ReadFrom(Configuration(new Dictionary<string, string?> { ["ClientEndpoint:TelemetryLevel"] = level }))
+            .TelemetryLevel);
+
+        // Assert
+        Assert.Equal(
+            [
+                ClientTelemetryLevel.Trace,
+                ClientTelemetryLevel.Debug,
+                ClientTelemetryLevel.Warn,
+                ClientTelemetryLevel.Fatal,
+            ],
+            asked);
+    }
+
+    /// <summary>A level nobody publishes is refused rather than bound to whatever the binder made of it, for the reason every other misspelling here is.</summary>
+    [Fact]
+    public void ReadFrom_ATelemetryLevelNobodyPublishes_FailsRatherThanReadingAsSomethingElse()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["ClientEndpoint:TelemetryLevel"] = "verbose",
+        });
+
+        // Act & Assert
+        Assert.ThrowsAny<InvalidOperationException>(() => ClientEndpointOptions.ReadFrom(configuration));
     }
 
     private static IConfiguration Configuration(Dictionary<string, string?> values) =>

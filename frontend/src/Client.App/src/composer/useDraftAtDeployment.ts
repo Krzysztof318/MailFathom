@@ -19,6 +19,7 @@ import {
     type MailSendWithdrawal,
 } from '@mailfathom/client-backend';
 import { useAttachmentUpload } from '../deployment/attachmentUpload';
+import { useTelemetry } from '../telemetry/clientTelemetry';
 import { wireComposition, type Composition } from './composition';
 
 // What the deployment holds for the message being written, and the five acts that change it. It is a hook rather than
@@ -119,6 +120,7 @@ export interface DraftAtDeployment {
 
 export function useDraftAtDeployment(session: ClientSession, transport: MailFathomTransport): DraftAtDeployment {
     const upload = useAttachmentUpload();
+    const telemetry = useTelemetry();
     const [standing, setStanding] = useState<DraftStanding>({ kind: 'held' });
     const [attached, setAttached] = useState<readonly AttachedFile[]>([]);
 
@@ -341,6 +343,14 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
         const stopWasAsked = stopping.current;
         stopping.current = false;
 
+        // What became of a send this client asked for, which the deployment's own outbox cannot say: it records what
+        // it was handed rather than what somebody wrote and then could not send. The refusal is a name out of the
+        // closed set the wire package publishes; no recipient, no subject, and no part of the message reaches this.
+        telemetry.happened('message_sent', {
+            'mailfathom.client.send': outcome.kind,
+            ...(outcome.kind === 'refused' ? { 'mailfathom.client.refusal': outcome.refusal } : {}),
+        });
+
         // Somebody asked to stop while the deployment had not yet answered, so this is where their stop lands.
         if (outcome.kind === 'queued' && stopWasAsked) {
             return withdraw();
@@ -358,10 +368,21 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
             return settledAs.current;
         }
 
-        return settled(await withdrawOutgoingMail(session, transport, sent), (withdrawal) => ({
-            kind: 'withdrawn',
+        const taken = settled(await withdrawOutgoingMail(session, transport, sent), (withdrawal) => ({
+            kind: 'withdrawn' as const,
             withdrawal,
         }));
+
+        // Somebody changing their mind inside the window the deployment gives them, which is a decision rather than a
+        // failure and is why it is written at the client's own account level rather than above it. The deployment's own
+        // answer is what is reported rather than the standing this hook composed from it: `withdrawn` is the standing
+        // whatever the route said, so a take-back the deployment refused because the message was already going out
+        // would otherwise read as one it accepted.
+        telemetry.happened('send_withdrawn', {
+            'mailfathom.client.withdrawal': taken.kind === 'withdrawn' ? taken.withdrawal : taken.kind,
+        });
+
+        return taken;
     }
 
     return {

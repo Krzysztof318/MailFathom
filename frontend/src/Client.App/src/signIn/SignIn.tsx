@@ -20,6 +20,7 @@ import type { AdoptedDeployment } from '../deployment/adoptedDeployment';
 import type { DeploymentTransport } from '../deployment/sendToDeployment';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { useTelemetry } from '../telemetry/clientTelemetry';
 import { AdvancedConnection } from './AdvancedConnection';
 import { defaultPortOf, portForPermission, portOf, resolveConnection, type ResolvedConnection } from './connection';
 import { resolveCredentialEntry, resolveSessionCredential, type CredentialEntryRefusal } from './credentialEntry';
@@ -159,6 +160,7 @@ export function SignIn({
     readonly onPointSomewhereElse: () => void;
 }) {
     const { translate } = useLocalization();
+    const telemetry = useTelemetry();
     const deployment = adopted === null ? null : adopted.deployment;
     const [entry, setEntry] = useState('');
 
@@ -300,6 +302,16 @@ export function SignIn({
             attempt.current = null;
             setPresenting(false);
             setRefusal(reason);
+
+            // The one funnel every refusal this screen can reach passes through, which is why it is the only place a
+            // sign-in is reported from. The refusal is this screen's own closed vocabulary rather than a status or a
+            // sentence — an operator grouping by it sees a deployment refusing passwords apart from one nobody can
+            // reach, and neither the address, the name, nor any part of what was typed is written down.
+            //
+            // Below the level a deployment keeps by default, because a person mistyping their password is not a
+            // deployment's business and a fleet of them would be the loudest thing in its log. It is what an operator
+            // lowers the floor for when somebody says they cannot get in.
+            telemetry.happened('sign_in_refused', { 'mailfathom.client.refusal': reason });
         };
 
         // An address typed on this screen is asked what it is before it is handed a password, which is the whole
@@ -349,6 +361,11 @@ export function SignIn({
 
         attempt.current = null;
         setPresenting(false);
+
+        // Whether the session will be kept beyond this tab, and nothing else: not the name, not the address, and not
+        // the token. It is the one thing about a sign-in an operator cannot infer from the requests around it, and it
+        // is what separates somebody who signs in every morning from somebody whose stored session keeps being refused.
+        telemetry.happened('signed_in', { 'mailfathom.client.kept': String(keepSignedIn) });
 
         // The password is not handed on and is not kept anywhere: what the exchange answered with is a session, and
         // that is the whole of what this client holds from here. The name travels beside it because a token does not

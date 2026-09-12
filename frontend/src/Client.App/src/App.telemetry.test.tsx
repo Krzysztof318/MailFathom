@@ -88,7 +88,7 @@ describe('App telemetry', () => {
         renderApp(
             servedFrom,
             heldSession,
-            deploymentAnswering(undefined, sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask'], false)),
+            deploymentAnswering(undefined, sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask'], 'off')),
             storeKeeping(),
             recording.telemetry,
         );
@@ -101,6 +101,26 @@ describe('App telemetry', () => {
         await waitFor(() => {
             expect(recording.permitted.at(-1)).toBe(false);
         });
+    });
+
+    // The level is the deployment's alone, so what proves it arrived is that the pipeline was started with the one the
+    // session route answered rather than with the one the client stands on until it has been told.
+    it('starts the pipeline at the level the deployment asked for', async () => {
+        const recording = telemetryRecording();
+
+        renderApp(
+            servedFrom,
+            heldSession,
+            deploymentAnswering(undefined, sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask'], 'trace')),
+            storeKeeping(),
+            recording.telemetry,
+        );
+        await framed();
+
+        await waitFor(() => {
+            expect(recording.levels.at(-1)).toBe('trace');
+        });
+        expect(recording.levels[0]).toBe('info');
     });
 
     // What a restart owes somebody who turned it off on this machine: the decision is honoured from the first effect

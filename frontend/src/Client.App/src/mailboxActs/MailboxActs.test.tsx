@@ -16,6 +16,8 @@ import { LocalizationProvider } from '../localization/Localization';
 import { PendingChangeLines } from '../pendingChanges/PendingChangeLines';
 import { PendingChangesProvider } from '../pendingChanges/PendingChanges';
 import { followedChangeInterval } from '../pendingChanges/usePendingChanges';
+import { TelemetryContext, noTelemetry, type ClientTelemetry } from '../telemetry/clientTelemetry';
+import { recordingTelemetry, recordsOf } from '../telemetry/telemetry.harness';
 import { ToastsProvider } from '../toasts/Toasts';
 import { toastLeaving, toastLifetime } from '../toasts/useToasts';
 import { mostMessagesPerMutation } from '@mailfathom/client-backend';
@@ -235,28 +237,40 @@ const someoneElse: ClientSession = { baseAddress: 'https://mail.example.invalid'
 
 function acting(
     deployment: Deployment,
-    { flags = true, moves = true, deletes = true }: { flags?: boolean; moves?: boolean; deletes?: boolean } = {},
+    {
+        flags = true,
+        moves = true,
+        deletes = true,
+        telemetry = noTelemetry,
+    }: {
+        flags?: boolean;
+        moves?: boolean;
+        deletes?: boolean;
+        telemetry?: ClientTelemetry;
+    } = {},
 ): { readonly held: () => MailboxActs; readonly signIn: (next: ClientSession) => void } {
     let signedIn = session;
 
     function Surrounded({ children }: { readonly children: ReactNode }) {
         return (
             <LocalizationProvider>
-                <ToastsProvider>
-                    <PendingChangesProvider session={signedIn} transport={deployment.transport}>
-                        <PendingChangeLines />
-                        <MailboxActsProvider
-                            session={signedIn}
-                            transport={deployment.transport}
-                            online
-                            flags={flags}
-                            moves={moves}
-                            deletes={deletes}
-                        >
-                            {children}
-                        </MailboxActsProvider>
-                    </PendingChangesProvider>
-                </ToastsProvider>
+                <TelemetryContext value={telemetry}>
+                    <ToastsProvider>
+                        <PendingChangesProvider session={signedIn} transport={deployment.transport}>
+                            <PendingChangeLines />
+                            <MailboxActsProvider
+                                session={signedIn}
+                                transport={deployment.transport}
+                                online
+                                flags={flags}
+                                moves={moves}
+                                deletes={deletes}
+                            >
+                                {children}
+                            </MailboxActsProvider>
+                        </PendingChangesProvider>
+                    </ToastsProvider>
+                </TelemetryContext>
             </LocalizationProvider>
         );
     }
@@ -820,6 +834,41 @@ describe('MailboxActsProvider', () => {
         });
 
         expect(held().asked.get('message-0')?.act).toBe('flag');
+    });
+
+    // What an operator reads to find a deployment refusing writes it accepted the request for, and the count is the
+    // whole of the record: which messages is never written down.
+    it('reports how many messages a deployment declined after answering for them', async () => {
+        const recording = recordingTelemetry();
+        const deployment = deploymentAnswering({ 'message-2': 'message-not-found' });
+        const { held } = acting(deployment, { telemetry: recording.telemetry });
+
+        perform(held, 'flag', [invoice, receipt]);
+
+        await waitFor(() => {
+            expect(recordsOf(recording.recorded, 'act_refused')).toStrictEqual([
+                {
+                    event: 'act_refused',
+                    attributes: { 'mailfathom.client.act': 'flag', 'mailfathom.client.messages': 1 },
+                },
+            ]);
+        });
+    });
+
+    // A batch that never reached the deployment leaves its messages unwritten exactly as a declined one does, so a
+    // count taken over both would put every dropped connection into the record above and leave nothing in it that
+    // means what it says. That half is `request_failed`, at the level a transport failure belongs to.
+    it('counts nothing as refused from a batch that never reached the deployment', async () => {
+        const recording = recordingTelemetry();
+        const deployment = deploymentAnswering({}, 503);
+        const { held } = acting(deployment, { telemetry: recording.telemetry });
+
+        perform(held, 'flag', [invoice]);
+
+        await screen.findByText('This change did not reach your deployment.');
+
+        expect(recordsOf(recording.recorded, 'act_asked')).toHaveLength(1);
+        expect(recordsOf(recording.recorded, 'act_refused')).toStrictEqual([]);
     });
 
     it.each<{ named: string; act: MailboxAct; message: ActedMessage; destination?: MoveDestination }>([

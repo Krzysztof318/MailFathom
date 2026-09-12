@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Net.Quic;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
+using MailFathom.Host.Observability.ClientTelemetry;
 
 namespace MailFathom.Host.Configuration.Endpoints;
 
@@ -104,6 +105,16 @@ internal sealed class ClientEndpointOptions
     /// <summary>Gets or sets whether this deployment also serves the client's bundle from this endpoint's listeners.</summary>
     /// <remarks>The one setting here that is about a page rather than about an API. It belongs to this section because the page is served on this surface's listeners and nowhere else: same origin is what lets the bundle carry no address at all, and it is what a deployment gives up by publishing the two apart.</remarks>
     public ClientApplicationOptions Application { get; set; } = new();
+
+    /// <summary>Gets or sets the least severe log record this deployment asks a client to write.</summary>
+    /// <remarks>
+    /// The client's vocabulary reaches far below the default, and at the bottom of it there is a record per request —
+    /// which is what an operator chasing one report wants and what a deployment serving many clients must not be given
+    /// by default. So the floor is stated here and answered on the session route, and a client refuses anything below it
+    /// before the record is written rather than exporting it for a collector to drop. It decides nothing about whether
+    /// telemetry is forwarded at all: that is whether the deployment named a collector, and this section does not ask it.
+    /// </remarks>
+    public ClientTelemetryLevel TelemetryLevel { get; set; } = ClientTelemetryLevel.Info;
 
     /// <summary>Gets or sets which browser origins the endpoint answers.</summary>
     /// <remarks>The same section the MCP and administrative endpoints carry, configured separately. A browser-hosted client calls this surface from a page origin, so a preflight it cannot answer is a client that never starts.</remarks>

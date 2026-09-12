@@ -14,6 +14,7 @@ import {
     type MetricData,
 } from '@opentelemetry/sdk-metrics';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { defaultTelemetryLevel, recordDownTo, worthRecording } from '@mailfathom/client-backend';
 import { clientTelemetryForThisApplication, noTelemetry } from './clientTelemetry';
 
 // The registries this module publishes to are global, so every one of them is released after each test: a
@@ -58,11 +59,15 @@ const session = { baseAddress: 'https://mail.example', authorization: 'Basic c2F
 
 beforeEach(() => {
     pipeline.steps.length = 0;
+
+    // The floor is module state in the package that owns the vocabulary, so a test that lowered it would otherwise
+    // decide what the next one records. Each begins where a client that has heard from no deployment begins.
+    recordDownTo(defaultTelemetryLevel);
 });
 
 describe('noTelemetry', () => {
     it('records nothing and hands back a teardown that is safe to call', () => {
-        const stop = noTelemetry.exportFor(session, true);
+        const stop = noTelemetry.exportFor(session, true, 'trace');
 
         expect(() => {
             noTelemetry.navigated('mail', performance.timeOrigin);
@@ -267,6 +272,61 @@ describe('clientTelemetryForThisApplication', () => {
         expect(record?.attributes['mailfathom.client.error']).toBe('unknown');
     });
 
+    // The one occurrence whose severity is not settled by its name. A reading pane that could not draw a document is a
+    // message somebody cannot open; the boundary around the whole application failing is a client nobody can use, and
+    // an operator woken by one is not being told the same thing as an operator reading the other.
+    it('records the containment boundary around the whole application failing as fatal', async () => {
+        const telemetry = clientTelemetryForThisApplication();
+
+        telemetry.renderFailed('application', new TypeError('Nothing could be drawn at all.'));
+
+        const [record] = await written(() => records.getFinishedLogRecords());
+
+        expect(record?.severityNumber).toBe(SeverityNumber.FATAL);
+        expect(record?.attributes['mailfathom.client.region']).toBe('application');
+    });
+
+    describe('the level the deployment asked for', () => {
+        it('writes what a deployment asked to be told and nothing below it', async () => {
+            const telemetry = clientTelemetryForThisApplication();
+
+            telemetry.exportFor(session, true, 'warn');
+            telemetry.happened('session_started');
+            telemetry.happened('credential_no_longer_accepted');
+
+            const [only, ...rest] = await written(() => records.getFinishedLogRecords());
+
+            expect(only?.attributes['mailfathom.client.event']).toBe('credential_no_longer_accepted');
+            expect(rest).toEqual([]);
+        });
+
+        it('writes the client’s own account of what it did once a deployment asks for it', async () => {
+            const telemetry = clientTelemetryForThisApplication();
+
+            telemetry.exportFor(session, true, 'debug');
+            telemetry.happened('deployment_read', { 'mailfathom.client.deployment.version': '0.8.7' });
+
+            const [record] = await written(() => records.getFinishedLogRecords());
+
+            expect(record?.severityNumber).toBe(SeverityNumber.DEBUG);
+            expect(record?.attributes).toEqual({
+                'mailfathom.client.event': 'deployment_read',
+                'mailfathom.client.deployment.version': '0.8.7',
+            });
+        });
+
+        // The switch is the stronger of the two, and this is what makes it so rather than a claim that it is: a
+        // deployment asking for the whole stream gets none of it from somebody who declined, and the refusal reaches
+        // the half of the client that holds no pipeline as well as the half that does.
+        it('is off for somebody who declined, whatever the deployment asked for', () => {
+            const telemetry = clientTelemetryForThisApplication();
+
+            telemetry.exportFor(session, false, 'trace');
+
+            expect(worthRecording(SeverityNumber.FATAL)).toBe(false);
+        });
+    });
+
     it('carries no part of the credential or the address into anything it records', async () => {
         const telemetry = clientTelemetryForThisApplication();
 
@@ -288,7 +348,7 @@ describe('clientTelemetryForThisApplication', () => {
         it('has nothing written about them, whether or not there is a session to export it', async () => {
             const telemetry = clientTelemetryForThisApplication();
 
-            telemetry.exportFor(session, false);
+            telemetry.exportFor(session, false, 'trace');
             telemetry.navigated('mail', performance.timeOrigin + performance.now());
             telemetry.happened('session_started');
             telemetry.renderFailed('reading_pane', new TypeError('A message this pane cannot draw.'));
@@ -306,9 +366,9 @@ describe('clientTelemetryForThisApplication', () => {
         it('is recorded again from the moment they say so', async () => {
             const telemetry = clientTelemetryForThisApplication();
 
-            telemetry.exportFor(session, false);
+            telemetry.exportFor(session, false, 'trace');
             telemetry.navigated('mail', performance.timeOrigin + performance.now());
-            telemetry.exportFor(session, true);
+            telemetry.exportFor(session, true, 'trace');
             telemetry.navigated('discover', performance.timeOrigin + performance.now());
 
             const [span] = await written(() => spans.getFinishedSpans());
@@ -322,7 +382,7 @@ describe('clientTelemetryForThisApplication', () => {
     it('leaves the registries alone for a client that has not signed in', async () => {
         const telemetry = clientTelemetryForThisApplication();
 
-        telemetry.exportFor(null, true)();
+        telemetry.exportFor(null, true, 'trace')();
         telemetry.navigated('mail', performance.timeOrigin + performance.now());
 
         // The span still reaches the exporter this test registered, which is what says nothing replaced it.
@@ -350,7 +410,7 @@ describe('clientTelemetryForThisApplication', () => {
         it('reports it where the deployment is what served this client', async () => {
             const telemetry = clientTelemetryForThisApplication();
 
-            telemetry.exportFor({ ...session, baseAddress: window.location.origin }, true);
+            telemetry.exportFor({ ...session, baseAddress: window.location.origin }, true, 'trace');
 
             await vi.waitFor(async () => {
                 expect(await arrivalDuration()).toBe(1.5);
@@ -365,7 +425,7 @@ describe('clientTelemetryForThisApplication', () => {
             // What a session restored from a stored credential looks like: it is signed in before the load event, and
             // the entry then describes a document still arriving. This run gets one sign-in and no second attempt, so
             // reading it here is losing the measurement rather than deferring it.
-            telemetry.exportFor({ ...session, baseAddress: window.location.origin }, true);
+            telemetry.exportFor({ ...session, baseAddress: window.location.origin }, true, 'trace');
 
             // Queued behind the start, so its record appearing is how this knows the start finished — reading the
             // histogram before that would find it empty whether the measurement was deferred or merely late.
@@ -392,8 +452,8 @@ describe('clientTelemetryForThisApplication', () => {
             // What is read is the entry being consulted at all, rather than where the value landed: starting a second
             // pipeline takes the registries this test put there away, so the histogram is no longer this test's to
             // read by then. Consulting the entry is the whole of what the first session must not have used up.
-            telemetry.exportFor(session, true);
-            telemetry.exportFor({ ...session, baseAddress: window.location.origin }, true);
+            telemetry.exportFor(session, true, 'trace');
+            telemetry.exportFor({ ...session, baseAddress: window.location.origin }, true, 'trace');
 
             await vi.waitFor(() => {
                 expect(timing).toHaveBeenCalled();
@@ -406,7 +466,7 @@ describe('clientTelemetryForThisApplication', () => {
             // Signed in to a deployment elsewhere, which is every desktop shell and every development server. The
             // teardown is queued behind the start, so waiting for it is how this knows the start finished rather than
             // that it has not begun.
-            telemetry.exportFor(session, true)();
+            telemetry.exportFor(session, true, 'trace')();
 
             await vi.waitFor(() => {
                 expect(pipeline.steps).toContain('hold');
@@ -436,7 +496,7 @@ describe('exportFor', () => {
 
     it('names the session as the destination, and takes it away again when the session ends', async () => {
         const telemetry = clientTelemetryForThisApplication();
-        const stop = telemetry.exportFor(session, true);
+        const stop = telemetry.exportFor(session, true, 'trace');
 
         // The pipeline is fetched rather than bundled, so it arrives a moment after the client composed it. This waits
         // on what it was asked to do rather than on a duration.
@@ -454,11 +514,11 @@ describe('exportFor', () => {
     it('asks for no destination at all for a client that has not signed in', async () => {
         const telemetry = clientTelemetryForThisApplication();
 
-        telemetry.exportFor(null, true)();
+        telemetry.exportFor(null, true, 'trace')();
 
         // Signing in afterwards is what makes the absence provable: the queue is ordered, so a destination or a hold
         // asked for by the call above would sit in front of this one.
-        telemetry.exportFor(session, true);
+        telemetry.exportFor(session, true, 'trace');
 
         await vi.waitFor(() => {
             expect(pipeline.steps).toEqual(['export Basic c2FtcGxl']);
@@ -475,7 +535,7 @@ describe('exportFor', () => {
         const loggers = new LoggerProvider({ processors: [new SimpleLogRecordProcessor({ exporter: arriving })] });
         const telemetry = clientTelemetryForThisApplication();
 
-        const stop = telemetry.exportFor(session, true);
+        const stop = telemetry.exportFor(session, true, 'trace');
 
         telemetry.happened('session_started');
         logs.setGlobalLoggerProvider(loggers);
@@ -499,7 +559,7 @@ describe('exportFor', () => {
         // read, and the answer comes back off. Nothing may be addressed, so the discard stands alone in the queue —
         // an export before it would be the one batch the person had asked never to be sent.
         telemetry.navigated('mail', performance.timeOrigin + performance.now());
-        telemetry.exportFor(session, false);
+        telemetry.exportFor(session, false, 'trace');
 
         await vi.waitFor(() => {
             expect(pipeline.steps).toEqual(['discard']);
@@ -509,8 +569,8 @@ describe('exportFor', () => {
     it('exports for a session again once the answer comes back the other way', async () => {
         const telemetry = clientTelemetryForThisApplication();
 
-        telemetry.exportFor(session, false);
-        telemetry.exportFor(session, true);
+        telemetry.exportFor(session, false, 'trace');
+        telemetry.exportFor(session, true, 'trace');
 
         await vi.waitFor(() => {
             expect(pipeline.steps).toEqual(['discard', 'export Basic c2FtcGxl']);
@@ -523,10 +583,10 @@ describe('exportFor', () => {
     it('throws away rather than flushing when a session that was permitted is refused', async () => {
         const telemetry = clientTelemetryForThisApplication();
 
-        const stop = telemetry.exportFor(session, true);
+        const stop = telemetry.exportFor(session, true, 'trace');
 
         stop();
-        telemetry.exportFor(session, false);
+        telemetry.exportFor(session, false, 'trace');
 
         await vi.waitFor(() => {
             expect(pipeline.steps).toEqual(['export Basic c2FtcGxl', 'discard']);
@@ -540,10 +600,10 @@ describe('exportFor', () => {
         // What signing out and straight back in looks like from here, and what React does on every mount in strict
         // mode: the teardown and the next start are asked for before the first one has finished arriving. Left to
         // race, the hold lands last and leaves the session that is now signed in holding for the rest of the run.
-        const stop = telemetry.exportFor(session, true);
+        const stop = telemetry.exportFor(session, true, 'trace');
 
         stop();
-        telemetry.exportFor({ ...session, authorization: 'Basic c29tZWJvZHkgZWxzZQ==' }, true);
+        telemetry.exportFor({ ...session, authorization: 'Basic c29tZWJvZHkgZWxzZQ==' }, true, 'trace');
 
         await vi.waitFor(() => {
             expect(pipeline.steps).toEqual(['export Basic c2FtcGxl', 'hold', 'export Basic c29tZWJvZHkgZWxzZQ==']);

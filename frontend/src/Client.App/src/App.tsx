@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+    defaultTelemetryLevel,
     draftsMailReplies,
     endSession,
     type ClientSession,
@@ -356,9 +357,15 @@ export function App({
     // until the deployment answers, so a client that had been turned off records nothing in the seconds a read takes.
     // What the deployment forwards is unknown rather than refused until it says — a deployment nobody has reached yet
     // is every cold start and every failed sign-in, which is exactly what the pipeline holds records for, so refusing
-    // there would throw away the failures somebody cannot otherwise describe. Only `false`, which is a deployment
+    // there would throw away the failures somebody cannot otherwise describe. Only `off`, which is a deployment
     // stating that it forwards nothing, stops it; and stopping it discards what was held rather than sending it.
-    const telemetryPermitted = preferences.telemetryEnabled && deploymentSession?.telemetryForwarded !== false;
+    //
+    // The same answer carries how much this deployment asks for, which is the floor every record either half of the
+    // client writes is held to. Until it has said, that is the level a collector keeps by default — so a cold start
+    // holds what an ordinary deployment would want and no more, and lowering the floor is what an operator does to one
+    // deployment rather than what a client decides for itself.
+    const telemetryLevel = deploymentSession?.telemetryLevel ?? defaultTelemetryLevel;
+    const telemetryPermitted = preferences.telemetryEnabled && telemetryLevel !== 'off';
 
     // Which session has already been reported as having begun, so that it is reported once however many times this
     // effect runs. It runs again whenever the permission changes, and the permission is false until the deployment has
@@ -367,13 +374,17 @@ export function App({
     const sessionReported = useRef<string | null>(null);
 
     useEffect(() => {
-        const stop = telemetry.exportFor(session, telemetryPermitted);
+        const stop = telemetry.exportFor(session, telemetryPermitted, telemetryLevel);
 
         // Forgotten on the way out as well as written on the way in, because this frame is not unmounted by signing
         // out — it renders the sign-in screen instead. A value left behind would make signing back in as the same
         // person at the same deployment record nothing, and the commonest way to reach that is the path this event is
         // most about: the deployment refuses the kept session and somebody signs straight back in.
         if (session === null) {
+            if (sessionReported.current !== null) {
+                telemetry.happened('session_ended');
+            }
+
             sessionReported.current = null;
         } else if (telemetryPermitted && sessionReported.current !== signedInAs) {
             sessionReported.current = signedInAs;
@@ -381,7 +392,27 @@ export function App({
         }
 
         return stop;
-    }, [session, signedInAs, telemetry, telemetryPermitted]);
+    }, [session, signedInAs, telemetry, telemetryLevel, telemetryPermitted]);
+
+    // What the deployment answered about itself, which is the one thing an operator cannot read off their own side:
+    // the release a client is running against theirs, and how much of the surface that credential was granted. A
+    // client several releases behind a deployment behaves in ways neither end's code explains, and it is the first
+    // question worth asking about a report that makes no sense. The grant is a count rather than the names — which
+    // names are in the grant is the deployment's own record, and a client is not where it is read back from.
+    //
+    // After the effect above rather than beside it, so the floor the deployment asked for is already standing when
+    // this is written: the two arrive from one answer, and this one is below the level that answer may refuse.
+    useEffect(() => {
+        if (deploymentSession === null) {
+            return;
+        }
+
+        telemetry.happened('deployment_read', {
+            'mailfathom.client.deployment.version': deploymentSession.version,
+            'mailfathom.client.deployment.permissions': deploymentSession.permissions.length,
+            'mailfathom.client.deployment.telemetry': deploymentSession.telemetryLevel,
+        });
+    }, [deploymentSession, telemetry]);
 
     // Whether opening a message marks it read on the person's own mail server, which is the frame's answer rather than
     // a screen's for the reason ADR 0026 gives about the two halves of it: the reader's own setting says what they want

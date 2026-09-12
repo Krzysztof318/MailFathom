@@ -4,9 +4,9 @@
 
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord } from './json';
-import { reconnectionDelay } from './reconnection';
+import { mostReconnectionAttempts, reconnectionDelay } from './reconnection';
 import { headersFor, routeFor, type ClientSession } from './session';
-import { spanned } from './telemetry';
+import { spanned, writeClientEvent } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
 // What a deployment says changed while somebody has this client open, and the connection it says it over.
@@ -213,9 +213,12 @@ export function parseClientSignal(payload: unknown): ClientSignal | null {
  * schedule has. A rolling upgrade that keeps the hub away for longer than a minute is no reason for an open client to
  * stop hearing about mail until somebody reloads it, so only the caller closing the stream ends it.
  *
- * **Nothing here reports a failure.** A deployment that serves no hub, a proxy that will not pass the upgrade, and a
- * connection that dropped are all the same thing to a person looking at the screen — a client reading on its interval
- * — and saying so would be a client complaining about an optimization it never promised.
+ * **Nothing here reports a failure to the person.** A deployment that serves no hub, a proxy that will not pass the
+ * upgrade, and a connection that dropped are all the same thing to somebody looking at the screen — a client reading on
+ * its interval — and saying so would be a client complaining about an optimization it never promised. The operator is
+ * a different reader with a different question, so the connection's whole life is written down for them instead, below
+ * the level a deployment keeps by default; that is where a proxy silently refusing every upgrade becomes visible as
+ * something other than a client that feels slow.
  *
  * @param told Called once per statement, after the payload has been read as one of the six.
  * @param opened Called each time a connection has opened and stands. Whatever was said while none stood was said to
@@ -255,6 +258,18 @@ export function openSignalStream(
             // schedule caps it at its longest.
             refusals = outcome === 'opened' ? 0 : refusals + 1;
 
+            if (outcome === 'refused') {
+                // The attempt is on the record rather than in the sentence, so an operator reads how long this has been
+                // going on without one record per attempt being a different sentence to group. Crossing the budget is
+                // said once and at a level an operator sees: past it nothing changes about what the client does, which
+                // is exactly why it is the moment worth knowing — every screen is being read on the interval alone and
+                // nobody looking at one can tell.
+                writeClientEvent({
+                    event: refusals === mostReconnectionAttempts ? 'signals_unreachable' : 'signals_refused',
+                    attributes: { 'mailfathom.client.attempt': refusals },
+                });
+            }
+
             await schedule.wait(reconnectionDelay(refusals, schedule.draw()));
         }
     };
@@ -275,9 +290,23 @@ export function openSignalStream(
                 arrived: (payload) => {
                     const signal = parseClientSignal(payload);
 
-                    if (signal !== null) {
-                        told(signal);
+                    if (signal === null) {
+                        // A payload this client does not act on is dropped in silence as far as the screen is
+                        // concerned, and it is the one thing on this connection an operator would want to know about
+                        // without being told: it means a deployment saying something in a vocabulary the client in
+                        // front of it does not have, which is a version skew rather than a network.
+                        writeClientEvent({ event: 'signal_refused' });
+
+                        return;
                     }
+
+                    // The kind alone. Every other member of a statement is an account, a folder, a stored identity, or
+                    // the two lines of a notification, and none of those is something this client writes down.
+                    writeClientEvent({
+                        event: 'signal_received',
+                        attributes: { 'mailfathom.client.signal': signal.kind },
+                    });
+                    told(signal);
                 },
                 dropped: ended.settle,
             });
@@ -292,8 +321,10 @@ export function openSignalStream(
         }
 
         opened();
+        writeClientEvent({ event: 'signals_opened' });
         await ended.reached;
         open = null;
+        writeClientEvent({ event: 'signals_dropped' });
 
         return 'opened';
     };

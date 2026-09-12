@@ -3,22 +3,29 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import type { DeploymentSession } from '@mailfathom/client-backend';
+import type { DeploymentSession, DeploymentTelemetryLevel } from '@mailfathom/client-backend';
 import { telemetryForwardedBy } from './telemetryForwarding';
 
 const address = 'https://mail.example.invalid';
 
-function answering(telemetryForwarded: boolean): DeploymentSession {
-    return { version: '0.8.7', permissions: [], telemetryForwarded };
+function answering(telemetryLevel: DeploymentTelemetryLevel): DeploymentSession {
+    return { version: '0.8.7', permissions: [], telemetryLevel };
 }
 
 describe('telemetryForwardedBy', () => {
     it('names the deployment somebody is signed in to, where it forwards telemetry', () => {
-        expect(telemetryForwardedBy(answering(true), address)).toEqual({ answered: true, destination: address });
+        expect(telemetryForwardedBy(answering('info'), address)).toEqual({ answered: true, destination: address });
     });
 
     it('answers that a deployment forwarding none has nothing behind the switch', () => {
-        expect(telemetryForwardedBy(answering(false), address)).toEqual({ answered: true, destination: null });
+        expect(telemetryForwardedBy(answering('off'), address)).toEqual({ answered: true, destination: null });
+    });
+
+    // How much a deployment asks for is not what this screen draws: the records go to the same place whether it wants
+    // the whole stream or only what it would act on, and somebody reading the switch is being told where.
+    it('names the deployment whatever level it asked for', () => {
+        expect(telemetryForwardedBy(answering('trace'), address)).toEqual({ answered: true, destination: address });
+        expect(telemetryForwardedBy(answering('fatal'), address)).toEqual({ answered: true, destination: address });
     });
 
     // The distinction the screen exists to draw: a deployment that has said nothing has not said no, and the frame
@@ -28,6 +35,6 @@ describe('telemetryForwardedBy', () => {
     });
 
     it('answers nothing either way where there is no deployment to have answered', () => {
-        expect(telemetryForwardedBy(answering(true), null)).toEqual({ answered: false });
+        expect(telemetryForwardedBy(answering('info'), null)).toEqual({ answered: false });
     });
 });

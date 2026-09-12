@@ -3122,7 +3122,7 @@
             "type": "string"
           },
           "telemetry": {
-            "type": "boolean"
+            "type": "string"
           },
           "version": {
             "type": "string"

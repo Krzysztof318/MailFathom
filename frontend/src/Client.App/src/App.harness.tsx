@@ -6,12 +6,14 @@ import { StrictMode } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
 import {
+    defaultTelemetryLevel,
     sessionExchangeRoute,
     sessionRevocationRoute,
     type ClientRequest,
     type ClientResponse,
     type ClientSession,
     type DeploymentAddress,
+    type DeploymentTelemetryLevel,
     type MailFathomSignalChannel,
     type SignalStreamSchedule,
 } from '@mailfathom/client-backend';
@@ -46,11 +48,14 @@ export type Answer = Omit<ClientResponse, 'headers'> & { readonly headers?: Read
 export const accepted = sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask']);
 
 /**
- * A deployment reporting itself, what it grants the credential that just reached it, and whether it forwards the
- * client's own telemetry. The last of those is what decides whether the client records anything at all, so a test
- * about telemetry states it and every other test takes a deployment that forwards it.
+ * A deployment reporting itself, what it grants the credential that just reached it, and how much of the client's own
+ * telemetry it wants. The last of those is what decides whether the client records anything at all and how deep, so a
+ * test about telemetry states it and every other test takes the level a deployment publishes by default.
  */
-export function sessionAnswering(permissions: readonly string[], telemetry = true): Answer {
+export function sessionAnswering(
+    permissions: readonly string[],
+    telemetry: DeploymentTelemetryLevel = defaultTelemetryLevel,
+): Answer {
     return {
         status: 200,
         body: JSON.stringify({ service: 'MailFathom', version: '0.8.7', permissions, telemetry }),
@@ -661,18 +666,21 @@ export function telemetryRecording(): {
     readonly telemetry: ClientTelemetry;
     readonly exportedFor: (ClientSession | null)[];
     readonly permitted: boolean[];
+    readonly levels: DeploymentTelemetryLevel[];
     readonly stopped: number[];
     readonly events: ClientEvent[];
 } {
     const exportedFor: (ClientSession | null)[] = [];
     const permitted: boolean[] = [];
+    const levels: DeploymentTelemetryLevel[] = [];
     const stopped: number[] = [];
     const events: ClientEvent[] = [];
 
     return {
         telemetry: {
-            exportFor: (session, allowed) => {
+            exportFor: (session, allowed, level) => {
                 permitted.push(allowed);
+                levels.push(level);
 
                 const started = exportedFor.push(session);
 
@@ -686,6 +694,7 @@ export function telemetryRecording(): {
         },
         exportedFor,
         permitted,
+        levels,
         stopped,
         events,
     };

@@ -13,7 +13,7 @@ function answering(response: Partial<ClientResponse>): MailFathomTransport {
 }
 
 function sessionBody(permissions: unknown, version: unknown = '0.8.0', service: unknown = 'MailFathom'): string {
-    return JSON.stringify({ service, version, permissions, telemetry: true });
+    return JSON.stringify({ service, version, permissions, telemetry: 'info' });
 }
 
 describe('readDeploymentSession', () => {
@@ -46,7 +46,7 @@ describe('readDeploymentSession', () => {
             value: {
                 version: '0.8.1',
                 permissions: ['mailfathom.mail.read', 'mailfathom.mail.ask'],
-                telemetryForwarded: true,
+                telemetryLevel: 'info',
             },
         });
     });
@@ -56,18 +56,20 @@ describe('readDeploymentSession', () => {
 
         expect(result).toEqual({
             outcome: 'read',
-            value: { version: '0.8.0', permissions: [], telemetryForwarded: true },
+            value: { version: '0.8.0', permissions: [], telemetryLevel: 'info' },
         });
     });
 
     it.each([
-        ['a deployment that forwards telemetry', true, true],
-        ['a deployment that forwards none', false, false],
-        // Read as not forwarded rather than refusing the answer, so a deployment older than this client still signs
-        // somebody in — and the direction it is wrong in is the one that sends nothing.
-        ['a deployment answering nothing about it', undefined, false],
-        ['an answer stating something that is not a decision', 'yes', false],
-    ])('reads %s', async (_, telemetry, forwarded) => {
+        ['a deployment asking for the quietest level there is', 'fatal', 'fatal'],
+        ['a deployment asking for the whole stream', 'trace', 'trace'],
+        ['a deployment that forwards none', 'off', 'off'],
+        // Each of these is read as `off` rather than refusing the answer, so a deployment older or newer than this
+        // client still signs somebody in — and the direction it is wrong in is the one that sends nothing.
+        ['a deployment answering nothing about it', undefined, 'off'],
+        ['an answer stating a level this client does not know', 'verbose', 'off'],
+        ['an answer still stating the boolean this field used to carry', true, 'off'],
+    ])('reads %s', async (_, telemetry, level) => {
         const result = await readDeploymentSession(
             session,
             answering({
@@ -77,7 +79,7 @@ describe('readDeploymentSession', () => {
 
         expect(result).toEqual({
             outcome: 'read',
-            value: { version: '0.8.0', permissions: [], telemetryForwarded: forwarded },
+            value: { version: '0.8.0', permissions: [], telemetryLevel: level },
         });
     });
 
@@ -89,7 +91,7 @@ describe('readDeploymentSession', () => {
 
         expect(result).toEqual({
             outcome: 'read',
-            value: { version: '0.8.0', permissions: ['mailfathom.mail.read'], telemetryForwarded: true },
+            value: { version: '0.8.0', permissions: ['mailfathom.mail.read'], telemetryLevel: 'info' },
         });
     });
 
@@ -101,7 +103,7 @@ describe('readDeploymentSession', () => {
 
         expect(result).toEqual({
             outcome: 'read',
-            value: { version: '0.8.0', permissions: [], telemetryForwarded: true },
+            value: { version: '0.8.0', permissions: [], telemetryLevel: 'info' },
         });
     });
 
@@ -113,7 +115,7 @@ describe('readDeploymentSession', () => {
 
         expect(result).toEqual({
             outcome: 'read',
-            value: { version: '0.8.0', permissions: ['mailfathom.mail.read'], telemetryForwarded: true },
+            value: { version: '0.8.0', permissions: ['mailfathom.mail.read'], telemetryLevel: 'info' },
         });
     });
 
