@@ -395,10 +395,15 @@ changing. `pnpm test:desktop` is the whole of how it runs.
   a role and a name, so the elements this suite reaches are the ids the labels point at and the one control that states
   the resolved language during a render. That the control carries the right accessible name is asserted by the unit
   suite and by the browser suite, which is why it is not asserted twice.
-- **Two facts about the Linux head were measured rather than assumed**, and both are recorded in the spec because
+- **Three facts about the Linux head were measured rather than assumed**, and each is recorded in the spec because
   nothing else in this repository would record them. WebKitGTK answers `navigator.languages` out of `LC_ALL` and `LANG`
-  and ignores `LANGUAGE`; and it reports exactly one language however many the environment names, so the list-walking
-  half of the language rule is a web-head property and only its first step can be asked here.
+  and ignores `LANGUAGE`; it reports exactly one language however many the environment names, so the list-walking
+  half of the language rule is a web-head property and only its first step can be asked here; and a locale the machine
+  has not generated is no preference at all, because `setlocale` refuses one and leaves the process in `C`, so the head
+  then reports `en-US` exactly as it does for a machine naming nothing. The last of those is why a case naming a locale
+  checks that the machine has it and stops with `locale-gen` where it does not: the failure it replaces is a case
+  asserting the opposite of its own name and looking green for it, which is how the suite first passed here and failed
+  on a runner. The `Drive the desktop head` job generates what the cases name.
 - **Nothing a run captures is kept.** No screenshot, no trace, and no video — on the rule § _The browser suite_ states
   and for the same reason, except that here there is nothing to weigh: the suite reads text out of a document and a
   failure is diagnosed from the expectation it printed.

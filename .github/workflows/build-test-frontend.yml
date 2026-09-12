@@ -172,6 +172,14 @@ jobs:
             webkit2gtk-driver \
             xvfb
 
+      # The two locales the language cases name, which a runner does not carry: it generates `C`, `C.UTF-8`, `POSIX`,
+      # and `en_US.UTF-8` and nothing else. `setlocale` refuses a locale the machine has not generated and leaves the
+      # process in `C`, so without this the head reports `en-US` whatever `LC_ALL` says — and a case would assert the
+      # opposite of what its name claims while looking green for it. The suite refuses to run a case whose locale is
+      # missing rather than trusting this step to have happened.
+      - name: Generate the locales the language cases name
+        run: sudo locale-gen pl_PL.UTF-8 de_DE.UTF-8
+
       - name: Set up Node
         uses: actions/setup-node@v7
         with:

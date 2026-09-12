@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { execFileSync } from 'node:child_process';
+
 import { expect, test } from '@playwright/test';
 
 import * as deployment from '../fixtures/deployment';
@@ -91,8 +93,8 @@ for (const [zone, spelling] of Object.entries(spellings)) {
 }
 
 // What a WebView reports as the machine's language preference comes from the platform rather than from anything a test
-// can set on a context, which is the whole reason these cases are here. Two things about the Linux head were measured
-// rather than assumed, and both decide how this is written.
+// can set on a context, which is the whole reason these cases are here. Three things about the Linux head were measured
+// rather than assumed, and each decides how this is written.
 //
 // **It reads the C locale, not `LANGUAGE`.** WebKitGTK answers `navigator.languages` out of `LC_ALL` and `LANG`;
 // `LANGUAGE`, which is what GLib's own message lookup reads first, is ignored. A case stating its preference there and
@@ -103,7 +105,26 @@ for (const [zone, spelling] of Object.entries(spellings)) {
 // over a single tag whatever is in the environment, so the walk is a web-head property and only its first step can be
 // asked here. That is a fact about the platform rather than a gap to close: the narrowing itself is covered by the unit
 // suite, and what is left for this suite is that a real WebView's one tag reaches the right catalogue.
+//
+// **A locale the machine has not generated is no preference at all.** `setlocale` refuses one and leaves the process in
+// `C`, so naming it in `LC_ALL` reports `en-US` exactly as naming nothing does — which would turn the Polish case into
+// an assertion of the opposite of what it says and leave the German one green for a reason that has nothing to do with
+// the client. So what a case names is checked against what the machine actually has, and a missing one stops the case
+// with the command that installs it rather than with a comparison of two language tags.
+const generatedLocales = new Set(execFileSync('locale', ['-a'], { encoding: 'utf8' }).split('\n').map(asLocaleName));
+
+/** One spelling for the two a locale has: `locale -a` prints `pl_PL.utf8` for what an environment names `pl_PL.UTF-8`. */
+function asLocaleName(locale: string): string {
+    return locale.trim().toLowerCase().replaceAll(/[-_.]/gu, '');
+}
+
 function preferring(locale: string): Readonly<Record<string, string>> {
+    if (!generatedLocales.has(asLocaleName(locale))) {
+        throw new Error(
+            `This machine has not generated ${locale}, so nothing it is named in reaches the head. Run: sudo locale-gen ${locale}`,
+        );
+    }
+
     return { LANG: locale, LC_ALL: locale, LANGUAGE: locale };
 }
 
