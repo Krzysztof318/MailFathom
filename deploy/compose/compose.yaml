@@ -485,7 +485,7 @@ services:
     # replica that raised it to the replicas holding the connections that have to hear about it, and this file runs one
     # MailFathom — so every signal already reaches every connection this deployment holds, and the server relays each
     # one back to the single subscriber that published it. It is here so that this shape offers the same component the
-    # chart does, and so that a deployment which grows a second instance has the piece already provisioned.
+    # chart does, and so that a deployment which expects to move to the chart can provision it before it needs one.
     profiles:
       - signal-backplane
     # A digest rather than a tag, and the same digest the Helm chart renders — Valkey 9.1.2 — so the server this starts

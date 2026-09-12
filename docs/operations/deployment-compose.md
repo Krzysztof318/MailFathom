@@ -839,8 +839,8 @@ The stack has a sixth service, `valkey`, and it is not started either. It sits b
 carries a client signal from the instance that raised it to the instances holding the connections that have to hear
 about it, and this file runs one MailFathom — so every signal already reaches every connection this deployment holds,
 and the server relays each one back to the single subscriber that published it. It is here so that this shape offers the
-same component [the chart](deployment-kubernetes.md) does, and so that a deployment which grows a second instance has
-the piece provisioned before it needs one.
+same component [the chart](deployment-kubernetes.md) does, and so that a deployment which expects to move to the chart
+can provision it before it needs one.
 
 **Running more than one MailFathom under Compose is not supported**, and the reason is this shape rather than the
 application. The service publishes fixed host ports, so a second container has nothing to bind; nothing here balances

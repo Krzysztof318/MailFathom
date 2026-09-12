@@ -23,7 +23,7 @@ This file is loaded into every agent session in either stack, so it holds what h
 | Where | Read when | What it holds |
 |---|---|---|
 | `backend/AGENTS.md` | A change anywhere under `backend/` | The service stack's whole contract: the .NET and C# conventions and the asynchronous return types, comment and XML-documentation discipline, the clean-architecture boundaries, the cross-boundary email invariants, package pinning and lock files, and the two verification rules that are this solution's alone |
-| `backend/src/AGENTS.md` | A change under `backend/src/` | What holds for the service's production code alone: API and failure design, dependency injection and configuration, and the lifetime and bounds every outbound HTTP client is registered with |
+| `backend/src/AGENTS.md` | A change under `backend/src/` | What holds for the service's production code alone: that several independent replicas run this code and what each design decision owes that — which state is one replica's, what a guarantee may rest on, how singleton work is excluded and a contested row claimed, and what a rolling upgrade running two builds obliges — then API and failure design, dependency injection and configuration, and the lifetime and bounds every outbound HTTP client is registered with |
 | `backend/tests/AGENTS.md` | A change under `backend/tests/` | The service suite's own policy, coverage, and what belongs in the integration suite instead |
 | `backend/src/Infrastructure/AGENTS.md` | A change under `backend/src/Infrastructure/` | Persistence and EF Core rules, and email-protocol safety |
 | `backend/src/Mcp/AGENTS.md` | A change under `backend/src/Mcp/` | Where a result type and the types nested inside one are placed |

@@ -405,21 +405,30 @@ not about MailFathom at all:
   claim whatever this number says, so a node taking that pod takes the deployment with it. Point the chart at a server
   somebody operates before the replica count is what your availability rests on.
 - **Every ceiling worded as one process's multiplies.** `Jobs:MaxConcurrentJobs`,
-  `MailSynchronization:MaxInFlightRawMimeBytes`, `Embeddings:MaxQueuedEmails`, and
-  `Resilience:AiProviderInvocation:ConcurrencyLimit` are each replica's own, deliberately: what they bound is that
+  `MailSynchronization:MaxInFlightRawMimeBytes`, `Embeddings:MaxQueuedEmails`,
+  `Resilience:AiProviderInvocation:ConcurrencyLimit`, and every endpoint's `RateLimiting` are each replica's own,
+  deliberately: what they bound is that
   process's threads, memory, and sockets. A deployment of *n* replicas runs up to *n* times them, so a provider's own
   concurrency is respected by dividing the figure rather than by restating it. Every ceiling worded as the
   deployment's — the two content-storage ceilings, the paced request rates, the answering spend — is a row each replica
   shares and stays the figure it names. The [configuration reference](configuration-reference.md) says which of the two
   each setting is, per setting.
 
-**Nothing about several replicas weakens a security property.** A client assertion is spendable once for the whole
-deployment, because the record of a spent identifier is a row under a unique constraint rather than a dictionary in one
-process — so an identifier any replica served is refused by every replica, and there is no window to route around. It is
-a shared store rather than affinity for a reason worth stating: affinity is honoured by the client, and the client here
-is whoever captured the assertion.
+**No guarantee is weakened by several replicas, and one budget is multiplied by them.** A client assertion is spendable
+once for the whole deployment, because the record of a spent identifier is a row under a unique constraint rather than a
+dictionary in one process — so an identifier any replica served is refused by every replica, and there is no window to
+route around. It is a shared store rather than affinity for a reason worth stating: affinity is honoured by the client,
+and the client here is whoever captured the assertion.
 [The assertions this deployment has already served](../architecture/stored-email-schema.md#the-assertions-this-deployment-has-already-served)
 is the table.
+
+**The endpoint rate limiters are the exception, and they are a bound rather than a guarantee.**
+`McpEndpoint:RateLimiting`, `AdminEndpoint:RateLimiting`, and `ClientEndpoint:RateLimiting` each count in one process,
+so a deployment of *n* replicas admits up to *n* times what one of them declares and `TokenCapacity` is the largest
+burst one caller may spend at one replica. That matters most on the administrative surface, where the limiter is what
+stands between an API key and unbounded guessing: divide the figure when the replica count is raised rather than
+leaving it as it was sized for one process.
+[Rate limiting](configuration-endpoints.md#rate-limiting) states every value and which of the two it is.
 
 **A signed-in session needs nothing either.** It is a row in PostgreSQL, so every replica accepts a session any other
 replica minted and honours its revocation the moment it is written;
@@ -467,6 +476,12 @@ for, so work a newer replica introduced waits for one instead of failing on an o
 scheduled occasion compose the same idempotency key; and a leased scope is released by the pod being stopped and
 claimed by whichever replica takes it next. `Recreate` is the other type Kubernetes accepts, and the chart
 renders no `rollingUpdate` block beside it, so choosing it produces a Deployment the API server accepts.
+
+Either half of `rollingUpdate` may be zero and both may not, and the chart refuses that pair rather than letting the
+API server reject the Deployment while a release is being applied. The refusal exists because a values document is
+merged into the chart's defaults rather than replacing them: writing `maxSurge: 0` alone — which is what a tight quota
+asks for — keeps `maxUnavailable: 0` underneath, and a rollout allowed neither a pod below the replica count nor a pod
+above it can never replace anything.
 
 **A rolling upgrade hands leased work over rather than parking it.** A pod stopping releases every lease it holds, so
 the account it was synchronizing is claimable immediately. The release is an optimization of the ordinary case and

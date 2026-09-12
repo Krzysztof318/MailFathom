@@ -23,10 +23,15 @@ method: it is wherever a guarantee was quietly resting on being the only process
   threads, sockets, or memory is a bound, and a bound is legitimately one process's — but then say so where an operator
   meets it, in the configuration reference, as `× replicaCount`. ADR 0031 records both halves and the asymmetry between
   them.
-- **Work that must not run twice takes a lease.** `IWorkLeaseStore` and `WorkLeaseHolder` are the mechanism, the unit of
-  exclusion is the scope of the row that already records the work's progress, every write against a leased scope is
-  conditional on the holder still matching, and the holder stops on the first renewal it fails rather than when the
-  expiry passes. A new singleton worker takes a lease keyed that way rather than inventing coordination beside it, and
+- **Work that must not run twice takes a lease, through `IWorkLeaseRunner`.** That is the seam, and it is the seam
+  because taking a lease is more than claiming one: the renewal while the work runs, the persistence scope each
+  statement against the store needs of its own, and the release once the work ends are all the host's, so the work is
+  handed in rather than the lease handed out and no caller can forget the release. `IWorkLeaseStore` is the store
+  beneath it and `WorkLeaseHolder` names one hold rather than one process, which is what makes every write against a
+  leased scope conditional on the holder still matching; the hold the runner takes cancels the work on the first
+  renewal that does not complete, strictly before the lease could expire and another replica take the scope. The unit
+  of exclusion is the scope of the row that already records the work's progress, so a new singleton worker keys its
+  lease that way rather than inventing coordination beside it, and
   [ADR 0031](../../docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) holds the
   reasoning, including why a PostgreSQL advisory lock was not chosen.
 - **A row a competing replica may already have written is claimed, never adopted.** Take it under

@@ -67,7 +67,7 @@
                   "pattern": "^(0|[1-9][0-9]?|100)%$"
                 }
               ],
-              "description": "How many pods above the replica count a rollout may start, as a count or a percentage. Kubernetes refuses both halves being zero, because that is a rollout that can never take a step."
+              "description": "How many pods above the replica count a rollout may start, as a count or a percentage. Either half may be zero on its own, and both being zero is a rollout that can never take a step: the chart's own validation refuses that pair, in either form, rather than leaving it to the API server to reject the Deployment after a release is already being applied."
             }
           }
         }

@@ -781,9 +781,10 @@ ingress:
 # StatefulSet on a ReadWriteOnce claim whatever this number says. They do not divide one account's synchronization,
 # which is one lease and therefore one replica's at a time, so a single large mailbox is not synchronized faster by
 # raising this. And they multiply every ceiling worded as one process's rather than the deployment's —
-# `Jobs:MaxConcurrentJobs`, `MailSynchronization:MaxInFlightRawMimeBytes`, `Embeddings:MaxQueuedEmails`, and
-# `Resilience:AiProviderInvocation:ConcurrencyLimit` are each replica's own, so a deployment of *n* replicas runs up to
-# *n* times them and a provider's concurrency is respected by dividing rather than by restating. Every ceiling worded
+# `Jobs:MaxConcurrentJobs`, `MailSynchronization:MaxInFlightRawMimeBytes`, `Embeddings:MaxQueuedEmails`,
+# `Resilience:AiProviderInvocation:ConcurrencyLimit`, and every endpoint's `RateLimiting` block are each replica's own,
+# so a deployment of *n* replicas runs up to *n* times them and both a provider's concurrency and an endpoint's burst
+# are respected by dividing rather than by restating. Every ceiling worded
 # as the deployment's is a row each replica shares and stays the figure it names; the configuration reference says
 # which of the two each setting is, per setting.
 #
@@ -803,6 +804,11 @@ replicaCount: 1
 # same idempotency key. `Recreate` is the other type Kubernetes accepts and stops every pod before starting one; the
 # chart renders no `rollingUpdate` block beside it, so selecting it here produces a manifest the API server accepts
 # rather than one it refuses.
+#
+# Either half may be zero on its own and both may not, because a rollout allowed neither a pod below the replica count
+# nor a pod above it can never replace anything. The chart refuses that pair itself — a values document is *merged*
+# into the defaults above rather than replacing them, so writing `maxSurge: 0` alone keeps the zero underneath and
+# would otherwise install a Deployment the API server rejects.
 strategy:
   type: RollingUpdate
   rollingUpdate:
