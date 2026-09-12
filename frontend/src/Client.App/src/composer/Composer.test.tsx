@@ -8,6 +8,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
 import { AttachmentUploadContext, type AttachmentUpload } from '../deployment/attachmentUpload';
 import { LocalizationProvider } from '../localization/Localization';
+import { TelemetryContext, noTelemetry, type ClientTelemetry } from '../telemetry/clientTelemetry';
+import { recordingTelemetry, recordsOf } from '../telemetry/telemetry.harness';
 import { ToastsProvider } from '../toasts/Toasts';
 import { Composer } from './Composer';
 import type { ComposerOpening } from './composition';
@@ -202,6 +204,7 @@ function drawComposer(
     online = true,
     upload: AttachmentUpload = uploadsOneFile,
     drafts = false,
+    telemetry: ClientTelemetry = noTelemetry,
 ): { closed: ReturnType<typeof vi.fn>; asked: ClientRequest[]; upload: AttachmentUpload } {
     const closed = vi.fn();
     const { transport, asked } = deployment(answers);
@@ -222,23 +225,25 @@ function drawComposer(
 
     render(
         <LocalizationProvider>
-            <ToastsProvider>
-                <AttachmentUploadContext value={upload}>
-                    <Framed>
-                        {(onClosed) => (
-                            <Composer
-                                session={session}
-                                transport={transport}
-                                accounts={accounts}
-                                opening={opening}
-                                online={online}
-                                drafts={drafts}
-                                onClosed={onClosed}
-                            />
-                        )}
-                    </Framed>
-                </AttachmentUploadContext>
-            </ToastsProvider>
+            <TelemetryContext value={telemetry}>
+                <ToastsProvider>
+                    <AttachmentUploadContext value={upload}>
+                        <Framed>
+                            {(onClosed) => (
+                                <Composer
+                                    session={session}
+                                    transport={transport}
+                                    accounts={accounts}
+                                    opening={opening}
+                                    online={online}
+                                    drafts={drafts}
+                                    onClosed={onClosed}
+                                />
+                            )}
+                        </Framed>
+                    </AttachmentUploadContext>
+                </ToastsProvider>
+            </TelemetryContext>
         </LocalizationProvider>,
     );
 
@@ -471,6 +476,76 @@ describe('Composer, a message of its own', () => {
 
         await waitFor(() => {
             expect(asked.some((request) => request.path.endsWith('/outbox/cancellation'))).toBe(true);
+        });
+    });
+
+    // What became of a send this client asked for, which is the half a deployment's own outbox cannot report: it
+    // records what it was handed rather than what somebody wrote and then could not send. No recipient, no subject,
+    // and no part of the message is in it.
+    it('reports what became of a send it asked for', async () => {
+        const recording = recordingTelemetry();
+
+        drawComposer({ kind: 'new' }, {}, [work], true, uploadsOneFile, false, recording.telemetry);
+
+        address('ada@example.invalid');
+        confirmSend();
+
+        await waitFor(() => {
+            expect(recordsOf(recording.recorded, 'message_sent')).toStrictEqual([
+                { event: 'message_sent', attributes: { 'mailfathom.client.send': 'queued' } },
+            ]);
+        });
+    });
+
+    it('names the refusal a refused send met, out of the closed set the wire package publishes', async () => {
+        const recording = recordingTelemetry();
+
+        drawComposer(
+            { kind: 'new' },
+            { send: { status: 409, body: JSON.stringify({ errorCode: 56_003 }) } },
+            [work],
+            true,
+            uploadsOneFile,
+            false,
+            recording.telemetry,
+        );
+
+        address('ada@example.invalid');
+        confirmSend();
+
+        await waitFor(() => {
+            expect(recordsOf(recording.recorded, 'message_sent')).toStrictEqual([
+                {
+                    event: 'message_sent',
+                    attributes: {
+                        'mailfathom.client.send': 'refused',
+                        'mailfathom.client.refusal': 'sendingNotEnabled',
+                    },
+                },
+            ]);
+        });
+    });
+
+    // Somebody changing their mind inside the window the deployment gives them, which is a decision rather than a
+    // failure — and the deployment records the cancellation without ever recording that a person asked for it.
+    it('reports a send taken back before the deployment let it go', async () => {
+        const recording = recordingTelemetry();
+
+        drawComposer({ kind: 'new' }, {}, [work], true, uploadsOneFile, false, recording.telemetry);
+
+        address('ada@example.invalid');
+        confirmSend();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Stop the operation' }));
+
+        const question = screen.getByRole('dialog', { name: 'Stop the operation?' });
+
+        fireEvent.click(within(question).getByRole('button', { name: 'Stop the operation' }));
+
+        await waitFor(() => {
+            expect(recordsOf(recording.recorded, 'send_withdrawn')).toStrictEqual([
+                { event: 'send_withdrawn', attributes: { 'mailfathom.client.withdrawal': 'withdrawn' } },
+            ]);
         });
     });
 

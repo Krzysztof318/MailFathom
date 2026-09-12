@@ -8,6 +8,8 @@ import { largestPortraitOctets } from '@mailfathom/client-backend';
 import type { TelemetryForwarding } from '../deployment/telemetryForwarding';
 import { LocalizationProvider } from '../localization/Localization';
 import { chooseSystemNotifications } from '../preferences/systemNotifications';
+import { TelemetryContext, noTelemetry, type ClientTelemetry } from '../telemetry/clientTelemetry';
+import { recordingTelemetry, recordsOf } from '../telemetry/telemetry.harness';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
 import type { OwnProfileInForce } from '../profile/useOwnProfile';
 import { deviceKeys } from '../device/deviceStore';
@@ -58,6 +60,7 @@ function renderSettings({
     deploymentVersion = '0.9.0',
     onClose = () => undefined,
     head = raisesNothing,
+    telemetry = noTelemetry,
 }: {
     readonly profile?: OwnProfileInForce;
     readonly preferences?: ClientPreferencesInForce;
@@ -67,18 +70,22 @@ function renderSettings({
 
     /** The head this surface is drawn in, which decides whether it offers a system notification at all. */
     readonly head?: SystemNotifier;
+
+    readonly telemetry?: ClientTelemetry;
 } = {}): void {
     render(
         <LocalizationProvider>
-            <SystemNotifierContext value={head}>
-                <Settings
-                    profile={profile}
-                    preferences={preferences}
-                    telemetryForwarding={telemetryForwarding}
-                    deploymentVersion={deploymentVersion}
-                    onClose={onClose}
-                />
-            </SystemNotifierContext>
+            <TelemetryContext value={telemetry}>
+                <SystemNotifierContext value={head}>
+                    <Settings
+                        profile={profile}
+                        preferences={preferences}
+                        telemetryForwarding={telemetryForwarding}
+                        deploymentVersion={deploymentVersion}
+                        onClose={onClose}
+                    />
+                </SystemNotifierContext>
+            </TelemetryContext>
         </LocalizationProvider>,
     );
 }
@@ -590,6 +597,26 @@ describe('Settings', () => {
 
         expect(window.localStorage.getItem(deviceKeys.systemNotifications)).toBeNull();
     });
+
+    // What the head answered is the one part of this a deployment cannot see at all: somebody who turned notifications
+    // on and got nothing reports the client as broken, and nothing else says which of the three answers they met.
+    it.each<NotificationStanding>(['permitted', 'refused', 'unasked'])(
+        'reports what the head answered when it was asked whether it may raise one: %s',
+        async (answered) => {
+            const recorded = recordingTelemetry();
+            renderSettings({ head: asksFirst(answered), telemetry: recorded.telemetry });
+            openApplication();
+
+            await act(async () => {
+                fireEvent.click(screen.getByRole('switch', { name: /Notify me on this machine/u }));
+                await Promise.resolve();
+            });
+
+            expect(recordsOf(recorded.recorded, 'notifications_asked')).toStrictEqual([
+                { event: 'notifications_asked', attributes: { 'mailfathom.client.standing': answered } },
+            ]);
+        },
+    );
 
     it('follows the head where a permission is taken back underneath an open dialog', async () => {
         const browser = asksFirst('permitted');

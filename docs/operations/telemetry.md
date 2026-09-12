@@ -1397,7 +1397,7 @@ than against the client population as a whole. Nothing in the client branches on
 asked is whether the document's own origin is the deployment the session is signed in to, which a shell serving the
 bundle over `http://tauri.localhost` answers exactly as one serving from a scheme of its own does.
 
-**Eighteen log records, and no others.** Each carries `mailfathom.client.event` naming which it is, and the severity
+**Twenty-two log records, and no others.** Each carries `mailfathom.client.event` naming which it is, and the severity
 it is written at is fixed by the occurrence rather than chosen at the call site — so a dashboard grouping on that
 attribute reads the same shape from every client, and the floor below can be reasoned about from this table alone.
 
@@ -1414,6 +1414,10 @@ attribute reads the same shape from every client, and the floor below can be rea
 | `DEBUG` | `signals_refused` | One could not be opened, with `mailfathom.client.attempt` counting the attempt |
 | `DEBUG` | `signal_refused` | The hub sent a payload this client does not act on |
 | `DEBUG` | `act_asked` | The client asked the deployment to change something, with `mailfathom.client.act` naming which act and `…messages` counting them |
+| `DEBUG` | `message_sent` | The client asked the deployment to send a message somebody wrote in it, with `mailfathom.client.send` naming how that ended and `…refusal` naming which refusal where it was refused |
+| `DEBUG` | `send_withdrawn` | Somebody took a send back before the deployment had let it go, with `mailfathom.client.withdrawal` naming how the withdrawal ended |
+| `DEBUG` | `preferences_stated` | A preference write went out, with `mailfathom.client.stated` saying whether the deployment held it or refused it — never which preference moved or what it was set to |
+| `DEBUG` | `notifications_asked` | The head was asked whether it may raise a system notification, with `mailfathom.client.standing` naming what it answered |
 | `TRACE` | `request_completed` | A request produced an answer, with the same attributes `request_failed` carries minus the failure |
 | `TRACE` | `signal_received` | The hub said something changed, with `mailfathom.client.signal` naming the kind |
 | `TRACE` | `navigated` | Somebody moved to another space, with `mailfathom.client.space` and `…navigation.duration_ms` |
@@ -1433,7 +1437,8 @@ records the buffer exists for within seconds of somebody opening a folder.
 conservative: a deployment serving hundreds of clients pays for every record each of them sends, so what ships by
 default is the line that says a session exists, and everything a defect report actually needs is turned on for as long
 as the report takes. `debug` is the level to ask for then — it adds the sign-in, the deployment read, the signal hub,
-the acts, and the failed requests, and leaves out the two per-request and per-move streams that `trace` adds.
+the acts, the sends and the withdrawals, the preference writes, the notification answer, and the failed requests, and
+leaves out the two per-request and per-move streams that `trace` adds.
 
 **A record made before the deployment answers is held at `info` too.** The client has no level until the session route
 has answered, and the alternative to standing on the default there is picking between recording a `TRACE` stream into a

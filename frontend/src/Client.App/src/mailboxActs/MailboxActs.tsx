@@ -690,10 +690,21 @@ export function MailboxActsProvider({
             // the act as done and has just put itself back, which somebody using it experiences as the client undoing
             // their work. It is above the default floor because it is a deployment refusing writes it accepted the
             // request for, which is a thing to look at rather than a thing to read.
-            if (recorded.length < messages.length) {
+            //
+            // Counted over the batches the deployment actually answered, and never over one that failed to reach it.
+            // A dropped connection or a credential that expired leaves `writtenDown` with nothing from that batch,
+            // which is indistinguishable here from a deployment declining every message in it — so counting both
+            // would put every transport failure into the one record an operator reads to find a deployment refusing
+            // writes. `request_failed` already reports that half, at the level a transport failure belongs to.
+            const declined = answered
+                .filter(({ answer }) => answer.outcome === 'read')
+                .flatMap(({ messages: batch }) => batch)
+                .filter((message) => !written.has(message.storedEmailId));
+
+            if (declined.length > 0) {
                 telemetry.happened('act_refused', {
                     'mailfathom.client.act': act,
-                    'mailfathom.client.messages': messages.length - recorded.length,
+                    'mailfathom.client.messages': declined.length,
                 });
             }
 

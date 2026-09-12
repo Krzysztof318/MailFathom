@@ -6,6 +6,8 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ClientRequest, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { telemetryKey } from '../device/deviceStore';
+import { TelemetryContext, noTelemetry, type ClientTelemetry } from '../telemetry/clientTelemetry';
+import { recordingTelemetry, recordsOf } from '../telemetry/telemetry.harness';
 import { ThemeProvider } from '../theme/Theme';
 import { useTheme } from '../theme/useTheme';
 import { useClientPreferences } from './useClientPreferences';
@@ -60,13 +62,25 @@ function recording(body: string, status = 200): { transport: MailFathomTransport
 
 // The theme is read beside the settings because it is the one of them the device also holds, so what the deployment
 // did to it is only visible through the provider that paints it.
-function reading(transport: MailFathomTransport, asked: ClientSession | null = session, person: string | null = anna) {
+function reading(
+    transport: MailFathomTransport,
+    asked: ClientSession | null = session,
+    person: string | null = anna,
+    telemetry: ClientTelemetry = noTelemetry,
+) {
     return renderHook(
         ({ session: presenting, person: whose }: { session: ClientSession | null; person: string | null }) => ({
             preferences: useClientPreferences(presenting, transport, whose),
             theme: useTheme(),
         }),
-        { initialProps: { session: asked, person }, wrapper: ThemeProvider },
+        {
+            initialProps: { session: asked, person },
+            wrapper: ({ children }) => (
+                <TelemetryContext value={telemetry}>
+                    <ThemeProvider>{children}</ThemeProvider>
+                </TelemetryContext>
+            ),
+        },
     );
 }
 
@@ -343,6 +357,33 @@ describe('useClientPreferences', () => {
             expect(result.current.preferences.notStated).toBe(true);
         });
     });
+
+    // Which preference somebody changed and what they set it to is not written down: a preference document is what a
+    // person chose about their own client, and a collector is the deployment's operator rather than them. What an
+    // operator needs is that the write happened and whether it stuck, a setting that silently does not stick being
+    // the defect nobody reports as one.
+    it.each<{ named: string; status: number; stated: string }>([
+        { named: 'held', status: 200, stated: 'held' },
+        { named: 'refused', status: 503, stated: 'refused' },
+    ])(
+        'reports a preference write the deployment $named, and nothing about which one it was',
+        async ({ status, stated }) => {
+            const body = stored({ telemetryEnabled: false, theme: 'light', openMailInTabs: false });
+            const { transport } = recording(body, status);
+            const recorded = recordingTelemetry();
+            const { result } = reading(transport, session, anna, recorded.telemetry);
+
+            act(() => {
+                result.current.preferences.chooseTabMode(true);
+            });
+
+            await waitFor(() => {
+                expect(recordsOf(recorded.recorded, 'preferences_stated')).toStrictEqual([
+                    { event: 'preferences_stated', attributes: { 'mailfathom.client.stated': stated } },
+                ]);
+            });
+        },
+    );
 
     it('reads whether this deployment may be told what the client is doing', async () => {
         const { transport } = recording(stored({ telemetryEnabled: false, theme: 'system', openMailInTabs: false }));

@@ -132,7 +132,11 @@ export type ClientEvent =
     | 'signal_refused'
     | 'navigated'
     | 'act_asked'
-    | 'act_refused';
+    | 'act_refused'
+    | 'message_sent'
+    | 'send_withdrawn'
+    | 'preferences_stated'
+    | 'notifications_asked';
 
 /**
  * What each occurrence is written at.
@@ -159,6 +163,10 @@ export const severityOf: Readonly<Record<ClientEvent, SeverityNumber>> = {
     signals_refused: SeverityNumber.DEBUG,
     signal_refused: SeverityNumber.DEBUG,
     act_asked: SeverityNumber.DEBUG,
+    message_sent: SeverityNumber.DEBUG,
+    send_withdrawn: SeverityNumber.DEBUG,
+    preferences_stated: SeverityNumber.DEBUG,
+    notifications_asked: SeverityNumber.DEBUG,
 
     request_completed: SeverityNumber.TRACE,
     signal_received: SeverityNumber.TRACE,
@@ -193,6 +201,10 @@ const bodyOf: Readonly<Record<ClientEvent, string>> = {
     navigated: 'Somebody moved to another space in the client.',
     act_asked: 'The client asked the deployment to change something about a mailbox.',
     act_refused: 'The deployment refused a change the client had already drawn, and the client put the screen back.',
+    message_sent: 'Somebody asked the deployment to send a message they had written in this client.',
+    send_withdrawn: 'Somebody took a send back before the deployment had let it go.',
+    preferences_stated: 'Somebody changed what this deployment holds about how they want the client to behave.',
+    notifications_asked: 'This head was asked whether it may raise a system notification, and answered.',
 };
 
 /** One record, as the half of the client that noticed the occurrence describes it. */

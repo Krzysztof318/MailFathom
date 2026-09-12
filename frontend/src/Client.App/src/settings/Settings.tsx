@@ -21,6 +21,7 @@ import type { OwnProfileInForce } from '../profile/useOwnProfile';
 import { chooseSystemNotifications, useSystemNotificationsChosen } from '../preferences/systemNotifications';
 import { LanguageSegments } from '../shell/Preferences';
 import { useSystemNotifier } from '../shellOperations/systemNotifier';
+import { useTelemetry } from '../telemetry/clientTelemetry';
 import { chosenPortrait, type PortraitChoice } from './chosenPortrait';
 import { MessageView, MessageViewWarning } from './MessageView';
 
@@ -413,6 +414,7 @@ function NotificationDuration({ preferences }: { readonly preferences: ClientPre
 function SystemNotifications() {
     const { translate } = useLocalization();
     const notifier = useSystemNotifier();
+    const telemetry = useTelemetry();
     const raising = useSystemNotificationsChosen();
 
     // Read on every render rather than copied, for the same reason the switch above it is: this screen is not the only
@@ -438,6 +440,11 @@ function SystemNotifications() {
 
         void notifier.permit().then((answered) => {
             redrawOnceTheHeadAnswers((asked) => asked + 1);
+
+            // What the head answered, which is the one part of this a deployment cannot see at all: a refusal here is
+            // a person who turned notifications on and got nothing, and every report of that reads as the client being
+            // broken. The four standings are a closed set of this client's own.
+            telemetry.happened('notifications_asked', { 'mailfathom.client.standing': answered });
 
             // Only an answer somebody gave is written. `unasked` is a question that reached nobody — a prompt the
             // browser dismissed without deciding, or a shell command that threw — and writing *off* for it would leave

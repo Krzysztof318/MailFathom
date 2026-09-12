@@ -103,11 +103,8 @@ public sealed class ClientSessionResponseTests
     /// <summary>
     /// What lets a client say there is nothing behind its telemetry switch, and how much this deployment asks of it.
     /// Both follow the deployment rather than the grant, so a credential granted nothing is told the same thing as one
-    /// granted everything.
-    /// </summary>
-    /// <summary>
-    /// Written over every member rather than over a chosen few, so a level added without a spelling fails here rather
-    /// than reaching a client as whatever the enum happened to be called.
+    /// granted everything; and it is written over every member rather than over a chosen few, so a level added without
+    /// a spelling fails here rather than reaching a client as whatever the enum happened to be called.
     /// </summary>
     [Fact]
     public void For_ADeploymentThatForwardsTelemetry_ReportsEveryLevelItCouldAskForInItsPublishedSpelling()

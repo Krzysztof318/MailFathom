@@ -12,6 +12,7 @@ import {
     type ClientSession,
     type MailFathomTransport,
 } from '@mailfathom/client-backend';
+import { useTelemetry } from '../telemetry/clientTelemetry';
 import type { ThemeChoice } from '../theme/themeChoice';
 import { useTheme } from '../theme/useTheme';
 import { rememberedTelemetry, rememberTelemetry } from './rememberedTelemetry';
@@ -136,6 +137,7 @@ export function useClientPreferences(
     person: string | null,
 ): ClientPreferencesInForce {
     const { setThemeChoice } = useTheme();
+    const telemetry = useTelemetry();
     const [held, setHeld] = useState<HeldPreferences>(heldForNobody);
 
     // The latest document, reachable from a handler whichever render built it. A handler closes over the render it
@@ -214,6 +216,15 @@ export function useClientPreferences(
             setHeld((current) =>
                 current.session === session ? { ...current, notStated: answer.outcome !== 'read' } : current,
             );
+
+            // That somebody changed how they want the client to behave, and whether the deployment took it. Which
+            // preference and what they set it to is not written: a preference document is what a person chose about
+            // their own client, and a collector is the deployment's operator rather than them. What an operator needs
+            // is that the write happened and whether it stuck, because a setting that silently does not stick is the
+            // defect nobody reports as one.
+            telemetry.happened('preferences_stated', {
+                'mailfathom.client.stated': answer.outcome === 'read' ? 'held' : 'refused',
+            });
         });
     }
 

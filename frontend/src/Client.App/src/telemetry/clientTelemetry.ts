@@ -261,7 +261,7 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
 
         navigated(space, askedAt) {
             const named = isSpace(space) ? space : unnamedSpace;
-            const at = { 'mailfathom.client.space': named };
+            const movedTo = { 'mailfathom.client.space': named };
 
             // Read where the move ended rather than where it was written, so queueing the write moves when the record
             // reaches a registry and not what the record says.
@@ -270,20 +270,23 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
             record(() => {
                 trace
                     .getTracer(telemetryName)
-                    .startSpan(`navigate ${named}`, { startTime: askedAt, attributes: at })
+                    .startSpan(`navigate ${named}`, { startTime: askedAt, attributes: movedTo })
                     .end(reached);
 
                 const meter = metrics.getMeter(telemetryName);
-                meter.createCounter('mailfathom.client.navigations').add(1, at);
+                meter.createCounter('mailfathom.client.navigations').add(1, movedTo);
                 meter
                     .createHistogram('mailfathom.client.navigation.duration', { unit: 's' })
-                    .record((reached - askedAt) / 1_000, at);
+                    .record((reached - askedAt) / 1_000, movedTo);
             });
 
             // Beside the span and the two measurements and at the quietest level there is, for the reason a request is
             // recorded there: what it adds is the order somebody moved in, which is what makes a stream of requests
             // read as somebody using the client rather than as traffic.
-            report('navigated', { ...at, 'mailfathom.client.navigation.duration_ms': Math.round(reached - askedAt) });
+            report('navigated', {
+                ...movedTo,
+                'mailfathom.client.navigation.duration_ms': Math.round(reached - askedAt),
+            });
         },
 
         happened(event, attributes = {}) {
