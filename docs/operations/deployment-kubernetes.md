@@ -424,11 +424,14 @@ is the table.
 
 **The endpoint rate limiters are the exception, and they are a bound rather than a guarantee.**
 `McpEndpoint:RateLimiting`, `AdminEndpoint:RateLimiting`, and `ClientEndpoint:RateLimiting` each count in one process,
-so a deployment of *n* replicas admits up to *n* times what one of them declares and `TokenCapacity` is the largest
-burst one caller may spend at one replica. That matters most on the administrative surface, where the limiter is what
-stands between an API key and unbounded guessing: divide the figure when the replica count is raised rather than
-leaving it as it was sized for one process.
-[Rate limiting](configuration-endpoints.md#rate-limiting) states every value and which of the two it is.
+so a deployment of *n* replicas admits up to *n* times what one of them declares. What `TokenCapacity` is the burst of
+differs by surface: one caller's, at one replica, on the MCP and client surfaces, and **the whole endpoint's** on the
+administrative one, where the credential is judged behind the limiter so an administrative request is still anonymous
+when it is counted and every caller shares one bucket. That is the surface where this matters most, because the limiter
+is what stands between an API key and unbounded guessing — so divide the figure when the replica count is raised rather
+than leaving it as it was sized for one process.
+[Rate limiting](configuration-endpoints.md#rate-limiting) is every value and which of the two it is, and
+[the administrative endpoint's own](admin-endpoint.md#rate-limiting) is why its bucket is not partitioned.
 
 **A signed-in session needs nothing either.** It is a row in PostgreSQL, so every replica accepts a session any other
 replica minted and honours its revocation the moment it is written;

@@ -54,7 +54,7 @@
                   "pattern": "^(0|[1-9][0-9]?|100)%$"
                 }
               ],
-              "description": "How many pods below the replica count a rollout may go, as a count or a percentage. The chart's default is 0, which is what keeps a pod serving at every instant of an upgrade."
+              "description": "How many pods below the replica count a rollout may go, as a count or a percentage. The chart's default is 0, which is what keeps a pod serving at every instant of an upgrade. A percentage above 100 is refused here because Kubernetes refuses one too: more than every pod cannot be taken away."
             },
             "maxSurge": {
               "oneOf": [
@@ -64,7 +64,7 @@
                 },
                 {
                   "type": "string",
-                  "pattern": "^(0|[1-9][0-9]?|100)%$"
+                  "pattern": "^(0|[1-9][0-9]*)%$"
                 }
               ],
               "description": "How many pods above the replica count a rollout may start, as a count or a percentage. Either half may be zero on its own, and both being zero is a rollout that can never take a step: the chart's own validation refuses that pair, in either form, rather than leaving it to the API server to reject the Deployment after a release is already being applied."

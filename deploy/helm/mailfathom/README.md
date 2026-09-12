@@ -78,8 +78,10 @@ Neither is the database more available: one the chart deploys is a single-replic
 whatever this number says. A signed-in session is a row in PostgreSQL, so every replica accepts one any other replica
 minted; a client assertion is spent in a row as well, so an identifier any replica served is refused by every replica.
 Every ceiling worded as one process's — `Jobs:MaxConcurrentJobs`, `MailSynchronization:MaxInFlightRawMimeBytes`,
-`Embeddings:MaxQueuedEmails`, `Resilience:AiProviderInvocation:ConcurrencyLimit` — multiplies by the replica count, and
-every ceiling worded as the deployment's is a row the replicas share.
+`Embeddings:MaxQueuedEmails`, `Resilience:AiProviderInvocation:ConcurrencyLimit`, and every endpoint's
+`RateLimiting` — multiplies by the replica count, and every ceiling worded as the deployment's is a row the replicas
+share. The administrative endpoint's is the one to divide first: its bucket is the whole endpoint's rather than one
+caller's, and the limiter is what stands between an API key and unbounded guessing.
 
 **The chart renders two things for it**, both from values and both stated rather than inherited. The rollout keeps a pod
 serving at every instant (`strategy.rollingUpdate.maxUnavailable: 0`), which is what makes a new pod that refuses a
