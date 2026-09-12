@@ -42,8 +42,8 @@ const runningInPipeline = process.env['CI'] !== undefined;
 export default defineConfig({
     testDir: './tests',
 
-    // The other two suites sit under `tests/` because each is a browser suite belonging to neither package, exactly as
-    // this one does — and neither may run here. The end-to-end one reaches a real deployment that this configuration
+    // The other two suites sit under `tests/` because each drives a built client and belongs to neither package, exactly
+    // as this one does — and neither may run here. The end-to-end one reaches a real deployment that this configuration
     // neither starts nor knows the address of, and the desktop one drives a shell binary this configuration does not
     // build, so a run that picked either up would fail against nothing on every pull request.
     // `playwright.end-to-end.config.ts` and `playwright.desktop.config.ts` are what run them, and

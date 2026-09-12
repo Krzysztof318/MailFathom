@@ -1270,7 +1270,7 @@ Seven things around those commands are worth knowing before they are discovered:
   the build after them.
   [Which stack a gate runs](agent-workflow.md#which-stack-a-gate-runs) carries how that is decided and what keeps it in
   step with `ci.yml`.
-- **`CI`'s `Frontend` job runs the full gate's client flow and both browser suites.** It is gated on the `frontend` path
+- **`CI`'s `Frontend` job runs the full gate's client flow, the browser suite, and the desktop suite.** It is gated on the `frontend` path
   filter and calls `.github/workflows/build-test-frontend.yml`, whose first job installs Node and pnpm, restores the
   workspace, and then runs the same commands in the same order the full gate does — the linter, the type check, both
   packages' unit suites, `pnpm format:check`, and the build — before installing Chromium and driving the bundle. The
@@ -1287,7 +1287,7 @@ Seven things around those commands are worth knowing before they are discovered:
   port its preview server binds is derived from the workspace's own path rather than fixed, so two worktrees on one
   machine do not contend for it. What that suite covers, and what belongs in `pnpm test` instead, is
   `frontend/tests/AGENTS.md`.
-- **`pnpm test:desktop` needs more than a browser, and neither verification gate runs it either.** It builds the desktop
+- **`pnpm test:desktop` needs no browser at all and a machine of its own, and neither verification gate runs it either.** It builds the desktop
   shell and drives the WebView that shell renders in, so what it wants on the machine is a Rust toolchain, the platform's
   WebView development packages, `tauri-driver` — `cargo install tauri-driver --version 2.0.6 --locked` — the WebDriver
   for that WebView, which is `webkit2gtk-driver` on Debian and Ubuntu, a display, which on a headless machine means

@@ -27,8 +27,8 @@ question is answered again rather than reworded.
 - **The suites are told apart by the name, and the last three by the directory.** A unit test is `*.test.ts` or
   `*.test.tsx` beside its source; a browser spec is `*.spec.ts` under this directory. Each runner's default finds its
   own and neither finds the other's, so a file named for the wrong one silently joins the wrong suite — and a browser
-  spec run by Vitest would fail on an import Playwright supplies. The three browser suites share that extension and are
-  separated by where they sit: `end-to-end/` is the third one and `desktop/` the fourth, and `playwright.config.ts`
+  spec run by Vitest would fail on an import Playwright supplies. The three suites Playwright runs share that extension
+  and are separated by where they sit: `end-to-end/` is the third one and `desktop/` the fourth, and `playwright.config.ts`
   ignores both paths so a spec needing a deployment or a shell binary cannot be picked up by the suite that has
   neither.
 - Neither runner is given an `include` glob, so what makes a file part of a suite is its name and nothing else. A helper
