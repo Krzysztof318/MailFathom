@@ -76,7 +76,9 @@ of a filled mailbox takes as long as it takes.
 
 `frontend/tests/end-to-end/` holds them and `frontend/playwright.end-to-end.config.ts` runs them. They cover the path a
 person takes: signing in, the mail list, opening a message, the conversation it belongs to, a search over the mailbox,
-and signing out — asserted by role and by the words a person reads, as both of the client's other suites are.
+and signing out — asserted by role and by the words a person reads, as the client's unit and browser suites are. Its
+fourth suite is the exception that proves nothing about this one: the desktop suite reaches its WebView over the
+WebDriver protocol, which has no locator for a role and a name at all.
 
 **They route nothing.** The bundle the deployment serves reaches the surface that deployment serves, over one origin,
 and every answer comes from mail that arrived at a mail server and was synchronized out of it. A `page.route` here would

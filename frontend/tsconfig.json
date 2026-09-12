@@ -13,6 +13,7 @@
     "vitest.config.ts",
     "playwright.config.ts",
     "playwright.end-to-end.config.ts",
+    "playwright.desktop.config.ts",
     "tests",
     "design-parity/capture.ts",
     "src-tauri/run-tauri.ts"

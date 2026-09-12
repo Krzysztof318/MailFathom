@@ -30,10 +30,13 @@ frontend/src/Client.App/dist/
 # `frontend/.playwright/` is where the committed browser suite retains a failure, named in `frontend/playwright.config.ts`;
 # `frontend/.playwright-end-to-end/` is the same for the end-to-end suite, whose run keeps what it captured because
 # every message in it is fabricated — the workflow uploads that directory rather than committing it;
+# `frontend/.playwright-desktop/` is the desktop suite's, which captures nothing at all and is named only because
+# Playwright wants somewhere to put a result;
 # `.playwright-cli/` is what `@playwright/cli` writes into whichever directory a session started it from, which is why
 # that one is matched at any depth rather than at a path.
 frontend/.playwright/
 frontend/.playwright-end-to-end/
+frontend/.playwright-desktop/
 .playwright-cli/
 
 # What the native shell's build writes. `frontend/src-tauri/target/` holds the compiled crate graph and the bundles

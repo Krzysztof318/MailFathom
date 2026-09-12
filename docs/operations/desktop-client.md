@@ -207,10 +207,19 @@ a red job beside a published release. That is the same posture
 [the command binaries](release-procedure.md) are published under. What the build does wait for is verification: both
 channels build it only from a commit whose tests, and on a release the integration suite, have already passed.
 
-Neither verification script builds a desktop head, and neither does the client's pull-request gate. A bundle takes a
-Rust toolchain, a platform's development packages, and minutes of compilation, none of which a change to a screen
-should wait on — so the pull-request answer about the client is its linter, type check, unit suites, and browser suite,
-and the bundle is built where a bundle is actually wanted.
+Neither verification script builds a desktop head. A *bundle* takes a Rust toolchain, a platform's development
+packages, and minutes of compilation, none of which a change to a screen should wait on, so no gate on a developer's
+machine asks for one and the bundle is built where a bundle is actually wanted.
+
+**A pull request does build the head, and drives it.** `Drive the desktop head`, the second job of
+`.github/workflows/build-test-frontend.yml`, builds the shell in debug without bundles and drives the WebView it renders
+in over the WebDriver protocol, which is what `pnpm test:desktop` is. What it costs is the toolchain and a debug
+compilation on a runner rather than on the machine the change is being written on, and what it buys is the one class of
+break no browser suite can see: an instant placed against a zone the WebView reported differently, and a first run
+opening in a language the platform stated and nothing else reads.
+[`frontend/tests/AGENTS.md`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/tests/AGENTS.md) § _The
+desktop suite_ is what that job may assert. So the pull-request answer about the client is its linter, type check, unit
+suites, browser suite, and that — and a `deb`, an `rpm`, or an installer is still nobody's pull-request concern.
 
 ## The version a bundle carries
 
