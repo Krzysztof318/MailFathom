@@ -66,8 +66,9 @@ reason rather than only a standby.
 
 **Reads are not routed to a replica**, in either shape. Every session MailFathom opens reaches the primary, so a replica
 carries redundancy rather than load. Serving a query from a standby is a decision about read-your-writes and replication
-lag that [ADR 0001](../decisions/0001-application-owned-repositories-for-persistence-ports.md) would have to be amended
-for, and no configuration here approximates it.
+lag that
+[ADR 0001](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md)
+would have to be amended for, and no configuration here approximates it.
 
 The role MailFathom connects as is never a superuser, in either arrangement. When the chart deploys the server, its
 initialization script runs once on the empty data directory, creates the role that owns the database, and installs the
