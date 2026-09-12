@@ -19,7 +19,7 @@ Issue 1947 asks for the opposite arrangement as an option per mail account: Mail
 
 Reading is not the hard part, because every read path already answers from the stored copy. What has no answer yet is what a message, a folder, and a mutation *are* once no server holds them, and every other child of issue 1947 — the identity change on issue 1940, local mutations on 1941, local folders on 1942, export on 1943, filing on 1944, the client surface on 1945, and the switch on 1946 — is written against that answer. Issue 1939 is the gate that settles it, and this record is that answer. It produces no code.
 
-The owner stated one more constraint while this record was being written, and it shapes the whole of it: **the mode is off by default for every account, switching it on empties the source server, and switching it off again fills the IMAP mailbox back up.** It is a reversible mode rather than a migration, and both directions are periods of background work rather than instants.
+The owner stated one more constraint while this record was being written, and it shapes the whole of it: **the mode is off by default for every account, switching it on empties the source server, and switching it off again fills the IMAP mailbox back up.** It is a reversible mode rather than a migration, and both directions are periods of background work rather than instants. A second constraint followed from the owner as well: **the mode is never a setting in the JSON configuration.** It is switched only by an administrator, through `mfctl` and the administrative API, for one user's one mail account, and what was asked for is stored in the database.
 
 ## Decision Drivers
 
@@ -31,11 +31,12 @@ The owner stated one more constraint while this record was being written, and it
 - **A single writer per value.** ADR 0007 made synchronization the one writer of the stored flag snapshot. A held account has no server to observe, so the value needs exactly one writer again rather than two that take turns.
 - **Irreversible acts driven by attacker-influenced input are the thing to refuse.** Emptying a source is irreversible and is driven by what arrives from the network, which is why issue 1946 carries the `security` label and why this record owes an authorization review for every command it adds.
 - **Several replicas run this code, and during a rolling upgrade two builds run side by side** ([ADR 0031](0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)). A build that does not know the mode will meet an account that is in it.
+- **Emptying somebody's source is a deliberate act on one account, not an edit to a file.** A configuration key is changed in bulk, templated, copied between deployments, and reloaded without anybody naming the account it reaches, and none of those is how the only copy of a mailbox should come about.
 - **Holding the only copy moves obligations onto the operator** that the source server used to discharge silently: the backup, the way out, and the erasure. They are stated rather than implied.
 
 ## Considered Options
 
-The decision has nine axes, one per question issue 1939 asks. A to C are ordered against each other — B is a gate over the identity A picks, and C decides which messages B is ever asked about — and D to I are each written against A's answer and are otherwise independent.
+The decision has ten axes: one per question issue 1939 asks, and J for where the switch is made, which the owner added. A to C are ordered against each other — B is a gate over the identity A picks, and C decides which messages B is ever asked about — and D to J are each written against A's answer and are otherwise independent.
 
 **A — what identifies a stored message:**
 
@@ -51,7 +52,7 @@ The decision has nine axes, one per question issue 1939 asks. A to C are ordered
 
 **C — what the mode reaches, and how it is switched:**
 
-1. Every synchronized folder of the account is drained; the mode is switched by configuration, on and off, and each direction is a background period of its own.
+1. Every synchronized folder of the account is drained; the mode is switched on and off, and each direction is a background period of its own.
 2. Only the inbox is drained, and other folders stay mirrored.
 3. The mode can be switched on and never off.
 
@@ -87,24 +88,31 @@ The decision has nine axes, one per question issue 1939 asks. A to C are ordered
 
 **I — how the mode meets several replicas and a rolling upgrade:**
 
-1. The mode's work runs under the account's existing lease scope, every command it issues is idempotent against the UIDs it names, and an operator switches the mode on only once every replica runs a build that knows it — with a configuration rule that leaves an older build meeting a held account nothing irreversible to do.
+1. The mode's work runs under the account's existing lease scope, every command it issues is idempotent against the UIDs it names, and an operator switches the mode on only once every replica runs a build that knows it — with a refusal at the switch that leaves an older build meeting a held account nothing irreversible to do.
 2. A scope of its own for the drain, with its own lease.
 3. A build-version handshake in the database that a replica must pass before it touches any account.
 
+**J — where the mode is switched:**
+
+1. A key on the account's synchronization entry in the JSON configuration.
+2. An administrative command, through `mfctl` and the administrative API, for one user's one mail account, stored in the database.
+
 ## Decision Outcome
 
-Chosen options: **A2**, **B2**, **C1**, **D1**, **E2**, **F1**, **G1**, **H1**, and **I1**.
+Chosen options: **A2**, **B2**, **C1**, **D1**, **E2**, **F1**, **G1**, **H1**, **I1**, and **J2**.
 
-### The account's custody is a setting, and the phase it is in is a fact the database records
+### The mode is switched by an administrator for one account, and both what was asked for and how far it has got are in the database
 
-A mail account's synchronization entry gains `Custody`, with two values. `MirrorSource` is the default and is exactly today's behaviour. `HoldMailbox` asks MailFathom to hold the mailbox and empty the source. The setting is what an operator *asks for*; it is read-only configuration like every other account setting, and it is validated at startup with the rest of the account options.
+A mail account's custody has two values. `MirrorSource` is what every account has until somebody changes it, and is exactly today's behaviour. `HoldMailbox` asks MailFathom to hold the mailbox and empty the source. **It is not a configuration key** (option J2). It is switched by one administrative command, reached through `mfctl` and the administrative API, naming one user and one of that user's mail accounts, under `mailfathom.admin.custody.write` — a permission of its own under ADR 0012, which no other administrative grant confers, because emptying somebody's source is the one administrative act here that destroys a copy of their mail. The requested custody is stored in the database against that account, every switch writes an audit entry naming who asked, which user and account, from which value to which, and when, and nothing a configuration file says can turn the mode on or off. Option J1 was refused because a JSON key is edited in bulk, templated, copied between deployments, and reloaded without anybody naming the account it reaches, and because an account's configuration entry is not where a deliberate act against one person's mailbox is recorded as having been taken.
 
-What the account *is* at any moment is a phase stored with the account in the database, because a switch is a period of work and a configuration value cannot say how far that work has got:
+The command refuses what can be known when it is issued, naming the reason: an account whose configuration synchronizes a virtual folder, and an account whose `RemotelyDeletedEmailDisposition` is `EraseLocalCopy`, both for the reasons given below. Configuration is read-only but not frozen, so the account's supervision checks the same two conditions on every run of a held account too, and one that has started to fail pauses the drain and the restore and reports why, while acts on the account stay local.
+
+What the account *is* at any moment is a phase stored beside the requested custody, because a switch is a period of work and a requested value cannot say how far that work has got:
 
 | Phase | What is true | What moves it |
 |---|---|---|
-| `Mirrored` | The source is the truth; everything is as it is today | `Custody` reading `HoldMailbox`, once the account has no remote mutation outstanding |
-| `Held` | MailFathom is the truth; the source is drained of what MailFathom holds and delivers new mail to it | `Custody` reading `MirrorSource` again |
+| `Mirrored` | The source is the truth; everything is as it is today | The requested custody becoming `HoldMailbox`, once the account has no remote mutation outstanding |
+| `Held` | MailFathom is the truth; the source is drained of what MailFathom holds and delivers new mail to it | The requested custody becoming `MirrorSource` again |
 | `Restoring` | MailFathom is still the truth; the mailbox is being appended back to the source | Every held message holding a source occurrence again, and every folder existing on the source |
 
 **Switching the mode on empties the source, and it is a period rather than an instant.** The phase becomes `Held` as soon as the account has finished what it already asked the server for: a remote mutation outstanding at the moment of the switch is carried to its ending by the converger first, because a relocation half-issued on the source and then declared local would leave the message in two folders nobody can reconcile. Until then the switch is reported as pending and the account stays `Mirrored`. From the moment it is `Held`, every act on the account is local, and the drain works through what the source still holds under the gate below. An account whose source held nothing has nothing to drain; an account with years of mail on its source spends as long as the drain's batches take, and nobody waits for that but the source's disk.
@@ -149,7 +157,7 @@ The gate is re-evaluated immediately before a batch is issued, not only when a m
 
 **Every folder the account synchronizes is drained into a local folder, including the source's sent, drafts, junk, and trash.** A folder whose mapping does not synchronize is never held and never drained. Option C2 was refused because a mailbox half held and half mirrored has two truths, and every act would need to know which half a message is in.
 
-**A virtual folder is refused on a held account.** A mapping that synchronizes a folder playing the `All`, `Flagged`, or `Important` role fails validation where the configuration binds, naming the alias: such a folder presents messages that are occurrences of other folders, so holding it stores each of them twice and draining it removes mail from folders nobody asked about. Providers whose folders are labels over one store are not what this mode is for — its purpose is a server on the operator's own host — and the refusal is what keeps one from being drained by accident.
+**A virtual folder is refused on a held account.** An account whose configuration synchronizes a folder playing the `All`, `Flagged`, or `Important` role is refused the mode by the switch, naming the alias, and a held account that gains such a mapping later has its drain paused: such a folder presents messages that are occurrences of other folders, so holding it stores each of them twice and draining it removes mail from folders nobody asked about. Providers whose folders are labels over one store are not what this mode is for — its purpose is a server on the operator's own host — and the refusal is what keeps one from being drained by accident.
 
 **Each source folder corresponds to one local folder.** The source inbox, sent, drafts, junk, and trash correspond to the local folders playing those roles; any other synchronized folder corresponds to a local folder created with its name the first time a message arrives from it. The correspondence is to the local folder's identity, so renaming or moving that folder locally changes nothing about where arrivals go. Where the local folder has since been deleted, arrivals go to the inbox.
 
@@ -157,7 +165,7 @@ The gate is re-evaluated immediately before a batch is issued, not only when a m
 
 **A `UIDVALIDITY` change on a held account's source duplicates rather than loses.** Every row in that folder still carrying an occurrence under the old value loses it without an expunge, and the messages the folder now reports are discovered as arrivals and drained. Mail the drain had not yet reached is therefore stored twice; recognizing it by content instead would be the guess this record refuses, and a duplicate the user deletes is recoverable where a loss is not.
 
-**Switching back to `MirrorSource` restores the whole mailbox.** Nothing is left on MailFathom alone when the source is the truth again, because a mirrored account's truth is by definition what the source holds: a message not appended back would be a message the mirror then treats as gone.
+**Switching the mode off restores the whole mailbox.** Nothing is left on MailFathom alone when the source is the truth again, because a mirrored account's truth is by definition what the source holds: a message not appended back would be a message the mirror then treats as gone.
 
 ### An act on a held message is a local commit
 
@@ -230,15 +238,15 @@ Issue 1943 writes those obligations into the operator documentation, and issue 1
 
 **The mode's work runs under the account's existing lease scope** (option I1), the same one that already gives an account one supervisor across replicas under ADR 0031. The drain, the removal, and the restore are one writer's work, and ADR 0031 promises one writer rather than one runner: two replicas can overlap across a lease handover. What makes the overlap safe is that the gate is re-read before a batch is issued, both drain commands are idempotent against the UIDs they name, and the restore's append is written down before it goes out and never repeated. A local act is a database transaction, and two acts on one message resolve by the row's concurrency token as any other write does. Option I2 was refused because a second scope against the same source is two writers against one write connection; option I3 because a handshake nothing else in the deployment needs is machinery for one feature's upgrade.
 
-**An operator switches the mode on only once every replica runs a build that knows it.** A build that does not know `Custody` reads a held account as mirrored, and on meeting its source emptied it would apply `RemotelyDeletedEmailDisposition` to every drained message. So `HoldMailbox` is refused where configuration binds unless the account's `RemotelyDeletedEmailDisposition` is `RetainTombstone`: the worst an older build can then do is tombstone rows, which hides them and destroys nothing, and a build that knows the phase clears such a tombstone on a held account on its next run. `EraseLocalCopy` beside `HoldMailbox` is refused naming both keys. The occurrence columns becoming nullable is additive, and a null occurrence is written only for a held account, which an older build is exactly the build that must not be holding; the release that ships the mode states the upgrade order in its changelog entry.
+**An operator switches the mode on only once every replica runs a build that knows it.** A build that does not know the phase reads a held account as mirrored, and on meeting its source emptied it would apply `RemotelyDeletedEmailDisposition` to every drained message. So the switch refuses `HoldMailbox` unless the account's `RemotelyDeletedEmailDisposition` is `RetainTombstone`, naming the key: the worst an older build can then do is tombstone rows, which hides them and destroys nothing, and a build that knows the phase clears such a tombstone on a held account on its next run. A configuration changed to `EraseLocalCopy` after the switch pauses the drain as above, and the upgrade order stays the operator's to keep, since no build can read a value that did not exist when it was released. The occurrence columns becoming nullable is additive, and a null occurrence is written only for a held account, which an older build is exactly the build that must not be holding; the release that ships the mode states the upgrade order in its changelog entry.
 
 ### What ADR 0007 and ADR 0008 keep, and what this record changes
 
 Both records are still `proposed`, so each carries a pointer to this one rather than being superseded, and neither text is rewritten.
 
-**ADR 0007 governs a mirrored account unchanged**, and every one of its eleven axes still holds there. It governs the source of a held account as well, and this record adds three acts to what MailFathom may issue against a source — each reached only through a mode an operator configured, and each reviewed below:
+**ADR 0007 governs a mirrored account unchanged**, and every one of its eleven axes still holds there. It governs the source of a held account as well, and this record adds three acts to what MailFathom may issue against a source — each reached only through a mode an administrator switched on for that account, and each reviewed below:
 
-- **The drain expunge** — `STORE +FLAGS (\Deleted)` and `UID EXPUNGE` of a message MailFathom stored and nobody asked to delete. It amends axis A's closed set, which held only acts the mailbox user authored; this one the operator authored by choosing the mode.
+- **The drain expunge** — `STORE +FLAGS (\Deleted)` and `UID EXPUNGE` of a message MailFathom stored and nobody asked to delete. It amends axis A's closed set, which held only acts the mailbox user authored; this one an administrator authored by switching the mode on.
 - **The restore append** of a message MailFathom holds but did not compose. It amends axis J, which admits an append only for a message MailFathom composed itself; the flags it carries are the message's own stored state rather than a role's, which amends axis K for this one act.
 - **The restore's folder creation**, for a local folder with no source counterpart. It amends axis E, which admits creation only for a folder a mapping named with `CreateIfMissing`; the path here is the held account's own folder, which the person the mailbox belongs to created.
 
@@ -248,9 +256,9 @@ Both records are still `proposed`, so each carries a pointer to this one rather 
 
 A new irreversible act owes a review against the driver that refuses irreversible acts driven by attacker-influenced input, and the drain is the plainest instance this system has had: it destroys the source's copy of every message that arrives.
 
-**The input class that decides to drain is the operator's configuration, and nothing else.** `Custody` is written by whoever writes the account's configuration, who already holds the credential that could empty the mailbox directly. No tool argument, client request, rule, model output, or message content selects a mode, a folder, or a message for the drain: the drain takes every message that passed the gate, and the gate is a fact about MailFathom's own storage.
+**The input class that decides to drain is one administrative command, and nothing else.** It is issued by a caller holding `mailfathom.admin.custody.write`, it names one user and one account rather than reaching any in bulk, it is audited, and nothing in the configuration file, a reload, or a template can issue it. No tool argument, client request, rule, model output, or message content selects a mode, a folder, or a message for the drain: the drain takes every message that passed the gate, and the gate is a fact about MailFathom's own storage.
 
-**What an attacker who controls arriving mail can do is bounded by the gate, and none of it loses mail.** A message crafted to be too large is `ExceededSizeLimit` and stays on the source. A flood that fills the storage ceiling leaves every further message `AwaitingStorageHeadroom`, on the source. A message whose bytes fail to store never reaches the digest check. A message that makes derivation fail is still drained, because derivation reads the stored copy and its failure destroys nothing. The act the attacker can cause is the one the operator chose — mail that MailFathom verifiably holds leaves the source — and they can cause it only for their own message.
+**What an attacker who controls arriving mail can do is bounded by the gate, and none of it loses mail.** A message crafted to be too large is `ExceededSizeLimit` and stays on the source. A flood that fills the storage ceiling leaves every further message `AwaitingStorageHeadroom`, on the source. A message whose bytes fail to store never reaches the digest check. A message that makes derivation fail is still drained, because derivation reads the stored copy and its failure destroys nothing. The act the attacker can cause is the one the administrator chose — mail that MailFathom verifiably holds leaves the source — and they can cause it only for their own message.
 
 **The command reaches only what it names.** Every expunge names UIDs the gate selected, on one account's source, and a bare `EXPUNGE` is never issued, so a message another client flagged `\Deleted` and MailFathom never stored is not swept with the batch.
 
@@ -270,7 +278,7 @@ A new irreversible act owes a review against the driver that refuses irreversibl
 - Neutral, because the gate reads every payload back once before its message is drained. That is one read per message, paid in the background, and it is the price of treating the only copy as verified rather than trusted.
 - Neutral, because a held account's sent copy exists twice locally — the outgoing record's content and the stored message in the sent folder — which is a local duplicate rather than the source duplicate the mode removes.
 - Neutral, because the administrative surface now reports a held account's drain and restore work, and those counts are the only way an operator learns how far a switch has got.
-- Bad, because MailFathom now issues an expunge nobody asked for message by message. It is bounded by the operator's configuration and by a gate, and it is still the most destructive command this system issues.
+- Bad, because MailFathom now issues an expunge nobody asked for message by message. It is bounded by an administrator's command on one account and by a gate, and it is still the most destructive command this system issues.
 - Bad, because a held account's backup is the operator's alone, and a deployment that loses its database and its bucket together loses that mail with no server behind it.
 - Bad, because a `UIDVALIDITY` change on a source that is still being drained stores the undrained mail twice. The duplicate is visible and deletable; recognizing it would have needed a guess.
 - Bad, because a message above the size limit keeps a held account's source from ever being empty, and an operator has to read the held-back count to know why.
@@ -283,7 +291,7 @@ A new irreversible act owes a review against the driver that refuses irreversibl
 - Issue 1940 proves the identity: a stored message's identifier is assigned when it is first stored and never changes; a message whose occurrence is cleared is still returned by every read path; erasure through the identity reaches every derived row; and a mirrored account's synchronization is unchanged, including the rediscovery that recognizes an occurrence it already stores.
 - Issue 1946 proves the gate for every content availability state — `ExceededSizeLimit` and `AwaitingStorageHeadroom` are never drained, and a payload whose read-back does not match its digest is never drained — and requires the gate to be re-read before a batch is issued, with the control the absence rule requires: the same pass over a message that passes the gate issues its expunge.
 - Issue 1946 proves the commands: a drain batch is `UID STORE +FLAGS (\Deleted)` and `UID EXPUNGE` naming exactly the selected UIDs, with no bare `EXPUNGE` anywhere in the sequence; a source without `UIDPLUS` refuses the mode; an interrupted batch resumes without storing any message twice; and a message rediscovered at an occurrence the row still carries is recognized rather than stored again.
-- Issue 1946 proves the phases: a switch waits for outstanding remote mutations; `Held` and `Restoring` move in both directions; a restore appends only messages without an occurrence, is not repeated after an unanswered append, and cannot end while one stands; and `HoldMailbox` beside `EraseLocalCopy` or a virtual folder fails configuration binding, naming the keys.
+- Issue 1946 proves the phases: a switch waits for outstanding remote mutations; `Held` and `Restoring` move in both directions; a restore appends only messages without an occurrence, is not repeated after an unanswered append, and cannot end while one stands; the switch refuses `HoldMailbox` beside `EraseLocalCopy` or a synchronized virtual folder, naming the key, and pauses the drain of a held account whose configuration has since come to say either; the switch is refused a caller without `mailfathom.admin.custody.write` and writes its audit entry; and no configuration value changes an account's custody.
 - Issue 1941 proves the local acts: each mutation kind commits to stored state with its audit entry and no mutation record; the executor is chosen from the phase in the mutation layer; delete moves to trash and delete in trash erases; and an act during `Restoring` on a restored message writes the remote record beside the local change.
 - Issue 1942 proves the folders: each operation on a held account, refusal on a mirrored one, the five protected roles, folder deletion as one move into the trash, and name validation at the boundary.
 - Issue 1943 proves the export byte for byte against stored content, with the folder structure and the flags in each file name, and refuses a caller without `mailfathom.mail.export`.
@@ -382,12 +390,18 @@ A new irreversible act owes a review against the driver that refuses irreversibl
 ### I3 — a build-version handshake
 
 - Good, because an older build is then excluded by the system rather than by an operator following the upgrade order.
-- Bad, because it is coordination machinery nothing else in the deployment needs, built for one feature's upgrade, while a configuration rule already makes the older build's worst act reversible.
+- Bad, because it is coordination machinery nothing else in the deployment needs, built for one feature's upgrade, while a refusal at the switch already makes the older build's worst act reversible.
+
+### J1 — a configuration key
+
+- Good, because every other per-account behaviour is configured there, and an operator reads one file to know what an account does.
+- Bad, because a file is edited in bulk, templated, and copied between deployments, so the act that empties somebody's source would be taken without anybody naming the account it reaches.
+- Bad, because the configuration records what a deployment is set to rather than who decided to empty one person's mailbox and when, which is the record this act needs.
 
 ## More Information
 
 - Issue 1939 asks the questions this record answers; issue 1947 is the feature it belongs to, and issues 1940 to 1946 are the children that implement it, with 1946 — the switch — landing last.
 - [ADR 0007](0007-remote-mailbox-mutation-boundary-and-write-session.md) holds the remote mutation boundary this record leaves unchanged for a mirrored account and amends for a held account's source; [ADR 0008](0008-copied-message-local-identity.md) holds the copy decision this record keeps and the identity clause it replaces.
-- [ADR 0017](0017-object-storage-content-backend-consistency-and-object-identity.md) holds the write order the backup obligation rests on and the erasure of objects after commit; [ADR 0031](0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) holds the lease the drain runs under; [ADR 0012](0012-authorization-model-named-permissions-and-where-they-are-enforced.md) governs the two permissions this record names; [ADR 0028](0028-no-mail-on-the-device-and-an-honest-client-with-no-route-to-its-deployment.md) is why the client offers no export.
+- [ADR 0017](0017-object-storage-content-backend-consistency-and-object-identity.md) holds the write order the backup obligation rests on and the erasure of objects after commit; [ADR 0031](0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) holds the lease the drain runs under; [ADR 0012](0012-authorization-model-named-permissions-and-where-they-are-enforced.md) governs the three permissions this record names; [ADR 0028](0028-no-mail-on-the-device-and-an-honest-client-with-no-route-to-its-deployment.md) is why the client offers no export.
 - RFC 4315 defines `UIDPLUS`, `UID EXPUNGE`, and `APPENDUID`; RFC 6154 defines the `\All` and `\Flagged` special uses a held account refuses to synchronize. The Maildir flag letters are the ones the format's own specification defines.
 - Revisit when a provider whose folders are labels is asked for, when the read-back in the gate becomes a measured cost rather than an accepted one, when a client export is asked for, or when importing an archive into a held account is — that is outside issue 1947 and would reach the identity decided here.
