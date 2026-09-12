@@ -374,8 +374,13 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
         }));
 
         // Somebody changing their mind inside the window the deployment gives them, which is a decision rather than a
-        // failure and is why it is written at the client's own account level rather than above it.
-        telemetry.happened('send_withdrawn', { 'mailfathom.client.withdrawal': taken.kind });
+        // failure and is why it is written at the client's own account level rather than above it. The deployment's own
+        // answer is what is reported rather than the standing this hook composed from it: `withdrawn` is the standing
+        // whatever the route said, so a take-back the deployment refused because the message was already going out
+        // would otherwise read as one it accepted.
+        telemetry.happened('send_withdrawn', {
+            'mailfathom.client.withdrawal': taken.kind === 'withdrawn' ? taken.withdrawal : taken.kind,
+        });
 
         return taken;
     }

@@ -1415,7 +1415,7 @@ attribute reads the same shape from every client, and the floor below can be rea
 | `DEBUG` | `signal_refused` | The hub sent a payload this client does not act on |
 | `DEBUG` | `act_asked` | The client asked the deployment to change something, with `mailfathom.client.act` naming which act and `…messages` counting them |
 | `DEBUG` | `message_sent` | The client asked the deployment to send a message somebody wrote in it, with `mailfathom.client.send` naming how that ended and `…refusal` naming which refusal where it was refused |
-| `DEBUG` | `send_withdrawn` | Somebody took a send back before the deployment had let it go, with `mailfathom.client.withdrawal` naming how the withdrawal ended |
+| `DEBUG` | `send_withdrawn` | Somebody asked for a send back before the deployment had let it go, with `mailfathom.client.withdrawal` naming what the deployment answered — `withdrawn`, `alreadyBeingSent`, `pastRecall`, or `noSuchSend`, and `failed` where the request produced no answer |
 | `DEBUG` | `preferences_stated` | A preference write went out, with `mailfathom.client.stated` saying whether the deployment held it or refused it — never which preference moved or what it was set to |
 | `DEBUG` | `notifications_asked` | The head was asked whether it may raise a system notification, with `mailfathom.client.standing` naming what it answered |
 | `TRACE` | `request_completed` | A request produced an answer, with the same attributes `request_failed` carries minus the failure |

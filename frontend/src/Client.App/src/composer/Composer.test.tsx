@@ -527,11 +527,26 @@ describe('Composer, a message of its own', () => {
     });
 
     // Somebody changing their mind inside the window the deployment gives them, which is a decision rather than a
-    // failure — and the deployment records the cancellation without ever recording that a person asked for it.
-    it('reports a send taken back before the deployment let it go', async () => {
+    // failure — and what is reported is the deployment's own answer rather than the standing the composer composed
+    // from it, three of the four being a take-back that did not happen.
+    it.each<{ answered: string; reported: string; status?: number }>([
+        { answered: 'Accepted', reported: 'withdrawn' },
+        { answered: 'AttemptUnderWay', reported: 'alreadyBeingSent' },
+        { answered: 'StageDoesNotAllowIt', reported: 'pastRecall' },
+        { answered: 'RecordUnknown', reported: 'noSuchSend' },
+        { answered: 'nothing at all', reported: 'failed', status: 503 },
+    ])('reports what the deployment answered a take-back with: $reported', async ({ answered, reported, status }) => {
         const recording = recordingTelemetry();
 
-        drawComposer({ kind: 'new' }, {}, [work], true, uploadsOneFile, false, recording.telemetry);
+        drawComposer(
+            { kind: 'new' },
+            { withdrawal: { status: status ?? 200, body: JSON.stringify({ outcome: answered }) } },
+            [work],
+            true,
+            uploadsOneFile,
+            false,
+            recording.telemetry,
+        );
 
         address('ada@example.invalid');
         confirmSend();
@@ -544,7 +559,7 @@ describe('Composer, a message of its own', () => {
 
         await waitFor(() => {
             expect(recordsOf(recording.recorded, 'send_withdrawn')).toStrictEqual([
-                { event: 'send_withdrawn', attributes: { 'mailfathom.client.withdrawal': 'withdrawn' } },
+                { event: 'send_withdrawn', attributes: { 'mailfathom.client.withdrawal': reported } },
             ]);
         });
     });
