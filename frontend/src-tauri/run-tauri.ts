@@ -119,9 +119,14 @@ if (command === 'dev') {
 // is composed — a separate one would have to restate the version patch above, which is the duplication this wrapper
 // exists to prevent. The `beforeBuildCommand` goes with it: a shell that loads a URL bundles no assets, so building
 // them would be a minute spent on a directory nothing reads.
+//
+// It is scoped to the desktop build rather than to every `build`, because the command read above names `android build`
+// as `build` as well: the phone's invocation carries `android` first and its target after an option. A value left in an
+// environment that then builds the Android head would bundle no assets into the APK and point its WebView at a
+// development server nothing there serves, which is a silent difference between two heads rather than a failed build.
 const frontendUrl = process.env['MAILFATHOM_FRONTEND_URL']?.trim() ?? '';
 
-if (frontendUrl.length > 0 && command === 'build') {
+if (frontendUrl.length > 0 && command === 'build' && forwardedArguments[0] !== 'android') {
     configurationPatch['build'] = { frontendDist: frontendUrl, beforeBuildCommand: '' };
 }
 

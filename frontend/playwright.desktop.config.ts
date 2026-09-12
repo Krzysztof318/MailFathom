@@ -19,6 +19,11 @@ import { fixturePort } from './tests/desktop/head';
 export default defineConfig({
     testDir: './tests/desktop',
 
+    // Where every case's profile directory is written, and what removes the lot when the last one has finished. It
+    // returns the run's teardown, so the directory is named once; `tests/desktop/profiles.ts` holds why the removal
+    // cannot happen as each shell closes.
+    globalSetup: './tests/desktop/profiles.ts',
+
     // One at a time. Every case starts a shell of its own, each one a WebView process tree against a single X display,
     // and a machine running four of those at once reports contention as a screen that never settled.
     fullyParallel: false,

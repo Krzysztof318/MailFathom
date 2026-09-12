@@ -382,7 +382,10 @@ changing. `pnpm test:desktop` is the whole of how it runs.
   preference is something a WebDriver session can be asked for: a WebView reads both from the process it was started
   in, and `tauri:options` carries no environment. So one driver and one shell are started per case, under a profile
   directory of their own — without which a case asserting what a first run resolves would read back whatever the case
-  before it chose, and the suite would pass or fail by the order it happened to run in.
+  before it chose, and the suite would pass or fail by the order it happened to run in. Every one of those directories
+  sits under one the run owns, and the run's teardown removes it: a shell outlives the session that ended it and its
+  graphics stack writes a cache under the profile afterwards, so a removal as each case closes either races that write
+  or waits out a duration nobody measured.
 - **What it owns is what the platform answers, and nothing else.** Two rules qualify today and both are
   [#1462](https://github.com/Krzysztof318/MailFathom/issues/1462)'s: that an instant is placed against the zone the
   runtime reports, and that a first run opens in the language the platform states. A check belongs here by being

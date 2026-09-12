@@ -44,7 +44,8 @@ export const fixturePort =
 export const fixtureOrigin = `http://127.0.0.1:${String(fixturePort)}`;
 
 /**
- * The shell binary this suite drives, which `scripts/build-desktop-head.sh` writes.
+ * The shell binary this suite drives, which `buildHead.ts` beside this file writes — the first half of
+ * `pnpm test:desktop`, before Playwright is started at all.
  *
  * A debug build without bundles: what is under test is the WebView the shell opens, and a `deb` takes minutes to
  * produce and adds nothing this suite reads.
@@ -81,9 +82,12 @@ export interface DesktopHead {
  * The WebView writes the chosen language into its origin storage under the application's data directory, and that
  * outlives the process it was written by — so without this a case asserting what a first run resolves would be reading
  * back whatever the case before it chose, and the suite would pass or fail by the order it happened to run in.
+ *
+ * It is written inside the run's own directory, which `profiles.ts` makes and removes when the last case has finished.
+ * Removing one as its shell closes does not work, and that module holds the measurement that says why.
  */
 export function freshProfile(): string {
-    return mkdtempSync(resolve(tmpdir(), 'mailfathom-desktop-'));
+    return mkdtempSync(resolve(process.env['MAILFATHOM_DESKTOP_PROFILES'] ?? tmpdir(), 'profile-'));
 }
 
 /**
@@ -99,17 +103,18 @@ export function freshProfile(): string {
  */
 export async function openDesktopHead(
     environment: Readonly<Record<string, string>>,
-    profile: string = freshProfile(),
+    profile?: string,
 ): Promise<DesktopHead> {
+    const keeping = profile ?? freshProfile();
     const driverPort = await reserveFreePort();
     const nativePort = await reserveFreePort();
 
     const driver = spawn('tauri-driver', ['--port', String(driverPort), '--native-port', String(nativePort)], {
         env: {
             ...process.env,
-            XDG_DATA_HOME: resolve(profile, 'data'),
-            XDG_CONFIG_HOME: resolve(profile, 'config'),
-            XDG_CACHE_HOME: resolve(profile, 'cache'),
+            XDG_DATA_HOME: resolve(keeping, 'data'),
+            XDG_CONFIG_HOME: resolve(keeping, 'config'),
+            XDG_CACHE_HOME: resolve(keeping, 'cache'),
             ...environment,
         },
         stdio: ['ignore', 'inherit', 'inherit'],
@@ -209,10 +214,16 @@ async function elementFor(driverAddress: string, session: string, selector: stri
             });
 
             return found[elementKey] ?? null;
-        } catch {
+        } catch (refusal) {
             // A selector that matches nothing yet is a screen that has not finished rendering, which is the ordinary
-            // case here rather than a failure: the driver answers `no such element` and this asks again.
-            return null;
+            // case here rather than a failure: the driver answers `no such element` and this asks again. Anything else
+            // is carried rather than swallowed — a session whose shell has died answers nothing at all, and reading
+            // that as an element still rendering would replace its own diagnosis with a timeout thirty seconds later.
+            if (refusal instanceof Error && refusal.message.includes('no such element')) {
+                return null;
+            }
+
+            throw refusal;
         }
     });
 }
