@@ -110,6 +110,21 @@ if (command === 'dev') {
     configurationPatch['build'] = { devUrl: `http://localhost:${developmentPort}` };
 }
 
+// `MAILFATHOM_FRONTEND_URL` builds a shell that loads the client over HTTP instead of out of its own bundle, which is
+// how the desktop suite puts a populated client in front of the WebView: the fixture corpus is gated on
+// `import.meta.env.DEV`, so a bundled build has no example mail to answer with and a signed-in screen is unreachable
+// in it. `frontend/tests/AGENTS.md` § *The desktop suite* is where that arrangement is stated and bounded.
+//
+// It is folded in here rather than passed as a second `--config` because this is the one place a configuration patch
+// is composed — a separate one would have to restate the version patch above, which is the duplication this wrapper
+// exists to prevent. The `beforeBuildCommand` goes with it: a shell that loads a URL bundles no assets, so building
+// them would be a minute spent on a directory nothing reads.
+const frontendUrl = process.env['MAILFATHOM_FRONTEND_URL']?.trim() ?? '';
+
+if (frontendUrl.length > 0 && command === 'build') {
+    configurationPatch['build'] = { frontendDist: frontendUrl, beforeBuildCommand: '' };
+}
+
 // Everything after `--` is handed to the runner, which is Cargo. `--locked` is what makes a `Cargo.toml` that has
 // moved away from `Cargo.lock` a refusal to build rather than a lock file quietly rewritten under the reviewed crate
 // closure, and it is the counterpart of the `--frozen-lockfile` both verification gates install pnpm with.

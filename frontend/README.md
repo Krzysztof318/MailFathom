@@ -316,7 +316,7 @@ pipeline costs that document is the two interface packages in front of it — `@
 `@opentelemetry/api-logs`, the registries every recording call reaches whether or not a pipeline was registered behind
 them: 15 kB, 5 kB compressed.
 
-## The three suites
+## The four suites
 
 `pnpm test` is the unit suite, and `vitest.config.ts` declares one Vitest project per package because the two are tested
 differently: `Client.Backend` is ordinary logic run without a DOM, and `Client.App` is components rendered into jsdom
@@ -342,7 +342,19 @@ started in the pipeline, and
 [the end-to-end client run](../docs/operations/end-to-end-client-run.md) is the page. It runs on request and gates
 nothing.
 
-`tests/fixtures/` beside the first two is one corpus of example mail — the session, the accounts and folders, the mail, the
+`pnpm test:desktop` is the fourth one, and the only one that drives the head this repository ships as something somebody
+installs. Its specs are under `tests/desktop/`, its configuration is `playwright.desktop.config.ts`, and no browser is
+launched at all: it builds the desktop shell, opens its WebView through `tauri-driver`, and reaches it over the WebDriver
+protocol. What it proves is what the platform answers rather than what the client computes — that an instant is placed
+against the zone the runtime reports, and that a first run opens in the language the platform states — because a WebView
+reads each from the process it was started in and the three suites above all run in a browser somebody downloaded. It
+needs a Rust toolchain, the platform's WebView libraries, a WebDriver for them and a display, so neither verification
+gate runs it and the pipeline does, on every pull request that reaches this stack. It also needs the locales its language
+cases name to be generated on the machine — `sudo locale-gen pl_PL.UTF-8 de_DE.UTF-8` on a Debian or Ubuntu one — because
+a locale the machine does not have reaches the head as no preference at all; a case says so and stops rather than
+reporting the English a missing locale would produce.
+
+`tests/fixtures/` beside the other three is one corpus of example mail — the session, the accounts and folders, the mail, the
 conversations, the drafts, the notifications, and what a change answers with — imported by whatever needs a populated
 screen rather than written out again per check. It is data and no consumer of it is assumed: the browser suite reaches
 it with `page.route`, a unit test hands it to a transport function, and the development server below answers from it.
@@ -379,7 +391,7 @@ drawn by, the octets of a file a message carries, and the signal channel, each o
 `deployment/` or opens a connection of its own — so they answer as a deployment that is not there, which every screen
 drawing one already has a state for. What the client's own telemetry export reports in the console is the same thing.
 
-[`tests/AGENTS.md`](tests/AGENTS.md) is where all three suites' policy is decided, including which check belongs to
+[`tests/AGENTS.md`](tests/AGENTS.md) is where all four suites' policy is decided, including which check belongs to
 which, and where the corpus's own rules are.
 
 ## Whitespace is decided in `.editorconfig`

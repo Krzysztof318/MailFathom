@@ -273,13 +273,17 @@ under `backend/` builds and tests `backend/MailFathom.slnx`, a change under
 `frontend/` reaches the client stack, a change to a file above both reaches both,
 and a documentation-only change reaches neither.
 
-**One client check is deliberately outside both gates.** `pnpm test:browser`
+**Two client checks are deliberately outside both gates.** `pnpm test:browser`
 builds the bundle, serves it, and drives it in a real browser, so it needs a
 browser install of its own; running it on every client change would put a
 300 MB prerequisite in front of the loop for a check the pipeline makes on every
-pull request that reaches the client. `.github/workflows/build-test-frontend.yml`
-carries the argument for gating it there rather than nightly or locally, and
-`frontend/tests/AGENTS.md` says which checks belong to it rather than to
+pull request that reaches the client. `pnpm test:desktop` is outside them for a
+stronger version of the same reason: it builds the desktop shell and drives the
+WebView that shell renders in, so it wants a Rust toolchain, the platform's
+WebView packages, a WebDriver for them, and a display.
+`.github/workflows/build-test-frontend.yml` carries the argument for gating both
+there rather than nightly or locally — they are two jobs in it rather than one —
+and `frontend/tests/AGENTS.md` says which checks belong to each rather than to
 `pnpm test`.
 
 `ci.yml` has answered the same question since the client existed, in its
@@ -2682,7 +2686,8 @@ all three categories, `verify-fast.sh` succeeds from a fresh run, the complete d
 has been inspected for secrets, generated files, unrelated edits, and boundary
 violations, and the published pull request body references its issue. The rest of
 the evidence is the pull request's own checks, which is where the coverage target,
-the contract suite, and the client's bundle and browser suite report.
+the contract suite, and the client's bundle, browser suite, and desktop suite
+report.
 
 `gh pr edit` fails against this repository with a Projects-classic GraphQL error
 and silently drops the edit, so correct a missing issue reference through

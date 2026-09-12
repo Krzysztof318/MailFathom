@@ -42,11 +42,13 @@ const runningInPipeline = process.env['CI'] !== undefined;
 export default defineConfig({
     testDir: './tests',
 
-    // The end-to-end suite sits under `tests/` because it is a browser suite belonging to neither package, exactly as
-    // this one does — and it must never run here. It reaches a real deployment that this configuration neither starts
-    // nor knows the address of, so a run that picked it up would fail against nothing on every pull request.
-    // `playwright.end-to-end.config.ts` is what runs it, and `frontend/tests/AGENTS.md` says why they are two suites.
-    testIgnore: '**/end-to-end/**',
+    // The other two suites sit under `tests/` because each is a browser suite belonging to neither package, exactly as
+    // this one does — and neither may run here. The end-to-end one reaches a real deployment that this configuration
+    // neither starts nor knows the address of, and the desktop one drives a shell binary this configuration does not
+    // build, so a run that picked either up would fail against nothing on every pull request.
+    // `playwright.end-to-end.config.ts` and `playwright.desktop.config.ts` are what run them, and
+    // `frontend/tests/AGENTS.md` says why they are suites of their own.
+    testIgnore: ['**/end-to-end/**', '**/desktop/**'],
 
     // Traces and screenshots of a failure are personal data the moment this drives a real deployment rather than the
     // stubbed transport, so they are written inside the workspace, ignored by Git, and uploaded nowhere.

@@ -2,8 +2,8 @@
 
 These instructions govern every test in the client stack, in addition to the repository root instructions. They are
 reached from the root table rather than from the directory a test sits in, because most of the client's tests do not sit
-here: a unit test sits beside the source it covers, and this directory holds the contract beside the one suite that
-belongs to neither package. The first section says why the two are placed differently.
+here: a unit test sits beside the source it covers, and this directory holds the contract beside the three suites that
+belong to neither package. The first section says why the two are placed differently.
 
 `backend/tests/AGENTS.md` is the same file for the service, and the two share only what the root one states for both.
 Nothing below translates a C# convention into TypeScript; where the service's answer does not survive the stack, the
@@ -20,16 +20,17 @@ question is answered again rather than reworded.
   refuse. A test inside the package inherits it instead: a `Client.Backend` test cannot import React, exactly as its
   source cannot, and nothing has to check that it did not.
 - `frontend/tests/` therefore holds this file, the browser suite beside it, [the end-to-end suite](#the-end-to-end-suite)
-  under `end-to-end/`, and [the corpus](#the-corpus) the first two read — and nothing else. A unit test written here
-  would resolve neither package, which is the whole of the argument above; both browser suites are what can live here
-  precisely because they import neither — each drives a built bundle over HTTP rather than importing a module out of
-  one, and the corpus is data rather than a test.
-- **The suites are told apart by the name, and the last two by the directory.** A unit test is `*.test.ts` or
+  under `end-to-end/`, [the desktop suite](#the-desktop-suite) under `desktop/`, and [the corpus](#the-corpus) all three
+  read — and nothing else. A unit test written here would resolve neither package, which is the whole of the argument
+  above; the three suites are what can live here precisely because they import neither — each drives a built client over
+  HTTP rather than importing a module out of one, and the corpus is data rather than a test.
+- **The suites are told apart by the name, and the last three by the directory.** A unit test is `*.test.ts` or
   `*.test.tsx` beside its source; a browser spec is `*.spec.ts` under this directory. Each runner's default finds its
   own and neither finds the other's, so a file named for the wrong one silently joins the wrong suite — and a browser
-  spec run by Vitest would fail on an import Playwright supplies. The two browser suites share that extension and are
-  separated by where they sit: `end-to-end/` is the third one, and `playwright.config.ts` ignores that path so a spec
-  needing a deployment cannot be picked up by the suite that has none.
+  spec run by Vitest would fail on an import Playwright supplies. The three browser suites share that extension and are
+  separated by where they sit: `end-to-end/` is the third one and `desktop/` the fourth, and `playwright.config.ts`
+  ignores both paths so a spec needing a deployment or a shell binary cannot be picked up by the suite that has
+  neither.
 - Neither runner is given an `include` glob, so what makes a file part of a suite is its name and nothing else. A helper
   either suite imports is an ordinary module and carries neither marker in its name.
 - **A subject too large for one file is split by the concern each group of tests exercises**, into files named
@@ -354,6 +355,62 @@ the way an operator stands one up, with mail that arrived at a mail server and w
   shows nobody's mailbox and a trace carries a credential that exists for the length of one run. The pull-request suite
   keeps its output on the machine that produced it for the opposite reason, and that rule is unchanged: the moment a
   capture could show real mail it is personal data whatever produced it.
+
+## The desktop suite
+
+`frontend/tests/desktop/` is the fourth suite, and the only one that drives the head this repository ships as something
+somebody installs. The three above all run in a browser somebody downloaded: the web head is that browser, so they
+answer for it completely — and they answer for the desktop head only as far as the two are the same bundle. What they
+cannot reach is the WebView the shell renders in, which is where the two can differ without a line of this client
+changing. `pnpm test:desktop` is the whole of how it runs.
+
+- **`tauri-driver` 2.0.6 is the mechanism, and it is Tauri's own.** It speaks the W3C WebDriver protocol, proxies to the
+  platform's native driver — `WebKitWebDriver` on Linux, Microsoft Edge Driver on Windows — and launches the shell
+  binary the session names. macOS is unreachable because no WKWebView driver exists, which costs nothing: this
+  repository builds no macOS head. The protocol client is written in `tests/desktop/head.ts` rather than taken from a
+  package, because four requests out of a frozen standard is sixty lines against a pinned dependency, a register row,
+  and a re-counted census. The proxy itself is a binary a machine holds rather than a dependency a lock file resolves,
+  so its version is written in the workflow step that installs it and in this bullet, and nowhere else;
+  `THIRD_PARTY_LICENSES.md` § _Test-only_ carries its row and says why it is in none of the three closures.
+- **It drives a shell whose client is served over HTTP rather than out of the bundle**, which is the one place this
+  suite is not looking at what ships. The fixture corpus is gated on `import.meta.env.DEV`, so a bundled shell has no
+  example mail to answer with and no signed-in screen to reach — and that gate is deliberate. So the binary is built
+  with `build.frontendDist` pointed at the corpus development server, which `MAILFATHOM_FRONTEND_URL` in
+  `src-tauri/run-tauri.ts` is for. What differs from a published shell is the scheme the document was served from;
+  what does not differ is the WebView, which is the thing under test.
+- **A case that needs a different environment needs a shell of its own.** Neither the timezone nor the language
+  preference is something a WebDriver session can be asked for: a WebView reads both from the process it was started
+  in, and `tauri:options` carries no environment. So one driver and one shell are started per case, under a profile
+  directory of their own — without which a case asserting what a first run resolves would read back whatever the case
+  before it chose, and the suite would pass or fail by the order it happened to run in.
+- **What it owns is what the platform answers, and nothing else.** Two rules qualify today and both are
+  [#1462](https://github.com/Krzysztof318/MailFathom/issues/1462)'s: that an instant is placed against the zone the
+  runtime reports, and that a first run opens in the language the platform states. A check belongs here by being
+  unanswerable in the other three — a component, a label, a layout, a request on the wire, or anything about the
+  accessibility tree belongs above, and a copy of one here buys a slower answer and a second thing to keep in step.
+- **It asserts a literal spelling, never a formatter built the same way.** That is the rule § _A localized screen_
+  already states, and it is the whole content of the timezone half: an expectation written as the output of a second
+  `Intl.DateTimeFormat` passes for a head that named a zone of its own as happily as for one that did not.
+- **A selector here is a CSS one, and that is a protocol limit rather than an exemption.** WebDriver has no locator for
+  a role and a name, so the elements this suite reaches are the ids the labels point at and the one control that states
+  the resolved language during a render. That the control carries the right accessible name is asserted by the unit
+  suite and by the browser suite, which is why it is not asserted twice.
+- **Three facts about the Linux head were measured rather than assumed**, and each is recorded in the spec because
+  nothing else in this repository would record them. WebKitGTK answers `navigator.languages` out of `LC_ALL` and `LANG`
+  and ignores `LANGUAGE`; it reports exactly one language however many the environment names, so the list-walking
+  half of the language rule is a web-head property and only its first step can be asked here; and a locale the machine
+  has not generated is no preference at all, because `setlocale` refuses one and leaves the process in `C`, so the head
+  then reports `en-US` exactly as it does for a machine naming nothing. The last of those is why a case naming a locale
+  checks that the machine has it and stops with `locale-gen` where it does not: the failure it replaces is a case
+  asserting the opposite of its own name and looking green for it, which is how the suite first passed here and failed
+  on a runner. The `Drive the desktop head` job generates what the cases name.
+- **Nothing a run captures is kept.** No screenshot, no trace, and no video — on the rule § _The browser suite_ states
+  and for the same reason, except that here there is nothing to weigh: the suite reads text out of a document and a
+  failure is diagnosed from the expectation it printed.
+- **Where it runs is decided**: on every pull request that reaches the client stack, in the `Drive the desktop head`
+  job of `.github/workflows/build-test-frontend.yml`, which carries the argument for gating it there rather than
+  nightly. Neither verification gate runs it, for the reason neither runs the browser suite and a stronger one — it
+  needs a Rust toolchain, the platform's WebView libraries, a WebDriver, and a display.
 
 ## Coverage
 
