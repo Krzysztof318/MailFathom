@@ -15,9 +15,11 @@ metadata:
 spec:
   {{- /*
     One instance unless replication is on, and the count is the only thing that changes when it is: a second instance
-    is a standby rather than a larger endpoint, because replicas of a RESP server do not share subscriptions — a signal
-    published to one reaches only the MailFathom replicas subscribed there. Which is why the Service beside this set
-    names one pod rather than load-balancing across them, and why an instance count is never a throughput decision here.
+    is a standby rather than a larger endpoint. A RESP server carries a publication down the replication link but never
+    back up it, so a `PUBLISH` issued against a replica reaches neither the primary nor the other replicas. Which is
+    why the Service beside this set names one pod rather than load-balancing across them — every MailFathom replica
+    publishes and subscribes on the one connection it holds — and why an instance count is never a throughput decision
+    here.
   */}}
   replicas: {{ if $valkey.replication.enabled }}{{ add1 (int $valkey.replication.replicas) }}{{ else }}1{{ end }}
   {{- /*

@@ -492,6 +492,12 @@ services:
     # server the default rather than a requirement.
     image: ${MAILFATHOM_VALKEY_IMAGE:-valkey/valkey@sha256:c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1d}
     restart: unless-stopped
+    # **The account is stated here because the image states none.** Its entrypoint takes a root branch when nothing
+    # else has chosen an account: it chowns the working directory and then re-execs itself as `valkey`. Both halves
+    # need capabilities `cap_drop: ALL` below has taken away, so the entrypoint would fail on the chown and the server
+    # would never start. The chart states the same account in its pod's security context and the Quadlet unit states it
+    # as a user-namespace mapping; this is the same decision in the form Compose reads.
+    user: "999:999"
     # **The password arrives as a file, which on this server means an ACL file.** This is the one place this deployment
     # differs from the chart, which expands the password into `--requirepass` from a Secret the kubelet reads. Nothing
     # here has that expansion: Compose interpolates `${...}` from `.env` while it parses this file, so that route would
@@ -516,15 +522,15 @@ services:
     # No volume, and nothing to persist. A backplane holds a live subscription rather than a record: a restart loses
     # nothing, and a server that kept anything across one would replay a statement whose subject has already moved.
     #
-    # No health check either, for the reason MailFathom's own service has none: a check would have to authenticate,
-    # which would put the password in a second place. A replica whose backplane is down reports itself through
-    # `/health` and says so in its telemetry.
+    # No health check either: one would have to authenticate, which would put the password in a second place. A replica
+    # whose backplane is down reports itself through `/health` and says so in its telemetry.
     read_only: true
     tmpfs:
       # Two writable paths on an otherwise read-only root filesystem, which is what the chart's pod gives this image as
       # well: the runtime's scratch directory, and the working directory the server insists on whether or not it ever
       # writes a file into it. In memory rather than on disk so that nothing derived from a signal outlives the
-      # container. Both are owned by the image's own unprivileged account, which is what runs the server.
+      # container. A tmpfs is created owned by `root`, which the account above cannot change with every capability
+      # dropped, so mode 1777 is what makes both writable by the server rather than ownership.
       - /tmp:mode=1777,size=64m
       - /data:mode=1777,size=16m
     cap_drop:

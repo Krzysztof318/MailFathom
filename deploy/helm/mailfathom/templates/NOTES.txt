@@ -81,11 +81,11 @@ and MailFathom reaches the endpoint with the connection string in the same Secre
 
   {{ include "mailfathom.backplaneFullname" . }}:{{ .Values.signalBackplane.valkey.service.port }},password=<the password above>
 {{ if .Values.signalBackplane.valkey.replication.enabled }}
-That Service names one instance — the one this set starts as the primary — because a RESP server's replicas do not
-share subscriptions and a Service spreading connections across them would lose signals between a subscriber on one and
-a publisher on another. Nothing promotes a standby: losing the primary is a `REPLICAOF NO ONE` you run against a
-replica and that Service's selector repointed at it. What the standbys buy is an instance already running and in step
-when you do.
+That Service names one instance — the one this set starts as the primary — because a publication travels from the
+primary down to its standbys and never back up, so a connection handed to a standby would strand whatever MailFathom
+published on it. Nothing promotes a standby: losing the primary is a `REPLICAOF NO ONE` you run against a replica and
+that Service's selector repointed at it, and both last only until the next upgrade or pod restart puts the set back
+into its rendered shape. What the standbys buy is an instance already running and in step when you do.
 {{ end }}
 Write both keys before you turn this block on. Neither pod starts without them: MailFathom proves the reference while
 it builds and refuses to start when the mounted file is missing, and the kubelet cannot even create the backplane

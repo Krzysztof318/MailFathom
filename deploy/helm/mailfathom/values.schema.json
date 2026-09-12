@@ -745,7 +745,7 @@
                   "type": "integer",
                   "minimum": 1,
                   "maximum": 65535,
-                  "description": "The port the Service publishes, and the port the connection string names beside the Service's own host. The container always listens on 6379. The Service names the first instance of the set whether or not the server is replicated, because a RESP server's replicas hold no subscription of their own."
+                  "description": "The port the Service publishes, and the port the connection string names beside the Service's own host. The container always listens on 6379. The Service names the first instance of the set whether or not the server is replicated, because a publication travels from the primary down to its replicas and never back up, so a connection handed to a replica would strand what MailFathom published on it."
                 }
               },
               "additionalProperties": false

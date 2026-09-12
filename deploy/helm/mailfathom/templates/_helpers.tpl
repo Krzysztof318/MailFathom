@@ -341,6 +341,9 @@ wrong place to report a malformed one.
     {{- end -}}
   {{- end -}}
 {{- else -}}
+  {{- if .Values.signalBackplane.valkey.replication.enabled -}}
+    {{- fail "signalBackplane.valkey.replication.enabled is true while signalBackplane.enabled is false. Nothing would read it, so this deployment runs no backplane at all while its values file reads as though it ran a replicated one. Turn the backplane on beside it, or turn replication off." -}}
+  {{- end -}}
   {{- if and (gt (int .Values.replicaCount) 1) $clientSurfaceServed -}}
     {{- fail (printf "signalBackplane.enabled is false while replicaCount is %d and the client surface is served. A signal is raised by whichever replica holds the account and has to reach whichever replica holds the client's connection, so without a backplane this deployment installs, serves, and tells its clients nothing — which is the one configuration here that looks healthy and silently cannot do what it was configured for. Set signalBackplane.enabled=true and let the chart run Valkey, point it at a RESP endpoint you already operate with signalBackplane.valkey.deploy=false, or run one replica." (int .Values.replicaCount)) -}}
   {{- end -}}
@@ -605,13 +608,23 @@ notes print it rather than leaving it to be derived.
 
 One name hangs off it. `-valkey-peers` is the headless Service every instance gets a DNS name of its own from, which is
 what a replica follows the primary by.
+
+**The base is truncated rather than the result**, which is why there is a helper for it. One suffix is a prefix of the
+other, so truncating each finished name at 63 collapses them into one string for any release long enough to reach it —
+two Services with one name, and an install that fails on the duplicate rather than on anything an operator wrote. Fifty
+characters leaves room for the longer suffix and for the `-0` a pod name adds on top of the shorter one, which the
+Service's selector carries as a label value.
 */}}
+{{- define "mailfathom.backplaneBaseName" -}}
+{{- include "mailfathom.fullname" . | trunc 50 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "mailfathom.backplaneFullname" -}}
-{{- printf "%s-valkey" (include "mailfathom.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-valkey" (include "mailfathom.backplaneBaseName" .) -}}
 {{- end -}}
 
 {{- define "mailfathom.backplanePeerFullname" -}}
-{{- printf "%s-valkey-peers" (include "mailfathom.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-valkey-peers" (include "mailfathom.backplaneBaseName" .) -}}
 {{- end -}}
 
 {{- define "mailfathom.backplaneSelectorLabels" -}}

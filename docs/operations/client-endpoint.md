@@ -2472,9 +2472,10 @@ it for `PUBLISH`, `SUBSCRIBE`, and `PSUBSCRIBE` and nothing else — no key is w
 outside that set is issued — so **any RESP endpoint serves**: Redis, Valkey, Garnet, or a managed equivalent from a
 cloud provider. An operator who already runs one names it in the connection string and MailFathom starts nothing
 beside it. What the project itself deploys, pins, and tests against is **Valkey**: the Helm chart, the Compose file,
-the Quadlet units, and the local orchestration all ship it, and every one of them can be told to deploy nothing and
-point at yours instead. That is a default rather than a requirement, and the three deployment pages each say where the
-choice is made.
+and the Quadlet units all ship it, and each of the three can be told to deploy nothing and point at an endpoint you
+operate instead. The local orchestration ships it too and offers no such switch — it either starts one for the run or
+starts none. That is a default rather than a requirement, and the three deployment pages each say where the choice is
+made.
 
 **What it costs when it is not there, or when it breaks**, is exactly what the paragraph above describes and no more:
 the channel degrades to the client's own refresh. The connection is opened so that an endpoint that is down at startup

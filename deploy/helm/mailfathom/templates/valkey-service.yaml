@@ -19,9 +19,10 @@ spec:
   */}}
   type: ClusterIP
   {{- /*
-    One pod rather than the set, always. A RESP server's replicas do not share subscriptions, so a Service that
-    load-balanced across them would deliver a subscription to one instance and a publication to another and lose the
-    signal in between. Ordinal 0 is the instance the set starts as the primary, which is what this names.
+    One pod rather than the set, always. A RESP server carries a publication from the primary down to its replicas but
+    never back up, so a `PUBLISH` issued against a replica reaches nobody subscribed elsewhere — and a Service that
+    load-balanced across the set would hand some MailFathom replicas a connection to a standby and strand what they
+    published on it. Ordinal 0 is the instance the set starts as the primary, which is what this names.
 
     **It does not follow a promotion**, because nothing in this chart performs one: promoting a standby is an
     operator's `REPLICAOF NO ONE` and this selector repointed at the pod they promoted. It is also the address a scrape,

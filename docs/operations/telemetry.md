@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/Signals/SignalBackplaneTelemetry.cs, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs, frontend/src/Client.App/src/containment/**, frontend/src/Client.App/src/telemetry/**, frontend/src/Client.App/src/App.tsx, frontend/src/Client.App/src/main.tsx, frontend/src/Client.Backend/src/telemetry.ts, frontend/src/Client.Backend/src/mailAttachment.ts, frontend/src/Client.Backend/src/ownDisplayName.ts, frontend/src/Client.Backend/src/ownPortrait.ts -->
+<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/Signals/SignalBackplaneTelemetry.cs, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs, deploy/helm/mailfathom/templates/valkey-*.yaml, deploy/compose/compose.yaml, deploy/quadlet/mailfathom-valkey.container, frontend/src/Client.App/src/containment/**, frontend/src/Client.App/src/telemetry/**, frontend/src/Client.App/src/App.tsx, frontend/src/Client.App/src/main.tsx, frontend/src/Client.Backend/src/telemetry.ts, frontend/src/Client.Backend/src/mailAttachment.ts, frontend/src/Client.Backend/src/ownDisplayName.ts, frontend/src/Client.Backend/src/ownPortrait.ts -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -1478,10 +1478,12 @@ and MailFathom neither reads it nor republishes it. **This is the one dependency
 collection path is documented**, because it is the one whose loss is silent: nothing in the product reports a backplane
 that is up and empty.
 
-The path is the OpenTelemetry Collector's own **`redis` receiver**, which asks the server for `INFO` and emits the
-result as OTLP — so the signals arrive wherever every MailFathom signal already arrives, through the one exporter
+The path is the OpenTelemetry Collector's **`redis` receiver**, which asks the server for `INFO` and emits the result
+as OTLP — so the signals arrive wherever every MailFathom signal already arrives, through the one exporter
 [`OTEL_EXPORTER_OTLP_ENDPOINT`](#the-one-switch-otel_exporter_otlp_endpoint) names, and nothing new is deployed to
-carry them. Valkey answers `INFO` exactly as the receiver expects and needs no adaptation:
+carry them. It ships in the **contrib** distribution rather than in the core one, so a collector built from
+`opentelemetry-collector` alone rejects the configuration below as an unknown receiver type; `otelcol-contrib` and the
+distributions built on it carry it. Valkey answers `INFO` exactly as the receiver expects and needs no adaptation:
 
 ```yaml
 receivers:
@@ -1501,7 +1503,11 @@ service:
 user for the scrape would be a third credential to provision across three deployment shapes, for a reader that is
 already inside the deployment's confidentiality boundary — so the scrape presents what the deployment already holds.
 An operator who wants the scrape to hold less can create a Valkey ACL user with `+info +ping` and nothing else and name
-it in the receiver; nothing here depends on the default user.
+it in the receiver; nothing here depends on the default user. **Where that user survives a restart differs by shape**:
+on Compose and Quadlet the ACL document is the operator's own file, so a user written into it is as durable as the
+deployment. A Valkey the chart runs is started with `--requirepass` and no ACL file at all, and `aclfile` cannot be set
+at runtime, so a user created there with `ACL SETUSER` lives in that process's memory, `ACL SAVE` refuses it, and the
+next pod restart leaves the scrape authenticating with a credential the server no longer knows.
 
 Where the password and the address come from, by deployment shape:
 
@@ -1533,7 +1539,7 @@ none connected is a standby nobody could promote. `redis.memory.used` should sta
 subscriptions rather than keys, so a rising line means something is writing to an endpoint that was provisioned to
 keep nothing.
 
-**Two of them read oddly against a backplane and neither is a fault.** `redis.keyspace.hits` and `redis.keyspace.misses`
+**Four of them read oddly against a backplane and none is a fault.** `redis.keyspace.hits` and `redis.keyspace.misses`
 stay at zero for the life of the deployment, because nothing ever reads a key. `redis.rdb.changes_since_last_save` and
 `redis.latest_fork` are about a snapshot every deployment asset switches off, so they are reported and mean nothing
 here.

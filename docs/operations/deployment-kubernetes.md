@@ -502,11 +502,19 @@ reliable**, and nothing here changes what a signal is: pub/sub delivers to whoev
 keeps nothing, so a statement raised while the primary is being replaced is gone in every arrangement on this page.
 
 **What it adds is standbys, and nothing that promotes one.** The StatefulSet grows to `replicas + 1` instances, ordinal
-0 is the one the others follow, and the ClusterIP Service keeps naming ordinal 0 — because a RESP server's replicas do
-not share subscriptions, so a Service spreading connections across them would put a subscriber on one instance and a
-publication on another and lose the signal in between. Losing ordinal 0 is then an operator's act: `REPLICAOF NO ONE`
-against a standby, and that Service's selector repointed at the pod it was run on. Put ordinal 0 back as a replica of
-whoever holds the role before you let it serve again — a pod 0 that returns starts as a primary of its own, and two
+0 is the one the others follow, and the ClusterIP Service keeps naming ordinal 0. A RESP server carries a publication
+from the primary down to its replicas but never back up it, so a `PUBLISH` issued against a replica reaches neither the
+primary nor the other replicas — and since each MailFathom replica publishes and subscribes on the one connection it
+holds, a Service spreading those connections across the set would strand what some of them published.
+
+**A promotion here is yours to make and yours to undo.** Losing ordinal 0 is an operator's act: `REPLICAOF NO ONE`
+against a standby, and that Service's selector repointed at the pod it was run on. **Neither half survives the chart.**
+The selector is rendered from the templates, so the next `helm upgrade` — an image bump, a values change, anything —
+puts it back on ordinal 0, and the role is in memory only, so a reschedule of the promoted pod re-applies the
+`--replicaof` its template carries and demotes it while the Service may still name it. Both failures look exactly like
+the ordinary lost-signal case this page describes above, and nothing counts them separately. So treat a promotion as a
+state to leave: return the set to its rendered shape — ordinal 0 the primary, the selector on ordinal 0 — as the step
+that ends it, and put a returned pod 0 back as a replica of whoever holds the role before letting it serve, because two
 primaries behind one name is a split fan-out rather than a promotion.
 
 **The connection string does not change shape**, because the Service names an instance either way:
@@ -524,9 +532,10 @@ client `Microsoft.AspNetCore.SignalR.StackExchangeRedis` resolves, and its curre
 is a Sentinel by reading a `redis_mode` line out of its `INFO` reply, and Valkey writes `server_mode` there instead. A
 connection string carrying `serviceName=` against a Valkey Sentinel therefore fails at connect with *The
 ConnectionMultiplexer is not a Sentinel connection. Detected as: Standalone*, before any signal is published. Issue 1917
-measured that against three Sentinels watching a replicated pair, on the image this chart pins. Until that is resolved
-upstream, a deployment that wants automatic promotion points `valkey.deploy: false` at an endpoint it operates itself,
-where the failover arrangement is its own to choose.
+measured that against three Sentinels watching a replicated pair, on the image this chart pins, with the current
+client release as well as the one the backplane package resolves. Issue 1924 records what would turn it on. Until then,
+a deployment that wants automatic promotion points `valkey.deploy: false` at an endpoint it operates itself, where the
+failover arrangement is its own to choose.
 
 **One password covers all of it.** The instances use it both to authenticate a client and to authenticate the
 replication link, so the single key `signalBackplane.valkey.passwordSecretKey` names is what the whole set runs on.
@@ -1058,8 +1067,8 @@ Three documents do the same for the backplane, all at two replicas with the clie
 `signal-backplane-valkey-values.yaml` renders the one instance the chart runs by default,
 `signal-backplane-external-values.yaml` renders no workload at all while configuring the application identically, and
 `signal-backplane-replication-values.yaml` renders the set with two standbys beside that instance — so the difference
-between the first and the last is exactly what the one availability value costs. A document under `ci/refusals/` covers
-replication asked for over an endpoint the chart does not run. `defaults-values.yaml` is
+between the first and the last is exactly what the one availability value costs. Two documents under `ci/refusals/`
+cover the two ways that value can be asked for with nothing to apply it to. `defaults-values.yaml` is
 `values.yaml` plus only what the chart refuses to default — an image reference, the Secret the pod mounts, and the
 Secret holding the database superuser password, which the chart requires whenever it deploys the database itself and so
 by default — meaning it renders the shape an operator following the quick start gets. That last one is also what keeps
@@ -1070,12 +1079,13 @@ the others.
 Some values documents are supposed to be refused rather than rendered, and a rendering cannot record that: a
 combination the chart accepts by accident produces a plausible manifest and no golden file shows anything. Those live
 under `ci/refusals/`, each carrying on a `# refuses:` line the wording its refusal has to contain, and the same script
-requires the chart to refuse each one and to name the setting while doing so. Four are there today. Three of them are
+requires the chart to refuse each one and to name the setting while doing so. Five are there today. Three of them are
 one refusal reached three ways — more than one replica serving the page, more than one serving the client surface from
 a configuration file, and more than one serving it from the environment block — because what the chart reads to decide
 that is three different values, and a refusal walkable around by configuring the same thing another way is not one. The
-fourth is replication asked for over an endpoint the chart does not run, which would render exactly what the external
-document renders while an operator had written down an arrangement the deployment does not have.
+other two are replication asked for with nothing to apply it to: over an endpoint the chart does not run, which would
+render exactly what the external document renders, and with the backplane off altogether, which would render exactly
+what the defaults render. Each leaves an operator having written down an arrangement the deployment does not have.
 
 The `Helm chart` job of `CI` runs the same script on every pull request that touches `deploy/helm/`, which is where a
 chart that stopped rendering is now found. The release run lints and renders again before it publishes anything, so a

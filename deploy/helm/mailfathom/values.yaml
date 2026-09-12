@@ -479,7 +479,8 @@ signalBackplane:
     # and a change to that selector. Sentinel would be what automates this, and it is deliberately not offered:
     # StackExchange.Redis — the RESP client the SignalR backplane package resolves, current release included —
     # recognizes a Sentinel by the `redis_mode` line in its `INFO` reply, and Valkey answers with `server_mode`, so a
-    # `serviceName=` connection string against a Valkey Sentinel refuses to connect at all. Issue 1917 measured it.
+    # `serviceName=` connection string against a Valkey Sentinel refuses to connect at all. Issue 1917 measured it and
+    # issue 1924 records what would turn it on.
     #
     # **Read what this is worth before turning it on.** ADR 0032 makes the client's own re-read the guarantee a signal
     # is not, so a backplane outage is already a delay rather than a loss. Replication shortens the part of that delay

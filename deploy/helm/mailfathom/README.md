@@ -55,17 +55,17 @@ never told anything. The connection string is a key inside the Secret above in b
 deployed Valkey is started with; the chart templates no credential, and the install notes print exactly what to write.
 Anyone who can subscribe on that endpoint reads every signal of every user, so keep it inside your own network, and give
 an endpoint somebody else operates `ssl=true`, a credential of its own, and a channel prefix nothing else uses.
+[Signals between replicas](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html#signals-between-replicas)
+is the page.
 
 **One value puts a standby beside that backplane, and it is off.** `valkey.replication.enabled` adds instances that
 follow the first one's stream, so an instance is already running and in step when you lose it. **Nothing promotes
 one**: the Service names the first instance, and a standby serves clients after a `REPLICAOF NO ONE` on it and that
-selector repointed. Sentinel would be what automates that and the chart deliberately offers none, because the RESP
-client the SignalR backplane package resolves recognizes a Sentinel by a line Valkey no longer writes and refuses the
-connection outright. Read what replication is worth before turning it on: the client's own re-read is the guarantee, so
-this shortens a gap rather than making a signal reliable.
+selector repointed, both of which the next upgrade or pod restart undoes. Sentinel would be what automates it and the
+chart deliberately offers none, because the RESP client the SignalR backplane package resolves recognizes a Sentinel by
+a line Valkey no longer writes and refuses the connection outright. Read what replication is worth before turning it
+on: the client's own re-read is the guarantee, so this shortens a gap rather than making a signal reliable.
 [Replicating the backplane](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html#replicating-the-backplane)
-is the page.
-[Signals between replicas](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html#signals-between-replicas)
 is the page.
 
 ## Installing

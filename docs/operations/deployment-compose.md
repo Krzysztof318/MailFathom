@@ -888,8 +888,7 @@ but subscriptions, so the line above grants it every key, every channel, and eve
 The service has no volume and nothing to persist: a backplane holds a live subscription rather than a record, so a
 restart loses nothing, and a server that kept anything across one would replay a statement whose subject has already
 moved. Its scheduled snapshot is switched off on the command line rather than left at the upstream default, which is on.
-It has no health check either, for the reason MailFathom's own service has none — a check would have to authenticate,
-which would put the password in a second place. Nothing waits for it: MailFathom
+It has no health check either: one would have to authenticate, which would put the password in a second place. Nothing waits for it: MailFathom
 finishes starting whether or not the endpoint answers, and an instance whose backplane is down serves every screen
 correctly from the connections it holds itself.
 

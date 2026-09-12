@@ -1,0 +1,27 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# refuses: signalBackplane.valkey.replication.enabled is true while signalBackplane.enabled is false
+
+# Replication asked of a backplane that is off. The refusal beside this one catches replication asked of an endpoint
+# somebody else operates; this is the case one step further out, where there is no backplane at all to replicate. The
+# chart would render exactly what `defaults-values.yaml` renders, so nothing would look wrong, and the values file
+# would go on reading as though this deployment ran a replicated backplane it never had.
+image:
+  repository: example/mailfathom
+  tag: 0.1.0-verification
+  allowVersionMismatch: true
+
+secrets:
+  existingSecret: mailfathom-secrets
+
+database:
+  deploy:
+    superuserPasswordSecret: mailfathom-postgres-superuser
+
+signalBackplane:
+  enabled: false
+  valkey:
+    replication:
+      enabled: true
