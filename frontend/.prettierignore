@@ -1,12 +1,13 @@
 pnpm-lock.yaml
 src/Client.App/dist/
 
-# What a browser run retains — a trace, a screenshot, and the run's own record. `.gitignore` keeps both out of a commit
-# for the reasons the two Playwright configurations give; this keeps the formatter from reporting on them in the
+# What a browser run retains — a trace, a screenshot, and the run's own record. `.gitignore` keeps all three out of a
+# commit for the reasons the three Playwright configurations give; this keeps the formatter from reporting on them in the
 # meantime. The end-to-end run keeps its output whether it failed or not, so its directory is here after every run
-# rather than after a bad one.
+# rather than after a bad one, and the desktop run writes nothing but that record, which is enough to be reported on.
 .playwright/
 .playwright-end-to-end/
+.playwright-desktop/
 
 # What the native shell's build writes: the compiled crate graph and the bundles built from it, and the access-control
 # schemas Tauri derives from the configuration. Prettier reaches the JSON files inside both otherwise, which is a build

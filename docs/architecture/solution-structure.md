@@ -181,8 +181,11 @@ The unit suite is Vitest, run by `pnpm test` as one Vitest project per package: 
 test has to import a component neither package publishes and a test tree beside `src/` could reach one only by
 crossing the boundary above. A second suite, `pnpm test:browser`, builds the bundle and drives it with Playwright in a
 real browser, which is what answers the questions jsdom structurally cannot — the built bundle rather than the source,
-a document with a history, and the requests a page actually issued; it belongs to neither package, imports neither, and
-therefore does live under `frontend/tests/`, beside the contract governing both.
+a document with a history, and the requests a page actually issued; and another, `pnpm test:desktop`, builds the
+desktop shell and drives the WebView it renders in, which is what answers the two a browser somebody downloaded cannot:
+the zone an instant is placed against, and the language a first run opens in, each read from the process the WebView was
+started in. Neither belongs to a package, neither imports one, and both therefore live under `frontend/tests/`, beside
+the contract governing all four.
 [`frontend/tests/AGENTS.md`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/tests/AGENTS.md) is that
 contract. `frontend/tests/fixtures/` beside them is the third thing in that directory and belongs to neither package
 either: one corpus of invented example mail, exported as values, which whatever needs a populated screen imports rather
@@ -196,9 +199,9 @@ Node process joins any deployment shape.
 The repository's own shape around it was kept when the old client went. `CI` still runs a `Frontend` job, gated on a
 `frontend` path filter, calling `.github/workflows/build-test-frontend.yml`; a nightly and a release still wait on that
 job before they publish. What that workflow asserts is everything the full gate asks the client — the linter, the
-type check, both packages' unit suites, the formatting pass, and the build — plus the browser suite, which is gated on
-a pull request because a break only a browser can see is otherwise found the morning after a merge. Both verification
-gates run the same client flow, and deliberately not the browser suite —
+type check, both packages' unit suites, the formatting pass, and the build — plus the browser suite and, in a second job
+beside it, the desktop suite, both gated on a pull request because a break only a real head can see is otherwise found
+the morning after a merge. Both verification gates run the same client flow, and deliberately neither of those two —
 [which stack a gate runs](../operations/agent-workflow.md#which-stack-a-gate-runs) is where both are decided.
 
 **Nothing the service does for a client moved with it**, because none of it was Uno's. The client surface under

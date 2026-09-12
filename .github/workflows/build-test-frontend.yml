@@ -126,3 +126,94 @@ jobs:
       # stubbed transport, so a failure is read from this log and reproduced locally rather than downloaded from a run.
       - name: Build the client and check it in a real browser
         run: pnpm --dir frontend run test:browser
+
+  # The desktop head, driven in its own WebView. It is a job of its own rather than four more steps above, because
+  # nothing it installs is anything that job needs — a Rust toolchain, the platform's WebView and bundling libraries,
+  # the WebKit WebDriver, and a virtual display — so the two run beside each other rather than one behind the other.
+  #
+  # **Why it is gated on a pull request rather than left to a nightly.** The two rules it proves are the ones that could
+  # diverge between the heads with nobody noticing: an instant is placed against whatever zone the runtime reports, and
+  # a first run opens in whatever language the platform states — and a WebView reads each from the process that started
+  # it rather than from a profile a test configured. A nightly would find such a break the morning after the merge and
+  # name a run at 02:00 rather than the change that caused it, which is the argument this workflow already makes for the
+  # browser suite above. `frontend/tests/AGENTS.md` § *The desktop suite* holds what it may assert and what it leaves to
+  # the other three.
+  #
+  # The runner is pinned to the image `Build the desktop client` pins, for a related reason: what links against the
+  # platform's WebView is the thing under test, so driving it on a different image than the one the published bundles
+  # are built on would be proving it somewhere nobody runs it. macOS is absent because no WKWebView driver exists, and
+  # Windows because its driver is Microsoft Edge Driver against a different WebView — the suite is written to drive
+  # either, and adding that runner is a decision with its own cost rather than a line here.
+  drive-the-desktop-head:
+    name: Drive the desktop head
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # The same system half `Build the desktop client` installs, plus the two this job needs and that one does not: the
+      # WebDriver for the WebView the shell renders in, and a display for it to open a window on.
+      - name: Install the Linux WebView, bundling, and WebDriver dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            webkit2gtk-driver \
+            xvfb
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/package.json
+
+      - name: Install pnpm
+        run: npm install --global "$(jq --raw-output .packageManager frontend/package.json)"
+
+      - name: Resolve the pnpm store directory
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-desktop-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+
+      # The registry and the git checkouts Cargo downloads, keyed on the lock file that fixes exactly which crate
+      # versions those are — the same arrangement `Build the desktop client` uses, and deliberately not a cache of
+      # `target/`, which is gigabytes against a repository-wide budget.
+      - name: Cache the Cargo dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-desktop-suite-${{ runner.os }}-${{ hashFiles('frontend/src-tauri/Cargo.lock') }}
+
+      - name: Restore the client workspace
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      # Tauri's own WebDriver proxy, pinned like every other dependency here. It translates the session the suite opens
+      # into one the platform's native driver understands and launches the shell binary, which is why the suite needs no
+      # WebDriver package of its own. `--locked` for the reason the shell is built with it.
+      - name: Install the Tauri WebDriver proxy
+        run: cargo install tauri-driver --version 2.0.6 --locked
+
+      # `pnpm test:desktop` builds the shell and then drives it, so this is the build step as well as the driving one.
+      # `xvfb-run` is what gives the window something to open on: a runner has no display, and a WebView that cannot
+      # open one fails as a session that never started rather than as a display that is missing. Nothing is uploaded
+      # afterwards, for the reason the browser suite above uploads nothing.
+      - name: Build the desktop head and drive it in its own WebView
+        run: xvfb-run --auto-servernum pnpm --dir frontend run test:desktop

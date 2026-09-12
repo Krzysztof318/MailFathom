@@ -21,6 +21,7 @@
     "test": "vitest run",
     "test:browser": "pnpm build && playwright test",
     "test:end-to-end": "playwright test --config playwright.end-to-end.config.ts",
+    "test:desktop": "jiti tests/desktop/buildHead.ts && playwright test --config playwright.desktop.config.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
