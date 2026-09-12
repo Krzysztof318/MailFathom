@@ -754,8 +754,8 @@ export function App({
                     the three between them has a reason to name a file it never opens. */}
                                                         <OpenAttachmentContext value={openTabs.openAttachment}>
                                                             <div className="flex h-dvh flex-col bg-rail pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left workspace:flex-row">
-                                                                {/* Positioned because the Mail space stays on the screen
-                    while another space is in front of it, laid out over this region rather than beside it —
+                                                                {/* Positioned because every space stays on the screen while
+                    one of them is in front, each aside one laid out over this region rather than beside it —
                     `shell/Space.tsx` holds why a space is stood aside instead of taken down. */}
                                                                 <div
                                                                     ref={workspaceRegion}
@@ -787,6 +787,9 @@ export function App({
                                                                         </main>
                                                                     ) : (
                                                                         <Space
+                                                                            // Every space this deployment offers, because every one of them is mounted: moving
+                                                                            // between them changes which is in front and takes nothing down.
+                                                                            offered={offeredSpaces}
                                                                             space={space}
                                                                             // Who is signed in, which is what was kept beside the session rather than anything read out of a credential.
                                                                             // A screen never sees the credential; what it is handed is the name the deployment knows the

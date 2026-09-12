@@ -7,7 +7,7 @@ import { render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ComposingContext } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
-import type { Space as SpaceName } from '../routing/spaces';
+import { spaces, type Space as SpaceName } from '../routing/spaces';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { Space } from './Space';
 
@@ -32,13 +32,14 @@ const nothingBeingWritten = {
     close: () => undefined,
 };
 
-function inStrictMode(space: SpaceName): ReactNode {
+function inStrictMode(space: SpaceName, offered: readonly SpaceName[] = spaces): ReactNode {
     return (
         <StrictMode>
             <LocalizationProvider>
                 <WorkspaceProvider>
                     <ComposingContext value={nothingBeingWritten}>
                         <Space
+                            offered={offered}
                             space={space}
                             intent={<p>{handedTheIntent}</p>}
                             status={<p>{handedTheStatus}</p>}
@@ -84,12 +85,19 @@ describe('Space', () => {
         expect(document.activeElement).toBe(document.body);
     });
 
+    // Both directions, because the region focused is the one the single ref is handed to and that ref moves between
+    // regions that are all already mounted: a rule that only ever reached the space it was written for would pass on
+    // the first move and leave focus behind on the second.
     it('puts focus at the start of the new content when the address changes', () => {
         const { rerender } = render(inStrictMode('discover'));
 
         rerender(inStrictMode('mail'));
 
-        expect(document.activeElement).toBe(screen.getByRole('main'));
+        expect(document.activeElement).toBe(screen.getByRole('main', { name: 'Mail' }));
+
+        rerender(inStrictMode('cases'));
+
+        expect(document.activeElement).toBe(screen.getByRole('main', { name: 'Cases' }));
     });
 
     it('names the space it is showing', () => {
@@ -131,37 +139,66 @@ describe('Space', () => {
     it('does not call the Mail space unbuilt, which is what it stopped being when it started reading mail', () => {
         render(inStrictMode('mail'));
 
-        expect(screen.queryByText(/This space is not built yet\./)).toBeNull();
+        expect(
+            within(screen.getByRole('main', { name: 'Mail' })).queryByText(/This space is not built yet\./),
+        ).toBeNull();
     });
 
-    it('shows the pending note in a space nothing has been built for yet, with Mail standing behind it', () => {
+    it('shows the pending note in a space nothing has been built for yet', () => {
         render(inStrictMode('cases'));
 
-        expect(screen.getByText(/This space is not built yet\./)).toBeDefined();
-        expect(screen.queryByRole('main', { name: 'Mail' })).toBeNull();
-        expect(screen.getByRole('main', { name: 'Cases' })).toBeDefined();
+        expect(
+            within(screen.getByRole('main', { name: 'Cases' })).getByText(/This space is not built yet\./),
+        ).toBeDefined();
     });
 
-    // What Mail holds is the folder it was reading, the pages of it that answered, and the place in them the reader had
-    // scrolled to, and all three are state of the components it renders — so it is stood aside rather than taken down,
-    // and coming back is a return rather than a rebuild. What says it is aside is what a reader would find: no second
-    // landmark naming Mail, and nothing in it to tab into.
-    it('keeps Mail on the screen while another space is in front of it, out of reach and out of the reading order', () => {
+    // The mechanism, stated as a count: a space the deployment offers is a space that is on the screen from the first
+    // render, whichever one the address names.
+    it('mounts every space the deployment offers, not only the one in front', () => {
+        render(inStrictMode('cases', ['discover', 'mail', 'cases']));
+
+        expect(document.querySelectorAll('main')).toHaveLength(3);
+        expect(screen.getByLabelText('Discover')).toBeDefined();
+        expect(screen.getByLabelText('Mail')).toBeDefined();
+    });
+
+    it('mounts no space the deployment does not offer', () => {
+        render(inStrictMode('mail', ['mail']));
+
+        expect(document.querySelectorAll('main')).toHaveLength(1);
+        expect(screen.queryByLabelText('Cases')).toBeNull();
+    });
+
+    // What says a space is aside is what a reader would find: one landmark rather than seven, nothing in the others to
+    // tab into, and no live region in one reaching somebody standing on another.
+    it('leaves exactly the space in front reachable by the keyboard and by an accessible name', () => {
+        render(inStrictMode('cases', ['discover', 'mail', 'cases']));
+
+        expect(screen.getAllByRole('main')).toHaveLength(1);
+        expect(screen.getByRole('main', { name: 'Cases' })).toBeDefined();
+
+        for (const aside of ['Discover', 'Mail'] as const) {
+            const region = screen.getByLabelText(aside);
+
+            expect(region.getAttribute('aria-hidden')).toBe('true');
+            expect(region.hasAttribute('inert')).toBe(true);
+        }
+    });
+
+    it('keeps a space on the screen while another is in front of it, with everything it was handed still in it', () => {
         render(inStrictMode('cases'));
 
         const mail = screen.getByLabelText('Mail');
 
-        expect(mail.getAttribute('aria-hidden')).toBe('true');
-        expect(mail.hasAttribute('inert')).toBe(true);
         expect(within(mail).getByText(handedTheList)).toBeDefined();
         expect(within(mail).getByText(handedTheFolders)).toBeDefined();
         expect(within(mail).getByText(handedToMail)).toBeDefined();
     });
 
-    // The assertion that says *not rebuilt from zero*: the same element, not an element drawing the same thing. A Mail
-    // space taken down and put back reads the folder again from its leading end and puts the reader at the top of it,
-    // and every node in it is a new node — so node identity is what tells the two apart, and it holds under the extra
-    // mount `StrictMode` performs, which a count of mounts would not.
+    // The assertion that says *not rebuilt from zero*: the same element, not an element drawing the same thing. A space
+    // taken down and put back reads again from its leading end and puts the reader at the top of it, and every node in
+    // it is a new node — so node identity is what tells the two apart, and it holds under the extra mount `StrictMode`
+    // performs, which a count of mounts would not.
     it('gives back the Mail space that was left rather than a rebuilt one', () => {
         const { rerender } = render(inStrictMode('mail'));
         const before = screen.getByText(handedTheList);
@@ -173,6 +210,33 @@ describe('Space', () => {
         expect(screen.getByRole('main', { name: 'Mail' })).toBeDefined();
     });
 
+    it('gives back the space that was left whichever space it is, not only Mail', () => {
+        const { rerender } = render(inStrictMode('cases'));
+        const before = screen.getByRole('heading', { name: 'Cases' });
+
+        rerender(inStrictMode('mail'));
+        rerender(inStrictMode('cases'));
+
+        expect(screen.getByRole('heading', { name: 'Cases' })).toBe(before);
+    });
+
+    // The scroll offset is the platform's rather than this client's: it belongs to the scroller's box, so it survives
+    // exactly as long as that box does. jsdom keeps what is written to `scrollTop` without laying anything out, so the
+    // number here says the element was never rebuilt — a space put back would be a new element reading zero. That the
+    // aside space also keeps its *box*, by standing aside with `visibility` rather than leaving the layout, is a
+    // rendered-layout claim and is the browser suite's rather than this one's.
+    it('keeps a space its scroll offset across a visit to another space and back', () => {
+        const { rerender } = render(inStrictMode('cases'));
+        const region = screen.getByLabelText('Cases');
+
+        region.scrollTop = 120;
+        rerender(inStrictMode('mail'));
+        rerender(inStrictMode('cases'));
+
+        expect(screen.getByLabelText('Cases')).toBe(region);
+        expect(region.scrollTop).toBe(120);
+    });
+
     // The two the frame composes for whichever space is in front. Handed to one of them and to nothing else: a second
     // live copy of the field would be a second place somebody's question could be typed into.
     it('hands the question and the connection to the space in front and to nothing behind it', () => {
@@ -181,5 +245,14 @@ describe('Space', () => {
         expect(screen.getAllByText(handedTheIntent)).toHaveLength(1);
         expect(screen.getAllByText(handedTheStatus)).toHaveLength(1);
         expect(within(screen.getByRole('main', { name: 'Cases' })).getByText(handedTheIntent)).toBeDefined();
+    });
+
+    it('moves the question and the connection to the space arrived at rather than leaving them behind', () => {
+        const { rerender } = render(inStrictMode('cases'));
+
+        rerender(inStrictMode('mail'));
+
+        expect(screen.getAllByText(handedTheIntent)).toHaveLength(1);
+        expect(within(screen.getByRole('main', { name: 'Mail' })).getByText(handedTheIntent)).toBeDefined();
     });
 });
