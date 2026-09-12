@@ -658,7 +658,7 @@
         "enabled",
         "connectionStringSecretKey",
         "channelPrefix",
-        "garnet"
+        "valkey"
       ],
       "properties": {
         "enabled": {
@@ -675,13 +675,14 @@
           "type": "string",
           "description": "What every channel this deployment publishes to and subscribes to begins with. Two MailFathom deployments sharing one RESP endpoint at the same prefix receive each other's statements, so a shared endpoint needs one of its own. An empty value is admitted here, as connectionStringSecretKey's pattern admits one, so that the chart's own refusal is what an operator who cleared it reads rather than a schema message that cannot say why leaving it unset is the right move."
         },
-        "garnet": {
+        "valkey": {
           "type": "object",
           "required": [
             "deploy",
             "passwordSecretKey",
             "image",
             "service",
+            "replication",
             "resources",
             "podSecurityContext",
             "containerSecurityContext"
@@ -689,7 +690,7 @@
           "properties": {
             "deploy": {
               "type": "boolean",
-              "description": "Whether the chart runs Garnet as the RESP endpoint. Turn it off to point the connection string above at an endpoint you already operate, so you run one such service rather than two."
+              "description": "Whether the chart runs Valkey as the RESP endpoint. Turn it off to point the connection string above at an endpoint you already operate — Redis, Garnet, Valkey, or a managed equivalent — so you run one such service rather than two. The protocol is the contract; Valkey is what this repository deploys and pins."
             },
             "passwordSecretKey": {
               "type": "string",
@@ -710,12 +711,12 @@
                 "repository": {
                   "type": "string",
                   "minLength": 1,
-                  "description": "Microsoft's Garnet, an MIT-licensed RESP server that documents its compatibility with StackExchange.Redis. THIRD_PARTY_LICENSES.md records what is in the image."
+                  "description": "Valkey, a BSD-3-Clause RESP server maintained under the Linux Foundation and the endpoint this repository deploys and pins against. THIRD_PARTY_LICENSES.md records what is in the image."
                 },
                 "digest": {
                   "type": "string",
                   "pattern": "^sha256:[0-9a-f]{64}$",
-                  "description": "A digest rather than a tag, because the upstream publishes its release tags beside moving 1, 2, and latest ones: the digest is the only reference that names one artifact."
+                  "description": "A digest rather than a tag, because the upstream publishes its release tags beside moving 9, 9.1, and latest ones: the digest is the only reference that names one artifact."
                 },
                 "pullPolicy": {
                   "type": "string",
@@ -744,7 +745,27 @@
                   "type": "integer",
                   "minimum": 1,
                   "maximum": 65535,
-                  "description": "The port the Service publishes, and the port the connection string names beside the Service's own host. The container always listens on 6379."
+                  "description": "The port the Service publishes, and the port the connection string names beside the Service's own host. The container always listens on 6379. The Service names the first instance of the set whether or not the server is replicated, because a RESP server's replicas hold no subscription of their own."
+                }
+              },
+              "additionalProperties": false
+            },
+            "replication": {
+              "type": "object",
+              "required": [
+                "enabled",
+                "replicas"
+              ],
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Whether standby instances follow the primary. Off is one instance, which is what carries signals; on adds standbys that hold the same stream. Nothing here promotes one: a standby serves clients after REPLICAOF NO ONE on it and the Service's selector repointed, and this chart offers no Sentinel to do that for you, because the RESP client the SignalR backplane package resolves cannot connect to a Valkey Sentinel at all. It buys an instance already running and in step rather than a delivered signal, because ADR 0032 makes the client's own re-read the guarantee. Refused where deploy is false: replication of an endpoint you operate is arranged where it runs."
+                },
+                "replicas": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 16,
+                  "description": "Standbys beside the primary, so the set holds one more instance than this number. Read only when enabled is true. One is what a hand-run promotion needs; more is for an operator who wants a second instance in step as well."
                 }
               },
               "additionalProperties": false
@@ -761,7 +782,7 @@
               "properties": {
                 "runAsNonRoot": {
                   "const": true,
-                  "description": "The image declares an unprivileged account and the server binds its port as it, so nothing here has to begin as root. Restated by the chart so the cluster enforces it rather than trusting the image's own USER, and kept from being switched off because leaving the restricted Pod Security Standard is not a values decision."
+                  "description": "The image carries an unprivileged valkey account and a world-writable working directory, so nothing here has to begin as root. Stated by the chart so the cluster enforces it rather than trusting the image's own entrypoint, which would otherwise start as root and drop privilege itself, and kept from being switched off because leaving the restricted Pod Security Standard is not a values decision."
                 },
                 "runAsUser": {
                   "type": "integer",
@@ -803,7 +824,7 @@
                 },
                 "readOnlyRootFilesystem": {
                   "const": true,
-                  "description": "The server keeps nothing, so it writes nothing but the runtime's scratch directory, which is an in-memory emptyDir the template mounts at /tmp."
+                  "description": "The server keeps nothing, so what it writes is scratch: the two in-memory emptyDir volumes the template mounts at /tmp and /data, the second being the working directory the server insists on whether or not it ever writes a file into it."
                 },
                 "capabilities": {
                   "type": "object",

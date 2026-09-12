@@ -211,6 +211,15 @@ raises reaches the clients it holds itself and no others, and a screen on anothe
 refresh — which is what makes this a restart to schedule rather than an outage, and
 [the signal backplane](telemetry.md#the-signal-backplane) is what says it happened.
 
+That order rests on the server accepting both credentials at once, which a managed endpoint and one configured with an
+ACL file do. **A server this repository deploys does not**, because each asset starts it with a single `--requirepass`
+or a single-user ACL file, so the old credential stops being accepted the moment that server restarts and the two
+restarts cannot overlap. Rotating there is a short signal outage rather than a rolling one: restart the backplane,
+then restart MailFathom. [Kubernetes](deployment-kubernetes.md#signals-between-replicas),
+[Compose](deployment-compose.md#the-signal-backplane), and
+[Quadlet](deployment-quadlet.md#the-signal-backplane) each name where that credential is written for the asset in
+front of you.
+
 ## Watching a reload
 
 A rejected candidate is logged at `Error` with the configuration path and a stable failure identity, and the previous configuration stays active:

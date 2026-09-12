@@ -1,0 +1,160 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
+{{- if and .Values.signalBackplane.enabled .Values.signalBackplane.valkey.deploy }}
+{{- include "mailfathom.validate" . -}}
+{{- $valkey := .Values.signalBackplane.valkey -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "mailfathom.backplaneFullname" . }}
+  labels:
+    {{- include "mailfathom.backplaneLabels" . | nindent 4 }}
+spec:
+  {{- /*
+    One instance unless replication is on, and the count is the only thing that changes when it is: a second instance
+    is a standby rather than a larger endpoint, because replicas of a RESP server do not share subscriptions — a signal
+    published to one reaches only the MailFathom replicas subscribed there. Which is why the Service beside this set
+    names one pod rather than load-balancing across them, and why an instance count is never a throughput decision here.
+  */}}
+  replicas: {{ if $valkey.replication.enabled }}{{ add1 (int $valkey.replication.replicas) }}{{ else }}1{{ end }}
+  {{- /*
+    A StatefulSet rather than a Deployment, and with no claim of its own. What it is wanted for is the stable identity:
+    every instance is reachable at a name that survives a restart, which is what lets ordinal 0 be the one the others
+    follow and what keeps that name true across a rescheduling. A Deployment's pods have neither.
+  */}}
+  serviceName: {{ include "mailfathom.backplanePeerFullname" . }}
+  selector:
+    matchLabels:
+      {{- include "mailfathom.backplaneSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mailfathom.backplaneSelectorLabels" . | nindent 8 }}
+    spec:
+      {{- with $valkey.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml $valkey.podSecurityContext | nindent 8 }}
+      {{- /*
+        The server carries signals between replicas and talks to nothing in the cluster, so it has no business holding a
+        token that can talk to the API server.
+      */}}
+      automountServiceAccountToken: false
+      {{- with $valkey.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $valkey.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $valkey.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: valkey
+          image: {{ include "mailfathom.backplaneImage" . | quote }}
+          imagePullPolicy: {{ $valkey.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $valkey.containerSecurityContext | nindent 12 }}
+          {{- /*
+            The password is the one form this server reads it in: a value on its own command line, expanded by the shell
+            below from the entry here rather than written into this object, so no rendered manifest and no committed
+            golden file carries a credential. Valkey's file-backed alternative is an ACL document with its own syntax —
+            which is what the Compose and Quadlet deployments use, having no expansion of their own — and what this
+            costs instead is that the password is readable inside this container, by the process that already holds it.
+          */}}
+          env:
+            - name: MAILFATHOM_SIGNAL_BACKPLANE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ $valkey.passwordSecretKey }}
+          {{- /*
+            A shell rather than a plain argument list, for the one thing an argument list cannot express: a StatefulSet
+            writes one pod template for every ordinal, and which instance is the primary is decided by the ordinal. Pod
+            0 starts as one and every other pod follows it. Nothing here moves that afterwards: an operator who
+            promotes a standby by hand has also repointed the Service's selector at it, and a pod 0 that comes back
+            rejoins as a primary of its own until they put it back.
+
+            Persistence is off in both branches, which is why there is no claim above: `--save ""` turns the periodic
+            snapshot off and appending is already off, so the server writes nothing and a restart brings nothing back.
+            That is the whole intent — pub/sub delivers to whoever is subscribed at that moment, and a server that kept
+            anything across a restart would replay a statement whose subject has already moved.
+          */}}
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              set -eu
+              set -- --port 6379 --save "" --appendonly no \
+                --requirepass "$MAILFATHOM_SIGNAL_BACKPLANE_PASSWORD" \
+                --primaryauth "$MAILFATHOM_SIGNAL_BACKPLANE_PASSWORD" \
+                --replica-announce-ip "${HOSTNAME}.{{ include "mailfathom.backplanePeerFullname" . }}"
+              if [ "${HOSTNAME##*-}" != "0" ]; then
+                set -- "$@" --replicaof "{{ include "mailfathom.backplaneFullname" . }}-0.{{ include "mailfathom.backplanePeerFullname" . }}" 6379
+              fi
+              exec valkey-server "$@"
+          ports:
+            - name: resp
+              containerPort: 6379
+              protocol: TCP
+          {{- /*
+            The probes open a TCP connection rather than speaking the protocol, for the reason the spam daemon's do:
+            what answers here is RESP, which no probe type composes, and a listener that has bound the port is a server
+            that has finished starting. A probe that could speak RESP would have to authenticate, which would put the
+            password into a second place.
+          */}}
+          startupProbe:
+            tcpSocket:
+              port: resp
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 20
+          readinessProbe:
+            tcpSocket:
+              port: resp
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: resp
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            {{- /*
+              Nothing durable is held here, because this server keeps nothing. These are the two paths the image expects
+              to be writable — the runtime's scratch directory, and the working directory the server insists on whether
+              or not it ever writes a file into it — and an in-memory emptyDir over both is what makes a read-only root
+              filesystem workable, as it does for MailFathom's own pod. In memory rather than on a node's disk so that
+              nothing derived from a signal can outlive the pod on a host.
+            */}}
+            - name: temporary
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+          resources:
+            {{- toYaml $valkey.resources | nindent 12 }}
+      volumes:
+        {{- /*
+          Two volumes rather than one mounted twice: a second mount of one emptyDir needs a `subPath`, and the kubelet
+          creates a subPath directory owned by root, which this unprivileged container could not write into.
+        */}}
+        - name: temporary
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+        - name: data
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+{{- end }}

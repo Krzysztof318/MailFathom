@@ -2,11 +2,12 @@
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 # Project repository: https://github.com/Krzysztof318/MailFathom
 
-# The backplane somebody else operates, which is the half of the choice `signal-backplane-garnet-values.yaml` does not
-# render: there the Deployment and the Service are produced and the endpoint is the release's own, and here nothing of a
-# workload is, while the application is configured exactly the same way. That is the point worth recording — the two
+# The backplane somebody else operates, which is the half of the choice `signal-backplane-valkey-values.yaml` does not
+# render: there the StatefulSet and the Services are produced and the endpoint is the release's own, and here nothing of
+# a workload is, while the application is configured exactly the same way. That is the point worth recording — the two
 # shapes differ in what is deployed and in nothing the application reads, because the connection string names the
-# endpoint in both.
+# endpoint in both. Which server answers it is the operator's too: Redis, Garnet, Valkey, or a managed equivalent all
+# speak the protocol MailFathom asks in.
 #
 # Everything else is the smallest values document the chart installs from, so what the golden manifest shows against
 # `defaults.yaml` is the backplane decision and nothing else.
@@ -46,5 +47,5 @@ config:
 signalBackplane:
   enabled: true
   connectionStringSecretKey: mailfathom-signal-backplane
-  garnet:
+  valkey:
     deploy: false

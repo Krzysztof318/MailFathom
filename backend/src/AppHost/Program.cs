@@ -314,9 +314,9 @@ if (runsIntegrationTests)
     // pin nothing in this repository writes is one scripts/update-dependencies.sh cannot survey and the licence
     // register was verified against a version an Aspire bump could change underneath it.
     builder
-        .AddGarnet(OrchestrationContract.SignalBackplaneResourceName)
-        .WithImage("ghcr.io/microsoft/garnet")
-        .WithImageTag("1.0")
+        .AddValkey(OrchestrationContract.SignalBackplaneResourceName)
+        .WithImage("valkey/valkey")
+        .WithImageTag("9.1.2")
         .WithContainerName($"{ephemeralResourceNamePrefix}-signal-backplane");
 }
 
@@ -688,9 +688,9 @@ else
         // No volume and no persistence: a backplane holds a live subscription rather than a record, so there is nothing
         // a restart should bring back. The container's own lifetime is the run's, unlike PostgreSQL's, because nothing
         // is lost by starting a fresh one and an empty server is ready in under a second.
-        var signalBackplane = builder.AddGarnet(OrchestrationContract.SignalBackplaneResourceName)
-            .WithImage("ghcr.io/microsoft/garnet")
-            .WithImageTag("1.0");
+        var signalBackplane = builder.AddValkey(OrchestrationContract.SignalBackplaneResourceName)
+            .WithImage("valkey/valkey")
+            .WithImageTag("9.1.2");
 
         // A second host resource rather than a second replica of the first, for the reason
         // OrchestrationContract.HostReplicaResourceName gives: every socket here is stated and unproxied, so two

@@ -504,9 +504,11 @@ Backplane__Enabled=true dotnet run --project backend/src/AppHost/AppHost.csproj
 `Backplane` rather than `SignalBackplane`, deliberately: this is the app host's own switch and not the host's section,
 a child process inherits the environment it was started from, and a `SignalBackplane__Enabled` reaching a MailFathom
 would land inside a section bound strictly and stop the process on a key it has no property for. A value that is not a
-boolean fails the app host at startup naming the key, the same way a port that is not a number does. What the switch adds is two resources. `signal-backplane` is a [Garnet](https://github.com/microsoft/garnet)
-container — Microsoft's RESP server — with no volume and no persistence, because a backplane holds a live subscription
-rather than a record and an empty one is ready in under a second. `mailfathom-host-replica` is a second MailFathom
+boolean fails the app host at startup naming the key, the same way a port that is not a number does. What the switch adds is two resources. `signal-backplane` is a [Valkey](https://valkey.io/)
+container — the RESP server every deployment asset here ships — with no volume and no persistence, because a backplane
+holds a live subscription rather than a record and an empty one is ready in under a second. Any RESP endpoint answers
+what MailFathom asks of one; this is the server a developer's machine is asked to pull, and it is the server a
+deployment starts. `mailfathom-host-replica` is a second MailFathom
 process against the same database, the same data-encryption key, and two more free ports of its own: it serves the
 client surface and the probes and nothing else, because the MCP and administrative surfaces belong to the first host
 and a second of each would be sockets for nothing this shape is being started to show. Both hosts are handed the

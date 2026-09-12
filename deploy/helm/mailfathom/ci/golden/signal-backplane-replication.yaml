@@ -2,7 +2,7 @@
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 # Project repository: https://github.com/Krzysztof318/MailFathom
 #
-# Rendered from deploy/helm/mailfathom with deploy/helm/mailfathom/ci/signal-backplane-garnet-values.yaml by scripts/render-helm-manifests.sh.
+# Rendered from deploy/helm/mailfathom with deploy/helm/mailfathom/ci/signal-backplane-replication-values.yaml by scripts/render-helm-manifests.sh.
 # Committed so a change in what the chart produces is visible in the diff rather than only a failure to
 # produce anything. Regenerate with: scripts/render-helm-manifests.sh --update
 ---
@@ -105,30 +105,6 @@ data:
 
     printf 'Created database %s owned by role %s, with the vector extension installed.\n' "$database_name" "$database_role"
 ---
-# Source: mailfathom/templates/garnet-service.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: mailfathom-garnet
-  labels:
-    helm.sh/chart: mailfathom-0.0.0
-    app.kubernetes.io/name: mailfathom-garnet
-    app.kubernetes.io/instance: mailfathom
-    app.kubernetes.io/version: "4e298b9b274088cded4156853a32b85fed7b42242eb9ca90216d332e25f2bce"
-    app.kubernetes.io/component: signal-backplane
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/part-of: mailfathom
-spec:
-  type: ClusterIP
-  selector:
-    app.kubernetes.io/name: mailfathom-garnet
-    app.kubernetes.io/instance: mailfathom
-  ports:
-    - name: resp
-      port: 6379
-      targetPort: resp
-      protocol: TCP
----
 # Source: mailfathom/templates/postgres-service.yaml
 apiVersion: v1
 kind: Service
@@ -175,6 +151,56 @@ spec:
   selector:
     app.kubernetes.io/name: mailfathom
     app.kubernetes.io/instance: mailfathom
+---
+# Source: mailfathom/templates/valkey-peers-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailfathom-valkey-peers
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom-valkey
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: "c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1"
+    app.kubernetes.io/component: signal-backplane
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: mailfathom-valkey
+    app.kubernetes.io/instance: mailfathom
+  ports:
+    - name: resp
+      port: 6379
+      targetPort: resp
+      protocol: TCP
+---
+# Source: mailfathom/templates/valkey-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailfathom-valkey
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom-valkey
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: "c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1"
+    app.kubernetes.io/component: signal-backplane
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mailfathom-valkey
+    app.kubernetes.io/instance: mailfathom
+    statefulset.kubernetes.io/pod-name: mailfathom-valkey-0
+  ports:
+    - name: resp
+      port: 6379
+      targetPort: resp
+      protocol: TCP
 ---
 # Source: mailfathom/templates/deployment.yaml
 apiVersion: apps/v1
@@ -307,107 +333,6 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 64Mi
----
-# Source: mailfathom/templates/garnet-deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: mailfathom-garnet
-  labels:
-    helm.sh/chart: mailfathom-0.0.0
-    app.kubernetes.io/name: mailfathom-garnet
-    app.kubernetes.io/instance: mailfathom
-    app.kubernetes.io/version: "4e298b9b274088cded4156853a32b85fed7b42242eb9ca90216d332e25f2bce"
-    app.kubernetes.io/component: signal-backplane
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/part-of: mailfathom
-spec:
-  replicas: 1
-  strategy:
-    type: Recreate
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: mailfathom-garnet
-      app.kubernetes.io/instance: mailfathom
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: mailfathom-garnet
-        app.kubernetes.io/instance: mailfathom
-    spec:
-      securityContext:
-        runAsGroup: 1654
-        runAsNonRoot: true
-        runAsUser: 1654
-        seccompProfile:
-          type: RuntimeDefault
-      automountServiceAccountToken: false
-      containers:
-        - name: garnet
-          image: "ghcr.io/microsoft/garnet@sha256:4e298b9b274088cded4156853a32b85fed7b42242eb9ca90216d332e25f2bceb"
-          imagePullPolicy: IfNotPresent
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-              - ALL
-            readOnlyRootFilesystem: true
-          env:
-            - name: MAILFATHOM_SIGNAL_BACKPLANE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: mailfathom-secrets
-                  key: mailfathom-signal-backplane-password
-          args:
-            - --port
-            - "6379"
-            - --auth
-            - Password
-            - --password
-            - $(MAILFATHOM_SIGNAL_BACKPLANE_PASSWORD)
-          ports:
-            - name: resp
-              containerPort: 6379
-              protocol: TCP
-          startupProbe:
-            tcpSocket:
-              port: resp
-            periodSeconds: 3
-            timeoutSeconds: 3
-            failureThreshold: 20
-          readinessProbe:
-            tcpSocket:
-              port: resp
-            periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 3
-          livenessProbe:
-            tcpSocket:
-              port: resp
-            periodSeconds: 30
-            timeoutSeconds: 5
-            failureThreshold: 3
-          volumeMounts:
-            - name: temporary
-              mountPath: /tmp
-            - name: data
-              mountPath: /data
-          resources:
-            limits:
-              cpu: "1"
-              memory: 512Mi
-            requests:
-              cpu: 50m
-              memory: 256Mi
-      volumes:
-        - name: temporary
-          emptyDir:
-            medium: Memory
-            sizeLimit: 16Mi
-        - name: data
-          emptyDir:
-            medium: Memory
-            sizeLimit: 16Mi
 ---
 # Source: mailfathom/templates/postgres-statefulset.yaml
 apiVersion: apps/v1
@@ -560,6 +485,113 @@ spec:
           emptyDir: {}
         - name: temporary
           emptyDir: {}
+---
+# Source: mailfathom/templates/valkey-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mailfathom-valkey
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom-valkey
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: "c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1"
+    app.kubernetes.io/component: signal-backplane
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+spec:
+  replicas: 3
+  serviceName: mailfathom-valkey-peers
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mailfathom-valkey
+      app.kubernetes.io/instance: mailfathom
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mailfathom-valkey
+        app.kubernetes.io/instance: mailfathom
+    spec:
+      securityContext:
+        runAsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+        seccompProfile:
+          type: RuntimeDefault
+      automountServiceAccountToken: false
+      containers:
+        - name: valkey
+          image: "docker.io/valkey/valkey@sha256:c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1d"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+          env:
+            - name: MAILFATHOM_SIGNAL_BACKPLANE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mailfathom-secrets
+                  key: mailfathom-signal-backplane-password
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              set -eu
+              set -- --port 6379 --save "" --appendonly no \
+                --requirepass "$MAILFATHOM_SIGNAL_BACKPLANE_PASSWORD" \
+                --primaryauth "$MAILFATHOM_SIGNAL_BACKPLANE_PASSWORD" \
+                --replica-announce-ip "${HOSTNAME}.mailfathom-valkey-peers"
+              if [ "${HOSTNAME##*-}" != "0" ]; then
+                set -- "$@" --replicaof "mailfathom-valkey-0.mailfathom-valkey-peers" 6379
+              fi
+              exec valkey-server "$@"
+          ports:
+            - name: resp
+              containerPort: 6379
+              protocol: TCP
+          startupProbe:
+            tcpSocket:
+              port: resp
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 20
+          readinessProbe:
+            tcpSocket:
+              port: resp
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: resp
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: temporary
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+          resources:
+            limits:
+              cpu: "1"
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+      volumes:
+        - name: temporary
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+        - name: data
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
 ---
 # Source: mailfathom/templates/ingress.yaml
 apiVersion: networking.k8s.io/v1

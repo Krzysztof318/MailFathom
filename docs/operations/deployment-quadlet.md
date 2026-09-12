@@ -109,7 +109,7 @@ cp deploy/compose/postgres/10-create-mailfathom-database.sh ~/.config/mailfathom
 
 The `.container` files and the one `.volume` are named rather than globbed because there are four more container units
 and a second volume, and those are the parts of this directory that are optional: `mailfathom-presidio.container`,
-`mailfathom-spamassassin.container`, `mailfathom-garnet.container`, and `mailfathom-silo.container` with
+`mailfathom-spamassassin.container`, `mailfathom-valkey.container`, and `mailfathom-silo.container` with
 `mailfathom-silo.volume` beside it. Copying one is half of switching its feature on, and a deployment that wants none
 never copies any. See [Personal-data scanning](#personal-data-scanning), [Spam scanning](#spam-scanning),
 [Running an object store beside MailFathom](#running-an-object-store-beside-mailfathom), and
@@ -449,7 +449,7 @@ holds here unchanged.
 # ordering runs the other way.
 systemctl --user stop mailfathom.service \
   mailfathom-presidio.service mailfathom-spamassassin.service mailfathom-silo.service \
-  mailfathom-garnet.service mailfathom-postgres.service
+  mailfathom-valkey.service mailfathom-postgres.service
 rm ~/.config/containers/systemd/mailfathom*.{container,network,volume}
 systemctl --user daemon-reload
 
@@ -762,7 +762,7 @@ above — is yours; MailFathom manages none of it.
 
 ## The signal backplane
 
-The same shape, and the same default: `mailfathom-garnet.container` is a file you either copy or do not, and not copying
+The same shape, and the same default: `mailfathom-valkey.container` is a file you either copy or do not, and not copying
 it is how the backplane is off.
 
 **On one host it does nothing, and that is the expected state rather than a misconfiguration to fix.** A backplane
@@ -779,15 +779,15 @@ configuration section itself. Choose one password first: the server's ACL file a
 string presents it, and they are one decision.
 
 ```bash
-printf 'user default on >%s +@all\n' "$password" \
-  | systemd-creds --user encrypt --name=garnet-acl - \
-      ~/.config/credstore.encrypted/garnet-acl
+printf 'user default on >%s ~* &* +@all\n' "$password" \
+  | systemd-creds --user encrypt --name=valkey-acl - \
+      ~/.config/credstore.encrypted/valkey-acl
 
-printf 'mailfathom-garnet:6379,password=%s' "$password" \
+printf 'mailfathom-valkey:6379,password=%s' "$password" \
   | systemd-creds --user encrypt --name=signal-backplane-connection-string - \
       ~/.config/credstore.encrypted/signal-backplane-connection-string
 
-cp deploy/quadlet/mailfathom-garnet.container ~/.config/containers/systemd/
+cp deploy/quadlet/mailfathom-valkey.container ~/.config/containers/systemd/
 ```
 
 Then in `~/.config/containers/systemd/mailfathom.container`, uncomment the two `Environment=` lines for
@@ -795,30 +795,35 @@ Then in `~/.config/containers/systemd/mailfathom.container`, uncomment the two `
 `systemctl --user daemon-reload`.
 
 There is no ordering line to uncomment at the top of that file, which is the one place this unit differs from the other
-three optional ones. It declares no health check to wait for — the image carries a .NET runtime and no RESP client, so
-there is nothing inside the container for a check to run — and nothing has to wait either: MailFathom finishes starting
+three optional ones. It declares no health check to wait for — a check would have to authenticate, which would put the password in a second
+place — and nothing has to wait either: MailFathom finishes starting
 whether or not the endpoint answers, and an instance whose backplane is down serves every screen correctly from the
 connections it holds itself.
 
-To use a Redis-compatible endpoint you already operate, copy no unit, encrypt only the connection string with that
+**The contract is the protocol rather than the product.** MailFathom asks the endpoint for `PUBLISH`, `SUBSCRIBE`, and
+`PSUBSCRIBE` and nothing else, so any RESP endpoint serves — Redis, Garnet, Valkey, or a managed equivalent. Valkey is
+what this unit starts and what the project pins; it is the default rather than a requirement. To use an endpoint you
+already operate, copy no unit, encrypt only the connection string with that
 endpoint's own address and password, and leave the ACL file to whoever runs it. Keep that endpoint **inside your own
 network**: what crosses it is which mailbox changed and for whom, which is personal data on its own. The unit here
 publishes no port and is attached to `mailfathom-backend.network` alone, exactly as the database is.
 
 **The password arrives as a file, which on this server means an ACL file**, and that is the one place this deployment
-differs from [the chart](deployment-kubernetes.md), where the kubelet expands it into `--auth Password --password` out
+differs from [the chart](deployment-kubernetes.md), where the kubelet expands it into `--requirepass` out
 of a Secret. Podman has no equivalent expansion — it passes a container's arguments through unchanged — so that route
 would put the password in the unit file, in `podman inspect`, and in this host's process list rather than in the
-credential store beside every other secret. `--auth ACL` is the one mode Garnet reads its credentials from a path in.
+credential store beside every other secret. `--aclfile` is the one way Valkey reads a credential from a path.
 The default user is what a RESP client authenticating with a password alone becomes, and this server holds nothing but
-subscriptions, so the line above grants it every command.
+subscriptions, so the line above grants it every key, every channel, and every command.
 
-The unit carries `UserNS=keep-id:uid=1654,gid=1654` for the reason `mailfathom.container` does: the image runs the
-server as its own unprivileged account, which under the default rootless mapping would be a subordinate uid belonging to
-nobody, and the ACL credential is readable by the unit's user alone.
+The unit carries `UserNS=keep-id:uid=999,gid=999` for the reason `mailfathom.container` carries its own number: the
+image runs the server as its own unprivileged `valkey` account, which under the default rootless mapping would be a
+subordinate uid belonging to nobody, and the ACL credential is readable by the unit's user alone. It is 999 rather than
+MailFathom's 1654 because it is this image's account rather than the .NET base's.
 
 The unit has no volume and nothing to persist: a backplane holds a live subscription rather than a record, so a restart
-loses nothing, and a server that kept anything across one would replay a statement whose subject has already moved.
+loses nothing, and a server that kept anything across one would replay a statement whose subject has already moved. Its
+scheduled snapshot is switched off on the `Exec=` line rather than left at the upstream default, which is on.
 
 **Rotating the password is a restart, not a reload**, and it is two credentials re-encrypted rather than one. The
 connection string is read once, when a connection is first wanted, and the endpoint parsed out of it — password included
@@ -826,10 +831,10 @@ connection string is read once, when a connection is first wanted, and the endpo
 [Rotating the signal backplane's connection string](secret-rotation.md#rotating-the-signal-backplanes-connection-string)
 states the order that takes.
 
-**Nothing of Garnet is in MailFathom's image or in this repository.** The unit names an image your host pulls from
-Microsoft's own registry, pinned by the same digest the Compose deployment and the chart carry — Garnet publishes its
-release tags beside moving `1`, `2`, and `latest` ones, so a digest is the only reference that names one artifact.
-Garnet is MIT-licensed, which
+**Nothing of Valkey is in MailFathom's image or in this repository.** The unit names an image your host pulls from
+Docker Hub, pinned by the same digest the Compose deployment and the chart carry — Valkey publishes its
+release tags beside moving `9`, `9.1`, and `latest` ones, so a digest is the only reference that names one artifact.
+Valkey is BSD-3-Clause, which
 [`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records
 together with the base image it is built on.
 

@@ -28,9 +28,9 @@ namespace MailFathom.Host.Configuration.Signals;
 /// <para>
 /// The endpoint is named by a connection string rather than by a host and a port, because that is the shape every RESP
 /// client, every managed provider, and every orchestrator already states one in — and it is a secret block rather
-/// than a plain string because it carries the password. Which server answers it is the operator's: the local
-/// orchestration starts Garnet when it is asked for one, and any Redis-compatible endpoint a deployment already runs is
-/// as good.
+/// than a plain string because it carries the password. Which server answers it is the operator's: the deployment
+/// assets and the local orchestration ship Valkey, and Redis, Garnet, or a managed RESP endpoint a deployment already
+/// runs is as good.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
