@@ -12,7 +12,7 @@ operates the cluster, and the chart is written so that it cannot pretend otherwi
 | A PostgreSQL StatefulSet, its Service, and its initialization script, unless `database.deploy.enabled` is false | Any certificate material |
 | A personal-data analyzer Deployment and Service, and a SpamAssassin Deployment and Service, only when the section that owns each is enabled and left to deploy its own | Any schema step |
 | A Silo object-store StatefulSet, its claim, and its Service, only when `contentStorage.objectStorage.deploy.enabled` is true | Any bucket, or any access key inside one |
-| A Garnet Deployment and Service for the signal backplane, only when `signalBackplane.enabled` and `.garnet.deploy` are both true | |
+| A Valkey StatefulSet and two Services for the signal backplane, only when `signalBackplane.enabled` and `.valkey.deploy` are both true | |
 | An optional Ingress | |
 
 ## What you supply
@@ -394,11 +394,16 @@ signalBackplane:
   enabled: true
 ```
 
-That renders a single-replica Garnet Deployment on no claim, a ClusterIP Service, and the three keys the application
-reads. Point it at an endpoint you already operate instead — Redis, Valkey, or a managed cache — with
-`signalBackplane.garnet.deploy: false`, and nothing of a workload is rendered while the application is configured
-identically. The difference between the two is what is deployed and nothing the application reads, because the
-connection string names the endpoint either way.
+That renders a one-instance Valkey StatefulSet on no claim, a ClusterIP Service naming it, a headless Service giving
+each instance a name of its own, and the three keys the application reads. Point it at an endpoint you already operate
+instead with `signalBackplane.valkey.deploy: false`, and nothing of a workload is rendered while the application is
+configured identically. The difference between the two is what is deployed and nothing the application reads, because
+the connection string names the endpoint either way.
+
+**Which server answers is yours, and the contract is the protocol.** MailFathom asks the endpoint for `PUBLISH`,
+`SUBSCRIBE`, and `PSUBSCRIBE` and nothing else, so Redis, Garnet, Valkey, or a managed RESP endpoint all serve it
+equally. Valkey is what this chart deploys, pins by digest, and is tested against — a default rather than a
+requirement, and `signalBackplane.valkey.deploy` is where the choice is made.
 
 **The chart refuses to render `replicaCount` above 1 with the client surface served and no backplane configured.** It is
 the one combination here that installs, starts, and answers every request while doing none of what it was configured to
@@ -413,15 +418,17 @@ chart value: `client.enabled`, any `config.files` document whose `ClientEndpoint
 password. That is not an omission: MailFathom reads one connection string, it carries the password, and this chart
 templates no credential and creates no Secret — for the reason [what you supply](#what-you-supply) gives about the
 data-encryption key, which is that a Helm-generated value is replaced on any upgrade not guarded by `lookup`, and
-`lookup` returns nothing under `helm template`, under a dry run, and under Argo CD. For a Garnet the chart runs, what to
+`lookup` returns nothing under `helm template`, under a dry run, and under Argo CD. For a Valkey the chart runs, what to
 write is the Service it rendered and the password you gave the server. That Service is the release's full name with
-`-garnet` appended, so the example below reads `mailfathom-garnet` because the release is installed as `mailfathom`; a
-release named `prod` gets `prod-mailfathom-garnet` instead, and the install notes print whichever it is:
+`-valkey` appended, so the example below reads `mailfathom-valkey` because the release is installed as `mailfathom`; a
+release named `prod` gets `prod-mailfathom-valkey` instead, and the install notes print whichever it is. It is the
+same string whether or not the server is [replicated](#replicating-the-backplane), because that Service names one
+instance either way:
 
 ```bash
 kubectl --namespace mailfathom create secret generic mailfathom-secrets \
   --from-literal=mailfathom-signal-backplane-password='…' \
-  --from-literal=mailfathom-signal-backplane-connection-string='mailfathom-garnet:6379,password=…' \
+  --from-literal=mailfathom-signal-backplane-connection-string='mailfathom-valkey:6379,password=…' \
   … every other key this deployment reads
 ```
 
@@ -434,22 +441,23 @@ of it. The install notes print the exact connection string to write.
 
 **Write both keys before turning the block on**, because neither pod starts without them. MailFathom proves the
 connection string's reference while the host is built and refuses to start when the mounted file is absent, and the
-kubelet cannot create the Garnet container at all without the password key, so a rollout begun without them never
+kubelet cannot create the backplane containers at all without the password key, so a rollout begun without them never
 completes. That is the reference being provable rather than the endpoint answering, and the two are not the same
 refusal: an endpoint that does not answer fails nothing, which is what losing the backplane below is about.
 
-**Rotating that password is a short signal outage rather than a rolling one**, which is the one place a Garnet the chart
+**Rotating that password is a short signal outage rather than a rolling one**, which is the one place a Valkey the chart
 runs differs from what [rotating the connection string](secret-rotation.md#rotating-the-signal-backplanes-connection-string)
 describes. That procedure keeps the old credential accepted at the server while the replicas restart, and a server
-started with one `--password` accepts exactly one. So the order here is: write both keys, roll the Garnet Deployment,
-then roll MailFathom's. Between those two rolls no signal crosses, and every client falls back on the re-read it already
-does — which is why this is a few minutes to schedule rather than an outage.
+started with one `--requirepass` accepts exactly one. So the order here is: write both keys, roll the backplane
+StatefulSet, then roll MailFathom's Deployment. Between those two rolls no signal crosses, and every client falls
+back on the re-read it already does — which is why this is a few minutes to schedule rather than an outage.
 
 **Anyone who can subscribe on that endpoint reads every signal of every user of this deployment** — account and folder
 aliases, stored identities, flags, and a raised notification's two lines. No subject, address, body fragment, or
 attachment name crosses it, and nothing rests there at all: pub/sub delivers to whoever is subscribed at that moment and
-keeps nothing, which is why the Garnet the chart runs is given no claim and nothing that outlives its pod — its two
-volumes are memory-backed scratch the runtime needs — and why no retention, export, or erasure obligation
+keeps nothing, which is why the Valkey the chart runs is given no claim and nothing that outlives its pod — its two
+volumes are memory-backed scratch the server needs, and every asset switches its scheduled snapshot off rather than
+leaving it at the upstream default — and why no retention, export, or erasure obligation
 reaches it. What does reach it is confidentiality, so the endpoint belongs inside the same boundary as the database. An
 endpoint somebody else operates owes four things, and the connection string is where the first two are written:
 
@@ -473,6 +481,78 @@ visible, so the worst a lost signal costs somebody watching the screen is that i
 **This is necessary above one replica and it is not sufficient.** A signed-in session still lives in the process that
 minted it, so a client served by more than one replica is signed out on most of its requests whatever the backplane
 does. That is tracked separately and the chart says nothing about it.
+
+### Replicating the backplane
+
+One value, off, and the rendering an unchanged `values.yaml` gives is the one instance described above:
+
+```yaml
+signalBackplane:
+  enabled: true
+  valkey:
+    replication:
+      enabled: true
+      replicas: 1
+```
+
+**Read what this is worth before turning it on.** [ADR 0032](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md)
+makes the client's own re-read the guarantee a signal is not, so losing the backplane is already a delay rather than a
+loss. **Replication shortens the part of that delay you spend bringing a second instance up. It does not make a signal
+reliable**, and nothing here changes what a signal is: pub/sub delivers to whoever is subscribed at that moment and
+keeps nothing, so a statement raised while the primary is being replaced is gone in every arrangement on this page.
+
+**What it adds is standbys, and nothing that promotes one.** The StatefulSet grows to `replicas + 1` instances, ordinal
+0 is the one the others follow, and the ClusterIP Service keeps naming ordinal 0. A RESP server carries a publication
+from the primary down to its replicas but never back up, so a `PUBLISH` issued against a replica reaches neither the
+primary nor the other replicas — and since each MailFathom replica publishes and subscribes on the one connection it
+holds, a Service spreading those connections across the set would strand what some of them published.
+
+**A promotion here is yours to make and yours to undo.** Losing ordinal 0 is a failure; recovering from it is the
+operator's act: `REPLICAOF NO ONE` against a standby, and that Service's selector repointed at the pod it was run on. **Neither half survives the chart.**
+The selector is rendered from the templates, so the next `helm upgrade` — an image bump, a values change, anything —
+puts it back on ordinal 0, and the role is in memory only, so a reschedule of the promoted pod re-applies the
+`--replicaof` its template carries and demotes it while the Service may still name it. Both failures look exactly like
+the ordinary lost-signal case this page describes above, and nothing counts them separately. So treat a promotion as a
+state to leave: return the set to its rendered shape — ordinal 0 the primary, the selector on ordinal 0 — as the step
+that ends it, and put a returned pod 0 back as a replica of whoever holds the role before letting it serve, because two
+primaries behind one name is a split fan-out rather than a promotion.
+
+**The connection string does not change shape**, because the Service names an instance either way:
+
+```bash
+kubectl --namespace mailfathom create secret generic mailfathom-secrets \
+  --from-literal=mailfathom-signal-backplane-password='…' \
+  --from-literal=mailfathom-signal-backplane-connection-string='mailfathom-valkey:6379,password=…' \
+  … every other key this deployment reads
+```
+
+**Sentinel is not offered, and the reason is the client rather than the server.** Valkey ships `valkey-sentinel` in the
+same binary and it does promote a standby correctly; what cannot reach it is MailFathom. StackExchange.Redis — the RESP
+client `Microsoft.AspNetCore.SignalR.StackExchangeRedis` resolves, and its current release as well — decides an endpoint
+is a Sentinel by reading a `redis_mode` line out of its `INFO` reply, and Valkey writes `server_mode` there instead. A
+connection string carrying `serviceName=` against a Valkey Sentinel therefore fails at connect with *The
+ConnectionMultiplexer is not a Sentinel connection. Detected as: Standalone*, before any signal is published. Issue 1917
+measured that against three Sentinels watching a replicated pair, on the image this chart pins, with the current
+client release as well as the one the backplane package resolves. Issue 1924 records what would turn it on. Until then,
+a deployment that wants automatic promotion points `valkey.deploy: false` at an endpoint it operates itself, where the
+failover arrangement is its own to choose.
+
+**One password covers all of it.** The instances use it both to authenticate a client and to authenticate the
+replication link, so the single key `signalBackplane.valkey.passwordSecretKey` names is what the whole set runs on.
+Rotating it is the short outage described above.
+
+**Each instance is reachable at a name of its own**, `<release>-mailfathom-valkey-<ordinal>.<release>-mailfathom-valkey-peers`,
+from the headless Service the chart renders. That is what a replica follows the primary by, rather than a pod address a
+rescheduling changes — and it is the address to point a
+[backplane scrape](telemetry.md#what-the-server-itself-reports-and-how-to-collect-it) at when you want an instance
+rather than whichever one the Service names.
+
+**Nothing here is persisted.** `--save ""` is passed explicitly and appending is off, so an instance writes nothing and
+a restart brings nothing back; the two volumes each pod carries are memory-backed scratch the server needs.
+
+**What this does not give you.** Valkey Cluster is not offered and is not on the roadmap here: the backplane holds
+subscriptions rather than a keyspace, so there is nothing to shard. Neither PostgreSQL nor the object store the chart
+runs is made highly available by any of this; both stay one instance under the posture their own sections state.
 
 ## Security defaults
 
@@ -976,16 +1056,19 @@ and exist so that a change in what the chart produces appears in a diff rather t
 anything. A rendering is normalized before it is compared — trailing whitespace and the blank lines Helm leaves between
 documents go — so the Helm version a machine happens to carry does not decide the verdict.
 
-Seven values documents are what the chart is held against, and each renders a shape the others do not.
+Eight values documents are what the chart is held against, and each renders a shape the others do not.
 `release-values.yaml` names an external database, an external analyzer, and an external spam scanner, and turns the
 ingress on. `nightly-values.yaml` selects the unsupported channel with its acknowledgement and renders the analyzer and
 the scanner the chart deploys itself. `content-storage-values.yaml` selects the object backend against an endpoint
 somebody else operates, and `object-store-values.yaml` selects it against the store the chart runs itself — between them
 both branches of `contentStorage.objectStorage.deploy.enabled`, with the console off in the second, which is what makes
 the committed manifest the record that no console listener is produced by default.
-`signal-backplane-garnet-values.yaml` and `signal-backplane-external-values.yaml` do the same for the backplane, at two
-replicas with the client surface served: the first renders the Garnet the chart runs and the second renders no workload
-at all while configuring the application identically. `defaults-values.yaml` is
+Three documents do the same for the backplane, all at two replicas with the client surface served:
+`signal-backplane-valkey-values.yaml` renders the one instance the chart runs by default,
+`signal-backplane-external-values.yaml` renders no workload at all while configuring the application identically, and
+`signal-backplane-replication-values.yaml` renders the set with two standbys beside that instance — so the difference
+between the first and the last is exactly what the one availability value costs. Two documents under `ci/refusals/`
+cover the two ways that value can be asked for with nothing to apply it to. `defaults-values.yaml` is
 `values.yaml` plus only what the chart refuses to default — an image reference, the Secret the pod mounts, and the
 Secret holding the database superuser password, which the chart requires whenever it deploys the database itself and so
 by default — meaning it renders the shape an operator following the quick start gets. That last one is also what keeps
@@ -996,10 +1079,13 @@ the others.
 Some values documents are supposed to be refused rather than rendered, and a rendering cannot record that: a
 combination the chart accepts by accident produces a plausible manifest and no golden file shows anything. Those live
 under `ci/refusals/`, each carrying on a `# refuses:` line the wording its refusal has to contain, and the same script
-requires the chart to refuse each one and to name the setting while doing so. Three are there today, and they are one
-refusal reached three ways — more than one replica serving the page, more than one serving the client surface from a
-configuration file, and more than one serving it from the environment block — because what the chart reads to decide
-that is three different values, and a refusal walkable around by configuring the same thing another way is not one.
+requires the chart to refuse each one and to name the setting while doing so. Five are there today. Three of them are
+one refusal reached three ways — more than one replica serving the page, more than one serving the client surface from
+a configuration file, and more than one serving it from the environment block — because what the chart reads to decide
+that is three different values, and a refusal walkable around by configuring the same thing another way is not one. The
+other two are replication asked for with nothing to apply it to: over an endpoint the chart does not run, which would
+render exactly what the external document renders, and with the backplane off altogether, which would render exactly
+what the defaults render. Each leaves an operator having written down an arrangement the deployment does not have.
 
 The `Helm chart` job of `CI` runs the same script on every pull request that touches `deploy/helm/`, which is where a
 chart that stopped rendering is now found. The release run lints and renders again before it publishes anything, so a

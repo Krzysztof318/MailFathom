@@ -231,10 +231,12 @@ Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom
 #
 # The reference is a systemd credential like the database password, so it needs a LoadCredentialEncrypted= line in the
 # [Service] section below. What it holds is a whole StackExchange.Redis connection string rather than a bare password:
-# `mailfathom-garnet:6379,password=...` for the server mailfathom-garnet.container starts beside this unit — the
-# container name on the internal network — or the address of a Redis-compatible endpoint you already operate, in which
-# case install no unit for it. Both halves of the password are one decision: the string here presents it, and the ACL
-# credential that unit loads is what accepts it.
+# `mailfathom-valkey:6379,password=...` for the server mailfathom-valkey.container starts beside this unit — the
+# container name on the internal network — or the address of a RESP endpoint you already operate, in which case install
+# no unit for it. What MailFathom asks of that endpoint is `PUBLISH`, `SUBSCRIBE`, and `PSUBSCRIBE`, so Redis, Garnet,
+# Valkey, or a managed equivalent all serve; Valkey is what this deployment ships rather than what it requires. Both
+# halves of the password are one decision: the string here presents it, and the ACL credential that unit loads is what
+# accepts it.
 #
 # The material is read once, when a connection is first wanted, and kept for the life of the process — so rotating it is
 # a restart to schedule rather than a reload. docs/operations/secret-rotation.md states the order.

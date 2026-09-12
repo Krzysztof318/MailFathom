@@ -1,0 +1,29 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# refuses: signalBackplane.valkey.replication.enabled is true while signalBackplane.valkey.deploy is false
+
+# Replication asked of a backplane somebody else operates. Nothing here would be wrong to render — the chart would
+# produce exactly what `signal-backplane-external-values.yaml` produces, because both values it would read belong to a
+# workload that is not rendered — and that is the problem: an operator would have written down an arrangement the
+# deployment silently does not have. Whether their own endpoint is replicated is arranged where it runs, and the
+# connection string is the only thing here that names it.
+image:
+  repository: example/mailfathom
+  tag: 0.1.0-verification
+  allowVersionMismatch: true
+
+secrets:
+  existingSecret: mailfathom-secrets
+
+database:
+  deploy:
+    superuserPasswordSecret: mailfathom-postgres-superuser
+
+signalBackplane:
+  enabled: true
+  valkey:
+    deploy: false
+    replication:
+      enabled: true

@@ -433,9 +433,10 @@ public static class OrchestrationContract
     /// <summary>The RESP server a deployment's replicas carry client signals to each other over.</summary>
     /// <remarks>
     /// <para>
-    /// Garnet rather than Redis: both answer the protocol the backplane speaks, and this is the one a developer's
-    /// machine is asked to pull. What a deployment runs is the operator's — the section takes any RESP endpoint, and
-    /// nothing in this repository deploys a server.
+    /// Valkey rather than Redis: both answer the protocol the backplane speaks, and this is the one this repository's
+    /// own deployment assets ship, so a developer's machine pulls what an operator runs. What a deployment reaches is
+    /// still the operator's — the section takes any RESP endpoint, and the chart, the Compose file, and the Quadlet
+    /// units each deploy this server or point at one already operated.
     /// </para>
     /// <para>
     /// The integration-test topology always starts it, because the claim the suite exists to prove about the backplane

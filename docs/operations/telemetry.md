@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/Signals/SignalBackplaneTelemetry.cs, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs, frontend/src/Client.App/src/containment/**, frontend/src/Client.App/src/telemetry/**, frontend/src/Client.App/src/App.tsx, frontend/src/Client.App/src/main.tsx, frontend/src/Client.Backend/src/telemetry.ts, frontend/src/Client.Backend/src/mailAttachment.ts, frontend/src/Client.Backend/src/ownDisplayName.ts, frontend/src/Client.Backend/src/ownPortrait.ts -->
+<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/Signals/SignalBackplaneTelemetry.cs, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs, deploy/helm/mailfathom/templates/valkey-*.yaml, deploy/compose/compose.yaml, deploy/quadlet/mailfathom-valkey.container, frontend/src/Client.App/src/containment/**, frontend/src/Client.App/src/telemetry/**, frontend/src/Client.App/src/App.tsx, frontend/src/Client.App/src/main.tsx, frontend/src/Client.Backend/src/telemetry.ts, frontend/src/Client.Backend/src/mailAttachment.ts, frontend/src/Client.Backend/src/ownDisplayName.ts, frontend/src/Client.Backend/src/ownPortrait.ts -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -1469,6 +1469,88 @@ that re-reads on its own interval, so a replica that cannot reach the backplane 
 correctly, and taking it out of rotation would turn a late list into an outage. What is reported is the transition
 rather than the state, because StackExchange.Redis reconnects on its own: a state would be either a line per attempt or
 one line and then silence.
+
+### What the server itself reports, and how to collect it
+
+Everything above is MailFathom's own view of the endpoint: whether this replica has a connection to it. The server's
+view — how many clients are subscribed, how much memory it holds, whether a replica is following it — is the server's,
+and MailFathom neither reads it nor republishes it. **This is the one dependency this repository deploys for which a
+collection path is documented**, because it is the one whose loss is silent: nothing in the product reports a backplane
+that is up and empty.
+
+The path is the OpenTelemetry Collector's **`redis` receiver**, which asks the server for `INFO` and emits the result
+as OTLP — so the signals arrive wherever every MailFathom signal already arrives, through the one exporter
+[`OTEL_EXPORTER_OTLP_ENDPOINT`](#the-one-switch-otel_exporter_otlp_endpoint) names, and nothing new is deployed to
+carry them. It ships in the **contrib** distribution rather than in the core one, so a collector built from
+`opentelemetry-collector` alone rejects the configuration below as an unknown receiver type; `otelcol-contrib` and the
+distributions built on it carry it. Valkey answers `INFO` exactly as the receiver expects and needs no adaptation:
+
+```yaml
+receivers:
+  redis:
+    endpoint: <the address for your deployment, below>:6379
+    collection_interval: 30s
+    password: ${env:MAILFATHOM_SIGNAL_BACKPLANE_PASSWORD}
+
+service:
+  pipelines:
+    metrics:
+      receivers: [redis]
+      exporters: [otlp]
+```
+
+**The credential is the deployment's own backplane password, and there is deliberately no second one.** A narrower ACL
+user for the scrape would be a third credential to provision across three deployment shapes, for a reader that is
+already inside the deployment's confidentiality boundary — so the scrape presents what the deployment already holds.
+An operator who wants the scrape to hold less can create a Valkey ACL user with `+info +ping` and nothing else and name
+it in the receiver; nothing here depends on the default user. **Where that user survives a restart differs by shape**:
+on Compose and Quadlet the ACL document is the operator's own file, so a user written into it is as durable as the
+deployment. A Valkey the chart runs is started with `--requirepass` and no ACL file at all, and `aclfile` cannot be set
+at runtime, so a user created there with `ACL SETUSER` lives in that process's memory, `ACL SAVE` refuses it, and the
+next pod restart leaves the scrape authenticating with a credential the server no longer knows.
+
+Where the password and the address come from, by deployment shape:
+
+| Shape | Address | The password |
+|---|---|---|
+| Helm chart | `<release>-mailfathom-valkey:6379`, the Service the chart renders. With replication on, an individual instance is `<release>-mailfathom-valkey-<ordinal>.<release>-mailfathom-valkey-peers:6379` | The key `signalBackplane.valkey.passwordSecretKey` names inside `secrets.existingSecret`, mounted into the collector's own pod as an environment variable |
+| Compose | `valkey:6379` on the `backend` network, which a collector has to be attached to | The password inside `secrets/valkey-acl`, which is the same one the connection string carries |
+| Quadlet | `mailfathom-valkey:6379` on `mailfathom-backend.network` | The password inside the `valkey-acl` credential |
+
+The chart renders nothing further for this and needs to render nothing: the Service and the Secret key a scrape wants
+are the two objects it already creates for MailFathom's own connection, and a collector in the same namespace reaches
+both. No ServiceMonitor, no sidecar exporter, and no annotation — every deployment shape here assumes the operator's
+own collector, and this repository deploys none.
+
+**What comes back is a `redis.*` instrument set**, twenty-six of them at the receiver's default settings, named as the
+receiver names them rather than under `mailfathom.`: `redis.clients.connected`, `redis.clients.blocked`,
+`redis.commands`, `redis.commands.processed`, `redis.connections.received`, `redis.connections.rejected`,
+`redis.cpu.time`, `redis.memory.used`, `redis.memory.rss`, `redis.memory.peak`, `redis.memory.lua`,
+`redis.memory.fragmentation_ratio`, `redis.net.input`, `redis.net.output`, `redis.keys.expired`, `redis.keys.evicted`,
+`redis.keyspace.hits`, `redis.keyspace.misses`, `redis.replication.offset`,
+`redis.replication.backlog_first_byte_offset`, `redis.slaves.connected`, `redis.rdb.changes_since_last_save`,
+`redis.latest_fork`, `redis.uptime`, `redis.clients.max_input_buffer`, and `redis.clients.max_output_buffer`.
+
+**Three of them are worth an alert and the rest are context.** `redis.clients.connected` counts client connections
+rather than replicas, and it sits above the replica count rather than equal to it: the client each replica uses holds
+an interactive connection and a subscription connection, and the scrape above is a client on this server too. What is
+worth an alert is the floor rather than the figure — a value below the replica count is the fan-out being incomplete,
+which is the failure MailFathom's own counter cannot see from one replica. `redis.slaves.connected` is whether the standbys are
+following, and it is the one to watch where replication is on, because a set that renders three instances and reports
+none connected is a standby nobody could promote. `redis.memory.used` should stay near flat: this server holds
+subscriptions rather than keys, so a rising line means something is writing to an endpoint that was provisioned to
+keep nothing.
+
+**Four of them read oddly against a backplane and none is a fault.** `redis.keyspace.hits` and `redis.keyspace.misses`
+stay at zero for the life of the deployment, because nothing ever reads a key. `redis.rdb.changes_since_last_save` and
+`redis.latest_fork` are about a snapshot every deployment asset switches off, so they are reported and mean nothing
+here.
+
+**The `redis.version` resource attribute reports `7.2.4` against a Valkey 9 server, and that is correct rather than
+stale.** Valkey answers `INFO` with both `redis_version`, which states the protocol and command surface it is
+compatible with, and `valkey_version`, which states the release; the receiver reads the first because that is the field
+the protocol defines. So a dashboard grouping by that attribute is grouping by compatibility level, and the release a
+deployment is running is read from the image digest its asset pins rather than from here.
 
 ## What the administration command emits
 

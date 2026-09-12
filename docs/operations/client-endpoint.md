@@ -2559,6 +2559,16 @@ endpoint and subscribe to what the others publish, so a signal raised anywhere r
 deployment running one replica writes nothing and loses nothing. A deployment serving no client surface connects to
 nothing whatever it wrote, because the backplane is registered inside the client surface's own composition.
 
+**The contract is the protocol, not a product.** MailFathom reaches the endpoint through StackExchange.Redis and asks
+it for `PUBLISH`, `SUBSCRIBE`, and `PSUBSCRIBE` and nothing else — no key is written, no key is read, and no command
+outside that set is issued — so **any RESP endpoint serves**: Redis, Valkey, Garnet, or a managed equivalent from a
+cloud provider. An operator who already runs one names it in the connection string and MailFathom starts nothing
+beside it. What the project itself deploys, pins, and tests against is **Valkey**: the Helm chart, the Compose file,
+and the Quadlet units all ship it, and each of the three can be told to deploy nothing and point at an endpoint you
+operate instead. The local orchestration ships it too and offers no such switch — it either starts one for the run or
+starts none. That is a default rather than a requirement, and the three deployment pages each say where the choice is
+made.
+
 **What it costs when it is not there, or when it breaks**, is exactly what the paragraph above describes and no more:
 the channel degrades to the client's own refresh. The connection is opened so that an endpoint that is down at startup
 does not stop the host from serving, a lost or regained connection is logged at `Warning` and counted rather than
@@ -2581,9 +2591,9 @@ a data-subject workflow.
 
 **Keep it inside the deployment's trust boundary, and secure the transport when it is not.** The intended shape is a
 RESP server on the same network as the replicas, reached over a private address and by nothing else. The
-[Helm chart](deployment-kubernetes.md#signals-between-replicas) renders one on request — a single-replica Garnet
-Deployment published as a ClusterIP Service, which is that shape — and takes an address an operator already has
-instead when they turn that off. The
+[Helm chart](deployment-kubernetes.md#signals-between-replicas) renders one on request — a Valkey StatefulSet published
+as a ClusterIP Service, which is that shape, optionally with standby instances beside it — and takes an
+address an operator already has instead when they turn that off. The
 [local orchestration](local-development.md#two-replicas-over-a-signal-backplane) starts one for a development run.
 Pointing the section at a managed endpoint outside that boundary makes the transport the
 operator's obligation: reach it over TLS by writing `ssl=true` in the connection string, give it a password and let

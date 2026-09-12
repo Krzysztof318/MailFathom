@@ -323,17 +323,29 @@ wrong place to report a malformed one.
   {{- if not $backplane.channelPrefix -}}
     {{- fail "signalBackplane.channelPrefix is empty. It is what keeps two deployments sharing one endpoint from receiving each other's statements, so leave it unset to take 'mailfathom' rather than clearing it." -}}
   {{- end -}}
-  {{- if $backplane.garnet.deploy -}}
-    {{- if not $backplane.garnet.passwordSecretKey -}}
-      {{- fail "signalBackplane.garnet.passwordSecretKey is not set while the chart is running Garnet. The server is started with a password and reads it as a bare value rather than as a connection string, so it needs a key of its own inside secrets.existingSecret holding the same password the connection string carries." -}}
+  {{- if $backplane.valkey.deploy -}}
+    {{- if not $backplane.valkey.passwordSecretKey -}}
+      {{- fail "signalBackplane.valkey.passwordSecretKey is not set while the chart is running Valkey. The server is started with a password and reads it as a bare value rather than as a connection string, so it needs a key of its own inside secrets.existingSecret holding the same password the connection string carries." -}}
     {{- end -}}
-    {{- if eq $backplane.garnet.passwordSecretKey $backplane.connectionStringSecretKey -}}
-      {{- fail (printf "signalBackplane.garnet.passwordSecretKey and signalBackplane.connectionStringSecretKey both name %q. One file cannot hold both a bare password and a connection string, so the server and MailFathom would each read the other's form." $backplane.connectionStringSecretKey) -}}
+    {{- if eq $backplane.valkey.passwordSecretKey $backplane.connectionStringSecretKey -}}
+      {{- fail (printf "signalBackplane.valkey.passwordSecretKey and signalBackplane.connectionStringSecretKey both name %q. One file cannot hold both a bare password and a connection string, so the server and MailFathom would each read the other's form." $backplane.connectionStringSecretKey) -}}
+    {{- end -}}
+  {{- else -}}
+    {{- /*
+      This describes a workload the values document is telling the chart not to render, so the deployment it configures
+      would be somebody else's — and it has no effect there. A replicated endpoint an operator already runs is that
+      operator's to arrange, and the connection string is where it is named.
+    */}}
+    {{- if $backplane.valkey.replication.enabled -}}
+      {{- fail "signalBackplane.valkey.replication.enabled is true while signalBackplane.valkey.deploy is false. The chart is not running the server, so there is nothing here to replicate: a replicated endpoint you operate yourself is arranged where it runs, and the connection string is what names it." -}}
     {{- end -}}
   {{- end -}}
 {{- else -}}
+  {{- if .Values.signalBackplane.valkey.replication.enabled -}}
+    {{- fail "signalBackplane.valkey.replication.enabled is true while signalBackplane.enabled is false. Nothing would read it, so this deployment runs no backplane at all while its values file reads as though it ran a replicated one. Turn the backplane on beside it, or turn replication off." -}}
+  {{- end -}}
   {{- if and (gt (int .Values.replicaCount) 1) $clientSurfaceServed -}}
-    {{- fail (printf "signalBackplane.enabled is false while replicaCount is %d and the client surface is served. A signal is raised by whichever replica holds the account and has to reach whichever replica holds the client's connection, so without a backplane this deployment installs, serves, and tells its clients nothing — which is the one configuration here that looks healthy and silently cannot do what it was configured for. Set signalBackplane.enabled=true and let the chart run Garnet, point it at a RESP endpoint you already operate with signalBackplane.garnet.deploy=false, or run one replica." (int .Values.replicaCount)) -}}
+    {{- fail (printf "signalBackplane.enabled is false while replicaCount is %d and the client surface is served. A signal is raised by whichever replica holds the account and has to reach whichever replica holds the client's connection, so without a backplane this deployment installs, serves, and tells its clients nothing — which is the one configuration here that looks healthy and silently cannot do what it was configured for. Set signalBackplane.enabled=true and let the chart run Valkey, point it at a RESP endpoint you already operate with signalBackplane.valkey.deploy=false, or run one replica." (int .Values.replicaCount)) -}}
   {{- end -}}
 {{- end -}}
 {{- end -}}
@@ -589,17 +601,34 @@ read.
 {{- define "mailfathom.objectStoreCredentialsDirectory" -}}/etc/silo/credentials{{- end -}}
 
 {{/*
-The backplane's objects, named after the release with `-garnet` appended. The suffix names the server rather than the
+The backplane's objects, named after the release with `-valkey` appended. The suffix names the server rather than the
 feature, for the reason the analyzer's, the scanner's, and the object store's do: what a listing has to distinguish is
 which image is in the pod. It is also the name an operator writes into the connection string, which is why the install
 notes print it rather than leaving it to be derived.
+
+One name hangs off it. `-valkey-peers` is the headless Service every instance gets a DNS name of its own from, which is
+what a replica follows the primary by.
+
+**The base is truncated rather than the result**, which is why there is a helper for it. One suffix is a prefix of the
+other, so truncating each finished name at 63 collapses them into one string for any release long enough to reach it —
+two Services with one name, and an install that fails on the duplicate rather than on anything an operator wrote. Fifty
+characters leaves room for the longer suffix and for the `-0` a pod name adds on top of the shorter one, which the
+Service's selector carries as a label value.
 */}}
+{{- define "mailfathom.backplaneBaseName" -}}
+{{- include "mailfathom.fullname" . | trunc 50 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "mailfathom.backplaneFullname" -}}
-{{- printf "%s-garnet" (include "mailfathom.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-valkey" (include "mailfathom.backplaneBaseName" .) -}}
+{{- end -}}
+
+{{- define "mailfathom.backplanePeerFullname" -}}
+{{- printf "%s-valkey-peers" (include "mailfathom.backplaneBaseName" .) -}}
 {{- end -}}
 
 {{- define "mailfathom.backplaneSelectorLabels" -}}
-app.kubernetes.io/name: {{ printf "%s-garnet" (include "mailfathom.name" .) | trunc 63 | trimSuffix "-" }}
+app.kubernetes.io/name: {{ printf "%s-valkey" (include "mailfathom.name" .) | trunc 63 | trimSuffix "-" }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
@@ -611,19 +640,19 @@ dropped, since a label value may not contain a colon.
 {{- define "mailfathom.backplaneLabels" -}}
 helm.sh/chart: {{ include "mailfathom.chart" . }}
 {{ include "mailfathom.backplaneSelectorLabels" . }}
-app.kubernetes.io/version: {{ .Values.signalBackplane.garnet.image.digest | trimPrefix "sha256:" | trunc 63 | trimSuffix "-" | quote }}
+app.kubernetes.io/version: {{ .Values.signalBackplane.valkey.image.digest | trimPrefix "sha256:" | trunc 63 | trimSuffix "-" | quote }}
 app.kubernetes.io/component: signal-backplane
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: mailfathom
 {{- end -}}
 
 {{/*
-The backplane image, pinned by digest because Garnet publishes its release tags beside moving `1`, `2`, and `latest`
+The backplane image, pinned by digest because Valkey publishes its release tags beside moving `9`, `9.1`, and `latest`
 ones: a digest reference carries no tag at all, which is what makes it the whole of the pin rather than a hint beside
 one.
 */}}
 {{- define "mailfathom.backplaneImage" -}}
-{{- $image := .Values.signalBackplane.garnet.image -}}
+{{- $image := .Values.signalBackplane.valkey.image -}}
 {{- if $image.registry -}}
 {{- printf "%s/%s@%s" $image.registry $image.repository $image.digest -}}
 {{- else -}}

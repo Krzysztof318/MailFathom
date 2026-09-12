@@ -3,7 +3,7 @@ Copyright © 2026 Krzysztof Kasprowicz
 Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 Project repository: https://github.com/Krzysztof318/MailFathom
 */ -}}
-{{- if and .Values.signalBackplane.enabled .Values.signalBackplane.garnet.deploy }}
+{{- if and .Values.signalBackplane.enabled .Values.signalBackplane.valkey.deploy }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -18,11 +18,22 @@ spec:
     rule is rendered for it. The server's password is what limits who inside the cluster can ask.
   */}}
   type: ClusterIP
+  {{- /*
+    One pod rather than the set, always. A RESP server carries a publication from the primary down to its replicas but
+    never back up, so a `PUBLISH` issued against a replica reaches nobody subscribed elsewhere — and a Service that
+    load-balanced across the set would hand some MailFathom replicas a connection to a standby and strand what they
+    published on it. Ordinal 0 is the instance the set starts as the primary, which is what this names.
+
+    **It does not follow a promotion**, because nothing in this chart performs one: promoting a standby is an
+    operator's `REPLICAOF NO ONE` and this selector repointed at the pod they promoted. It is also the address a scrape,
+    a `valkey-cli`, or an operator reading `INFO` reaches a known instance at.
+  */}}
   selector:
     {{- include "mailfathom.backplaneSelectorLabels" . | nindent 4 }}
+    statefulset.kubernetes.io/pod-name: {{ include "mailfathom.backplaneFullname" . }}-0
   ports:
     - name: resp
-      port: {{ .Values.signalBackplane.garnet.service.port }}
+      port: {{ .Values.signalBackplane.valkey.service.port }}
       targetPort: resp
       protocol: TCP
 {{- end }}

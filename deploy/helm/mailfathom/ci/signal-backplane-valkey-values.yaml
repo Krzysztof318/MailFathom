@@ -2,10 +2,11 @@
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 # Project repository: https://github.com/Krzysztof318/MailFathom
 
-# The backplane the chart runs itself, which is the branch that renders the Garnet Deployment and its Service and points
-# the application at the connection string naming them. The values document beside this one renders the other branch,
-# and every other document here leaves the block off — so all three shapes are produced by the repository's own
-# verification, and the off shape is byte for byte what the chart produced before this block existed.
+# The backplane the chart runs itself, at the one instance that is its default: the branch that renders the Valkey
+# StatefulSet and its two Services and points the application at the connection string naming them. Two documents
+# beside this one render the rest of the block — the endpoint somebody else operates and the replicated set — and every
+# other document here leaves the block off, so every shape is produced by the repository's own verification and the off
+# shape is byte for byte what the chart produced before this block existed.
 #
 # It is also the shape the refusal is about, from the other side: more than one replica with the client surface served
 # is exactly the combination the chart refuses without a backplane, so this document renders what configuring one

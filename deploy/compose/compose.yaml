@@ -189,10 +189,12 @@ services:
       # decided. Until then this is the same component the chart offers, provisioned ahead of needing it.
       #
       # The reference is a file under ./secrets/mailfathom/ like every other credential MailFathom reads, and what it
-      # holds is a whole StackExchange.Redis connection string rather than a bare password: `garnet:6379,password=...`
-      # for the server below, or the address of a Redis-compatible endpoint you already operate — in which case enable
-      # no profile and start nothing. Both halves of the password are one decision: the string here presents it and
-      # ./secrets/garnet-acl is what accepts it.
+      # holds is a whole StackExchange.Redis connection string rather than a bare password: `valkey:6379,password=...`
+      # for the server below, or the address of a RESP endpoint you already operate — Redis, Garnet, Valkey, or a
+      # managed equivalent, in which case enable no profile and start nothing. What MailFathom asks of the endpoint is
+      # `PUBLISH`, `SUBSCRIBE`, and `PSUBSCRIBE`, so the protocol is the whole of the contract and the server below is
+      # what this project deploys and pins rather than what it requires. Both halves of the password are one decision:
+      # the string here presents it and ./secrets/valkey-acl is what accepts it.
       #
       # The material is read once, when a connection is first wanted, and kept for the life of the process — so rotating
       # it is a restart to schedule. docs/operations/secret-rotation.md states the order.
@@ -470,7 +472,7 @@ services:
           # Modest: the server holds no index in memory and streams what it serves. What it wants is disk.
           memory: ${MAILFATHOM_SILO_MEMORY_LIMIT:-1g}
 
-  garnet:
+  valkey:
     # Started only under its profile, for the reason the three services above are: an opt-in nobody took pulls no image,
     # runs no container, and holds none of the memory below.
     #
@@ -481,43 +483,54 @@ services:
     # chart does, and so that a deployment which grows a second instance has the piece already provisioned.
     profiles:
       - signal-backplane
-    # A digest rather than a tag, and the same digest the Helm chart renders — Garnet 2.1.0 — so the server this starts
-    # is the server the other deployment shape starts. Garnet publishes its release tags beside moving `1`, `2`, and
-    # `latest` ones, so a digest is the only reference that names one artifact. Garnet is Microsoft's RESP server and is
-    # MIT-licensed; THIRD_PARTY_LICENSES.md records the reading, including the base image it is built on. Any
-    # Redis-compatible endpoint answers the same protocol, which is what makes pointing the setting below at one you
-    # already operate the other supported shape.
-    image: ${MAILFATHOM_GARNET_IMAGE:-ghcr.io/microsoft/garnet@sha256:4e298b9b274088cded4156853a32b85fed7b42242eb9ca90216d332e25f2bceb}
+    # A digest rather than a tag, and the same digest the Helm chart renders — Valkey 9.1.2 — so the server this starts
+    # is the server the other deployment shape starts. Valkey publishes its release tags beside moving `9`, `9.1`, and
+    # `latest` ones, so a digest is the only reference that names one artifact. Valkey is a BSD-3-Clause RESP server
+    # maintained under the Linux Foundation; THIRD_PARTY_LICENSES.md records the reading, including the base image it is
+    # built on. Any RESP endpoint answers the same protocol — Redis, Garnet, Valkey, or a managed equivalent — which is
+    # what makes pointing the setting above at one you already operate the other supported shape, and what makes this
+    # server the default rather than a requirement.
+    image: ${MAILFATHOM_VALKEY_IMAGE:-docker.io/valkey/valkey@sha256:c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1d}
     restart: unless-stopped
+    # **The account is stated here because the image states none.** Its entrypoint takes a root branch when nothing
+    # else has chosen an account: it chowns the working directory and then re-execs itself as `valkey`. Both halves
+    # need capabilities `cap_drop: ALL` below has taken away, so the entrypoint would fail on the chown and the server
+    # would never start. The chart states the same account in its pod's security context and the Quadlet unit states it
+    # as a user-namespace mapping; this is the same decision in the form Compose reads.
+    user: "999:999"
     # **The password arrives as a file, which on this server means an ACL file.** This is the one place this deployment
-    # differs from the chart, which expands the password into `--auth Password --password` from a Secret the kubelet
-    # reads. Nothing here has that expansion: Compose interpolates `${...}` from `.env` while it parses this file, so
-    # that route would put the password in `.env`, in `docker inspect`, and in this host's process list rather than in
-    # the secrets directory beside every other credential. `--auth ACL` is the one mode Garnet reads its credentials
-    # from a path in, so the secret below carries a single Redis-style ACL line with the password inside it. The default
-    # user is what a RESP client authenticating with a password alone becomes, and this server holds nothing but
-    # subscriptions, so it is granted every command rather than a subset nobody could enumerate from the client
-    # library's own handshake.
+    # differs from the chart, which expands the password into `--requirepass` from a Secret the kubelet reads. Nothing
+    # here has that expansion: Compose interpolates `${...}` from `.env` while it parses this file, so that route would
+    # put the password in `.env`, in `docker inspect`, and in this host's process list rather than in the secrets
+    # directory beside every other credential. `--aclfile` is the one way Valkey reads a credential from a path, so the
+    # secret below carries a single ACL line with the password inside it. The default user is what a RESP client
+    # authenticating with a password alone becomes, and this server holds nothing but subscriptions, so it is granted
+    # every key, every channel, and every command rather than a subset nobody could enumerate from the client library's
+    # own handshake.
+    #
+    # Persistence is off on the same line, and it is off deliberately rather than by default: Valkey snapshots on a
+    # schedule unless `--save` is given nothing to do.
     command:
-      - --auth
-      - ACL
-      - --acl-file
-      - /run/secrets/garnet-acl
+      - --aclfile
+      - /run/secrets/valkey-acl
+      - --save
+      - ""
+      - --appendonly
+      - "no"
     secrets:
-      - garnet-acl
+      - valkey-acl
     # No volume, and nothing to persist. A backplane holds a live subscription rather than a record: a restart loses
     # nothing, and a server that kept anything across one would replay a statement whose subject has already moved.
-    # Write-ahead logging and checkpointing are both off in this server's own defaults, so nothing here turns them off.
     #
-    # No health check either, for the reason MailFathom's own service has none: the image carries a .NET runtime and no
-    # RESP client, so there is nothing inside the container for a check to run. A replica whose backplane is down
-    # reports itself through `/health` and says so in its telemetry.
+    # No health check either: one would have to authenticate, which would put the password in a second place. A replica
+    # whose backplane is down reports itself through `/health` and says so in its telemetry.
     read_only: true
     tmpfs:
       # Two writable paths on an otherwise read-only root filesystem, which is what the chart's pod gives this image as
-      # well: the runtime's scratch directory, and the data directory the image's own `VOLUME` declares and a checkpoint
-      # would go to if anything ever asked for one. In memory rather than on disk so that nothing derived from a signal
-      # outlives the container. Both are owned by the image's own unprivileged account, which is what runs the server.
+      # well: the runtime's scratch directory, and the working directory the server insists on whether or not it ever
+      # writes a file into it. In memory rather than on disk so that nothing derived from a signal outlives the
+      # container. A tmpfs is created owned by `root`, which the account above cannot change with every capability
+      # dropped, so mode 1777 is what makes both writable by the server rather than ownership.
       - /tmp:mode=1777,size=64m
       - /data:mode=1777,size=16m
     cap_drop:
@@ -537,11 +550,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: ${MAILFATHOM_GARNET_CPU_LIMIT:-1}
-          # The server allocates its hash index while it starts and grows its log only as records are written, and this
-          # one is never written to — so what the limit covers is that index and the .NET runtime around it rather than
-          # anything this deployment stores.
-          memory: ${MAILFATHOM_GARNET_MEMORY_LIMIT:-1g}
+          cpus: ${MAILFATHOM_VALKEY_CPU_LIMIT:-1}
+          # No key is ever written here, so what the limit covers is the process and its allocator's arenas rather than
+          # anything this deployment stores. Persistence being off means it never covers a fork copying a dataset
+          # either — there is none to copy.
+          memory: ${MAILFATHOM_VALKEY_MEMORY_LIMIT:-256m}
 
 networks:
   # What the database is reachable on, and nothing that is not on it can reach the database. `internal` keeps this
@@ -581,10 +594,10 @@ secrets:
     file: ./secrets/silo-public.crt
   silo-private-key:
     file: ./secrets/silo-private.key
-  # The backplane server's own, read by the `garnet` service alone. It is beside the store's credentials rather than
+  # The backplane server's own, read by the `valkey` service alone. It is beside the store's credentials rather than
   # under ./secrets/mailfathom/ for the same reason they are: this file is the server's authority to accept a
   # connection, and what MailFathom reads is the connection string that presents the password to it. It does not exist
   # until an operator creates it, and a missing one fails the container rather than starting a RESP server that accepts
   # every connection unauthenticated.
-  garnet-acl:
-    file: ./secrets/garnet-acl
+  valkey-acl:
+    file: ./secrets/valkey-acl

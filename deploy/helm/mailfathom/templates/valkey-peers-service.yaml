@@ -1,0 +1,38 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
+{{- if and .Values.signalBackplane.enabled .Values.signalBackplane.valkey.deploy }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mailfathom.backplanePeerFullname" . }}
+  labels:
+    {{- include "mailfathom.backplaneLabels" . | nindent 4 }}
+spec:
+  {{- /*
+    Headless, which is the whole of what it is for: it gives every instance of the set a DNS name of its own that
+    survives a rescheduling, and nothing else in this chart wants one address that resolves to several backplane pods.
+    A replica follows the primary by that name rather than by an address, which is what keeps replication from
+    depending on a pod IP that a restart changes.
+
+    It is rendered whether or not replication is on, so the one instance a default install starts is reachable at the
+    same name it would carry in a replicated set — turning replication on then adds pods rather than renaming the one
+    that was already there.
+  */}}
+  clusterIP: None
+  {{- /*
+    A replica resolves the primary's name while it is itself still starting, and an endpoint withheld until the pod is
+    ready would leave the first `--replicaof` of a rollout resolving nothing. A name that answers before readiness is
+    also what lets an operator reach an instance that has stopped being ready, which is when they most want to.
+  */}}
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "mailfathom.backplaneSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: resp
+      port: 6379
+      targetPort: resp
+      protocol: TCP
+{{- end }}

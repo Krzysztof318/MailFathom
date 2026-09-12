@@ -397,20 +397,26 @@ client:
 # that stopped updating. A deployment that serves no client surface is never refused over this, whatever its replica
 # count, because nothing raises a signal there.
 #
-# Turning it on has two shapes, and `garnet.deploy` below is which one:
+# **The contract is RESP, not a product.** MailFathom reaches the backplane through StackExchange.Redis and uses
+# `PUBLISH`, `SUBSCRIBE`, and `PSUBSCRIBE` and nothing else, so any endpoint answering that protocol serves — Valkey,
+# Redis, Garnet, or a managed equivalent. Valkey is what this repository deploys, pins, and tests against; it is the
+# default rather than a requirement.
 #
-#   * **The chart runs Garnet**, as one replica on no claim and nothing that outlives the pod, because pub/sub keeps
-#     nothing. Its two volumes are memory-backed scratch the runtime needs. This is the default once
-#     the block is on, exactly as the analyzer and the spam scanner are deployed by default once theirs are.
-#   * **You point it at a RESP endpoint you already operate** — Redis, Valkey, or a managed cache — so you run one such
-#     service rather than two.
+# Turning it on has two shapes, and `valkey.deploy` below is which one:
+#
+#   * **The chart runs Valkey**, on no claim and nothing that outlives a pod, because pub/sub keeps nothing. Its two
+#     volumes are memory-backed scratch the server needs. This is the default once the block is on, exactly as the
+#     analyzer and the spam scanner are deployed by default once theirs are.
+#   * **You point it at a RESP endpoint you already operate** — Redis, Garnet, Valkey, or a managed cache — so you run
+#     one such service rather than two.
 #
 # Either way the connection string is yours to write, as a key inside `secrets.existingSecret`, and that is deliberate
 # rather than an omission: MailFathom reads one connection string, it carries the password, and this chart templates no
-# credential. For a Garnet the chart runs, what to write is the Service it renders and the password you gave it —
-# the release's full name with `-garnet` appended, which is `<release>-mailfathom-garnet` unless the release name
-# already contains `mailfathom`, then a colon and `garnet.service.port` below, then `,password=…`. The install notes
-# print the whole string for you, resolved.
+# credential. For a Valkey the chart runs, what to write is the Service it renders and the password you gave it —
+# the release's full name with `-valkey` appended, which is `<release>-mailfathom-valkey` unless the release name
+# already contains `mailfathom`, then a colon and `valkey.service.port` below, then `,password=…`. It is the same
+# string whether or not the server is replicated, because the Service names the instance clients talk to either way.
+# The install notes print it, resolved.
 #
 # **Anyone who can subscribe on that endpoint reads every signal of every user of this deployment**, so it belongs
 # inside the same confidentiality boundary as the database. An endpoint somebody else operates owes `ssl=true` in the
@@ -429,11 +435,11 @@ signalBackplane:
   # of its own; a MailFathom beside somebody else's application never does.
   channelPrefix: mailfathom
 
-  garnet:
+  valkey:
     # Whether the chart runs the RESP server, exactly as `spamScanning.scanner.deploy` decides whether it runs the
-    # daemon. On, the chart creates a Deployment and a Service for it, and the address your connection string names is
-    # the Service the release installed. Off, nothing of the sort is rendered and the connection string names whatever
-    # you already operate.
+    # daemon. On, the chart creates a StatefulSet and two Services for it, and the address your connection string names
+    # is the Service the release installed. Off, nothing of the sort is rendered and the connection string names
+    # whatever you already operate.
     deploy: true
 
     # The key inside `secrets.existingSecret` holding the bare password the server is started with — the same password
@@ -448,41 +454,65 @@ signalBackplane:
     passwordSecretKey: mailfathom-signal-backplane-password
 
     # A digest rather than a tag. This is a dependency the chart operates rather than a version a deployment chooses,
-    # like the database and the analyzer images — and unlike those two, Garnet's release tags are published beside
-    # moving `1`, `2`, and `latest` tags, so the digest is what names one artifact rather than a line. It resolves to
-    # Garnet 2.1.0, which is MIT-licensed and runs as an unprivileged account in its own image;
+    # like the database and the analyzer images — and unlike those two, Valkey's release tags are published beside
+    # moving `9`, `9.1`, and `latest` tags, so the digest is what names one artifact rather than a line. It resolves to
+    # Valkey 9.1.2, which is BSD-3-Clause and carries an unprivileged `valkey` account in its own image;
     # THIRD_PARTY_LICENSES.md records both.
     image:
-      registry: ghcr.io
-      repository: microsoft/garnet
-      digest: sha256:4e298b9b274088cded4156853a32b85fed7b42242eb9ca90216d332e25f2bceb
+      registry: docker.io
+      repository: valkey/valkey
+      digest: sha256:c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1d
       pullPolicy: IfNotPresent
       pullSecrets: []
 
     service:
       port: 6379
 
-    # Modest, and sized by what the server reserves rather than by what this deployment asks of it. Garnet is a
-    # cache-store being used as a pipe: no key is ever written, so what it holds is one subscription per replica and the
-    # hash index it allocates while starting, which is a flat array of the server's own default size. The chart passes
-    # no memory options to shrink it — the defaults are what the image is verified against, and a smaller index would be
-    # a number nothing here can check — so the request is what that index plus the runtime costs.
+    # **Standbys beside the one instance, and nothing that promotes them.** Off is one instance, which is what a
+    # backplane needs to work: pub/sub delivers to whoever is subscribed at that moment, so a second instance buys
+    # availability rather than throughput. On, the chart starts `replicas` further instances that follow the first
+    # one's stream and carry every message published on it, so an instance is already running and in step when the
+    # first one is lost.
+    #
+    # **Promotion is an operator's act, and this chart offers nothing that automates it.** The Service the connection
+    # string names selects the first instance by name, so a standby serves clients only after `REPLICAOF NO ONE` on it
+    # and a change to that selector. Sentinel would be what automates this, and it is deliberately not offered:
+    # StackExchange.Redis — the RESP client the SignalR backplane package resolves, current release included —
+    # recognizes a Sentinel by the `redis_mode` line in its `INFO` reply, and Valkey answers with `server_mode`, so a
+    # `serviceName=` connection string against a Valkey Sentinel refuses to connect at all. Issue 1917 measured it and
+    # issue 1924 records what would turn it on.
+    #
+    # **Read what this is worth before turning it on.** ADR 0032 makes the client's own re-read the guarantee a signal
+    # is not, so a backplane outage is already a delay rather than a loss. Replication shortens the part of that delay
+    # an operator spends bringing a second instance up; it does not make a signal reliable, it promotes nothing on its
+    # own, and nothing here is a reason to treat a signal as delivered.
+    replication:
+      enabled: false
+
+      # Instances beside the first one. One standby is what a hand-run promotion needs, and more is for an operator who
+      # wants a second one in step as well.
+      replicas: 1
+
+    # Modest, and sized by what the server reserves rather than by what this deployment asks of it. Valkey is a
+    # key-value store being used as a pipe: no key is ever written, so what it holds is one subscription per MailFathom
+    # replica and the allocator's own arenas. Persistence is off, so nothing here has to cover a fork that copies a
+    # dataset — there is none to copy.
     resources:
       requests:
         cpu: 50m
-        memory: 256Mi
+        memory: 64Mi
       limits:
         cpu: "1"
-        memory: 512Mi
+        memory: 256Mi
 
-    # Restricted Pod Security Standard, met without anything having to be relaxed: the image declares the same
-    # unprivileged account the .NET base images give MailFathom's own, and the server binds its port as that account
-    # rather than starting as root and dropping privilege the way the spam daemon does. The account is stated here as
-    # well so the cluster enforces it rather than trusting the image's own `USER`.
+    # Restricted Pod Security Standard, met without anything having to be relaxed: the image carries an unprivileged
+    # `valkey` account at uid and gid 999, and its `/data` is world-writable, so the server needs neither root nor a
+    # claim it owns. The account is stated here so the cluster enforces it rather than trusting the image's own
+    # entrypoint, which would otherwise start as root and drop privilege itself.
     podSecurityContext:
       runAsNonRoot: true
-      runAsUser: 1654
-      runAsGroup: 1654
+      runAsUser: 999
+      runAsGroup: 999
       seccompProfile:
         type: RuntimeDefault
 

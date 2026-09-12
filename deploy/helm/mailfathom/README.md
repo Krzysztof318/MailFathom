@@ -17,7 +17,7 @@ MailFathom synchronizes your IMAP accounts into a PostgreSQL database you run, i
 | A personal-data analyzer Deployment and Service, only when `personalDataScanning.enabled` and `.analyzer.deploy` are both true | Any schema step |
 | A SpamAssassin Deployment and Service, only when `spamScanning.enabled` and `.scanner.deploy` are both true | |
 | A Silo object-store StatefulSet, its claim, and its Service, only when `contentStorage.objectStorage.deploy.enabled` is true | Any bucket, or any access key inside one |
-| A Garnet Deployment and Service for the signal backplane, only when `signalBackplane.enabled` and `.garnet.deploy` are both true | |
+| A Valkey StatefulSet and two Services for the signal backplane, only when `signalBackplane.enabled` and `.valkey.deploy` are both true | |
 | An optional Ingress | |
 
 Both scanners are off, and off means nothing is rendered for them: an opt-in nobody took pulls no image and holds no memory. Take either deliberately — they are the two pods in this release that receive mail content in the clear, and the spam scanner's container adds `SETUID` and `SETGID` back to the capabilities the application pod drops entirely. Neither is given a service-account token.
@@ -44,17 +44,28 @@ database:
 **And optionally the store itself.** `contentStorage.objectStorage.deploy.enabled` runs one [Silo](https://github.com/pgsty/silo) node — a maintained fork of the open-source MinIO server — on a retained claim beside MailFathom, for a deployment that wants payload bytes out of PostgreSQL without adopting a cloud provider. The endpoint is then derived from its Service rather than named, its console is not served by default, and its root credential lives in a Secret of its own that the application pod never mounts. It is one node and one volume: no erasure coding, no replication, and no failover. Because MailFathom refuses a plain `http` endpoint, the store terminates TLS with a certificate you supply for its Service name, and the authority that signed it is the `trustAnchorSecretKey` beside the credential. Nothing of Silo is in this chart or in any MailFathom image — the cluster pulls it from PGSTY's own registry, under AGPL-3.0-or-later, which [THIRD_PARTY_LICENSES.md](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records. [Running the object store beside MailFathom](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html#running-the-object-store-beside-mailfathom) is the page.
 
 **And a signal backplane, once you run more than one replica.** A client's live updates arrive over one connection held
-by one replica, and a signal raised by whichever replica synchronized the account has to reach it. `signalBackplane`
-either runs a [Garnet](https://github.com/microsoft/garnet) Deployment beside MailFathom — one replica on no claim and
-nothing that outlives the pod, because pub/sub keeps nothing — or is pointed at a Redis-compatible endpoint you already
-operate with
-`garnet.deploy: false`. **The chart refuses to render `replicaCount` above 1 with the client surface served and no
+by one replica, and a signal raised by whichever replica synchronized the account has to reach it. **The contract is
+RESP rather than a product**: MailFathom asks the endpoint for `PUBLISH`, `SUBSCRIBE`, and `PSUBSCRIBE` and nothing
+else, so Redis, Garnet, Valkey, or a managed equivalent all serve. `signalBackplane` either runs a
+[Valkey](https://valkey.io/) StatefulSet beside MailFathom — one instance on no claim and nothing that outlives the
+pod, because pub/sub keeps nothing — or is pointed at an endpoint you already operate with
+`valkey.deploy: false`. **The chart refuses to render `replicaCount` above 1 with the client surface served and no
 backplane configured**, because that combination installs, starts, and answers every request while its clients are
 never told anything. The connection string is a key inside the Secret above in both shapes, beside the bare password a
-deployed Garnet is started with; the chart templates no credential, and the install notes print exactly what to write.
+deployed Valkey is started with; the chart templates no credential, and the install notes print exactly what to write.
 Anyone who can subscribe on that endpoint reads every signal of every user, so keep it inside your own network, and give
 an endpoint somebody else operates `ssl=true`, a credential of its own, and a channel prefix nothing else uses.
 [Signals between replicas](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html#signals-between-replicas)
+is the page.
+
+**One value puts a standby beside that backplane, and it is off.** `valkey.replication.enabled` adds instances that
+follow the first one's stream, so an instance is already running and in step when you lose it. **Nothing promotes
+one**: the Service names the first instance, and a standby serves clients after a `REPLICAOF NO ONE` on it and that
+selector repointed, both of which the next upgrade or pod restart undoes. Sentinel would be what automates it and the
+chart deliberately offers none, because the RESP client the SignalR backplane package resolves recognizes a Sentinel by
+a line Valkey no longer writes and refuses the connection outright. Read what replication is worth before turning it
+on: the client's own re-read is the guarantee, so this shortens a gap rather than making a signal reliable.
+[Replicating the backplane](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html#replicating-the-backplane)
 is the page.
 
 ## Installing

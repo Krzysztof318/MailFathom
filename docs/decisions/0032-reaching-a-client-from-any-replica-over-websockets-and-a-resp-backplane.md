@@ -7,7 +7,7 @@ consulted:
 informed:
 ---
 
-# Serve the signal hub over WebSockets alone with negotiation skipped, redeem its ticket from PostgreSQL on any replica, carry signals between replicas over an optional RESP backplane with Garnet as the deployed default, and make the client's own re-read the guarantee a signal is not
+# Serve the signal hub over WebSockets alone with negotiation skipped, redeem its ticket from PostgreSQL on any replica, carry signals between replicas over an optional RESP backplane with Valkey as the deployed default, and make the client's own re-read the guarantee a signal is not
 
 <!-- describes: backend/src/Host/Signals/**, frontend/src/Client.App/src/signals/signalChannel.ts, frontend/src/Client.Backend/src/signals.ts, frontend/src/Client.Backend/src/reconnection.ts -->
 
@@ -52,13 +52,13 @@ Three questions are answered together, because the answer to each constrains the
 
 **How does a signal reach a connection another replica holds?**
 
-1. A RESP pub/sub backplane through `Microsoft.AspNetCore.SignalR.StackExchangeRedis`, with Garnet as the deployed default and any Redis-compatible endpoint accepted.
+1. A RESP pub/sub backplane through `Microsoft.AspNetCore.SignalR.StackExchangeRedis`, with a deployed default the project ships and any RESP endpoint accepted.
 2. PostgreSQL `LISTEN`/`NOTIFY`, through a lifetime manager this project writes.
 3. No backplane: accept that above one replica live updates are lost, and let the client's re-read carry the screen.
 
 ## Decision Outcome
 
-Chosen options: **WebSockets alone with negotiation skipped**, **a ticket store in PostgreSQL**, and **an optional RESP pub/sub backplane with Garnet as the deployed default**. Together they remove every reason for session affinity, keep authentication on the one store every deployment already runs, and add a second kind of shared infrastructure only where it is needed: to carry client signals between replicas, and for nothing else.
+Chosen options: **WebSockets alone with negotiation skipped**, **a ticket store in PostgreSQL**, and **an optional RESP pub/sub backplane with Valkey as the deployed default**. Together they remove every reason for session affinity, keep authentication on the one store every deployment already runs, and add a second kind of shared infrastructure only where it is needed: to carry client signals between replicas, and for nothing else.
 
 ### The hub serves WebSockets alone, and the client never negotiates
 
@@ -97,9 +97,9 @@ The in-process dictionary becomes a table every replica shares, in the shape iss
 
 `Microsoft.AspNetCore.SignalR.StackExchangeRedis` is the first-party backplane. Every replica subscribes. A message published to a user's group travels to whichever replica holds that user's connections, and that replica delivers it. The channel names carry a prefix, which is `mailfathom` unless the deployment sets one.
 
-**The endpoint speaks RESP.** Where a deployment needs one of its own, the project deploys **Garnet**. Where the operator already runs a Redis-compatible endpoint — Redis, Valkey, or a managed cache — the deployment is pointed at it instead, and the operator runs one RESP service rather than two.
+**The endpoint speaks RESP, and the protocol is the contract rather than a product.** The backplane issues `PUBLISH`, `SUBSCRIBE`, and `PSUBSCRIBE` and nothing else — no key is written and none is read — so any endpoint answering RESP serves it: Redis, Garnet, Valkey, or a managed equivalent. Where a deployment needs one of its own, the project deploys **Valkey**. Where the operator already runs one, the deployment is pointed at it instead, and the operator runs one RESP service rather than two. What the project ships is a default, never a requirement, and every deployment asset carries the switch that turns it off.
 
-**Garnet over Redis** is the owner's choice, made so that the same component can later serve as a cache. That use is not taken here, as the next section says. Garnet documents its compatibility with StackExchange.Redis and supports `PUBLISH`, `SUBSCRIBE`, and `PSUBSCRIBE`, which is the whole of what the backplane uses. It is MIT-licensed. Redis 7.4 and later is offered under RSALv2 or SSPLv1, and Redis 8 adds AGPLv3 as a third choice, so Garnet is also the image with the simpler terms to deploy.
+**Valkey over Redis and over Garnet** is the owner's choice, recorded in [Amendment 1](#amendment-1-the-deployed-default-is-valkey) below, which replaced the Garnet this record first named. It is BSD-3-Clause, so its terms are simpler to deploy than Redis 7.4 and later, which is offered under RSALv2 or SSPLv1 with AGPLv3 added as a third choice in Redis 8. Nothing about the compatibility this section states turned on which of them was chosen.
 
 **A lost backplane is reported, and it does not take a replica out of rotation.** A backplane that drops or comes back is logged at `Warning` and counted. Losing it is exactly what silently turns live updates off, and that is the gap this record exists to close. Readiness does not fail over it: a signal is an optimization, and a pod pulled from service over one is a worse outage than a list five minutes stale.
 
@@ -110,7 +110,7 @@ ADR 0009 refuses a message broker until PostgreSQL-backed work demonstrates a co
 - **It carries client signals, and nothing else.** The limitation it answers is concrete and narrow: no first-party SignalR fan-out runs over PostgreSQL.
 - **It coordinates no work.** No job, lease, ceiling, ticket, or schedule goes through it. Every kind of work that must not run twice stays coordinated through PostgreSQL alone, as ADR 0031 decides.
 - **Nothing reads back from it.** It holds no state that any part of MailFathom depends on finding there later.
-- **Any later use is a decision of its own.** A cache — the reason Garnet was chosen — would need its own record, weighing what caching mail-derived data in a second store costs against the privacy obligations every derived copy inherits.
+- **Any later use is a decision of its own.** A cache would need its own record, weighing what caching mail-derived data in a second store costs against the privacy obligations every derived copy inherits.
 
 ### Accepting the degradation lost, and so did `LISTEN`/`NOTIFY`
 
@@ -128,7 +128,7 @@ It would buy no stronger delivery either: a notification reaches only sessions l
 
 **What travels is the serialized hub invocation**: the signal's kind, an account alias, a folder alias, a count, up to a hundred stored identities with the two server flags of each, and a raised notification's kind and two lines. No subject, address, body fragment, or attachment name crosses, which is the vocabulary `docs/operations/client-endpoint.md` already fixes for the wire to the client. The channel a group's messages travel on is named from the group, so the user's identifier crosses as part of a channel name as well.
 
-**That is personal data in transit, and it is stored nowhere.** Pub/sub delivers a message to whoever is subscribed at that moment and keeps nothing. A Garnet the deployment runs for itself runs with no volume, because it has nothing to keep. So no retention period, export, or erasure obligation reaches the backplane. What does reach it is confidentiality: **anyone who can subscribe on that endpoint reads every signal of every user of the deployment.** The endpoint therefore sits inside the deployment's confidentiality boundary, and an operator pointing MailFathom at an external one owes it what they owe the database:
+**That is personal data in transit, and it is stored nowhere.** Pub/sub delivers a message to whoever is subscribed at that moment and keeps nothing. A server the deployment runs for itself runs with no volume, because it has nothing to keep. So no retention period, export, or erasure obligation reaches the backplane. What does reach it is confidentiality: **anyone who can subscribe on that endpoint reads every signal of every user of the deployment.** The endpoint therefore sits inside the deployment's confidentiality boundary, and an operator pointing MailFathom at an external one owes it what they owe the database:
 
 - **Encryption in transit**, which StackExchange.Redis takes as `ssl=true` in the connection string.
 - **A credential of its own**, held as a secret reference like every other credential the deployment carries. Where the endpoint supports per-channel permissions, an ACL user limited to publishing and subscribing under the deployment's prefix.
@@ -152,7 +152,7 @@ So the worst any lost signal costs a person looking at the screen is five minute
 
 - **A deployment serving no client surface** pays nothing: no hub, no ticket ever minted, and no backplane connection. The ticket table exists in its schema and stays empty.
 - **A deployment running one replica** runs no backplane in any deployment kind. Its tickets go through PostgreSQL, one insert and one delete per connection, so one implementation serves every replica count.
-- **The backplane is optional in every deployment kind**: the Helm chart, Compose, and Quadlet can each deploy Garnet or point at an external endpoint, and none of them does by default. Compose and Quadlet run one instance on one host today. They carry the option anyway, so the shape of a deployment is the same whichever kind an operator starts from, and a second host behind their own proxy is not refused a component the chart offers.
+- **The backplane is optional in every deployment kind**: the Helm chart, Compose, and Quadlet can each deploy the server or point at an external endpoint, and none of them does by default. Compose and Quadlet run one instance on one host today. They carry the option anyway, so the shape of a deployment is the same whichever kind an operator starts from, and a second host behind their own proxy is not refused a component the chart offers.
 - **The chart refuses to render** when `replicaCount` is above 1, the client surface is served, and no backplane is configured. That is the one signal configuration that looks healthy and silently cannot do what it was configured for.
 - **That refusal covers the signal surface alone.** Until the session store is shared, a client served by more than one replica is signed out on most of its requests, whatever the backplane. So this record is necessary above one replica, and it is not sufficient. [ADR 0033](0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md) is the answer issue 1886 produced, and issue 1900 carries it out. It needs no second refusal in the chart, because it puts the session in PostgreSQL rather than behind anything an operator can leave unconfigured.
 
@@ -170,7 +170,7 @@ Above one replica, and once issue 1900 has shared the session store, an operator
 - Good, because a deployment that needs none of this runs none of it, and the chart refuses the one signal configuration that would fail silently.
 - Good, because what carries personal data between replicas keeps none of it, and the requirements an external endpoint has to meet are written down here rather than left for an operator to infer.
 - Good, because the client's promise no longer rests on the delivery of a signal. A lost signal, a dropped connection, and a backplane outage all end in the same re-read.
-- Neutral, because the backplane is first-party code against a third-party endpoint. The package is Microsoft's, while the endpoint's behaviour belongs to whoever runs it — Garnet by default, or anything else speaking RESP.
+- Neutral, because the backplane is first-party code against a third-party endpoint. The package is Microsoft's, while the endpoint's behaviour belongs to whoever runs it — the deployed default, or anything else speaking RESP.
 - Neutral, because Compose and Quadlet gain an option that their single-host shape does not use today.
 - Bad, because a second kind of shared infrastructure now sits beside PostgreSQL, with its own image, credential, network reach, and outage to operate.
 - Bad, because there is no fallback transport. A network that blocks the WebSocket upgrade gets no live updates, and its client relies on the five-minute re-read.
@@ -184,9 +184,9 @@ Above one replica, and once issue 1900 has shared the session store, an operator
 - **The transport.** A unit test over the hub's mapping requires a server-sent-events connection and a long-polling connection to be refused. Issue 1878 owns it.
 - **The ticket's bounds.** Unit tests over redemption require two things to be refused without the store being asked: a value without the shape of a minted ticket, and a redemption that arrives while the in-flight cap is full. Issue 1878 owns them.
 - **The backplane.** Startup validation refuses a backplane section that names no connection, and a unit test requires nothing to be registered when the section is absent or the client surface is not served. Issue 1879 owns both.
-- **The chart.** The golden manifests carry a values case for each mode — Garnet deployed, an external endpoint, and none. A case of `replicaCount: 2` with the client surface served and no backplane must fail to render, and `scripts/render-helm-manifests.sh` holds it. Issue 1880 owns this.
+- **The chart.** The golden manifests carry a values case for each mode — the server deployed, an external endpoint, and none. A case of `replicaCount: 2` with the client surface served and no backplane must fail to render, and `scripts/render-helm-manifests.sh` holds it. Issue 1880 owns this.
 - **The client.** Unit tests require a re-read after every reconnect, and every five minutes while the window is visible and never while it is hidden. Issue 1877 owns them.
-- **The ticket, against a real database, and across replicas.** The integration suite, which the owner runs, starts two hosts against one database and one Garnet. It proves that a ticket is spent once, that a second presentation and an expired ticket are refused, that a ticket minted on one host opens a connection on the other, and that a signal raised on one host reaches a connection the other holds. The ticket's proofs belong there rather than in a unit suite, because the store is raw SQL in the shape of `ClientAssertionSpendStore`, which carries `[RequiresIntegrationCoverage]` for the same reason: only PostgreSQL settles what that statement does, and a fake would only prove itself.
+- **The ticket, against a real database, and across replicas.** The integration suite, which the owner runs, starts two hosts against one database and one RESP server. It proves that a ticket is spent once, that a second presentation and an expired ticket are refused, that a ticket minted on one host opens a connection on the other, and that a signal raised on one host reaches a connection the other holds. The ticket's proofs belong there rather than in a unit suite, because the store is raw SQL in the shape of `ClientAssertionSpendStore`, which carries `[RequiresIntegrationCoverage]` for the same reason: only PostgreSQL settles what that statement does, and a fake would only prove itself.
 - **The boundary.** Every change that touches the backplane's registration is reviewed against *The backplane carries client signals and nothing else*.
 
 ## Pros and Cons of the Options
@@ -230,13 +230,13 @@ Above one replica, and once issue 1900 has shared the session store, an operator
 - Bad, because a cookie pins every request and source-address hashing pins every client behind one address, so either distorts how load is spread.
 - Bad, because a rollout replaces the replica that minted the ticket.
 
-### A RESP pub/sub backplane, Garnet by default
+### A RESP pub/sub backplane, with a server the project deploys by default
 
 - Good, because the backplane is first-party and documented, and it is the scale-out ASP.NET Core recommends for self-hosted infrastructure.
 - Good, because pub/sub keeps nothing, so personal data crossing it rests nowhere.
-- Good, because an operator who already runs a Redis-compatible endpoint points at it rather than running a second one.
-- Good, because Garnet is MIT-licensed, documents compatibility with StackExchange.Redis, and supports the pub/sub commands the backplane uses.
-- Neutral, because the owner chose Garnet so the same component can later serve as a cache, a use this record does not take.
+- Good, because an operator who already runs a RESP endpoint points at it rather than running a second one.
+- Good, because the deployed default is permissively licensed and supports the pub/sub commands the backplane uses, which was true of the Garnet this record first named and is true of the Valkey [Amendment 1](#amendment-1-the-deployed-default-is-valkey) replaced it with.
+- Neutral, because the same component could later serve as a cache, a use this record does not take and which would need a record of its own whichever server is deployed.
 - Bad, because it is a second kind of shared infrastructure to deploy, secure, and watch.
 - Bad, because it buffers nothing while unreachable, so an outage loses every signal published during it.
 
@@ -247,7 +247,7 @@ Above one replica, and once issue 1900 has shared the session store, an operator
 - Bad, because each replica pins a listener connection out of the pool for its lifetime.
 - Bad, because there is no first-party SignalR backplane over it, so this project would write and own a `HubLifetimeManager`.
 - Bad, because a payload must be shorter than 8000 bytes, and anything larger needs a side table that brings storage back.
-- Bad, because it cannot serve as the cache the owner wants the same component to be.
+- Bad, because it cannot serve as a cache, which is the other use the same component could later be put to under a record of its own.
 
 ### No backplane, and the degradation accepted
 
@@ -256,11 +256,27 @@ Above one replica, and once issue 1900 has shared the session store, an operator
 - Bad, because the chart would have to refuse more than one replica wherever the client is served, or ship a feature it knows does not work.
 - Bad, because the client's five-minute safety net would become its only source of new mail, which is not the product it promises.
 
+## Amendments
+
+### Amendment 1: the deployed default is Valkey
+
+*2026-09-12. Issue 1917.*
+
+The section above decided a RESP backplane and named Garnet as the server the project's own assets deploy. The owner decided on 2026-09-12 that the server this repository deploys is **Valkey** instead, and this amendment records the change and what it does not change.
+
+**The contract is untouched, and stating it plainly is half the point of the change.** The backplane reaches its endpoint through `Microsoft.AspNetCore.SignalR.StackExchangeRedis` and asks it for `PUBLISH`, `SUBSCRIBE`, and `PSUBSCRIBE`. Every RESP endpoint answers those — Redis, Garnet, Valkey, and every managed equivalent — so an operator who already runs one names it in the connection string and MailFathom starts nothing beside it. That was true before this amendment and it is true after it. What moved is which server the assets ship, and the documentation now states the compatibility as the contract rather than as a remark beside one product.
+
+**Why Valkey.** It is BSD-3-Clause and maintained under the Linux Foundation, its releases are published as `valkey/valkey` with the moving tags a digest pin exists to avoid, and it brings replication, which the Garnet shape had no answer for and which the chart now offers off by default. Garnet was chosen partly so the same component could later serve as a cache; that use was never taken, the section above already required its own record for it, and Valkey serves it equally where it is.
+
+**What it costs an operator.** The chart's `signalBackplane.garnet` block is renamed to `signalBackplane.valkey`, its objects are renamed with it, the Compose service and its ACL secret are renamed, and the Quadlet unit is renamed. A minor may break the deployment contract below `1.0.0`, and the release that carries this one records the operator's action against it.
+
+**The availability that came with it, and the half that did not.** The chart can replicate the backplane, off by default, and it deploys no Sentinel. Valkey ships one and it promotes correctly; what cannot reach it is MailFathom, because StackExchange.Redis decides an endpoint is a Sentinel from a `redis_mode` line Valkey writes as `server_mode`, and a `serviceName=` connection string against a Valkey Sentinel is refused at connect. Issue 1917 measured that against three Sentinels watching a replicated pair, and issue 1924 records what would turn it on. So promotion stays an operator's act here, and a deployment that wants it automatic points the chart at an endpoint it operates itself. Replication changes nothing about what a signal is either: pub/sub keeps nothing, so a statement raised while the primary is being replaced is gone in every arrangement, and the guarantee stays what this record made it — the client's own re-read.
+
 ## More Information
 
-- **The issues.** Issue 1838 asks the question. Issue 1870 is the plan and the measurements this record is written against. Issue 1878 delivers the WebSocket-only hub and the PostgreSQL ticket. Issue 1879 delivers the backplane. Issue 1880 puts Garnet or an external endpoint into the chart, together with the refusal. Issue 1881 does the same for Compose and Quadlet. Issue 1877 is the client's catch-up, which this record names as the guarantee. It waits on nothing here, because a single replica already loses signals across a dropped connection. Issue 1287 carries the exception to its broker refusal, and issues 1294 and 1295 wait on the four server-side children. Issue 1886 decided how a signed-in session survives more than one replica, which this record does not reach; [ADR 0033](0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md) is that answer, issue 1900 implements it, and issue 1295 waits on it as well.
+- **The issues.** Issue 1838 asks the question. Issue 1870 is the plan and the measurements this record is written against. Issue 1878 delivers the WebSocket-only hub and the PostgreSQL ticket. Issue 1879 delivers the backplane. Issue 1880 puts the deployed server or an external endpoint into the chart, together with the refusal. Issue 1881 does the same for Compose and Quadlet. Issue 1877 is the client's catch-up, which this record names as the guarantee. It waits on nothing here, because a single replica already loses signals across a dropped connection. Issue 1287 carries the exception to its broker refusal, and issues 1294 and 1295 wait on the four server-side children. Issue 1886 decided how a signed-in session survives more than one replica, which this record does not reach; [ADR 0033](0033-where-a-signed-in-session-lives-so-every-replica-accepts-it.md) is that answer, issue 1900 implements it, and issue 1295 waits on it as well.
 - **ADR 0009 and ADR 0031.** [ADR 0009](0009-durable-job-store-and-execution-identity.md) states the refusal of a message broker that this record makes one exception to, and that refusal stands for everything else. [ADR 0031](0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) divides the work between replicas, and this record does not touch it. This is a new record rather than an amendment to ADR 0031, because it adds a second kind of shared infrastructure beside PostgreSQL rather than refining the lease. The three records are linked in both directions.
-- **Other records.** [ADR 0016](0016-third-party-licence-obligations-per-artifact.md) governs how the Garnet image and the backplane package are reviewed in `THIRD_PARTY_LICENSES.md`. [ADR 0021](0021-client-stack-react-typescript-tailwind-tauri-and-pnpm.md) decides the two heads that ship, and [ADR 0027](0027-an-android-head-built-every-night-and-supported-by-nothing.md) the Android artifact beside them that nothing supports. All three speak WebSockets.
+- **Other records.** [ADR 0016](0016-third-party-licence-obligations-per-artifact.md) governs how the server's image and the backplane package are reviewed in `THIRD_PARTY_LICENSES.md`. [ADR 0021](0021-client-stack-react-typescript-tailwind-tauri-and-pnpm.md) decides the two heads that ship, and [ADR 0027](0027-an-android-head-built-every-night-and-supported-by-nothing.md) the Android artifact beside them that nothing supports. All three speak WebSockets.
 - **Out of scope.** Azure SignalR Service and every other hosted backplane, any change to what a signal carries, and any use of the RESP endpoint other than client signals.
 - **The `describes:` marker.** It names the code this decision is about as that code exists today: the hub, the ticket, and the channel under `backend/src/Host/Signals/`, and the client's transport and reconnection. It gains the ticket store, the backplane's registration, and the deployment assets as issues 1878 to 1881 land them.
 - **When to revisit.** Revisit when a supported head cannot speak WebSockets, or a deployment's network blocks the upgrade and needs a fallback. Revisit when the RESP endpoint is wanted for anything but client signals, which is a record of its own. Revisit when a first-party SignalR backplane over PostgreSQL appears. And revisit when signals lost during a backplane outage are measured as a problem the five-minute re-read does not cover.
