@@ -13,6 +13,7 @@ operates the cluster, and the chart is written so that it cannot pretend otherwi
 | A personal-data analyzer Deployment and Service, and a SpamAssassin Deployment and Service, only when the section that owns each is enabled and left to deploy its own | Any schema step |
 | A Silo object-store StatefulSet, its claim, and its Service, only when `contentStorage.objectStorage.deploy.enabled` is true | Any bucket, or any access key inside one |
 | A Valkey StatefulSet and two Services for the signal backplane, only when `signalBackplane.enabled` and `.valkey.deploy` are both true | |
+| A PodDisruptionBudget for the application pods, at any replica count, unless `podDisruptionBudget.enabled` is false | Any HorizontalPodAutoscaler, or any metric-driven scaling |
 | An optional Ingress | |
 
 ## What you supply
@@ -477,8 +478,11 @@ rather than having been replaced by it. It also means **two versions run togethe
 is safe rather than tolerated — a claim reaches only the job types the claiming replica's own build registers a handler
 for, so work a newer replica introduced waits for one instead of failing on an older one; two replicas reaching one
 scheduled occasion compose the same idempotency key; and a leased scope is released by the pod being stopped and
-claimed by whichever replica takes it next. `Recreate` is the other type Kubernetes accepts, and the chart
-renders no `rollingUpdate` block beside it, so choosing it produces a Deployment the API server accepts.
+claimed by whichever replica takes it next. `Recreate` is the other type Kubernetes accepts, and the chart renders no
+`rollingUpdate` block beside it, so choosing it produces a Deployment the API server accepts — but it stops every pod
+before starting one, so an upgrade under it has a window with nothing serving whatever order the schema is applied in.
+The order [upgrading](#upgrading-rolling-back-and-uninstalling) gives is the one with no such window, and that holds
+under the rolling default rather than under this type.
 
 Either half of `rollingUpdate` may be zero and both may not, and the chart refuses that pair rather than letting the
 API server reject the Deployment while a release is being applied. The refusal exists because a values document is
@@ -1081,7 +1085,9 @@ Back up the database — and the bucket beside it where `contentStorage.backend`
 [what you now back up](#what-you-now-back-up-and-in-which-order) gives — and apply the new release's
 `mailfathom-schema-<version>.sql` **before** the upgrade. The new pod
 refuses to start against a schema that is behind it, and the old pod keeps serving against a schema that is ahead — so
-that order is the one with no window in which nothing serves.
+that order is the one with no window in which nothing serves. That last part is the rolling default's:
+`strategy.type: Recreate` stops every pod before starting one, so an upgrade under it has a window whatever order the
+schema is applied in.
 
 ```bash
 helm upgrade mailfathom deploy/helm/mailfathom --namespace mailfathom --values values.yaml
