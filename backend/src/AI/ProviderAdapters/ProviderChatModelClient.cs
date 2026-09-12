@@ -113,7 +113,7 @@ internal sealed class ProviderChatModelClient : IChatModelClient
         }
         catch (ChatGenerationFailedException failure)
         {
-            ChatProviderEvents.LogCallFailed(this.logger, this.plan.Endpoint.Alias, failure.Failure);
+            ChatProviderEvents.LogCallFailed(this.logger, failure.EndpointAlias, failure.Failure);
 
             this.RecordFailure(failure);
 

@@ -147,10 +147,11 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
             this.plan.MaximumRequestCharacters,
             this.plan.MaximumRequestImageOctets);
 
-        var draft = ReplyDraftReading.Read(
-            await this.AskAsync(turn, brief.Language, cancellationToken),
-            sources.Messages,
-            sources.Participants);
+        var answer = await this.AskAsync(turn, brief.Language, cancellationToken);
+        var draft = ReplyDraftReading.Read(answer?.Text, sources.Messages, sources.Participants);
+
+        // The model that answered where one did, and the model the brief was put to where none could.
+        var answeringAlias = answer?.Alias ?? this.plan.Endpoint.Alias;
 
         if (draft.WasWritten)
         {
@@ -158,7 +159,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
 
             ReplyDraftEvents.LogDrafted(
                 this.logger,
-                this.plan.Endpoint.Alias,
+                answeringAlias,
                 sources.Messages.Count,
                 draft.Claims.Count,
                 unsupportedClaimCount,
@@ -166,7 +167,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
         }
         else
         {
-            ReplyDraftEvents.LogAnswerUnreadable(this.logger, this.plan.Endpoint.Alias);
+            ReplyDraftEvents.LogAnswerUnreadable(this.logger, answeringAlias);
         }
 
         return draft;
@@ -249,7 +250,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
     /// the person withdrawing the request rather than a provider failing to answer it.
     /// </para>
     /// </remarks>
-    private async Task<string?> AskAsync(
+    private async Task<ChatModelAnswer?> AskAsync(
         string turn,
         MailUserLanguage language,
         CancellationToken cancellationToken)
@@ -276,7 +277,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
     }
 
     /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
-    private async Task<string?> AskModelAsync(
+    private async Task<ChatModelAnswer> AskModelAsync(
         ChatGenerationPlan model,
         string turn,
         MailUserLanguage language,
@@ -315,6 +316,6 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
 
         var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
-        return response.Text;
+        return new ChatModelAnswer(endpoint.Alias, response.Text);
     }
 }

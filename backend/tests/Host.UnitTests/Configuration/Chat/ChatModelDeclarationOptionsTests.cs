@@ -169,6 +169,25 @@ public sealed class ChatModelDeclarationOptionsTests
         Assert.Contains(errors, error => error.Contains("ApiKey", StringComparison.Ordinal));
     }
 
+    /// <summary>A model needing no credential says so with Unauthenticated, so naming that as a Microsoft Entra shape declares nothing.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AnEntraCredentialOfKindUnauthenticated_IsRefused()
+    {
+        // Arrange
+        var model = DeclaredChatModels.Model();
+        model.ApiKey = null;
+        model.EntraCredential = new ProviderEntraCredentialOptions
+        {
+            Kind = ProviderEndpointCredentialKind.Unauthenticated,
+        };
+
+        // Act
+        var errors = Validate(model);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("Unauthenticated", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void FindConfigurationErrors_ARequestTimeoutThatIsNotPositive_IsRefused()
     {

@@ -10,13 +10,13 @@ using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
 using MailFathom.AI.UnitTests.TestDoubles;
-using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.EmailContent.Cleaning;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
@@ -184,6 +184,41 @@ public sealed class MailBodyCleanupAgentTests
     }
 
     /// <summary>
+    /// The line an operator reads names the model that actually produced the proposal. The alias the pass was
+    /// configured with is the model it asked first, so a fallback answering would otherwise send whoever reads the log
+    /// to an endpoint that is working.
+    /// </summary>
+    [Fact]
+    public async Task ProposeAsync_AProposalTheFallbackProduced_LogsTheFallbacksAlias()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.RefusingThenAnswering(
+            HttpStatusCode.TooManyRequests,
+            Completion(Partition));
+
+        using var logs = new RecordingLoggerFactory();
+        var chain = ChatDeclarations
+            .Plan()
+            .WithFallback(ChatDeclarations.Plan(ChatDeclarations.Endpoint("standby")));
+
+        var cleaner = provider.CleanerOver(
+            plan: chain,
+            logger: logs.CreateLogger<MailBodyCleanupAgent>());
+
+        // Act
+        var proposal = await cleaner.ProposeAsync(Outline(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailBodyCleaningWithholding.None, proposal.Withholding);
+
+        var proposed = Assert.Single(
+            logs.Records,
+            record => record.Properties.ContainsKey("SegmentCount"));
+
+        Assert.Equal("standby", proposed.Properties["EndpointAlias"]);
+    }
+
+    /// <summary>
     /// One proposal is one run however many models it was asked of, so the fallback attempt spends the run's remaining
     /// allowance rather than opening a second one. A ceiling of one call is what makes that visible: the main model
     /// spends it, and the fallback is then refused here rather than reaching the provider and being billed for.
@@ -234,6 +269,7 @@ public sealed class MailBodyCleanupAgentTests
     {
         private readonly FakeHttpMessageHandler handler;
         private string payload = string.Empty;
+        private string? nextPayload;
         private HttpStatusCode status = HttpStatusCode.OK;
 
         private ScriptedTransport() =>
@@ -244,10 +280,19 @@ public sealed class MailBodyCleanupAgentTests
                     ? string.Empty
                     : await request.Content.ReadAsStringAsync(cancellationToken));
 
-                return new HttpResponseMessage(this.status)
+                var answered = new HttpResponseMessage(this.status)
                 {
                     Content = new StringContent(this.payload, Encoding.UTF8, "application/json"),
                 };
+
+                if (this.nextPayload is { } following)
+                {
+                    this.status = HttpStatusCode.OK;
+                    this.payload = following;
+                    this.nextPayload = null;
+                }
+
+                return answered;
             });
 
         public int RequestCount { get; private set; }
@@ -260,12 +305,17 @@ public sealed class MailBodyCleanupAgentTests
         public static ScriptedTransport Refusing(HttpStatusCode status) =>
             new() { status = status, payload = "{\"error\":{\"message\":\"no\"}}" };
 
+        /// <summary>Refuses the first call and answers the second, which is one chain falling through to its fallback.</summary>
+        public static ScriptedTransport RefusingThenAnswering(HttpStatusCode status, string payload) =>
+            new() { status = status, payload = "{\"error\":{\"message\":\"no\"}}", nextPayload = payload };
+
         public MailBodyCleanupAgent CleanerOver(
             SensitiveContentEgressGuard? egressGuard = null,
             Exception? credentialFailure = null,
             IMailAnsweringSpendLedger? spendLedger = null,
             ChatGenerationPlan? plan = null,
-            MailAnsweringRunBounds? runBounds = null)
+            MailAnsweringRunBounds? runBounds = null,
+            ILogger<MailBodyCleanupAgent>? logger = null)
         {
             var transportFactory = Substitute.For<IHttpClientFactory>();
             transportFactory
@@ -303,11 +353,10 @@ public sealed class MailBodyCleanupAgentTests
                 new OpenAiCompatibleClientFactory(),
                 transportFactory,
                 operationRunner,
-                Substitute.For<IAiProviderHealthRecorder>(),
                 egressGuard ?? SensitiveContentEgressGuards.Inactive(),
                 new EmptyAgentInstructionEnvelope(),
                 NullLoggerFactory.Instance,
-                NullLogger<MailBodyCleanupAgent>.Instance);
+                logger ?? NullLogger<MailBodyCleanupAgent>.Instance);
         }
 
         public void Dispose() => this.handler.Dispose();

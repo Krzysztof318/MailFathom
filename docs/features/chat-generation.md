@@ -85,6 +85,11 @@ the main model fails gets no fallback attempt, which is the ceiling working rath
 the run's own record, by alias and by that block's own `PublishedModel`, because a cost record naming a model the
 deployment never called is worse than no record at all.
 
+**Every capability's outcome line names the model that answered it**, not the alias the capability was configured
+with. A fallback producing a cleaning proposal, an enrichment mark, a reply draft, a search reading, a thread state, a
+Discover plan or a Discover composition is named as the fallback in the line that reports it, and a chat call that
+failed is reported against the endpoint that failed rather than the one asked first.
+
 **A Discover run's opening event is the one place that still names the model the run *began* against.** It is sent
 before anything has been composed — which is the point of it, a person waiting for an answer being told which model is
 about to produce one — so it cannot know that the model would fail and the fallback would answer. What shows that is
@@ -475,6 +480,14 @@ Health is recorded per role rather than per alias, so a deployment whose main mo
 fallback answered records `Serving`: the deployment *can* answer questions, which is what withholds or offers
 `ask_mail`. What the state does not show is that the first model is failing, and the warning written on every
 fall-through — naming both aliases and the failure that caused it — is what does.
+
+**The body-cleanup pass records nothing, because the state it would write is not about it.** `Chat:BodyCleanup:Model`
+may name a model of its own, at its own address and under its own credential, and the chat role's state is what decides
+whether `ask_mail` is offered. A cleaning endpoint failing says nothing about whether questions can be answered, so
+recording it there would take a working `ask_mail` out of service on the strength of an endpoint no question is ever
+sent to. What shows a cleaning endpoint failing is the failures themselves in the log, and the reader being shown the
+message uncleaned and told so. Where the pass names the answering model anyway, that endpoint's state is already
+written by the questions themselves.
 
 **Nothing probes a provider to find out.** A paid call made to answer a health check would spend an operator's money on
 every scrape, and the answer would be about a request nobody asked for. What is reported is the outcome of the last real

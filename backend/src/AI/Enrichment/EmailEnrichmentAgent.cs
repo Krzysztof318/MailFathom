@@ -163,7 +163,7 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
             this.plan.MaximumRequestCharacters,
             this.plan.MaximumRequestImageOctets);
 
-        if (await this.AskAsync(turn, language, cancellationToken) is not { } answerText)
+        if (await this.AskAsync(turn, language, cancellationToken) is not { Text: { } answerText } answer)
         {
             return this.Withhold(EmailEnrichmentWithholding.ProviderUnavailable);
         }
@@ -175,13 +175,13 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
 
         if (marks.Count is 0)
         {
-            EmailEnrichmentEvents.LogAnswerUnreadable(this.logger, this.plan.Endpoint.Alias);
+            EmailEnrichmentEvents.LogAnswerUnreadable(this.logger, answer.Alias);
         }
         else
         {
             EmailEnrichmentEvents.LogDerived(
                 this.logger,
-                this.plan.Endpoint.Alias,
+                answer.Alias,
                 marks.Count,
                 email.Passages.Count);
         }
@@ -210,7 +210,7 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
     /// derivation that never reached the endpoint was withheld the same way as one the endpoint refused. A cancellation
     /// stays outside, being the caller withdrawing the work rather than a provider failing to answer.
     /// </remarks>
-    private async Task<string?> AskAsync(
+    private async Task<ChatModelAnswer?> AskAsync(
         string turn,
         MailUserLanguage language,
         CancellationToken cancellationToken)
@@ -248,7 +248,7 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
     }
 
     /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
-    private async Task<string?> AskModelAsync(
+    private async Task<ChatModelAnswer> AskModelAsync(
         ChatGenerationPlan model,
         string turn,
         MailUserLanguage language,
@@ -290,7 +290,7 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
 
         var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
-        return response.Text;
+        return new ChatModelAnswer(endpoint.Alias, response.Text);
     }
 
     private EmailEnrichmentDerivation Withhold(EmailEnrichmentWithholding withholding)

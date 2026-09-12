@@ -166,7 +166,7 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
             this.plan.MaximumRequestCharacters,
             this.plan.MaximumRequestImageOctets);
 
-        if (await this.AskAsync(turn, language, cancellationToken) is not { } answerText)
+        if (await this.AskAsync(turn, language, cancellationToken) is not { Text: { } answerText } answer)
         {
             return this.Withhold(ThreadStateWithholding.ProviderUnavailable);
         }
@@ -175,13 +175,13 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
 
         if (entries.Count is 0)
         {
-            ThreadStateEvents.LogAnswerUnreadable(this.logger, this.plan.Endpoint.Alias);
+            ThreadStateEvents.LogAnswerUnreadable(this.logger, answer.Alias);
         }
         else
         {
             ThreadStateEvents.LogDerived(
                 this.logger,
-                this.plan.Endpoint.Alias,
+                answer.Alias,
                 entries.Count,
                 thread.Messages.Count);
         }
@@ -239,7 +239,7 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
     /// deployment's availability gate reads. A cancellation stays outside, being the caller withdrawing the work rather
     /// than a provider failing to answer.
     /// </remarks>
-    private async Task<string?> AskAsync(
+    private async Task<ChatModelAnswer?> AskAsync(
         string turn,
         MailUserLanguage language,
         CancellationToken cancellationToken)
@@ -277,7 +277,7 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
     }
 
     /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
-    private async Task<string?> AskModelAsync(
+    private async Task<ChatModelAnswer> AskModelAsync(
         ChatGenerationPlan model,
         string turn,
         MailUserLanguage language,
@@ -319,7 +319,7 @@ internal sealed class ThreadStateAgent : IThreadStateDeriver
 
         var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
-        return response.Text;
+        return new ChatModelAnswer(endpoint.Alias, response.Text);
     }
 
     private ThreadStateDerivation Withhold(ThreadStateWithholding withholding)

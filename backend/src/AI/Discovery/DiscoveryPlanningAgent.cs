@@ -135,21 +135,24 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
             this.plan.MaximumRequestCharacters,
             this.plan.MaximumRequestImageOctets);
 
-        var answerText = await this.AskAsync(turn, cancellationToken);
-        var outcome = DiscoveryPlanReading.Read(answerText, question.Text, this.retrievalBounds);
+        var answer = await this.AskAsync(turn, cancellationToken);
+        var outcome = DiscoveryPlanReading.Read(answer?.Text, question.Text, this.retrievalBounds);
+
+        // The model that answered where one did, and the model the plan was asked of where none could.
+        var answeringAlias = answer?.Alias ?? endpoint.Alias;
 
         if (outcome.WasRead)
         {
             DiscoveryPlanningEvents.LogPlanDerived(
                 this.logger,
-                endpoint.Alias,
+                answeringAlias,
                 outcome.Plan.Intent.Identity,
                 outcome.Plan.Retrieval.Lookups.Count,
                 outcome.Plan.Retrieval.SufficientPassages);
         }
         else
         {
-            DiscoveryPlanningEvents.LogPlanUnreadable(this.logger, endpoint.Alias);
+            DiscoveryPlanningEvents.LogPlanUnreadable(this.logger, answeringAlias);
         }
 
         return outcome.Plan;
@@ -169,7 +172,7 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
     /// failing to answer it.
     /// </para>
     /// </remarks>
-    private async Task<string?> AskAsync(string turn, CancellationToken cancellationToken)
+    private async Task<ChatModelAnswer?> AskAsync(string turn, CancellationToken cancellationToken)
     {
         try
         {
@@ -193,7 +196,7 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
     }
 
     /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
-    private async Task<string?> AskModelAsync(
+    private async Task<ChatModelAnswer> AskModelAsync(
         ChatGenerationPlan model,
         string turn,
         CancellationToken cancellationToken)
@@ -232,6 +235,6 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
 
         var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
-        return response.Text;
+        return new ChatModelAnswer(endpoint.Alias, response.Text);
     }
 }

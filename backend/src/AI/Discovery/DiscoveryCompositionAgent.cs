@@ -131,14 +131,14 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
             plan.Intent,
             await this.GuardAsync(sources, cancellationToken));
 
-        var answerText = await this.AskAsync(turn, cancellationToken);
-        var composed = DiscoveryCompositionReading.Read(answerText, plan, sources, evidence, coverage);
+        var answer = await this.AskAsync(turn, cancellationToken);
+        var composed = DiscoveryCompositionReading.Read(answer?.Text, plan, sources, evidence, coverage);
 
-        if (answerText is not null)
+        if (answer is { Text: not null })
         {
             DiscoveryCompositionEvents.LogResultComposed(
                 this.logger,
-                this.plan.Endpoint.Alias,
+                answer.Alias,
                 composed.Blocks.Count,
                 composed.Citations.Count,
                 composed.Blocks[0].Evidence.Support);
@@ -201,7 +201,7 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
     /// be a composition that failed, which is the one thing this one does not do.
     /// </para>
     /// </remarks>
-    private async Task<string?> AskAsync(string turn, CancellationToken cancellationToken)
+    private async Task<ChatModelAnswer?> AskAsync(string turn, CancellationToken cancellationToken)
     {
         var endpoint = this.plan.Endpoint;
 
@@ -250,7 +250,7 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
     }
 
     /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
-    private async Task<string?> AskModelAsync(
+    private async Task<ChatModelAnswer> AskModelAsync(
         ChatGenerationPlan model,
         string turn,
         CancellationToken cancellationToken)
@@ -292,9 +292,9 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
         {
             DiscoveryCompositionEvents.LogResultUnreadable(this.logger, endpoint.Alias);
 
-            return null;
+            return new ChatModelAnswer(endpoint.Alias, Text: null);
         }
 
-        return response.Text;
+        return new ChatModelAnswer(endpoint.Alias, response.Text);
     }
 }

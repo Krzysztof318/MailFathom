@@ -6,7 +6,6 @@ using MailFathom.AI.Chat;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
-using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.EmailContent.Cleaning;
 using MailFathom.Application.Resilience;
@@ -41,6 +40,12 @@ namespace MailFathom.AI.BodyCleanup;
 /// model other than the one questions run on. Everything else in it is the endpoint's.
 /// </para>
 /// <para>
+/// That is also why a proposal writes no provider health. The chat role's state answers whether this deployment can
+/// answer questions, and a cleaning endpoint an operator declared separately says nothing about that — recording it
+/// there would report <c>ask_mail</c> degraded on the strength of an endpoint no question is ever sent to.
+/// <see cref="UnreportedProviderHealth" /> carries the rest of that reasoning.
+/// </para>
+/// <para>
 /// Each proposal opens its own credential, transport, chat client, and agent, and releases all four with it. That is the
 /// same lifetime every other agent here uses and for the same reasons: a rotated key is picked up by the next open rather
 /// than at the next restart, and one message's outline cannot outlive the call that sent it.
@@ -55,7 +60,6 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
     private readonly OpenAiCompatibleClientFactory clientFactory;
     private readonly IHttpClientFactory transportFactory;
     private readonly IOutboundOperationRunner operationRunner;
-    private readonly IAiProviderHealthRecorder healthRecorder;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly IAgentInstructionEnvelope instructionEnvelope;
     private readonly ILoggerFactory loggerFactory;
@@ -69,7 +73,6 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
     /// <param name="clientFactory">Opens the provider client.</param>
     /// <param name="transportFactory">Supplies the named outbound transport that client speaks over.</param>
     /// <param name="operationRunner">Applies this deployment's outbound resilience to the call.</param>
-    /// <param name="healthRecorder">Records what the endpoint did, so the availability gate can read it.</param>
     /// <param name="egressGuard">Withholds from the provider whatever this deployment withholds.</param>
     /// <param name="instructionEnvelope">The preamble and postamble every agent here carries.</param>
     /// <param name="loggerFactory">The factory the composed agent and the resilience decorator log through.</param>
@@ -83,7 +86,6 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
         OpenAiCompatibleClientFactory clientFactory,
         IHttpClientFactory transportFactory,
         IOutboundOperationRunner operationRunner,
-        IAiProviderHealthRecorder healthRecorder,
         SensitiveContentEgressGuard egressGuard,
         IAgentInstructionEnvelope instructionEnvelope,
         ILoggerFactory loggerFactory,
@@ -96,7 +98,6 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
         ArgumentNullException.ThrowIfNull(clientFactory);
         ArgumentNullException.ThrowIfNull(transportFactory);
         ArgumentNullException.ThrowIfNull(operationRunner);
-        ArgumentNullException.ThrowIfNull(healthRecorder);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(instructionEnvelope);
         ArgumentNullException.ThrowIfNull(loggerFactory);
@@ -109,7 +110,6 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
         this.clientFactory = clientFactory;
         this.transportFactory = transportFactory;
         this.operationRunner = operationRunner;
-        this.healthRecorder = healthRecorder;
         this.egressGuard = egressGuard;
         this.instructionEnvelope = instructionEnvelope;
         this.loggerFactory = loggerFactory;
@@ -144,7 +144,7 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
             this.plan.MaximumRequestCharacters,
             this.plan.MaximumRequestImageOctets);
 
-        if (await this.AskAsync(turn, cancellationToken) is not { } answerText)
+        if (await this.AskAsync(turn, cancellationToken) is not { Text: { } answerText } answer)
         {
             return this.Withhold(MailBodyCleaningWithholding.ProviderUnavailable);
         }
@@ -153,13 +153,13 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
 
         if (segments.Count == 0)
         {
-            MailBodyCleanupEvents.LogAnswerUnreadable(this.logger, this.plan.Endpoint.Alias, body.Blocks.Count);
+            MailBodyCleanupEvents.LogAnswerUnreadable(this.logger, answer.Alias, body.Blocks.Count);
         }
         else
         {
             MailBodyCleanupEvents.LogProposed(
                 this.logger,
-                this.plan.Endpoint.Alias,
+                answer.Alias,
                 segments.Count,
                 body.Blocks.Count);
         }
@@ -224,7 +224,7 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
     /// availability gate reads. A cancellation stays outside, being the reader withdrawing the wait rather than a provider
     /// failing to answer.
     /// </remarks>
-    private async Task<string?> AskAsync(string turn, CancellationToken cancellationToken)
+    private async Task<ChatModelAnswer?> AskAsync(string turn, CancellationToken cancellationToken)
     {
         // One ledger for the whole chain, so a proposal that falls through to the fallback spends the run's
         // single allowance across both attempts rather than opening a second one behind the first.
@@ -259,7 +259,7 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
     }
 
     /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
-    private async Task<string?> AskModelAsync(
+    private async Task<ChatModelAnswer> AskModelAsync(
         ChatGenerationPlan model,
         string turn,
         MailAnsweringRunLedger runLedger,
@@ -280,7 +280,7 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
             endpoint,
             model.RequestTimeout,
             this.operationRunner,
-            this.healthRecorder,
+            UnreportedProviderHealth.Instance,
             this.loggerFactory.CreateLogger<ResilientChatClient>());
 
         // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
@@ -299,7 +299,7 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
 
         var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
-        return response.Text;
+        return new ChatModelAnswer(endpoint.Alias, response.Text);
     }
 
     private MailBodyCleaningProposal Withhold(MailBodyCleaningWithholding withholding)

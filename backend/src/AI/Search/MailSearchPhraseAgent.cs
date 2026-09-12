@@ -127,8 +127,11 @@ internal sealed class MailSearchPhraseAgent : IMailSearchPhraseReader
             this.plan.MaximumRequestCharacters,
             this.plan.MaximumRequestImageOctets);
 
-        var answerText = await this.AskAsync(turn, cancellationToken);
-        var reading = MailSearchPhraseDocumentReading.Read(answerText);
+        var answer = await this.AskAsync(turn, cancellationToken);
+        var reading = MailSearchPhraseDocumentReading.Read(answer?.Text);
+
+        // The model that answered where one did, and the model the phrase was put to where none could.
+        var answeringAlias = answer?.Alias ?? endpoint.Alias;
 
         if (reading.WasRead)
         {
@@ -136,13 +139,13 @@ internal sealed class MailSearchPhraseAgent : IMailSearchPhraseReader
 
             MailSearchPhraseEvents.LogPhraseRead(
                 this.logger,
-                endpoint.Alias,
+                answeringAlias,
                 filterCount,
                 reading.Criteria.Count);
         }
         else
         {
-            MailSearchPhraseEvents.LogPhraseUnreadable(this.logger, endpoint.Alias);
+            MailSearchPhraseEvents.LogPhraseUnreadable(this.logger, answeringAlias);
         }
 
         return reading;
@@ -171,7 +174,7 @@ internal sealed class MailSearchPhraseAgent : IMailSearchPhraseReader
     /// withdrawing the search rather than a provider failing to read it.
     /// </para>
     /// </remarks>
-    private async Task<string?> AskAsync(string turn, CancellationToken cancellationToken)
+    private async Task<ChatModelAnswer?> AskAsync(string turn, CancellationToken cancellationToken)
     {
         try
         {
@@ -195,7 +198,7 @@ internal sealed class MailSearchPhraseAgent : IMailSearchPhraseReader
     }
 
     /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
-    private async Task<string?> AskModelAsync(
+    private async Task<ChatModelAnswer> AskModelAsync(
         ChatGenerationPlan model,
         string turn,
         CancellationToken cancellationToken)
@@ -234,6 +237,6 @@ internal sealed class MailSearchPhraseAgent : IMailSearchPhraseReader
 
         var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
-        return response.Text;
+        return new ChatModelAnswer(endpoint.Alias, response.Text);
     }
 }
