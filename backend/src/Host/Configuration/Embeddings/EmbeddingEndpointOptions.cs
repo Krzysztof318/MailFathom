@@ -112,6 +112,15 @@ internal sealed class EmbeddingEndpointOptions : IProviderEndpointReachDeclarati
     /// </remarks>
     public bool Unauthenticated { get; set; }
 
+    /// <summary>Gets the headers every request to this endpoint carries beside whatever the credential writes.</summary>
+    /// <remarks>
+    /// Empty for an endpoint reached directly, which is the ordinary deployment. What fills it is a gateway in front of
+    /// several models that routes by a header — and each value is a secret reference, so it is resolved per request and
+    /// never written into a configuration file. The same declaration a chat model carries, because what a header may be
+    /// does not depend on whether the request asks for a vector or for an answer.
+    /// </remarks>
+    public IList<ProviderEndpointHeaderOptions> ExtraHeaders { get; } = [];
+
     /// <summary>Reports every reason this endpoint could not be used, by reading the declaration alone.</summary>
     /// <returns>One result per rule this declaration breaks.</returns>
     /// <remarks>
@@ -151,6 +160,13 @@ internal sealed class EmbeddingEndpointOptions : IProviderEndpointReachDeclarati
         }
 
         foreach (var error in this.EntraCredential?.FindConfigurationErrors(alias) ?? [])
+        {
+            yield return error;
+        }
+
+        foreach (var error in ProviderEndpointHeaderOptions.FindConfigurationErrors(
+            DescribeEndpoint(alias),
+            [.. this.ExtraHeaders]))
         {
             yield return error;
         }

@@ -432,6 +432,105 @@ public sealed class EmbeddingOptionsTests
             error => error.MemberNames.Contains(nameof(EmbeddingOptions.MaxQueuedEmails), StringComparer.Ordinal));
     }
 
+    /// <summary>A gateway fronting several models routes by a header, and an embedding endpoint reached through one says so here.</summary>
+    [Fact]
+    public void Validate_AnEndpointDeclaringAnExtraHeader_IsAccepted()
+    {
+        // Arrange
+        var endpoint = Endpoint("indexing");
+        endpoint.ExtraHeaders.Add(Header("X-Tenant", "env:TENANT"));
+        var settings = SectionOver(endpoint);
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>The credential and the message framing are the request's own, so a declaration writing one would either lose silently or corrupt the request.</summary>
+    [Fact]
+    public void Validate_AnEndpointDeclaringAHeaderTheRequestWritesItself_IsRefused()
+    {
+        // Arrange
+        var endpoint = Endpoint("indexing");
+        endpoint.ExtraHeaders.Add(Header("Authorization", "env:TENANT"));
+        var settings = SectionOver(endpoint);
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.ErrorMessage!.Contains("writes for itself", StringComparison.Ordinal)
+                && error.ErrorMessage.Contains("indexing", StringComparison.Ordinal));
+    }
+
+    /// <summary>The value is a secret reference like the key beside it, so a header naming none says nothing to send.</summary>
+    [Fact]
+    public void Validate_AnEndpointDeclaringAHeaderWithNoValue_IsRefused()
+    {
+        // Arrange
+        var endpoint = Endpoint("indexing");
+        endpoint.ExtraHeaders.Add(new ProviderEndpointHeaderOptions { Name = "X-Tenant" });
+        var settings = SectionOver(endpoint);
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.ErrorMessage!.Contains("no Value", StringComparison.Ordinal));
+    }
+
+    /// <summary>A field name is sent once, so the repetitions would be resolved, paid for, and discarded.</summary>
+    [Fact]
+    public void Validate_AnEndpointDeclaringOneHeaderTwice_IsRefused()
+    {
+        // Arrange
+        var endpoint = Endpoint("indexing");
+        endpoint.ExtraHeaders.Add(Header("X-Tenant", "env:TENANT"));
+        endpoint.ExtraHeaders.Add(Header("x-tenant", "env:OTHER"));
+        var settings = SectionOver(endpoint);
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.ErrorMessage!.Contains("more than once", StringComparison.Ordinal));
+    }
+
+    /// <summary>A header's own rules name a property of the header, so the reported key reaches the element rather than stopping at the endpoint.</summary>
+    [Fact]
+    public void Validate_ASecondHeaderThatIsRefused_NamesTheKeyBelowExtraHeaders()
+    {
+        // Arrange
+        var endpoint = Endpoint("indexing");
+        endpoint.ExtraHeaders.Add(Header("X-Tenant", "env:TENANT"));
+        endpoint.ExtraHeaders.Add(Header("Content-Type", "env:OTHER"));
+        var settings = SectionOver(endpoint);
+
+        // Act
+        var keys = Validate(settings).SelectMany(error => error.MemberNames);
+
+        // Assert
+        Assert.Contains("ExtraHeaders:1:Name", keys);
+    }
+
+    private static ProviderEndpointHeaderOptions Header(string name, string secretReference) => new()
+    {
+        Name = name,
+        Value = new ConfiguredSecret { SecretReference = secretReference },
+    };
+
+    private static EmbeddingOptions SectionOver(EmbeddingEndpointOptions endpoint)
+    {
+        var settings = new EmbeddingOptions();
+        settings.Endpoints.Add(endpoint);
+
+        return settings;
+    }
+
     private static EmbeddingEndpointOptions Endpoint(
         string alias,
         string address = "https://provider.invalid/v1/") =>

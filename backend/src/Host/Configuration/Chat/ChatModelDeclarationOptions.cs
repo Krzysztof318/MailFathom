@@ -162,7 +162,7 @@ internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclar
     /// several models that routes by a header — and each value is a secret reference, so it is resolved per request and
     /// never written into a configuration file.
     /// </remarks>
-    public IList<ChatModelHeaderOptions> ExtraHeaders { get; } = [];
+    public IList<ProviderEndpointHeaderOptions> ExtraHeaders { get; } = [];
 
     /// <summary>Reports everything an operator must fix before this model could be called.</summary>
     /// <param name="position">Where in the declared array this block sits, which is how a message names a block whose alias is missing.</param>
@@ -259,7 +259,7 @@ internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclar
             yield return error;
         }
 
-        foreach (var error in this.FindHeaderErrors(description))
+        foreach (var error in ProviderEndpointHeaderOptions.FindConfigurationErrors(description, [.. this.ExtraHeaders]))
         {
             yield return error;
         }
@@ -286,43 +286,5 @@ internal sealed class ChatModelDeclarationOptions : IProviderEndpointReachDeclar
         Validator.TryValidateObject(this, new ValidationContext(this), results, validateAllProperties: true);
 
         return results;
-    }
-
-    /// <summary>Names a header's own result against the element it came from, so the key reaches the block re-keying complete.</summary>
-    /// <remarks>
-    /// A header's rules name <c>Name</c> or <c>Value</c>, which are properties of the element rather than of this
-    /// block, so the element's index is written in before <see cref="KeyedToThisBlock" /> prefixes the model's. Without
-    /// it an operator is sent to <c>Chat:Models:0:Name</c>, a key nothing binds.
-    /// </remarks>
-    private static ValidationResult KeyedToThisHeader(ValidationResult error, int index) => new(
-        error.ErrorMessage,
-        [.. error.MemberNames.Select(member => $"{nameof(ExtraHeaders)}:{index}:{member}")]);
-
-    private IEnumerable<ValidationResult> FindHeaderErrors(string description)
-    {
-        var declared = this.ExtraHeaders.SelectMany((header, index) => header
-            .FindConfigurationErrors(description)
-            .Select(error => KeyedToThisHeader(error, index)));
-
-        foreach (var error in declared)
-        {
-            yield return error;
-        }
-
-        // A repeated name is not two headers: the last one written wins and the others are paid for and discarded, so
-        // an operator who meant to send both learns it from a request that carried one of them.
-        var repeated = this.ExtraHeaders
-            .Select(header => header.Name.Trim())
-            .Where(name => name.Length > 0)
-            .GroupBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .Where(group => group.Count() > 1)
-            .Select(group => group.Key);
-
-        foreach (var name in repeated)
-        {
-            yield return new ValidationResult(
-                $"{description} declares the header '{name}' more than once. A field name is sent once, so the repetitions would be resolved and discarded.",
-                [nameof(this.ExtraHeaders)]);
-        }
     }
 }

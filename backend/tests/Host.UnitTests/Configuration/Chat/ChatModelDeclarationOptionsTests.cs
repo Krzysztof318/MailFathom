@@ -354,7 +354,7 @@ public sealed class ChatModelDeclarationOptionsTests
     {
         // Arrange
         var model = DeclaredChatModels.Model();
-        model.ExtraHeaders.Add(new ChatModelHeaderOptions { Name = "x-tenant" });
+        model.ExtraHeaders.Add(new ProviderEndpointHeaderOptions { Name = "x-tenant" });
 
         // Act
         var errors = Validate(model);
@@ -368,7 +368,7 @@ public sealed class ChatModelDeclarationOptionsTests
     {
         // Arrange
         var model = DeclaredChatModels.Model();
-        model.ExtraHeaders.Add(new ChatModelHeaderOptions
+        model.ExtraHeaders.Add(new ProviderEndpointHeaderOptions
         {
             Value = new ConfiguredSecret { SecretReference = "env:TENANT" },
         });
@@ -386,7 +386,7 @@ public sealed class ChatModelDeclarationOptionsTests
     {
         // Arrange
         var model = WithHeader("x-tenant", "env:TENANT");
-        model.ExtraHeaders.Add(new ChatModelHeaderOptions
+        model.ExtraHeaders.Add(new ProviderEndpointHeaderOptions
         {
             Name = "X-Tenant",
             Value = new ConfiguredSecret { SecretReference = "env:OTHER" },
@@ -440,7 +440,7 @@ public sealed class ChatModelDeclarationOptionsTests
     {
         // Arrange
         var model = WithHeader("x-tenant", "env:TENANT");
-        model.ExtraHeaders.Add(new ChatModelHeaderOptions
+        model.ExtraHeaders.Add(new ProviderEndpointHeaderOptions
         {
             Name = "Authorization",
             Value = new ConfiguredSecret { SecretReference = "env:OTHER" },
@@ -459,7 +459,7 @@ public sealed class ChatModelDeclarationOptionsTests
     {
         // Arrange
         var model = WithHeader("x-tenant", "env:TENANT");
-        model.ExtraHeaders.Add(new ChatModelHeaderOptions
+        model.ExtraHeaders.Add(new ProviderEndpointHeaderOptions
         {
             Name = "X-Tenant",
             Value = new ConfiguredSecret { SecretReference = "env:OTHER" },
@@ -476,7 +476,7 @@ public sealed class ChatModelDeclarationOptionsTests
     {
         var model = DeclaredChatModels.Model();
 
-        model.ExtraHeaders.Add(new ChatModelHeaderOptions
+        model.ExtraHeaders.Add(new ProviderEndpointHeaderOptions
         {
             Name = name,
             Value = new ConfiguredSecret { SecretReference = secretReference },

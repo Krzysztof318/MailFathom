@@ -193,13 +193,41 @@ public sealed class ConfiguredProviderEndpointCredentialSourceTests
         return settings;
     }
 
+    /// <summary>The same gateway products front an embedding model, so an embedding endpoint carries its routing header on exactly the terms a chat model does.</summary>
+    [Fact]
+    public async Task ResolveAsync_AnEmbeddingEndpointDeclaringExtraHeaders_PresentsEachOneResolved()
+    {
+        // Arrange
+        var embeddings = EmbeddingsDeclaring("indexing", "env:EMBEDDING_KEY");
+        embeddings.Endpoints[0].ExtraHeaders.Add(new ProviderEndpointHeaderOptions
+        {
+            Name = "X-Tenant",
+            Value = new ConfiguredSecret { SecretReference = "env:TENANT" },
+        });
+
+        var source = SourceOver(
+            embeddings,
+            ChatDeclaring("answering", "env:CHAT_KEY"),
+            ("env:EMBEDDING_KEY", "the-embedding-key"),
+            ("env:TENANT", "the-tenant"));
+
+        // Act
+        using var credential = await source.ResolveAsync("indexing", TestContext.Current.CancellationToken);
+
+        // Assert
+        var header = Assert.Single(credential.ExtraHeaders);
+        Assert.Equal("X-Tenant", header.Name);
+        Assert.Equal("the-tenant", header.Value);
+        Assert.Equal("the-embedding-key", credential.ApiKey);
+    }
+
     /// <summary>A declared header is material like the key beside it, so it is resolved per request and reaches the credential the request presents.</summary>
     [Fact]
     public async Task ResolveAsync_AModelDeclaringExtraHeaders_PresentsEachOneResolved()
     {
         // Arrange
         var chat = ChatDeclaring("answering", "env:CHAT_KEY");
-        chat.Models[0].ExtraHeaders.Add(new ChatModelHeaderOptions
+        chat.Models[0].ExtraHeaders.Add(new ProviderEndpointHeaderOptions
         {
             Name = "X-Tenant",
             Value = new ConfiguredSecret { SecretReference = "env:TENANT" },
@@ -227,7 +255,7 @@ public sealed class ConfiguredProviderEndpointCredentialSourceTests
     {
         // Arrange
         var chat = ChatDeclaring("answering", "env:CHAT_KEY");
-        chat.Models[0].ExtraHeaders.Add(new ChatModelHeaderOptions
+        chat.Models[0].ExtraHeaders.Add(new ProviderEndpointHeaderOptions
         {
             Name = "X-Tenant",
             Value = new ConfiguredSecret { SecretReference = "env:MISSING_TENANT" },

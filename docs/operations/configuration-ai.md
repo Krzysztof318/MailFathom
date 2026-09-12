@@ -582,6 +582,26 @@ default.
 | `…:ApiKey` | secret block | *(absent)* | the provider key. Exactly one of this, `EntraCredential`, and `Unauthenticated` is declared | restart, value read per request |
 | `…:Unauthenticated` | bool | `false` | that this endpoint asks for no credential, so a request presents none — the shape of a model server you run yourself. Written rather than inferred from the other two being absent, because that is what a forgotten key reference looks like | restart |
 
+### An extra header — `Embeddings:Endpoints:<n>:ExtraHeaders:<n>`
+
+The shape a gateway fronting several models asks for: a tenant, a project, or a routing key that decides which model
+answers, sent on every request beside whatever the credential writes. Declared per endpoint rather than once for the
+section, because the gateway one endpoint is reached through is not the server another one is. Empty is the ordinary
+deployment, which reaches its model directly and sends nothing extra. The same block a declared chat model carries,
+because what a header may be does not depend on whether the request asks for a vector or for an answer.
+
+The value is a secret block rather than a string, and that is why this is a pair of keys rather than a dictionary of
+them: what goes in one is a routing token or a tenant identifier — material of the same kind as the key beside it — so
+it is resolved per request from a reference and stays out of the configuration file. A reference nothing provisions
+takes the endpoint out of service rather than sending the request without the header, because a gateway reading it
+would route the call somewhere else — and the chain then falls through to the next endpoint, which is what a chain is
+for.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `…:Name` | string | — | required; a field name as RFC 9110 defines one — letters, digits, and the characters ``!#$%&'*+-.^_`|~`` and nothing else. `Authorization`, `Host`, `Content-Length`, `Content-Type`, and `Transfer-Encoding` are refused, matched without case: the first is the credential's own and the other four frame the message. Declaring one name twice is refused, because a field name is sent once and the repetitions would be resolved, paid for, and discarded | restart |
+| `…:Value` | secret block | — | required; the reference the value is resolved from, per request | restart, value read per request |
+
 ### Microsoft Entra credential — `Embeddings:Endpoints:<n>:EntraCredential`
 
 For an endpoint where no key exists to provision. All four shapes are non-interactive by construction: MailFathom is a
@@ -656,22 +676,9 @@ was found to serve.
 
 ### An extra header — `Chat:Models:<n>:ExtraHeaders:<n>`
 
-The shape a gateway fronting several models asks for: a tenant, a project, or a routing key that decides which model
-answers, sent on every request beside whatever the credential writes. Declared per model rather than once for the
-section, because the gateway one model is reached through is not the server another one is. Empty is the ordinary
-deployment, which reaches its model directly and sends nothing extra.
-
-The value is a secret block rather than a string, and that is why this is a pair of keys rather than a dictionary of
-them: what goes in one is a routing token or a tenant identifier — material of the same kind as the key beside it — so
-it is resolved per request from a reference, stays out of the configuration file, and is found by the same secret
-discovery that finds every other credential this deployment holds. A reference nothing provisions takes the model out of
-service rather than sending the request without the header, because a gateway reading it would route the call somewhere
-else.
-
-| Key | Type | Default | Constraint | Change |
-| --- | --- | --- | --- | --- |
-| `…:Name` | string | — | required; a field name as RFC 9110 defines one — letters, digits, and the characters ``!#$%&'*+-.^_`|~`` and nothing else. `Authorization`, `Host`, `Content-Length`, `Content-Type`, and `Transfer-Encoding` are refused, matched without case: the first is the credential's own and the other four frame the message | reload |
-| `…:Value` | secret block | — | required; the reference the value is resolved from, per request | reload, value read per request |
+The same block, with the same keys, defaults, and rules as
+[`Embeddings:Endpoints:<n>:ExtraHeaders:<n>`](#an-extra-header--embeddingsendpointsnextraheadersn) above. Its keys
+reload here and take a restart there, for the reason the Microsoft Entra block above gives.
 
 ### Microsoft Entra credential — `Chat:Models:<n>:EntraCredential`
 
