@@ -70,11 +70,13 @@ internal sealed partial class AiProviderTransportEncryptionWarning : IHostedServ
             this.LogEmbeddingEndpointReachedInClearText(endpointAlias);
         }
 
-        var chat = this.chatSettings.Current;
+        var clearTextChatAliases = this.chatSettings.Current.Models
+            .Where(model => ProviderEndpointReachRules.IsReachedInClearText(model.Address))
+            .Select(model => model.Alias.Trim());
 
-        if (chat.IsConfigured && ProviderEndpointReachRules.IsReachedInClearText(chat.Address))
+        foreach (var modelAlias in clearTextChatAliases)
         {
-            this.LogChatEndpointReachedInClearText(chat.Alias.Trim());
+            this.LogChatEndpointReachedInClearText(modelAlias);
         }
 
         return Task.CompletedTask;

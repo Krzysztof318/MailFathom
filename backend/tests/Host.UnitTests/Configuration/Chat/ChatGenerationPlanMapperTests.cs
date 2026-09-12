@@ -4,6 +4,7 @@
 
 using MailFathom.AI.Chat;
 using MailFathom.Host.Configuration.Chat;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using Xunit;
 
@@ -13,10 +14,10 @@ namespace MailFathom.Host.UnitTests.Configuration.Chat;
 public sealed class ChatGenerationPlanMapperTests
 {
     [Fact]
-    public void Map_ADeclaredEndpoint_CarriesEveryDeclaredParameter()
+    public void Map_ADeclaredModel_CarriesEveryDeclaredParameter()
     {
         // Arrange
-        var settings = new ChatModelOptions
+        var settings = DeclaredChatModels.Section(new ChatModelDeclarationOptions
         {
             Alias = "answering",
             Model = "a-chat-model",
@@ -31,7 +32,7 @@ public sealed class ChatGenerationPlanMapperTests
             MaxRequestImageOctets = 2_000_000,
             RequestTimeout = TimeSpan.FromSeconds(90),
             ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" },
-        };
+        });
 
         // Act
         var plan = ChatGenerationPlanMapper.Map(settings);
@@ -62,20 +63,77 @@ public sealed class ChatGenerationPlanMapperTests
         Assert.Null(plan);
     }
 
-    /// <summary>Chat completions is what a section stating no API runs on, because every OpenAI-compatible server offers it.</summary>
+    /// <summary>A section declaring one model and naming none resolves to that one, which is what keeps the ordinary deployment to a single block.</summary>
     [Fact]
-    public void Map_ASectionStatingNoApi_ReachesTheProviderThroughChatCompletions()
+    public void Map_OneModelAndNoMainModelNamed_ResolvesToThatModel()
     {
         // Arrange
-        var settings = new ChatModelOptions
-        {
-            Alias = "answering",
-            Model = "a-chat-model",
-            ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" },
-        };
+        var settings = DeclaredChatModels.Section(DeclaredChatModels.Model("the-only-one"));
 
         // Act
         var plan = ChatGenerationPlanMapper.Map(settings);
+
+        // Assert
+        Assert.NotNull(plan);
+        Assert.Equal("the-only-one", plan.Endpoint.Alias);
+    }
+
+    /// <summary>A declared fallback reaches the plan, so one call that the first model could not answer has somewhere else to go.</summary>
+    [Fact]
+    public void Map_AMainModelWithAFallback_CarriesTheFallbackBehindIt()
+    {
+        // Arrange
+        var settings = DeclaredChatModels.SectionWithFallback();
+
+        // Act
+        var plan = ChatGenerationPlanMapper.Map(settings);
+
+        // Assert
+        Assert.NotNull(plan);
+        Assert.Equal("answering", plan.Endpoint.Alias);
+        Assert.Equal("standby", plan.Fallback?.Endpoint.Alias);
+        Assert.Equal(["answering", "standby"], plan.Chain.Select(model => model.Endpoint.Alias));
+    }
+
+    /// <summary>A capability naming a model of its own is routed to that one rather than to the model questions are answered by.</summary>
+    [Fact]
+    public void Map_AReferenceNamingItsOwnModel_ResolvesToThatModel()
+    {
+        // Arrange
+        var settings = DeclaredChatModels.Section(
+            DeclaredChatModels.Model("answering"),
+            DeclaredChatModels.Model("cheap", model: "a-small-fast-model"));
+
+        // Act
+        var plan = ChatGenerationPlanMapper.Map(settings, new ChatModelReferenceOptions { Alias = "cheap" });
+
+        // Assert
+        Assert.NotNull(plan);
+        Assert.Equal("a-small-fast-model", plan.Endpoint.RoutedModelName);
+    }
+
+    /// <summary>A reference that names no model takes the main model and the fallback behind it, rather than half of the arrangement.</summary>
+    [Fact]
+    public void Map_AReferenceNamingNoModel_TakesTheMainModelAndItsFallback()
+    {
+        // Arrange
+        var settings = DeclaredChatModels.SectionWithFallback();
+
+        // Act
+        var plan = ChatGenerationPlanMapper.Map(settings, new ChatModelReferenceOptions());
+
+        // Assert
+        Assert.NotNull(plan);
+        Assert.Equal("answering", plan.Endpoint.Alias);
+        Assert.Equal("standby", plan.Fallback?.Endpoint.Alias);
+    }
+
+    /// <summary>Chat completions is what a model stating no API runs on, because every OpenAI-compatible server offers it.</summary>
+    [Fact]
+    public void Map_AModelStatingNoApi_ReachesTheProviderThroughChatCompletions()
+    {
+        // Act
+        var plan = ChatGenerationPlanMapper.Map(DeclaredChatModels.Section());
 
         // Assert
         Assert.NotNull(plan);
@@ -89,16 +147,8 @@ public sealed class ChatGenerationPlanMapperTests
     [Fact]
     public void Map_WithoutSamplingParameters_LeavesThemUnset()
     {
-        // Arrange
-        var settings = new ChatModelOptions
-        {
-            Alias = "answering",
-            Model = "a-chat-model",
-            ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" },
-        };
-
         // Act
-        var plan = ChatGenerationPlanMapper.Map(settings);
+        var plan = ChatGenerationPlanMapper.Map(DeclaredChatModels.Section());
 
         // Assert
         Assert.NotNull(plan);

@@ -226,41 +226,11 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
 
         try
         {
-            // Opened per composition and released with it, so a rotated key is picked up by the next question and the
-            // material exists for one call rather than for process uptime.
-            using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
-            using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
-            using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
-
-            using var resilientClient = new ResilientChatClient(
-                providerClient,
-                endpoint,
-                this.plan.RequestTimeout,
-                this.operationRunner,
-                this.healthRecorder,
-                this.loggerFactory.CreateLogger<ResilientChatClient>());
-
-            // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
-            // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
-            // the run's and the period's: this call is one of the two a Discover run makes, and both are charged.
-            await using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
-
-            var agent = DiscoveryCompositionAgentComposition.Compose(
-                chatClient,
+            return await ChatModelFallThrough.RunAsync(
                 this.plan,
-                this.instructionEnvelope,
-                this.loggerFactory);
-
-            var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
-
-            if (string.IsNullOrWhiteSpace(response.Text))
-            {
-                DiscoveryCompositionEvents.LogResultUnreadable(this.logger, endpoint.Alias);
-
-                return null;
-            }
-
-            return response.Text;
+                this.logger,
+                (model, attemptToken) => this.AskModelAsync(model, turn, attemptToken),
+                cancellationToken);
         }
         catch (ChatGenerationFailedException)
         {
@@ -277,5 +247,50 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
 
             return null;
         }
+    }
+
+    /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
+    private async Task<string?> AskModelAsync(
+        ChatGenerationPlan model,
+        string turn,
+        CancellationToken cancellationToken)
+    {
+        var endpoint = model.Endpoint;
+
+        // Opened per composition and released with it, so a rotated key is picked up by the next question and the
+        // material exists for one call rather than for process uptime.
+        using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
+        using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
+        using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
+
+        using var resilientClient = new ResilientChatClient(
+            providerClient,
+            endpoint,
+            model.RequestTimeout,
+            this.operationRunner,
+            this.healthRecorder,
+            this.loggerFactory.CreateLogger<ResilientChatClient>());
+
+        // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
+        // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
+        // the run's and the period's: this call is one of the two a Discover run makes, and both are charged.
+        await using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
+
+        var agent = DiscoveryCompositionAgentComposition.Compose(
+            chatClient,
+            model,
+            this.instructionEnvelope,
+            this.loggerFactory);
+
+        var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(response.Text))
+        {
+            DiscoveryCompositionEvents.LogResultUnreadable(this.logger, endpoint.Alias);
+
+            return null;
+        }
+
+        return response.Text;
     }
 }

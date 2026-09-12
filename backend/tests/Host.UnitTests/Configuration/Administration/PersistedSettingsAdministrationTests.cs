@@ -182,10 +182,14 @@ public sealed class PersistedSettingsAdministrationTests
         const string persisted = """
             {
               "Chat": {
-                "Alias": "primary",
-                "Address": "https://models.example/",
-                "Model": "small",
-                "ApiKey": { "Name": "chat-key", "SecretReference": "file:/run/secrets/chat" }
+                "Models": [
+                  {
+                    "Alias": "primary",
+                    "Address": "https://models.example/",
+                    "Model": "small",
+                    "ApiKey": { "Name": "chat-key", "SecretReference": "file:/run/secrets/chat" }
+                  }
+                ]
               },
               "MailboxSearch": { "WordsPerSnippet": "12" }
             }

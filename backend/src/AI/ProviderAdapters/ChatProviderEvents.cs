@@ -44,4 +44,14 @@ internal static partial class ChatProviderEvents
         ILogger logger,
         string endpointAlias,
         ChatGenerationStop chatStop);
+
+    [LoggerMessage(
+        EventId = 4,
+        Level = LogLevel.Warning,
+        Message = "Chat endpoint {EndpointAlias} could not answer and failed with {ChatFailure}, so the call is being attempted against the declared fallback model {FallbackAlias}.")]
+    internal static partial void LogFallingThroughToFallback(
+        ILogger logger,
+        string endpointAlias,
+        ChatGenerationFailure chatFailure,
+        string fallbackAlias);
 }

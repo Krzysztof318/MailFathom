@@ -254,38 +254,13 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
         MailUserLanguage language,
         CancellationToken cancellationToken)
     {
-        var endpoint = this.plan.Endpoint;
-
         try
         {
-            using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
-            using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
-            using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
-
-            using var resilientClient = new ResilientChatClient(
-                providerClient,
-                endpoint,
-                this.plan.RequestTimeout,
-                this.operationRunner,
-                this.healthRecorder,
-                this.loggerFactory.CreateLogger<ResilientChatClient>());
-
-            // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
-            // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
-            // this request's and the period's: what an operator pays a provider does not change because the call was
-            // started from a composer.
-            await using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
-
-            var agent = ReplyDraftAgentComposition.Compose(
-                chatClient,
+            return await ChatModelFallThrough.RunAsync(
                 this.plan,
-                language,
-                this.instructionEnvelope,
-                this.loggerFactory);
-
-            var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
-
-            return response.Text;
+                this.logger,
+                (model, attemptToken) => this.AskModelAsync(model, turn, language, attemptToken),
+                cancellationToken);
         }
         catch (ChatGenerationFailedException)
         {
@@ -298,5 +273,44 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
             // health record behind, the resilience decorator not yet existing to write one.
             return null;
         }
+    }
+
+    /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
+    private async Task<string?> AskModelAsync(
+        ChatGenerationPlan model,
+        string turn,
+        MailUserLanguage language,
+        CancellationToken cancellationToken)
+    {
+        var endpoint = model.Endpoint;
+
+        using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
+        using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
+        using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
+
+        using var resilientClient = new ResilientChatClient(
+            providerClient,
+            endpoint,
+            model.RequestTimeout,
+            this.operationRunner,
+            this.healthRecorder,
+            this.loggerFactory.CreateLogger<ResilientChatClient>());
+
+        // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
+        // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
+        // this request's and the period's: what an operator pays a provider does not change because the call was
+        // started from a composer.
+        await using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
+
+        var agent = ReplyDraftAgentComposition.Compose(
+            chatClient,
+            model,
+            language,
+            this.instructionEnvelope,
+            this.loggerFactory);
+
+        var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
+
+        return response.Text;
     }
 }

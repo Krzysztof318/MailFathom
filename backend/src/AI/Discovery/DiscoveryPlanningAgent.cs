@@ -171,39 +171,13 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
     /// </remarks>
     private async Task<string?> AskAsync(string turn, CancellationToken cancellationToken)
     {
-        var endpoint = this.plan.Endpoint;
-
         try
         {
-            // Opened per derivation and released with it, so a rotated key is picked up by the next question and the
-            // material exists for one call rather than for process uptime. It is the sequence an answering run opens
-            // with as well.
-            using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
-            using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
-            using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
-
-            using var resilientClient = new ResilientChatClient(
-                providerClient,
-                endpoint,
-                this.plan.RequestTimeout,
-                this.operationRunner,
-                this.healthRecorder,
-                this.loggerFactory.CreateLogger<ResilientChatClient>());
-
-            // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
-            // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
-            // the run's and the period's: this call is the first of the two a Discover run makes, and both are charged.
-            await using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
-
-            var agent = DiscoveryPlanningAgentComposition.Compose(
-                chatClient,
+            return await ChatModelFallThrough.RunAsync(
                 this.plan,
-                this.instructionEnvelope,
-                this.loggerFactory);
-
-            var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
-
-            return response.Text;
+                this.logger,
+                (model, attemptToken) => this.AskModelAsync(model, turn, attemptToken),
+                cancellationToken);
         }
         catch (ChatGenerationFailedException)
         {
@@ -216,5 +190,44 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
             // health record behind, the resilience decorator not yet existing to write one.
             return null;
         }
+    }
+
+    /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
+    private async Task<string?> AskModelAsync(
+        ChatGenerationPlan model,
+        string turn,
+        CancellationToken cancellationToken)
+    {
+        var endpoint = model.Endpoint;
+
+        // Opened per derivation and released with it, so a rotated key is picked up by the next question and the
+        // material exists for one call rather than for process uptime. It is the sequence an answering run opens
+        // with as well.
+        using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
+        using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
+        using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
+
+        using var resilientClient = new ResilientChatClient(
+            providerClient,
+            endpoint,
+            model.RequestTimeout,
+            this.operationRunner,
+            this.healthRecorder,
+            this.loggerFactory.CreateLogger<ResilientChatClient>());
+
+        // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
+        // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
+        // the run's and the period's: this call is the first of the two a Discover run makes, and both are charged.
+        await using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
+
+        var agent = DiscoveryPlanningAgentComposition.Compose(
+            chatClient,
+            model,
+            this.instructionEnvelope,
+            this.loggerFactory);
+
+        var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
+
+        return response.Text;
     }
 }

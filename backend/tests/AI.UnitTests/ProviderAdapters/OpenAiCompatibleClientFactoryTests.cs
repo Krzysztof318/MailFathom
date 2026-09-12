@@ -128,6 +128,74 @@ public sealed class OpenAiCompatibleClientFactoryTests
         Assert.DoesNotContain(sentHeaders, header => header.Key.Contains("api-key", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// The shape a gateway fronting several models asks for: a routing header beside the credential, resolved from a
+    /// secret reference and written on every request rather than baked into the address.
+    /// </summary>
+    [Fact]
+    public async Task OpenChatClient_AnEndpointDeclaringExtraHeaders_SendsEachOneBesideTheCredential()
+    {
+        // Arrange
+        HttpRequestHeaders? sentHeaders = null;
+        using var handler = new FakeHttpMessageHandler((request, _) =>
+        {
+            sentHeaders = request.Headers;
+
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(OneChatCompletion(), Encoding.UTF8, "application/json"),
+            });
+        });
+        using var transport = new HttpClient(handler, disposeHandler: false);
+        using var credential = ProviderEndpointCredential.FromApiKey(
+            "a-resolved-key",
+            resolvedMaterial: null,
+            extraHeaders:
+            [
+                new ProviderEndpointHeader("X-Tenant", "a-resolved-tenant"),
+                new ProviderEndpointHeader("X-Route", "a-resolved-route"),
+            ]);
+
+        using var client = this.factory.OpenChatClient(ChatDeclarations.Endpoint(), credential, transport);
+
+        // Act
+        await client.GetResponseAsync("a question", cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(sentHeaders);
+        Assert.Equal("a-resolved-tenant", Assert.Single(sentHeaders.GetValues("X-Tenant")));
+        Assert.Equal("a-resolved-route", Assert.Single(sentHeaders.GetValues("X-Route")));
+        Assert.Equal("a-resolved-key", sentHeaders.Authorization?.Parameter);
+    }
+
+    /// <summary>A model declaring none is the ordinary deployment, and it must reach the provider carrying nothing extra.</summary>
+    [Fact]
+    public async Task OpenChatClient_AnEndpointDeclaringNoExtraHeaders_SendsNoneOfItsOwn()
+    {
+        // Arrange
+        HttpRequestHeaders? sentHeaders = null;
+        using var handler = new FakeHttpMessageHandler((request, _) =>
+        {
+            sentHeaders = request.Headers;
+
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(OneChatCompletion(), Encoding.UTF8, "application/json"),
+            });
+        });
+        using var transport = new HttpClient(handler, disposeHandler: false);
+        using var credential = ProviderEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
+
+        using var client = this.factory.OpenChatClient(ChatDeclarations.Endpoint(), credential, transport);
+
+        // Act
+        await client.GetResponseAsync("a question", cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(sentHeaders);
+        Assert.DoesNotContain(sentHeaders, header => header.Key.StartsWith("X-", StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>The other role reaches the same server through the same construction, so neither is left unreachable.</summary>
     [Fact]
     public void OpenChatClient_AnEndpointNeedingNoCredential_OpensAClient()
@@ -420,4 +488,10 @@ public sealed class OpenAiCompatibleClientFactoryTests
             + $"\"index\":0,\"embedding\":[{string.Join(',', components)}]}}],"
             + "\"usage\":{\"prompt_tokens\":1,\"total_tokens\":1}}";
     }
+
+    /// <summary>Builds the chat-completion payload a provider answers with.</summary>
+    private static string OneChatCompletion() =>
+        "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"created\":1,\"model\":\"a-chat-model\","
+        + "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"an answer\"},"
+        + "\"finish_reason\":\"stop\"}]}";
 }

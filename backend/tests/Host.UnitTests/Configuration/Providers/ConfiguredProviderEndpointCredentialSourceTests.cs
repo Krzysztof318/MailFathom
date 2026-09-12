@@ -156,13 +156,8 @@ public sealed class ConfiguredProviderEndpointCredentialSourceTests
     public async Task ResolveAsync_AChatEndpointNeedingNoCredential_PresentsNothing()
     {
         // Arrange
-        var chat = new ChatModelOptions
-        {
-            Alias = "answering",
-            Model = "a-chat-model",
-            Address = "http://model-server:8000/v1",
-            Unauthenticated = true,
-        };
+        var chat = DeclaredChatModels.Section(
+            DeclaredChatModels.Model(address: "http://model-server:8000/v1", authenticated: false));
 
         var source = SourceOver(new EmbeddingOptions(), chat);
 
@@ -189,12 +184,65 @@ public sealed class ConfiguredProviderEndpointCredentialSourceTests
         return settings;
     }
 
-    private static ChatModelOptions ChatDeclaring(string alias, string secretReference) => new()
+    private static ChatModelOptions ChatDeclaring(string alias, string secretReference)
     {
-        Alias = alias,
-        Model = "a-chat-model",
-        ApiKey = new ConfiguredSecret { SecretReference = secretReference },
-    };
+        var settings = DeclaredChatModels.Section(DeclaredChatModels.Model(alias));
+
+        settings.Models[0].ApiKey = new ConfiguredSecret { SecretReference = secretReference };
+
+        return settings;
+    }
+
+    /// <summary>A declared header is material like the key beside it, so it is resolved per request and reaches the credential the request presents.</summary>
+    [Fact]
+    public async Task ResolveAsync_AModelDeclaringExtraHeaders_PresentsEachOneResolved()
+    {
+        // Arrange
+        var chat = ChatDeclaring("answering", "env:CHAT_KEY");
+        chat.Models[0].ExtraHeaders.Add(new ChatModelHeaderOptions
+        {
+            Name = "X-Tenant",
+            Value = new ConfiguredSecret { SecretReference = "env:TENANT" },
+        });
+
+        var source = SourceOver(
+            new EmbeddingOptions(),
+            chat,
+            ("env:CHAT_KEY", "the-chat-key"),
+            ("env:TENANT", "the-tenant"));
+
+        // Act
+        using var credential = await source.ResolveAsync("answering", TestContext.Current.CancellationToken);
+
+        // Assert
+        var header = Assert.Single(credential.ExtraHeaders);
+        Assert.Equal("X-Tenant", header.Name);
+        Assert.Equal("the-tenant", header.Value);
+        Assert.Equal("the-chat-key", credential.ApiKey);
+    }
+
+    /// <summary>A header nothing provisions takes the model out of service rather than sending a request without it, because a gateway reading that header would route the call somewhere else.</summary>
+    [Fact]
+    public async Task ResolveAsync_AHeaderReferenceThatCannotBeResolved_NamesTheModelAndNotTheTarget()
+    {
+        // Arrange
+        var chat = ChatDeclaring("answering", "env:CHAT_KEY");
+        chat.Models[0].ExtraHeaders.Add(new ChatModelHeaderOptions
+        {
+            Name = "X-Tenant",
+            Value = new ConfiguredSecret { SecretReference = "env:MISSING_TENANT" },
+        });
+
+        var source = SourceOver(new EmbeddingOptions(), chat, ("env:CHAT_KEY", "the-chat-key"));
+
+        // Act
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            source.ResolveAsync("answering", TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Contains("answering", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("MISSING_TENANT", failure.Message, StringComparison.Ordinal);
+    }
 
     private static ConfiguredProviderEndpointCredentialSource SourceOver(
         EmbeddingOptions embeddings,

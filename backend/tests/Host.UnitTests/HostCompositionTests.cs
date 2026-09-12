@@ -77,10 +77,10 @@ public sealed class HostCompositionTests
     /// <summary>The declared chat endpoint, which is what makes the deployment one that answers questions.</summary>
     private static readonly KeyValuePair<string, string?>[] ChatEndpoint =
     [
-        new("Chat:Alias", "chat"),
-        new("Chat:Model", "a-model"),
-        new("Chat:Address", "http://models.example.test/v1/"),
-        new("Chat:Unauthenticated", "true"),
+        new("Chat:Models:0:Alias", "chat"),
+        new("Chat:Models:0:Model", "a-model"),
+        new("Chat:Models:0:Address", "http://models.example.test/v1/"),
+        new("Chat:Models:0:Unauthenticated", "true"),
     ];
 
     /// <summary>The declared object-storage endpoint, which is what makes the deployment one that stores payloads outside the database.</summary>
@@ -263,7 +263,12 @@ public sealed class HostCompositionTests
             ["bodies cleaned on a model of their own"] =
             [
                 .. ChatEndpoint,
-                new("Chat:BodyCleanup:Model", "a-small-fast-model"),
+                new("Chat:Models:1:Alias", "cheap"),
+                new("Chat:Models:1:Model", "a-small-fast-model"),
+                new("Chat:Models:1:Address", "http://models.example.test/v1/"),
+                new("Chat:Models:1:Unauthenticated", "true"),
+                new("Chat:MainModel:Alias", "chat"),
+                new("Chat:BodyCleanup:Model:Alias", "cheap"),
             ],
             ["replies drafted from a conversation"] =
             [
@@ -726,7 +731,7 @@ public sealed class HostCompositionTests
         // Arrange
         var builder = ConfiguredBuilder(
             "images described in words",
-            [new("Chat:MaxRequestImageOctets", "0")]);
+            [new("Chat:Models:0:MaxRequestImageOctets", "0")]);
 
         // Act
         var refusal = Record.Exception(() => HostComposition.Compose(builder));
@@ -735,7 +740,7 @@ public sealed class HostCompositionTests
         var validationFailure = Assert.IsType<OptionsValidationException>(refusal);
         Assert.Contains(
             validationFailure.Failures,
-            failure => failure.StartsWith("Chat:MaxRequestImageOctets", StringComparison.Ordinal));
+            failure => failure.StartsWith("MaxRequestImageOctets on the chat model 'chat'", StringComparison.Ordinal));
     }
 
     /// <summary>

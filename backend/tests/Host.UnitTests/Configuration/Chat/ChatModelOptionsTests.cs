@@ -3,16 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.ComponentModel.DataAnnotations;
-using MailFathom.AI.Chat;
-using MailFathom.AI.Providers;
 using MailFathom.Host.Configuration.Chat;
-using MailFathom.Host.Configuration.Providers;
-using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Chat;
 
-/// <summary>Covers what a chat declaration has to say before an instance will start on it.</summary>
+/// <summary>Covers what a chat section has to say before an instance will start on it: which models it declares, and which of them each capability runs on.</summary>
 public sealed class ChatModelOptionsTests
 {
     /// <summary>An instance that generates nothing is a working instance, so an absent section starts the service.</summary>
@@ -31,45 +28,36 @@ public sealed class ChatModelOptionsTests
     }
 
     /// <summary>
-    /// A section carrying a model and a key but no alias reads to an operator as a configured provider, and nothing
-    /// would ever call it. That is the one absent-alias shape worth refusing rather than passing over.
-    /// </summary>
-    /// <summary>
-    /// Each of these members has no useful default, so writing one is unambiguous intent that a provider be in use. An
-    /// address in particular is what a private or cloud deployment is reached at, and dropping it silently would leave
-    /// an operator believing their traffic goes somewhere it never does.
+    /// A section switching a capability on while declaring no model reads to an operator as a configured provider, and
+    /// nothing would ever call it. That is the one shape worth refusing rather than passing over.
     /// </summary>
     /// <remarks>The case is named rather than passed, because the bound options type is internal to the host and a public test signature may not carry it.</remarks>
     [Theory]
-    [InlineData("model")]
-    [InlineData("address")]
-    [InlineData("api-key")]
-    [InlineData("entra-credential")]
-    [InlineData("unauthenticated")]
-    [InlineData("reasoning-effort")]
-    [InlineData("api")]
+    [InlineData("main-model")]
     [InlineData("enrichment")]
+    [InlineData("thread-state")]
+    [InlineData("relevance-filter")]
     [InlineData("body-cleanup-model")]
-    public void Validate_SettingsWithNoAlias_AreRefusedRatherThanIgnored(string writtenSetting)
+    public void Validate_SettingsWithNoDeclaredModel_AreRefusedRatherThanIgnored(string writtenSetting)
     {
         // Arrange
-        var settings = WrittenWithoutAnAlias(writtenSetting);
+        var settings = WrittenWithoutAModel(writtenSetting);
 
         // Act
         var errors = Validate(settings);
 
         // Assert
         Assert.False(settings.IsConfigured);
-        Assert.Contains(errors, error => error.Contains("Alias", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("Models", StringComparison.Ordinal));
     }
 
     /// <summary>
-    /// Reading a sentence into filters follows the endpoint rather than declaring one, which is why it is absent from
-    /// the list above: it is the one nested block that is on by default, so a section carrying it is the section every
-    /// deployment binds. Writing it off is an operator declining something they have, and it declares nothing.
+    /// Reading a sentence into filters follows the declared models rather than declaring one, which is why it is absent
+    /// from the list above: it is one of the nested blocks that is on by default, so a section carrying it is the section
+    /// every deployment binds. Writing it off is an operator declining something they have, and it declares nothing.
     /// </summary>
     [Fact]
-    public void Validate_PhraseReadingWrittenOffWithNoAlias_DeclaresNoProvider()
+    public void Validate_PhraseReadingWrittenOffWithNoModel_DeclaresNoProvider()
     {
         // Arrange
         var settings = new ChatModelOptions
@@ -85,30 +73,11 @@ public sealed class ChatModelOptionsTests
         Assert.Empty(errors);
     }
 
-    /// <summary>
-    /// A section left entirely alone is the ordinary deployment that generates nothing, and the bounds and the timeout
-    /// carry defaults — so a deployment that accepted them is indistinguishable from one that never wrote the section,
-    /// and neither may be refused.
-    /// </summary>
     [Fact]
-    public void Validate_ASectionCarryingOnlyDefaults_IsAcceptedAsNoProvider()
+    public void Validate_OneDeclaredModel_IsAcceptedAndAnswersWithoutBeingNamed()
     {
         // Arrange
-        var settings = new ChatModelOptions { MaxOutputTokens = 2048, RequestTimeout = TimeSpan.FromMinutes(3) };
-
-        // Act
-        var errors = Validate(settings);
-
-        // Assert
-        Assert.False(settings.IsConfigured);
-        Assert.Empty(errors);
-    }
-
-    [Fact]
-    public void Validate_ADeclaredEndpoint_IsAccepted()
-    {
-        // Arrange
-        var settings = Declared();
+        var settings = DeclaredChatModels.Section();
 
         // Act
         var errors = Validate(settings);
@@ -116,331 +85,64 @@ public sealed class ChatModelOptionsTests
         // Assert
         Assert.True(settings.IsConfigured);
         Assert.Empty(errors);
+        Assert.Equal("answering", settings.FindMainModel()?.Alias);
     }
 
+    /// <summary>An alias names one endpoint, because it is what a credential, a resilience circuit, and a log line are keyed by.</summary>
     [Fact]
-    public void Validate_AnEndpointWithNoModel_IsRefused()
+    public void Validate_TwoModelsUnderOneAlias_IsRefused()
     {
         // Arrange
-        var settings = Declared();
-        settings.Model = string.Empty;
+        var settings = DeclaredChatModels.Section(
+            DeclaredChatModels.Model("answering"),
+            DeclaredChatModels.Model("Answering", model: "another-chat-model"));
 
         // Act
         var errors = Validate(settings);
 
         // Assert
-        Assert.Contains(errors, error => error.Contains("Model", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("more than one chat model", StringComparison.Ordinal));
     }
 
-    /// <summary>Only the two schemes a request could be sent over are addresses at all.</summary>
-    [Theory]
-    [InlineData("/openai/v1/")]
-    [InlineData("not an address")]
-    [InlineData("ftp://provider.invalid/v1/")]
-    public void Validate_AnAddressThatIsNotAbsoluteHttpOrHttps_IsRefused(string address)
+    /// <summary>Two models and nothing naming which answers is not a default anything could pick without guessing.</summary>
+    [Fact]
+    public void Validate_SeveralModelsAndNoMainModelNamed_IsRefused()
     {
         // Arrange
-        var settings = Declared();
-        settings.Address = address;
+        var settings = DeclaredChatModels.Section(
+            DeclaredChatModels.Model("answering"),
+            DeclaredChatModels.Model("cheap", model: "a-small-fast-model"));
+
+        settings.MainModel.Alias = string.Empty;
 
         // Act
         var errors = Validate(settings);
 
         // Assert
-        Assert.Contains(errors, error => error.Contains("Address", StringComparison.Ordinal));
+        Assert.False(settings.IsConfigured);
+        Assert.Contains(errors, error => error.Contains("MainModel", StringComparison.Ordinal));
     }
 
-    /// <summary>The declared endpoint carries a credential, so an unencrypted address would publish it to anything on the path.</summary>
     [Fact]
-    public void Validate_ACredentialOverAPlainAddress_IsRefused()
+    public void Validate_AMainModelNamingNoDeclaredModel_IsRefused()
     {
         // Arrange
-        var settings = Declared();
-        settings.Address = "http://127.0.0.1:11434/v1";
+        var settings = DeclaredChatModels.Section();
+        settings.MainModel.Alias = "a-model-nobody-declared";
 
         // Act
         var errors = Validate(settings);
 
         // Assert
-        Assert.Contains(errors, error => error.Contains("plain http Address", StringComparison.Ordinal));
-    }
-
-    /// <summary>
-    /// The shape of a model server the operator runs themselves, and the reason this role reaches the shared rule rather
-    /// than keeping a copy: a scheme rule of its own would refuse what the other role accepts.
-    /// </summary>
-    [Fact]
-    public void Validate_AnEndpointNeedingNoCredentialOnAPlainAddress_IsAccepted()
-    {
-        // Arrange
-        var settings = Declared();
-        settings.Address = "http://model-server:8000/v1";
-        settings.ApiKey = null;
-        settings.Unauthenticated = true;
-
-        // Act
-        var errors = Validate(settings);
-
-        // Assert
-        Assert.Empty(errors);
-    }
-
-    /// <summary>Needing no credential is one of the three shapes rather than a fourth thing beside them.</summary>
-    [Fact]
-    public void Validate_AnEndpointDeclaringBothAKeyAndNoCredential_IsRefused()
-    {
-        // Arrange
-        var settings = Declared();
-        settings.Unauthenticated = true;
-
-        // Act
-        var errors = Validate(settings);
-
-        // Assert
-        Assert.Contains(errors, error => error.Contains("more than one", StringComparison.Ordinal));
-    }
-
-    /// <summary>Exactly one credential authenticates an endpoint, so both and neither are equally wrong.</summary>
-    [Fact]
-    public void Validate_NeitherCredential_IsRefused()
-    {
-        // Arrange
-        var settings = Declared();
-        settings.ApiKey = null;
-
-        // Act
-        var errors = Validate(settings);
-
-        // Assert
-        Assert.Contains(errors, error => error.Contains("Exactly one", StringComparison.Ordinal));
+        Assert.False(settings.IsConfigured);
+        Assert.Contains(errors, error => error.Contains("a-model-nobody-declared", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void Validate_BothCredentials_IsRefused()
+    public void Validate_ADeclaredFallback_IsAccepted()
     {
         // Arrange
-        var settings = Declared();
-        settings.EntraCredential = new ProviderEntraCredentialOptions
-        {
-            Kind = ProviderEndpointCredentialKind.ManagedIdentity,
-        };
-
-        // Act
-        var errors = Validate(settings);
-
-        // Assert
-        Assert.Contains(errors, error => error.Contains("Exactly one", StringComparison.Ordinal));
-    }
-
-    /// <summary>A key is declared in its own block, so naming it as a Microsoft Entra shape is a declaration to correct.</summary>
-    [Fact]
-    public void Validate_AnEntraCredentialOfKindApiKey_IsRefused()
-    {
-        // Arrange
-        var settings = Declared();
-        settings.ApiKey = null;
-        settings.EntraCredential = new ProviderEntraCredentialOptions
-        {
-            Kind = ProviderEndpointCredentialKind.ApiKey,
-        };
-
-        // Act
-        var errors = Validate(settings);
-
-        // Assert
-        Assert.Contains(errors, error => error.Contains("ApiKey", StringComparison.Ordinal));
-    }
-
-    /// <summary>Needing no credential is declared on the endpoint, so naming it as a Microsoft Entra shape is a declaration to correct.</summary>
-    [Fact]
-    public void Validate_AnEntraCredentialOfKindUnauthenticated_IsRefused()
-    {
-        // Arrange
-        var settings = Declared();
-        settings.ApiKey = null;
-        settings.EntraCredential = new ProviderEntraCredentialOptions
-        {
-            Kind = ProviderEndpointCredentialKind.Unauthenticated,
-        };
-
-        // Act
-        var errors = Validate(settings);
-
-        // Assert
-        Assert.Contains(errors, error => error.Contains("kind Unauthenticated", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void Validate_ARequestTimeoutThatIsNotPositive_IsRefused()
-    {
-        // Arrange
-        var settings = Declared();
-        settings.RequestTimeout = TimeSpan.Zero;
-
-        // Act
-        var errors = Validate(settings);
-
-        // Assert
-        Assert.Contains(errors, error => error.Contains("RequestTimeout", StringComparison.Ordinal));
-    }
-
-    /// <summary>The endpoint the adapter runs on takes its routing name from the declared model and trims what an operator typed.</summary>
-    [Fact]
-    public void ToEndpoint_ADeclaration_CarriesTheAliasAddressAndRoutedModel()
-    {
-        // Arrange
-        var settings = Declared();
-        settings.Alias = "  answering  ";
-
-        // Act
-        var endpoint = settings.ToEndpoint();
-
-        // Assert
-        Assert.Equal("answering", endpoint.Alias);
-        Assert.Equal("a-chat-model", endpoint.RoutedModelName);
-        Assert.Equal(new Uri("https://provider.invalid/v1/"), endpoint.Address);
-    }
-
-    /// <summary>An endpoint with no address of its own is the provider's first-party API at the library's default.</summary>
-    [Fact]
-    public void ToEndpoint_WithNoAddress_LeavesTheProviderDefaultInPlace()
-    {
-        // Arrange
-        var settings = Declared();
-        settings.Address = string.Empty;
-
-        // Act
-        var endpoint = settings.ToEndpoint();
-
-        // Assert
-        Assert.Null(endpoint.Address);
-    }
-
-    /// <summary>
-    /// The sampling parameters are bounded by an annotation rather than by the rules above, and an annotation reads as
-    /// a rule while enforcing nothing until the framework's own validation runs it. This goes through that validation
-    /// rather than through <see cref="IValidatableObject" /> alone, so a value the provider would reject on every call
-    /// is learned from configuration instead of from a paid request.
-    /// </summary>
-    [Theory]
-    [InlineData(-0.5f, null)]
-    [InlineData(2.5f, null)]
-    [InlineData(null, -0.5f)]
-    [InlineData(null, 1.5f)]
-    public void Validate_ASamplingParameterOutsideItsRange_IsRefusedByTheAnnotation(float? temperature, float? topP)
-    {
-        // Arrange
-        var settings = Declared();
-        settings.Temperature = temperature;
-        settings.TopP = topP;
-
-        // Act
-        var accepted = Validator.TryValidateObject(
-            settings,
-            new ValidationContext(settings),
-            validationResults: null,
-            validateAllProperties: true);
-
-        // Assert
-        Assert.False(accepted);
-    }
-
-    /// <summary>An unset sampling parameter is what a model that rejects the parameter needs, so it may not be refused.</summary>
-    [Fact]
-    public void Validate_UnsetSamplingParameters_AreAccepted()
-    {
-        // Arrange
-        var settings = Declared();
-
-        // Act
-        var accepted = Validator.TryValidateObject(
-            settings,
-            new ValidationContext(settings),
-            validationResults: null,
-            validateAllProperties: true);
-
-        // Assert
-        Assert.True(accepted);
-    }
-
-    private static ChatModelOptions WrittenWithoutAnAlias(string writtenSetting) => writtenSetting switch
-    {
-        "model" => new ChatModelOptions { Model = "a-chat-model" },
-        "address" => new ChatModelOptions { Address = "https://resource.cloud.invalid/openai/v1/" },
-        "api-key" => new ChatModelOptions { ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" } },
-        "unauthenticated" => new ChatModelOptions { Unauthenticated = true },
-        "reasoning-effort" => new ChatModelOptions { ReasoningEffort = "low" },
-        "api" => new ChatModelOptions { Api = ChatProviderApi.Responses },
-        "enrichment" => new ChatModelOptions { Enrichment = new EmailEnrichmentOptions { Enabled = true } },
-        "body-cleanup-model" => new ChatModelOptions
-        {
-            BodyCleanup = new BodyCleanupOptions { Model = "a-small-fast-model" },
-        },
-        _ => new ChatModelOptions
-        {
-            EntraCredential = new ProviderEntraCredentialOptions
-            {
-                Kind = ProviderEndpointCredentialKind.ManagedIdentity,
-            },
-        },
-    };
-
-    /// <summary>
-    /// The binder accepts any number for an enum, so a value no member declares reads as a choice while naming nothing —
-    /// for the API, a request sent to a path this deployment cannot reach. Learned at startup rather than from the first
-    /// question a client is waiting on.
-    /// </summary>
-    [Fact]
-    public void Validate_AnApiNamingNoValue_IsRefused()
-    {
-        // Arrange
-        var settings = Declared();
-        settings.Api = (ChatProviderApi)7;
-
-        // Act
-        var errors = Validate(settings);
-
-        // Assert
-        Assert.Contains(errors, error => error.Contains("Api", StringComparison.Ordinal));
-    }
-
-    /// <summary>
-    /// The effort's shape is checked and its vocabulary is not, so what startup refuses is a value no provider could
-    /// read as a level whatever it supports.
-    /// </summary>
-    [Theory]
-    [InlineData("")]
-    [InlineData("  ")]
-    [InlineData("very high")]
-    [InlineData(" high")]
-    public void Validate_AReasoningEffortNoProviderCouldRead_IsRefused(string effort)
-    {
-        // Arrange
-        var settings = Declared();
-        settings.ReasoningEffort = effort;
-
-        // Act
-        var errors = Validate(settings);
-
-        // Assert
-        Assert.Contains(errors, error => error.Contains("ReasoningEffort", StringComparison.Ordinal));
-    }
-
-    /// <summary>
-    /// Both APIs are accepted, and so is a level this build has never heard of: which levels a model offers is the
-    /// model's, and refusing the next one a provider adds would make a release the price of using it.
-    /// </summary>
-    [Theory]
-    [InlineData(ChatProviderApi.ChatCompletions, null)]
-    [InlineData(ChatProviderApi.Responses, "none")]
-    [InlineData(ChatProviderApi.Responses, "xhigh")]
-    [InlineData(ChatProviderApi.Responses, "a-level-released-later")]
-    public void Validate_ADeclaredApiAndEffort_AreAccepted(ChatProviderApi api, string? effort)
-    {
-        // Arrange
-        var settings = Declared();
-        settings.Api = api;
-        settings.ReasoningEffort = effort;
+        var settings = DeclaredChatModels.SectionWithFallback();
 
         // Act
         var errors = Validate(settings);
@@ -449,13 +151,139 @@ public sealed class ChatModelOptionsTests
         Assert.Empty(errors);
     }
 
-    private static ChatModelOptions Declared() => new()
+    [Fact]
+    public void Validate_AFallbackNamingNoDeclaredModel_IsRefused()
     {
-        Alias = "answering",
-        Model = "a-chat-model",
-        Address = "https://provider.invalid/v1/",
-        ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" },
-    };
+        // Arrange
+        var settings = DeclaredChatModels.Section();
+        settings.MainModel.Alias = "answering";
+        settings.MainModel.Fallback = "a-model-nobody-declared";
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("fallback model", StringComparison.Ordinal));
+    }
+
+    /// <summary>A second attempt against the model that had just failed buys a second payment for the same answer.</summary>
+    [Fact]
+    public void Validate_AModelNamedAsItsOwnFallback_IsRefused()
+    {
+        // Arrange
+        var settings = DeclaredChatModels.Section();
+        settings.MainModel.Alias = "answering";
+        settings.MainModel.Fallback = "Answering";
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("its own fallback", StringComparison.Ordinal));
+    }
+
+    /// <summary>A fallback without the model it stands behind says nothing about what would have to fail first.</summary>
+    [Fact]
+    public void Validate_AFallbackWithNoModelBeforeIt_IsRefused()
+    {
+        // Arrange
+        var settings = DeclaredChatModels.Section();
+        settings.BodyCleanup.Model.Fallback = "answering";
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("without naming the model", StringComparison.Ordinal));
+    }
+
+    /// <summary>A capability's own reference is judged against the declared models exactly as the main one is.</summary>
+    [Fact]
+    public void Validate_ABodyCleanupModelNamingNoDeclaredModel_IsRefused()
+    {
+        // Arrange
+        var settings = DeclaredChatModels.Section();
+        settings.BodyCleanup.Model.Alias = "a-model-nobody-declared";
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("BodyCleanup", StringComparison.Ordinal));
+    }
+
+    /// <summary>A block of the array is validated by the section, because the options framework never descends into the elements of a collection.</summary>
+    [Fact]
+    public void Validate_ADeclaredModelThatIsItselfWrong_IsRefusedThroughTheSection()
+    {
+        // Arrange
+        var settings = DeclaredChatModels.Section();
+        settings.Models[0].Model = string.Empty;
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("declares no Model", StringComparison.Ordinal));
+    }
+
+    /// <summary>A capability that named no model of its own runs on the one the deployment answers questions with.</summary>
+    [Fact]
+    public void FindModelFor_AReferenceNamingNoModel_ResolvesToTheMainModel()
+    {
+        // Arrange
+        var settings = DeclaredChatModels.Section(
+            DeclaredChatModels.Model("answering"),
+            DeclaredChatModels.Model("cheap", model: "a-small-fast-model"));
+
+        // Act
+        var resolved = settings.FindModelFor(new ChatModelReferenceOptions());
+
+        // Assert
+        Assert.Equal("answering", resolved?.Alias);
+    }
+
+    /// <summary>An alias is matched trimmed and without case, because that is how it is matched everywhere else it is used.</summary>
+    [Theory]
+    [InlineData("ANSWERING")]
+    [InlineData("  answering  ")]
+    public void FindModel_AnAliasSpeltDifferently_ReachesTheSameModel(string alias)
+    {
+        // Arrange
+        var settings = DeclaredChatModels.Section();
+
+        // Act
+        var resolved = settings.FindModel(alias);
+
+        // Assert
+        Assert.Equal("answering", resolved?.Alias);
+    }
+
+    private static ChatModelOptions WrittenWithoutAModel(string writtenSetting)
+    {
+        var settings = new ChatModelOptions();
+
+        switch (writtenSetting)
+        {
+            case "main-model":
+                settings.MainModel.Alias = "answering";
+                break;
+            case "enrichment":
+                settings.Enrichment = new EmailEnrichmentOptions { Enabled = true };
+                break;
+            case "thread-state":
+                settings.ThreadState = new ThreadStateOptions { Enabled = true };
+                break;
+            case "relevance-filter":
+                settings.RelevanceFilter = new PassageRelevanceFilterOptions { Enabled = true };
+                break;
+            default:
+                settings.BodyCleanup.Model.Alias = "a-small-fast-model";
+                break;
+        }
+
+        return settings;
+    }
 
     private static IReadOnlyList<string> Validate(ChatModelOptions settings) =>
     [

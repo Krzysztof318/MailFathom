@@ -78,7 +78,7 @@ Five things, because those are what a declaration writes and what a first call f
 | The address | `Address` carries the whole base path the service documents, version segment included; empty means the provider library's own default, which is first-party OpenAI |
 | The credential shape | Exactly one of `ApiKey`, `EntraCredential`, and `Unauthenticated` is declared, and a credential over a plain `http` address is refused at startup |
 | Whether a requested width is honoured | `SupportsRequestedDimension` defaults to `true`, so an endpoint that ignores or rejects `dimensions` needs it written `false` |
-| Which chat API it serves | `Chat:Api` names `ChatCompletions` or `Responses`, and a service serving only one refuses the other as *request refused* |
+| Which chat API it serves | A chat model's `Api` names `ChatCompletions` or `Responses`, and a service serving only one refuses the other as *request refused* |
 
 [AI configuration § `Embeddings`](configuration-ai.md#embeddings) and [§ `Chat`](configuration-ai.md#chat)
 are the inventory of every key named here.
@@ -233,14 +233,14 @@ wait for the first call to say so.
 
 ## Which chat API an entry serves
 
-`Chat:Api` defaults to `ChatCompletions`, which every chat-serving entry on this page documents. A `Responses` path is
+A chat model's `Api` defaults to `ChatCompletions`, which every chat-serving entry on this page documents. A `Responses` path is
 documented by OpenAI, Azure OpenAI, xAI, Groq (in beta), Ollama, llama.cpp, LM Studio, and vLLM. The Gemini, Mistral,
 Cohere, and Vertex AI compatibility layers document none, and a deployment stating `Responses` against one of those is
 answered *request refused*. Every other entry above was checked for the embeddings route rather than for this path, so
 its answer here is unestablished in the same sense the width column uses.
 
 Bedrock is the entry where the two APIs are two addresses. `bedrock-mantle` documents both paths and `bedrock-runtime`
-documents only chat completions, so `Chat:Api` and `Address` are one decision there rather than two independent keys.
+documents only chat completions, so `Api` and `Address` are one decision there rather than two independent keys.
 
 Serving the path is not the whole of it. MailFathom conducts every responses call statelessly and asks for the
 reasoning content it will hand back on the next turn, for the reasons [chat generation § the responses API is used

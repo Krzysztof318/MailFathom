@@ -217,7 +217,7 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
             [.. body.Blocks.Select((block, index) => block with { Opening = openings[index] })]);
     }
 
-    /// <summary>Makes the one provider call, answering with nothing where it failed.</summary>
+    /// <summary>Makes the provider call, against the fallback model too where the first could not answer, and answers with nothing where none could.</summary>
     /// <remarks>
     /// A failure is swallowed here rather than raised because the caller already has an outcome for that case, and the
     /// endpoint's own health record — which the resilience decorator wrote before this returned — is what a deployment's
@@ -226,39 +226,13 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
     /// </remarks>
     private async Task<string?> AskAsync(string turn, CancellationToken cancellationToken)
     {
-        var endpoint = this.plan.Endpoint;
-
         try
         {
-            using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
-            using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
-            using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
-
-            using var resilientClient = new ResilientChatClient(
-                providerClient,
-                endpoint,
-                this.plan.RequestTimeout,
-                this.operationRunner,
-                this.healthRecorder,
-                this.loggerFactory.CreateLogger<ResilientChatClient>());
-
-            // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
-            // never reaches the endpoint's circuit, its concurrency budget, or its health record. The run ledger is this
-            // proposal's own — one open is one run — and the period ledger is the deployment's.
-            await using var chatClient = new BudgetedChatClient(
-                resilientClient,
-                new MailAnsweringRunLedger(this.runBounds),
-                this.spendLedger);
-
-            var agent = MailBodyCleanupAgentComposition.Compose(
-                chatClient,
+            return await ChatModelFallThrough.RunAsync(
                 this.plan,
-                this.instructionEnvelope,
-                this.loggerFactory);
-
-            var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
-
-            return response.Text;
+                this.logger,
+                (model, attemptToken) => this.AskModelAsync(model, turn, attemptToken),
+                cancellationToken);
         }
         catch (ChatGenerationFailedException)
         {
@@ -278,6 +252,45 @@ internal sealed class MailBodyCleanupAgent : IMailBodyCleaner
             // record behind, the resilience decorator not yet existing to write one.
             return null;
         }
+    }
+
+    /// <summary>Asks one model of the chain, letting a failure out so the fallback behind it can be tried.</summary>
+    private async Task<string?> AskModelAsync(
+        ChatGenerationPlan model,
+        string turn,
+        CancellationToken cancellationToken)
+    {
+        var endpoint = model.Endpoint;
+
+        using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
+        using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
+        using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
+
+        using var resilientClient = new ResilientChatClient(
+            providerClient,
+            endpoint,
+            model.RequestTimeout,
+            this.operationRunner,
+            this.healthRecorder,
+            this.loggerFactory.CreateLogger<ResilientChatClient>());
+
+        // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
+        // never reaches the endpoint's circuit, its concurrency budget, or its health record. The run ledger is this
+        // proposal's own — one open is one run — and the period ledger is the deployment's.
+        await using var chatClient = new BudgetedChatClient(
+            resilientClient,
+            new MailAnsweringRunLedger(this.runBounds),
+            this.spendLedger);
+
+        var agent = MailBodyCleanupAgentComposition.Compose(
+            chatClient,
+            model,
+            this.instructionEnvelope,
+            this.loggerFactory);
+
+        var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
+
+        return response.Text;
     }
 
     private MailBodyCleaningProposal Withhold(MailBodyCleaningWithholding withholding)

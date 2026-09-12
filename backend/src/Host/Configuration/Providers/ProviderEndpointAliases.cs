@@ -17,38 +17,40 @@ namespace MailFathom.Host.Configuration.Providers;
 /// </para>
 /// <para>
 /// The check is one-directional by construction. Duplicate aliases *within* the embedding chain are refused by
-/// <see cref="EmbeddingOptions" /> itself, and the chat section declares one endpoint, so what is left is exactly
-/// whether the chat alias reappears in the chain.
+/// <see cref="EmbeddingOptions" /> itself and duplicates within the declared chat models by
+/// <see cref="ChatModelOptions" />, so what is left is exactly whether a chat alias reappears in the chain.
 /// </para>
 /// </remarks>
 internal static class ProviderEndpointAliases
 {
-    /// <summary>Finds the embedding endpoint alias a declared chat endpoint reuses, if any.</summary>
+    /// <summary>Finds the embedding endpoint alias a declared chat model reuses, if any.</summary>
     /// <param name="embeddings">The bound embedding declaration, or <see langword="null" /> when the deployment wrote no section.</param>
     /// <param name="chat">The bound chat declaration, or <see langword="null" /> when the deployment wrote no section.</param>
     /// <returns>The reused alias as the embedding chain spells it, or <see langword="null" /> when nothing collides.</returns>
     /// <remarks>
     /// Compared without case, and after trimming both sides, because that is how the alias is matched everywhere else it
-    /// is used — a credential resolved by it would otherwise reach one endpoint while a log line named the other.
+    /// is used — a credential resolved by it would otherwise reach one endpoint while a log line named the other. Every
+    /// declared chat model is read rather than only the one that answers questions, because each is an endpoint of its
+    /// own with its own credential and its own circuit.
     /// </remarks>
     public static string? FindReusedAlias(EmbeddingOptions? embeddings, ChatModelOptions? chat)
     {
-        if (chat?.IsConfigured is not true || embeddings is null)
+        if (chat is null || embeddings is null)
         {
             return null;
         }
 
-        var chatAlias = chat.Alias.Trim();
+        var chatAliases = chat.DeclaredAliases;
 
         return embeddings.Endpoints
             .Select(endpoint => endpoint.Alias.Trim())
-            .FirstOrDefault(alias => string.Equals(alias, chatAlias, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(alias => chatAliases.Contains(alias, StringComparer.OrdinalIgnoreCase));
     }
 
     /// <summary>Describes the collision for an operator, naming the alias and what it costs to leave it.</summary>
     /// <param name="reusedAlias">The alias both sections declare.</param>
     /// <returns>The message a startup failure carries.</returns>
     public static string DescribeReusedAlias(string reusedAlias) =>
-        $"The chat endpoint and an embedding endpoint both declare the alias '{reusedAlias}'. An alias names one "
+        $"A chat model and an embedding endpoint both declare the alias '{reusedAlias}'. An alias names one "
         + "endpoint, because it is what a credential, a resilience circuit, and a log line are keyed by.";
 }

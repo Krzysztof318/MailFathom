@@ -5,7 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using MailFathom.AI.Retrieval;
 using MailFathom.Host.Configuration.Chat;
-using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Chat;
@@ -58,7 +58,7 @@ public sealed class PassageRelevanceFilterOptionsTests
         var errors = Validate(settings);
 
         // Assert
-        Assert.Contains(errors, error => error.Contains("no Alias", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("no model under Chat:Models", StringComparison.Ordinal));
     }
 
     /// <summary>A count below one would judge nothing while still declaring a filter, which is a pass nobody could have meant.</summary>
@@ -139,7 +139,7 @@ public sealed class PassageRelevanceFilterOptionsTests
         // Arrange
         var settings = Declared();
         settings.RelevanceFilter.Enabled = true;
-        settings.MaxMessagesPerRequest = 1;
+        settings.Models[0].MaxMessagesPerRequest = 1;
 
         // Act
         var errors = Validate(settings);
@@ -164,12 +164,7 @@ public sealed class PassageRelevanceFilterOptionsTests
         Assert.Empty(errors);
     }
 
-    private static ChatModelOptions Declared() => new()
-    {
-        Alias = "answering",
-        Model = "a-chat-model",
-        ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" },
-    };
+    private static ChatModelOptions Declared() => DeclaredChatModels.Section();
 
     private static IReadOnlyList<string> Validate(ChatModelOptions settings) =>
     [

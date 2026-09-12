@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.BodyCleanup;
-using MailFathom.AI.Chat;
 
 namespace MailFathom.Host.Configuration.Chat;
 
@@ -11,8 +10,8 @@ namespace MailFathom.Host.Configuration.Chat;
 /// <remarks>
 /// The mapping is separate from the options type for the reason every mapper in this directory is: the bound object is
 /// mutable, binder-shaped, and carries empty strings that mean absence, while the plan is the validated value the pass is
-/// allowed to assume. What this one adds over <see cref="ChatGenerationPlanMapper" /> is the one substitution the block
-/// exists for — the routed model — and it makes it here rather than inside the pass so the pass holds no defaulting logic.
+/// allowed to assume. What this one adds over <see cref="ChatGenerationPlanMapper" /> is which reference it reads — the
+/// block's own, which is the whole reason that block exists.
 /// </remarks>
 internal static class MailBodyCleanupPlanMapper
 {
@@ -21,34 +20,15 @@ internal static class MailBodyCleanupPlanMapper
     /// <returns>The plan, or <see langword="null" /> when this deployment declared no chat provider.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// A model nobody wrote resolves to the endpoint's own, which is what keeps the common declaration — a chat endpoint
-    /// and nothing else — from needing a key to say "the same model as everything else".
+    /// A reference nobody wrote resolves to the deployment's main model, which is what keeps the common declaration — one
+    /// model and nothing else — from needing a key to say "the same model as everything else".
     /// </remarks>
     public static MailBodyCleanupPlan? Map(ChatModelOptions settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        if (!settings.IsConfigured)
-        {
-            return null;
-        }
-
-        var plan = ChatGenerationPlanMapper.Map(settings)
-            ?? throw new InvalidOperationException(
-                "The chat endpoint is declared and the generation plan is absent from the same declaration.");
-
-        return new MailBodyCleanupPlan(
-            settings.BodyCleanup.Model.Trim() is { Length: > 0 } routedModel
-                ? ChatGenerationPlan.Create(
-                    plan.Endpoint with { RoutedModelName = routedModel },
-                    plan.MaximumOutputTokens,
-                    plan.Temperature,
-                    plan.TopP,
-                    plan.ReasoningEffort,
-                    plan.MaximumMessagesPerRequest,
-                    plan.MaximumRequestCharacters,
-                    plan.MaximumRequestImageOctets,
-                    plan.RequestTimeout)
-                : plan);
+        return ChatGenerationPlanMapper.Map(settings, settings.BodyCleanup.Model) is { } plan
+            ? new MailBodyCleanupPlan(plan)
+            : null;
     }
 }

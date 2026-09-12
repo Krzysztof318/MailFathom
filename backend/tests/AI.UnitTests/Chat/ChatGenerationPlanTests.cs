@@ -230,4 +230,63 @@ public sealed class ChatGenerationPlanTests
             maximumRequestImageOctets: 1024,
             requestTimeout: TimeSpan.Zero));
     }
+
+    /// <summary>A plan declaring no fallback is a chain of one, which is what every deployment that named a single model holds.</summary>
+    [Fact]
+    public void Chain_APlanWithNoFallback_IsTheModelItself()
+    {
+        // Arrange
+        var plan = ChatDeclarations.Plan();
+
+        // Act, Assert
+        Assert.Null(plan.Fallback);
+        Assert.Equal([plan], plan.Chain);
+    }
+
+    [Fact]
+    public void WithFallback_ADeclaredFallback_LeavesTheModelItStandsBehindUnchanged()
+    {
+        // Arrange
+        var plan = ChatDeclarations.Plan();
+        var standby = ChatDeclarations.Plan(ChatDeclarations.Endpoint("standby"));
+
+        // Act
+        var chained = plan.WithFallback(standby);
+
+        // Assert
+        Assert.Null(plan.Fallback);
+        Assert.Equal("answering", chained.Endpoint.Alias);
+        Assert.Equal(["answering", "standby"], chained.Chain.Select(model => model.Endpoint.Alias));
+    }
+
+    /// <summary>A second attempt against the model that had just failed buys a second payment for the same answer.</summary>
+    [Fact]
+    public void WithFallback_TheModelItself_IsRefused()
+    {
+        // Arrange
+        var plan = ChatDeclarations.Plan();
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => plan.WithFallback(ChatDeclarations.Plan()));
+    }
+
+    /// <summary>A chain is two models and never three, so a fallback carrying one of its own is refused where it is assembled rather than followed at runtime.</summary>
+    [Fact]
+    public void WithFallback_AFallbackCarryingOneOfItsOwn_IsRefused()
+    {
+        // Arrange
+        var standby = ChatDeclarations
+            .Plan(ChatDeclarations.Endpoint("standby"))
+            .WithFallback(ChatDeclarations.Plan(ChatDeclarations.Endpoint("the-third-one")));
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ChatDeclarations.Plan().WithFallback(standby));
+    }
+
+    [Fact]
+    public void WithFallback_WithoutAFallback_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => ChatDeclarations.Plan().WithFallback(null!));
+    }
 }
