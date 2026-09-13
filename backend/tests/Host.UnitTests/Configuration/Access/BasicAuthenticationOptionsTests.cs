@@ -60,7 +60,7 @@ public sealed class BasicAuthenticationOptionsTests
     [Theory]
     [InlineData(PasswordAttemptLimiter.ConcurrentVerificationsPerPartition)]
     [InlineData(BasicAuthenticationOptions.DefaultMaxConcurrentVerifications)]
-    [InlineData(BasicAuthenticationOptions.MaximumMaxConcurrentVerifications)]
+    [InlineData(BasicAuthenticationOptions.MaximumConcurrentVerifications)]
     public void FindConfigurationErrors_AVerificationCeilingInsideItsBounds_ReportsNothing(int maxConcurrentVerifications)
     {
         // Arrange
@@ -74,7 +74,7 @@ public sealed class BasicAuthenticationOptionsTests
     [Theory]
     [InlineData(PasswordAttemptLimiter.ConcurrentVerificationsPerPartition - 1)]
     [InlineData(0)]
-    [InlineData(BasicAuthenticationOptions.MaximumMaxConcurrentVerifications + 1)]
+    [InlineData(BasicAuthenticationOptions.MaximumConcurrentVerifications + 1)]
     public void FindConfigurationErrors_AVerificationCeilingOutsideItsBounds_IsRefusedNamingItsPath(int maxConcurrentVerifications)
     {
         // Arrange

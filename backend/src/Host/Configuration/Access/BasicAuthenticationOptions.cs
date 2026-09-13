@@ -45,7 +45,7 @@ internal sealed class BasicAuthenticationOptions
 
     /// <summary>The most password verifications a deployment may let the surface have in flight at once.</summary>
     /// <remarks>Every verification is a deliberately expensive derivation occupying a thread, so a number past this is a bound on nothing a replica has: it would let a caller varying the username queue far more derivations than any machine runs at once.</remarks>
-    internal const int MaximumMaxConcurrentVerifications = 512;
+    internal const int MaximumConcurrentVerifications = 512;
 
     /// <summary>Gets or sets how many password attempts one source and one username each get per minute.</summary>
     /// <remarks>
@@ -110,7 +110,7 @@ internal sealed class BasicAuthenticationOptions
         }
 
         if (this.MaxConcurrentVerifications is < PasswordAttemptLimiter.ConcurrentVerificationsPerPartition
-            or > MaximumMaxConcurrentVerifications)
+            or > MaximumConcurrentVerifications)
         {
             errors.Add(string.Format(
                 CultureInfo.InvariantCulture,
@@ -121,7 +121,7 @@ internal sealed class BasicAuthenticationOptions
                 nameof(this.MaxConcurrentVerifications),
                 this.MaxConcurrentVerifications,
                 PasswordAttemptLimiter.ConcurrentVerificationsPerPartition,
-                MaximumMaxConcurrentVerifications));
+                MaximumConcurrentVerifications));
         }
 
         return errors;

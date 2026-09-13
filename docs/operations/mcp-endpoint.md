@@ -1750,7 +1750,7 @@ here. Every tool answers from the local mailbox copy with a bounded query, so a 
 rather than long and compute-bound. Forty-eight concurrent requests keep a replica inside the connection pool its
 synchronization workers share while leaving room for a roster whose users are not all busy in the same instant. Eight
 for one user is a browser's six connections to one origin plus an agent issuing a couple of calls in parallel, and it
-means six users at their own ceiling together still leave a seventh served. A burst of a hundred and twenty restored at
+means five users at their own ceiling together still leave a sixth served, while six already spend every permit. A burst of a hundred and twenty restored at
 two a second covers one user's client opening folders beside an agent listing and reading what it found — both spend
 the same bucket — while still costing an unattended loop its capacity within a minute.
 
@@ -1800,12 +1800,13 @@ Two identities can name a caller, and they are consulted in a fixed order:
 
 1. **The user the request's credential resolved to**, whenever there is one. Every key, password, public key, access
    token, and signed-in session a user holds resolves to that user, so all of them spend one allowance.
-2. **The name of the client-certificate profile the connection matched**, when no credential authenticated the request.
-3. **One shared anonymous partition** otherwise.
+2. **The name of the credential**, when the request authenticated with a configured key that resolves to no user.
+3. **The name of the client-certificate profile the connection matched**, when no credential authenticated the request.
+4. **One shared anonymous partition** otherwise.
 
-A user is MailFathom's own generated identifier and a profile one of its configured names — never the credential, and
-never anything the certificate itself carried. The partitions a deployment keeps therefore number no more than its
-roster plus its profile list, however many credentials its users hold and whatever a caller writes.
+A user is MailFathom's own generated identifier, and a key and a profile are its configured names — never the credential
+itself, and never anything the certificate carried. The partitions a deployment keeps therefore number no more than its
+roster plus its key list plus its profile list, however many credentials its users hold and whatever a caller writes.
 
 **The user wins wherever both exist, and the two are never combined.** A user is who a deployment serves; a profile
 names a client *application*, and several users' credentials may sit behind one profile. Taking the profile instead
