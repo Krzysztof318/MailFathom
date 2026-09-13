@@ -68,11 +68,11 @@ public sealed class AuthorizedPrincipalTests
     public void SignedCapability_AVerifiedTicket_NamesItsObjectAndHoldsNothing()
     {
         // Arrange & Act
-        var capability = AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/attachments/an-object/0");
+        var capability = AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/mcp/attachments/an-object/0");
 
         // Assert
         Assert.Equal(AuthorizedPrincipalKind.SignedCapability, capability.Kind);
-        Assert.Equal("/attachments/an-object/0", capability.Identity);
+        Assert.Equal("/mcp/attachments/an-object/0", capability.Identity);
         Assert.Empty(capability.Permissions);
     }
 
@@ -88,7 +88,7 @@ public sealed class AuthorizedPrincipalTests
         Action[] factories =
         [
             () => AuthorizedPrincipal.CallerActingFor(default, "mcp-key", [MailFathomPermission.MailRead]),
-            () => AuthorizedPrincipal.SignedCapability(default, "/attachments/an-object/0"),
+            () => AuthorizedPrincipal.SignedCapability(default, "/mcp/attachments/an-object/0"),
         ];
 
         // Act

@@ -40,6 +40,10 @@ internal sealed class ClientApplicationOptions
     /// <remarks>The bundle's entry document. Its presence is what separates an image carrying a bundle from one built without it, which is a distinction worth making at startup rather than as a page of 404s.</remarks>
     public const string EntryDocument = "index.html";
 
+    /// <summary>The path the bundle is served beneath, so the root of a listener belongs to no static file.</summary>
+    /// <remarks>A constant rather than a setting: the page resolves the surface it calls against the origin rather than against this path, so nothing a deployment configures depends on it.</remarks>
+    public const string RequestPath = "/app";
+
     /// <summary>Gets or sets whether the client's bundle is served from this deployment.</summary>
     /// <remarks>Served on the client endpoint's listeners and nowhere else, so it needs that endpoint enabled: same origin is the whole design, and a page served where the surface it calls is not would be a client that starts and cannot read a message.</remarks>
     public bool Enabled { get; set; }

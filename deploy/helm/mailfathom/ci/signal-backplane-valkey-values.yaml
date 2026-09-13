@@ -56,7 +56,7 @@ ingress:
       paths:
         - path: /api/client
           pathType: Prefix
-        - path: /
+        - path: /app
           pathType: Prefix
   tls:
     - secretName: mailfathom-tls

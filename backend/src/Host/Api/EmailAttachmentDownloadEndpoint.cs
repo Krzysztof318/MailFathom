@@ -10,6 +10,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Mcp;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -47,7 +48,8 @@ namespace MailFathom.Host.Api;
 internal static class EmailAttachmentDownloadEndpoint
 {
     /// <summary>The path prefix the route is served beneath, which is also what a minted link is built from.</summary>
-    internal const string RoutePrefix = "/attachments";
+    /// <remarks>Beneath the MCP route rather than at the root, so every path the MCP surface answers shares one prefix and a proxy forwarding that prefix forwards the links as well.</remarks>
+    internal const string RoutePrefix = McpEndpointRoute.Path + "/attachments";
 
     /// <summary>The one thing a refused request is told, whatever the reason was.</summary>
     internal const string RefusalDetail = "This attachment link is not valid.";

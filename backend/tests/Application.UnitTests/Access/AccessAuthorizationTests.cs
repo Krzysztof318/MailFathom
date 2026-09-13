@@ -186,7 +186,7 @@ public sealed class AccessAuthorizationTests
     public void RequirePermission_SignedCapability_RefusesNamingNoPermission()
     {
         // Arrange
-        var authorization = AuthorizationOver(AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/attachments/an-object/0"));
+        var authorization = AuthorizationOver(AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/mcp/attachments/an-object/0"));
 
         // Act
         var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() =>
@@ -231,7 +231,7 @@ public sealed class AccessAuthorizationTests
     public void RequireSignedCapability_AVerifiedCapability_Permits()
     {
         // Arrange
-        var authorization = AuthorizationOver(AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/attachments/an-object/0"));
+        var authorization = AuthorizationOver(AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/mcp/attachments/an-object/0"));
 
         // Act
         var refusal = Record.Exception(authorization.RequireSignedCapability);
@@ -275,7 +275,7 @@ public sealed class AccessAuthorizationTests
     {
         // Arrange
         var authorization = AuthorizationOver(
-            AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Another, "/attachments/an-object/0"));
+            AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Another, "/mcp/attachments/an-object/0"));
 
         // Act
         var user = authorization.RequireUser();
@@ -367,7 +367,7 @@ public sealed class AccessAuthorizationTests
     {
         // Arrange
         var processIdentity = AuthorizationOver(AuthorizedPrincipal.Process);
-        var signedCapability = AuthorizationOver(AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/attachments/an-object/0"));
+        var signedCapability = AuthorizationOver(AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/mcp/attachments/an-object/0"));
 
         // Act, Assert
         Assert.False(processIdentity.Permits(permission));

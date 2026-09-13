@@ -51,7 +51,7 @@ public sealed class EmailAttachmentDownloadReaderTests
     private const string ScreenedMarker = "sk-live-000111222333";
 
     /// <summary>The one attachment of the one email every capability in this suite is minted for.</summary>
-    private const string AuthorizedObject = "/attachments/0198f0aa-0000-7000-8000-000000000000/0";
+    private const string AuthorizedObject = "/mcp/attachments/0198f0aa-0000-7000-8000-000000000000/0";
 
     private static readonly byte[] StoredRawMime = Encoding.UTF8.GetBytes("From: sender@example.test\r\n\r\nBody");
 

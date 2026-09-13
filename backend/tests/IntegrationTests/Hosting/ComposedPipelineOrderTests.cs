@@ -330,7 +330,7 @@ public sealed class ComposedPipelineOrderTests
     /// is read by a client that is trying to find out where to authenticate.
     /// </summary>
     [Theory]
-    [InlineData("/attachments/not-a-real-capability", McpPort)]
+    [InlineData("/mcp/attachments/not-a-real-capability", McpPort)]
     [InlineData("/alive", HealthPort)]
     [InlineData(McpProtectedResourceMetadataPath, McpPort)]
     [InlineData(AdminProtectedResourceMetadataPath, AdminPort)]

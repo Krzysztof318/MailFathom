@@ -98,9 +98,9 @@ ingress:
         - path: /api/client
           pathType: Prefix
 
-        # The page itself, at the root of the same host it calls. Same origin is what lets the bundle carry no address
-        # at all, so publishing it anywhere else would be publishing a client that reaches nothing.
-        - path: /
+        # The page itself, beneath `/app` on the same host it calls. Same origin is what lets the bundle carry no address
+        # at all, so publishing it on another host would be publishing a client that reaches nothing.
+        - path: /app
           pathType: Prefix
   tls:
     - secretName: mailfathom-tls

@@ -3006,8 +3006,8 @@ carries them as two adjacent commented `Environment=` lines, because a `.contain
 keys through. [Kubernetes](deployment-kubernetes.md), [Compose](deployment-compose.md), and
 [Quadlet](deployment-quadlet.md) each state theirs.
 
-**What it adds is static files and nothing else.** The bundle answers the root of the listeners this endpoint is served
-on, and the routes beneath `/api/client` are unchanged: same credentials, same grants, same limits. The page itself
+**What it adds is static files and nothing else.** The bundle answers beneath `/app/` on the listeners this endpoint is
+served on — `/app` redirects there, and the root of the listener serves no page — and the routes beneath `/api/client` are unchanged: same credentials, same grants, same limits. The page itself
 carries no credential and needs none — a browser has to load the application before it can obtain one — and what that
 application then calls is authorized exactly as any other caller is. Turning this on grants nobody anything; it puts
 the client in front of the sign-in the endpoint already required.

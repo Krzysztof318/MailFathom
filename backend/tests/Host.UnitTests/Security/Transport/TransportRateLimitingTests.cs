@@ -145,7 +145,7 @@ public sealed class TransportRateLimitingTests
         using var limiter = ProcessLimiter(boundedSurfaces);
 
         // Act
-        var leases = AcquireAll(limiter, () => RequestTo("/attachments/AQIDBAUGBwgJ.CgsMDQ4PEBES"), attempts: 3);
+        var leases = AcquireAll(limiter, () => RequestTo("/mcp/attachments/AQIDBAUGBwgJ.CgsMDQ4PEBES"), attempts: 3);
 
         // Assert
         Assert.Equal([true, true, false], leases.Select(lease => lease.IsAcquired));
@@ -163,8 +163,8 @@ public sealed class TransportRateLimitingTests
 
         // Act
         var onTheProtocolRoute = limiter.AttemptAcquire(McpRequest());
-        var onTheDownloadRoute = limiter.AttemptAcquire(RequestTo("/attachments/AQIDBAUGBwgJ.CgsMDQ4PEBES"));
-        var beyondTheLimit = limiter.AttemptAcquire(RequestTo("/attachments/EhMUFRYXGBka.GxwdHh8gISIj"));
+        var onTheDownloadRoute = limiter.AttemptAcquire(RequestTo("/mcp/attachments/AQIDBAUGBwgJ.CgsMDQ4PEBES"));
+        var beyondTheLimit = limiter.AttemptAcquire(RequestTo("/mcp/attachments/EhMUFRYXGBka.GxwdHh8gISIj"));
 
         // Assert
         Assert.Equal(

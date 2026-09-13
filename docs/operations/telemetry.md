@@ -60,7 +60,7 @@ contains](#what-a-client-originated-trace-contains) is what one holds.
 
 One attribute is deliberately rewritten. An [attachment download](mcp-endpoint.md#the-one-route-on-this-surface-that-admits-no-credential)
 carries a signed capability in its path, and whoever holds it can fetch that file until it expires, so the span records
-the route template `/attachments/{capability}` in place of the path the request arrived with. The span itself is kept,
+the route template `/mcp/attachments/{capability}` in place of the path the request arrived with. The span itself is kept,
 because a download is real traffic an operator has to be able to see; what is removed is the one segment that is a
 secret. Nothing else in the pipeline writes it down: no log line here mentions a download, the exported log records
 carry no request scope, and the framework's own request logging is off at the shipped `Microsoft.AspNetCore` level of
