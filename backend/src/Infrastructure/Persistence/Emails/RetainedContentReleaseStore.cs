@@ -10,13 +10,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Emails;
 
-/// <summary>The four content tables as the release reads and empties them: what is duplicated, and the freeing of it.</summary>
+/// <summary>The five content tables as the release reads and empties them: what is duplicated, and the freeing of it.</summary>
 /// <remarks>
 /// <para>
-/// The four payload kinds are four tables with four key columns and two names for the payload column, and nothing above
-/// this type knows any of that. What crosses the port is a kind, a cutoff, and a bound, which is the same shape for all
-/// four — so the differences are four projections here rather than four use cases up there, exactly as they are for the
-/// move.
+/// The five payload kinds are five tables with five key columns and three names for the payload column, and nothing
+/// above this type knows any of that. What crosses the port is a kind, a cutoff, and a bound, which is the same shape for
+/// all five — so the differences are five projections here rather than five use cases up there, exactly as they are for
+/// the move.
 /// </para>
 /// <para>
 /// No query here is indexed for the branch it filters on, deliberately and for the reason the move's are not: while
@@ -66,7 +66,7 @@ internal sealed class RetainedContentReleaseStore(MailFathomDbContext dbContext)
     /// Two releases running at once is therefore exact in the count and approximate in the volume: the update reports
     /// how many rows it matched, so a row the other request freed first is not counted twice, while the byte total is
     /// summed over the batch that was read and does include it. Reporting both exactly would mean returning each freed
-    /// row's length from the update itself, which no LINQ translation expresses and which would put four hand-written
+    /// row's length from the update itself, which no LINQ translation expresses and which would put five hand-written
     /// <c>UPDATE</c> statements in the one path whose defect is the loss of mail. A typed statement that cannot name the
     /// wrong table is worth more than a counter that is exact while two operators are disposing of the same copies at
     /// the same moment, so the volume is read as what a release covered rather than as an accountant's figure.
@@ -146,7 +146,7 @@ internal sealed class RetainedContentReleaseStore(MailFathomDbContext dbContext)
 
     /// <summary>Reads one payload kind's rows that point at an object and still carry the copy the move left behind.</summary>
     /// <remarks>
-    /// The projection is what lets the count and the batch be written once over four tables whose key columns and
+    /// The projection is what lets the count and the batch be written once over five tables whose key columns and
     /// payload columns are named differently. It carries no payload, because both callers want to know which rows are
     /// there and how much they hold rather than what is in them.
     /// </remarks>
@@ -200,7 +200,7 @@ internal sealed class RetainedContentReleaseStore(MailFathomDbContext dbContext)
         _ => throw UnknownKind(kind),
     };
 
-    /// <summary>One duplicated content row as every one of the four tables can answer it, with the copy left where it is.</summary>
+    /// <summary>One duplicated content row as every one of the five tables can answer it, with the copy left where it is.</summary>
     private sealed class RetainedPayloadRow
     {
         public Guid PayloadId { get; init; }

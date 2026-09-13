@@ -45,7 +45,7 @@ public sealed class StoredContentMoveReader
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminRead" />.</exception>
     /// <remarks>
     /// The backlog is counted whether or not a move exists, because that is the figure an operator weighs before asking
-    /// for one. It is an aggregate over the four content tables and is therefore read on request rather than published
+    /// for one. It is an aggregate over the five content tables and is therefore read on request rather than published
     /// as a series: what it costs is proportional to the mail stored, and nothing needs it on a scrape interval.
     /// </remarks>
     public async Task<StoredContentMoveProgress> ReadAsync(CancellationToken cancellationToken)

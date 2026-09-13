@@ -9,10 +9,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Emails;
 
-/// <summary>Reads which of a page of object keys the four payload tables still point at.</summary>
+/// <summary>Reads which of a page of object keys the five payload tables still point at.</summary>
 /// <remarks>
 /// <para>
-/// Four queries rather than one union, because the four tables are unrelated and PostgreSQL plans each of them against
+/// Five queries rather than one union, because the five tables are unrelated and PostgreSQL plans each of them against
 /// its own index over the locator column. Every one of them is filtered to the object backend as well as to the keys,
 /// which is what keeps a deployment that has only ever written to the database answering from an empty index.
 /// </para>

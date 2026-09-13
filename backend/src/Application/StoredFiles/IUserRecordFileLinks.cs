@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.StoredFiles;
@@ -26,14 +27,15 @@ public interface IUserRecordFileLinks
     /// <returns>The portrait's file, or <see langword="null" /> when the record links none or this deployment holds no such user.</returns>
     Task<StoredFileId?> FindPortraitAsync(MailUserId user, CancellationToken cancellationToken);
 
-    /// <summary>Links one user's record to a portrait, or to none.</summary>
-    /// <param name="user">The user whose record is written.</param>
+    /// <summary>Links the signed-in user's record to a portrait, or to none.</summary>
     /// <param name="portrait">The file to link, or <see langword="null" /> to link none.</param>
     /// <param name="cancellationToken">Cancels the read and the commit.</param>
     /// <returns>Whether the user is held, and the file the record linked before this write.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the record refused the link for a reason other than a concurrent write.</exception>
-    Task<PortraitRelinking> RelinkPortraitAsync(
-        MailUserId user,
-        StoredFileId? portrait,
-        CancellationToken cancellationToken);
+    /// <remarks>
+    /// It names no user, and resolves the one it writes for from the caller itself, so no implementation can be handed
+    /// somebody else's record to rewrite.
+    /// </remarks>
+    Task<PortraitRelinking> RelinkOwnPortraitAsync(StoredFileId? portrait, CancellationToken cancellationToken);
 }

@@ -95,7 +95,7 @@ public sealed class OwnPortrait
             return false;
         }
 
-        var relinked = await this.links.RelinkPortraitAsync(user, written, cancellationToken);
+        var relinked = await this.links.RelinkOwnPortraitAsync(written, cancellationToken);
 
         if (!relinked.UserHeld)
         {
@@ -122,7 +122,7 @@ public sealed class OwnPortrait
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
         var user = this.authorization.RequireUser();
-        var relinked = await this.links.RelinkPortraitAsync(user, null, cancellationToken);
+        var relinked = await this.links.RelinkOwnPortraitAsync(null, cancellationToken);
 
         if (relinked.Replaced is { } displaced)
         {

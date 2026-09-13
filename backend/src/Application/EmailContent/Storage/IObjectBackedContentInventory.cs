@@ -15,7 +15,7 @@ namespace MailFathom.Application.EmailContent.Storage;
 /// </para>
 /// <para>
 /// It is deliberately a presence rather than a count. What an operator has to act on is that such rows exist at all,
-/// and counting them would mean four aggregates over four tables on every readiness scrape to refine an answer that
+/// and counting them would mean five aggregates over five tables on every readiness scrape to refine an answer that
 /// changes nothing about what to do.
 /// </para>
 /// </remarks>

@@ -17,7 +17,7 @@ namespace MailFathom.Application.EmailContent.Release;
 /// admits. This is what ends that state.
 /// </para>
 /// <para>
-/// Separate from <see cref="IStoredContentMoveStore" /> although both walk the same four tables, because the two answer
+/// Separate from <see cref="IStoredContentMoveStore" /> although both walk the same five tables, because the two answer
 /// opposite questions about a row: the move asks which payloads the database still owns, and this asks which payloads it
 /// merely still holds. One contract carrying both would let a caller reach the irreversible half while meaning the
 /// reversible one.
@@ -35,7 +35,7 @@ public interface IRetainedContentReleaseStore
     /// <remarks>
     /// The whole deployment's figure across every payload kind, because what an operator asks is how much of their
     /// database is duplication rather than which table it is in. It is read on request rather than published as a
-    /// series: it costs an aggregate over the four content tables, and nothing needs it on a scrape interval.
+    /// series: it costs an aggregate over the five content tables, and nothing needs it on a scrape interval.
     /// </remarks>
     Task<StoredContentBacklog> CountRetainedPayloadsAsync(CancellationToken cancellationToken);
 

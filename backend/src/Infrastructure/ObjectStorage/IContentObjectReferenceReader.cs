@@ -12,7 +12,7 @@ namespace MailFathom.Infrastructure.ObjectStorage;
 /// the materialization the sweep exists to avoid.
 /// </para>
 /// <para>
-/// All four payload kinds are asked at once, because an object gives no kind away. A key carries the kind as a segment
+/// All five payload kinds are asked at once, because an object gives no kind away. A key carries the kind as a segment
 /// for a reader's sake, and nothing derives one from a key — so a sweep that trusted the segment would delete a
 /// message the moment somebody renamed a group of keys.
 /// </para>

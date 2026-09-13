@@ -390,10 +390,7 @@ public sealed class ClientPortraitEndpointTests
         public Task<StoredFileId?> FindPortraitAsync(MailUserId user, CancellationToken cancellationToken) =>
             Task.FromResult(this.Portrait);
 
-        public Task<PortraitRelinking> RelinkPortraitAsync(
-            MailUserId user,
-            StoredFileId? portrait,
-            CancellationToken cancellationToken)
+        public Task<PortraitRelinking> RelinkOwnPortraitAsync(StoredFileId? portrait, CancellationToken cancellationToken)
         {
             var displaced = this.Portrait;
             this.Portrait = portrait;

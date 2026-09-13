@@ -127,7 +127,7 @@ public sealed class UserRecordAdministrationTests
 
     /// <summary>What the use case removes afterwards is the file the link displaced, so the relink has to name it.</summary>
     [Fact]
-    public async Task RelinkPortraitAsync_ARecordLinkingAnEarlierPortrait_LinksTheNewFileAndNamesTheOneItDisplaced()
+    public async Task RelinkOwnPortraitAsync_ARecordLinkingAnEarlierPortrait_LinksTheNewFileAndNamesTheOneItDisplaced()
     {
         // Arrange
         var earlier = StoredFileId.Create(Guid.Parse("0197a3c0-0000-7000-8000-000000000001"));
@@ -137,10 +137,7 @@ public sealed class UserRecordAdministrationTests
         harness.Files.HoldsAsync(SyntheticMailUser.Deployment, written, Arg.Any<CancellationToken>()).Returns(true);
 
         // Act
-        var relinked = await harness.Records.RelinkPortraitAsync(
-            SyntheticMailUser.Deployment,
-            written,
-            TestContext.Current.CancellationToken);
+        var relinked = await harness.Records.RelinkOwnPortraitAsync(written, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(new PortraitRelinking(UserHeld: true, Replaced: earlier), relinked);
@@ -153,7 +150,7 @@ public sealed class UserRecordAdministrationTests
 
     /// <summary>A record committed before a language was required still takes a portrait, because the link is all that changes.</summary>
     [Fact]
-    public async Task RelinkPortraitAsync_ARecordHeldFromBeforeALanguageWasRequired_IsStillLinked()
+    public async Task RelinkOwnPortraitAsync_ARecordHeldFromBeforeALanguageWasRequired_IsStillLinked()
     {
         // Arrange
         var written = StoredFileId.Create(Guid.Parse("0197a3c0-0000-7000-8000-000000000002"));
@@ -162,13 +159,41 @@ public sealed class UserRecordAdministrationTests
         harness.Files.HoldsAsync(SyntheticMailUser.Deployment, written, Arg.Any<CancellationToken>()).Returns(true);
 
         // Act
-        var relinked = await harness.Records.RelinkPortraitAsync(
-            SyntheticMailUser.Deployment,
-            written,
-            TestContext.Current.CancellationToken);
+        var relinked = await harness.Records.RelinkOwnPortraitAsync(written, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(new PortraitRelinking(UserHeld: true, Replaced: null), relinked);
+    }
+
+    /// <summary>The relink is an entry point of its own, so it holds the grant itself rather than trusting whoever called it to have checked.</summary>
+    [Fact]
+    public async Task RelinkOwnPortraitAsync_ACallerNotGrantedTheirOwnMail_IsRefusedBeforeTheRecordIsRead()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => harness.Records.RelinkOwnPortraitAsync(null, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+        await harness.Documents.DidNotReceive().ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Whose record is rewritten is the caller's to say only by being that user, so a caller acting for nobody rewrites nothing.</summary>
+    [Fact]
+    public async Task RelinkOwnPortraitAsync_ACallerActingForNoUser_IsRefusedBeforeTheRecordIsRead()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.MailRead);
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => harness.Records.RelinkOwnPortraitAsync(null, TestContext.Current.CancellationToken));
+
+        // Assert
+        await harness.Documents.DidNotReceive().ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

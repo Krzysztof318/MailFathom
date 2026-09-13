@@ -650,7 +650,7 @@ public static class ServiceCollectionExtensions
         // the other replicas are about to add to both, and the one thing a process cannot measure for itself.
         services.AddScoped<IStoredContentClaimStore, StoredContentClaimStore>();
         services.AddScoped<IStoredEmailExtractionBackfillStore, StoredEmailExtractionBackfillStore>();
-        // What the move of already-stored content reads and rewrites: the four content tables as one walk, and the one
+        // What the move of already-stored content reads and rewrites: the five content tables as one walk, and the one
         // row that says what an operator asked for. Registered whatever the selected backend is, because reading how
         // much content the database still holds is an ordinary question of a deployment that moves none of it.
         services.AddScoped<IStoredContentMoveStore, StoredContentMoveStore>();

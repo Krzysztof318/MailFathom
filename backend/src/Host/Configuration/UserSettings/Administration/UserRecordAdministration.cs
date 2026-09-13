@@ -394,17 +394,16 @@ internal sealed class UserRecordAdministration(
                 cancellationToken);
     }
 
-    /// <summary>Points a user's record at one of their stored files as the portrait they are drawn by, or at none.</summary>
-    /// <param name="user">The user whose record is rewritten.</param>
+    /// <summary>Points the signed-in user's record at one of their stored files as the portrait they are drawn by, or at none.</summary>
     /// <param name="portrait">The file to link, or <see langword="null" /> to link none.</param>
     /// <param name="cancellationToken">Cancels the reads and the commit.</param>
     /// <returns>Whether the record was held, and the file the link displaced, if any.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the record refused the link for a reason a retry does not settle.</exception>
     /// <remarks>
     /// <para>
-    /// Reached only through <see cref="OwnPortraitLinks" />, behind the use case that already required the caller's grant
-    /// and resolved the user from them, so it asks for no permission of its own.
+    /// Asks for the grant the portrait use case is published under and takes the user from the caller, as every other
+    /// entry point here does, so nothing that resolves this service can rewrite another user's record through it.
     /// </para>
     /// <para>
     /// Composed over whatever version is in force rather than over one a caller read, because nobody authored this change
@@ -416,12 +415,13 @@ internal sealed class UserRecordAdministration(
     /// record committed before a rule a write is held to existed must not stop a person replacing their picture.
     /// </para>
     /// </remarks>
-    internal async Task<PortraitRelinking> RelinkPortraitAsync(
-        MailUserId user,
+    internal async Task<PortraitRelinking> RelinkOwnPortraitAsync(
         StoredFileId? portrait,
         CancellationToken cancellationToken)
     {
-        RequireNamed(user);
+        authorization.RequirePermission(MailFathomPermission.MailRead);
+
+        var user = authorization.RequireUser();
 
         for (var attempt = 1; ; attempt++)
         {

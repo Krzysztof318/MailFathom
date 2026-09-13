@@ -36,11 +36,8 @@ internal sealed class OwnPortraitLinks(
         await documents.ReadAsync(user, cancellationToken) is { } record ? PortraitOf(record.Json) : null;
 
     /// <inheritdoc />
-    public Task<PortraitRelinking> RelinkPortraitAsync(
-        MailUserId user,
-        StoredFileId? portrait,
-        CancellationToken cancellationToken) =>
-        records.RelinkPortraitAsync(user, portrait, cancellationToken);
+    public Task<PortraitRelinking> RelinkOwnPortraitAsync(StoredFileId? portrait, CancellationToken cancellationToken) =>
+        records.RelinkOwnPortraitAsync(portrait, cancellationToken);
 
     /// <summary>Reads the portrait link a stored record carries.</summary>
     /// <param name="documentJson">The record as its row holds it.</param>

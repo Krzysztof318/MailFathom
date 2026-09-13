@@ -20,7 +20,7 @@ namespace MailFathom.Application.EmailContent.Move;
 /// object against a row a concurrent write had already replaced.
 /// </para>
 /// </remarks>
-/// <param name="Kind">Which of the four payload kinds this is, which decides the table it lives in.</param>
+/// <param name="Kind">Which of the five payload kinds this is, which decides the table it lives in.</param>
 /// <param name="PayloadId">The identity of the row holding it, which is what the walk is ordered by.</param>
 /// <param name="ByteLength">How many bytes of raw MIME the row records.</param>
 /// <param name="Sha256Hash">The digest the row records over them.</param>

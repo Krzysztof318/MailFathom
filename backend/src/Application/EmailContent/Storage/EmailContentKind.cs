@@ -4,13 +4,13 @@
 
 namespace MailFathom.Application.EmailContent.Storage;
 
-/// <summary>Names which of the four things a raw MIME payload is, so a placement can say what it placed.</summary>
+/// <summary>Names which of the five things a stored payload is — four kinds of raw MIME and a file a user supplied — so a placement can say what it placed.</summary>
 /// <remarks>
 /// <para>
-/// The four are the port's own write methods seen from the other side: each has its own owning row, its own write
-/// semantics, and — under the object backend — its own group of keys. A placement happens before the owning row exists,
-/// so this is the only thing the store knows about a payload at that moment, and it is what lets one placement method
-/// serve all four rather than four near-identical ones differing by a single segment.
+/// Each of the five has its own owning row, its own write semantics, and — under the object backend — its own group of
+/// keys. A placement happens before the owning row exists, so this is the only thing the store knows about a payload at
+/// that moment, and it is what lets one placement method serve all five rather than five near-identical ones differing
+/// by a single segment. Only <see cref="StoredFile" /> is not MIME, and nothing in the placement reads the octets.
 /// </para>
 /// <para>
 /// It reaches an object key as a segment, which is a readability and grouping property rather than a durable identity:
