@@ -21,7 +21,7 @@ MCP, not the administrative endpoint. A user who wants to change what their inst
     "Rules": [
       {
         "Name": "supplier-invoices",
-        "Accounts": [ "work" ],
+        "Accounts": [ "5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10" ],
         "Condition": "senderDomain == 'supplier.test' and attachmentCount > 0",
         "Triggers": [ "Arrival" ],
         "Actions": { "MoveTo": "invoices", "MarkAsRead": true },
@@ -79,7 +79,7 @@ reaches a mailbox which no longer maps its destination folder or permits its act
 until a record provides what it names or the rule is changed.
 
 The `account` fact stays available and is a different tool. The filter decides whether a rule runs; the fact lets one
-rule that does run say something about which account it is running for — `account == 'work' ? … : …` inside a condition
+rule that does run say something about which account it is running for — `account == '5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10' ? … : …` inside a condition
 that applies to several.
 
 [Mail configuration](../operations/configuration-mail.md#mailrules) lists every key of the section with its
@@ -851,7 +851,7 @@ senderAddress == 'billing@supplier.test'
 One account's mail only, which is the `Accounts` filter beside the condition rather than anything in it:
 
 ```json
-{ "Name": "work-invoices", "Accounts": [ "work" ], "Condition": "contains(subject, 'invoice')", "Triggers": [ "Arrival" ] }
+{ "Name": "work-invoices", "Accounts": [ "5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10" ], "Condition": "contains(subject, 'invoice')", "Triggers": [ "Arrival" ] }
 ```
 
 Anything from a domain, in one of two folders:
@@ -929,7 +929,7 @@ Filing supplier invoices and marking them read, on one account, so that the rule
 ```json
 {
   "Name": "supplier-invoices",
-  "Accounts": [ "work" ],
+  "Accounts": [ "5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10" ],
   "Condition": "senderDomain == 'supplier.test' and attachmentCount > 0",
   "Triggers": [ "Arrival" ],
   "Actions": { "MoveTo": "invoices", "MarkAsRead": true },
@@ -976,7 +976,7 @@ Labelling mail so it can be found by tag in any mail client, without moving it o
 ```json
 {
   "Name": "label-invoices",
-  "Accounts": [ "work" ],
+  "Accounts": [ "5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10" ],
   "Condition": "contains(subject, 'invoice') and attachmentCount > 0",
   "Triggers": [ "Arrival" ],
   "Actions": { "AddKeywords": [ "$Invoice", "$Todo" ] }
@@ -988,7 +988,7 @@ Taking a label off once the thing it stood for is over, and stating the whole se
 ```json
 {
   "Name": "settle-invoices",
-  "Accounts": [ "work" ],
+  "Accounts": [ "5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10" ],
   "Condition": "contains(subject, 'payment received') and ageInDays > 1",
   "Actions": { "SetKeywords": [ "$Invoice", "$Done" ] },
   "Triggers": []
@@ -1001,7 +1001,7 @@ refused at startup if it does not:
 ```json
 {
   "Name": "drop-build-notifications",
-  "Accounts": [ "work" ],
+  "Accounts": [ "5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10" ],
   "Condition": "senderAddress == 'builds@ci.example' and ageInDays > 7",
   "Triggers": [ "Arrival" ],
   "Actions": { "Delete": true }

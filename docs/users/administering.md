@@ -229,9 +229,9 @@ forward the port over SSH, or use `--mode device` for Microsoft and `--mode manu
 What it produces is a refresh token, and `--account` decides where that token goes:
 
 ```console
-$ mfctl mailbox authorize --provider google --client-id <client-id> --account workspace
+$ mfctl mailbox authorize --provider google --client-id <client-id> --account 8e3f1a6b-2c4d-4f7e-a915-7b2d0c6e1f38
 …
-Stored the refresh token for account 'workspace' on 'production'. It was not printed.
+Stored the refresh token for account '8e3f1a6b-2c4d-4f7e-a915-7b2d0c6e1f38' on 'production'. It was not printed.
 ```
 
 **Named, the token goes straight to your deployment**, which encrypts it and keeps it. It is never printed, so it never
@@ -336,9 +336,9 @@ gave the rule asks on your behalf. That asking is a command, and so is finding o
 | --- | --- |
 | See which rules your deployment is running, in order | `mfctl rules list` |
 | Read one of them in full | `mfctl rules show file-invoices` |
-| Apply them to mail that arrived before them | `mfctl rules run --account work` |
-| Watch that run | `mfctl rules run-status --account work` |
-| Find out what a rule did, or why a message is where it is | `mfctl rules history --account work` |
+| Apply them to mail that arrived before them | `mfctl rules run --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
+| Watch that run | `mfctl rules run-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
+| Find out what a rule did, or why a message is where it is | `mfctl rules history --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
 
 `mfctl rules list` is the one to run after editing a rule file. A deployment refuses a reload whose rules do not
 validate and goes on running the previous set, which it reports to its log and nowhere else — so this is where you find
@@ -366,10 +366,10 @@ moving a threshold does nothing about the existing mailbox until you ask:
 
 | What you want | Command |
 | --- | --- |
-| Find out what classification would do to the mail you have | `mfctl spam run --account work` |
-| Carry that out | `mfctl spam run --account work --apply` |
-| Watch the run | `mfctl spam run-status --account work` |
-| Find out why a message was filed as junk | `mfctl spam classifications --account work --email <id>` |
+| Find out what classification would do to the mail you have | `mfctl spam run --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
+| Carry that out | `mfctl spam run --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10 --apply` |
+| Watch the run | `mfctl spam run-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
+| Find out why a message was filed as junk | `mfctl spam classifications --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10 --email <id>` |
 
 **The run is a dry run unless you add `--apply`**, and that is the order to do it in: run it, read what it found with
 `run-status`, and only then run it again with `--apply`. With filing switched on, a run over an inbox is the largest
@@ -393,7 +393,7 @@ default — an edit to a configuration file should not dispose of mail — and b
 want back:
 
 ```console
-$ mfctl folder erase --account work --folder archive
+$ mfctl folder erase --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10 --folder archive
 1043 stored emails erased from ARCHIVE under work. The folder holds none, and its checkpoint went with them, so
 mirroring it again starts from the beginning rather than resuming.
 ```
@@ -417,9 +417,9 @@ folder, so a message it has already stored is never looked at again.
 
 | What you want | Command |
 | --- | --- |
-| Fill in what is already in the mail you stored | `mfctl mailbox rederive --account work` |
-| See how far that has got | `mfctl mailbox rederive-status --account work` |
-| Fill in what only your mail server knows | `mfctl mailbox rewind --account work` |
+| Fill in what is already in the mail you stored | `mfctl mailbox rederive --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
+| See how far that has got | `mfctl mailbox rederive-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
+| Fill in what only your mail server knows | `mfctl mailbox rewind --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
 | Any of them, for a single folder | add `--folder archive` |
 
 **Reach for `rederive` first, because it is nearly free.** Anything the message itself carries is in the raw mail
@@ -430,18 +430,18 @@ your mail server is not contacted at all, and nothing is marked read.
 so closing it changes nothing and the run survives a restart of the deployment:
 
 ```console
-$ mfctl mailbox rederive --account work
+$ mfctl mailbox rederive --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 A re-derivation of every folder under work has been asked for.
 Requested:  2026-08-18 12:00:00Z
 Progress:   0 re-read, 0 unparseable, 0 no longer stored
-The deployment carries the run in the background. Watch it with 'mfctl mailbox rederive-status --account work'.
+The deployment carries the run in the background. Watch it with 'mfctl mailbox rederive-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10'.
 ```
 
 Asking again while one is going is answered with the run already under way rather than starting a second, so a command
 you are not sure landed is safe to repeat. How far it has come is a second command:
 
 ```console
-$ mfctl mailbox rederive-status --account work
+$ mfctl mailbox rederive-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 Scope:      every folder under work — under way
 Requested:  2026-08-18 12:00:00Z
 Progress:   1,043 re-read, 0 unparseable, 0 no longer stored
@@ -454,7 +454,7 @@ forgets how far synchronization has got, which makes the next runs fetch the who
 much that is and asks before it does anything:
 
 ```console
-$ mfctl mailbox rewind --account work
+$ mfctl mailbox rewind --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 Scope:  every folder under work
 Cost:   22,500 stored emails would be fetched from the mail server, re-read, and stored again.
 Rewind that scope? [y/N]
@@ -541,7 +541,7 @@ tells you it is there:
 | What you want | Command |
 | --- | --- |
 | See what has stopped | `mfctl jobs dead-letters` |
-| See what has stopped for one account | `mfctl jobs dead-letters --account work` |
+| See what has stopped for one account | `mfctl jobs dead-letters --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
 | Run one again, after fixing what broke it | `mfctl jobs retry --job <id>` |
 | Decide one will never run | `mfctl jobs drop --job <id>` |
 

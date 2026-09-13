@@ -144,11 +144,12 @@ for one spelling stays valid for the other. Configuration is what makes this una
 same user's accounts already carries as an identifier or as a display name fails startup — so resolution never has to
 choose between two matches. [`list_accounts`](mcp-tools.md#list_accounts) is where a caller learns both names.
 
-Both spellings belong to the account's user and are unique within it rather than across the deployment, which is as far
-as that unambiguity has to reach: resolution runs against the accounts the caller's user owns, so two users each
-calling an account `work` is no ambiguity at all and neither of them can name the other's. A client storing either name
-is storing this user's name for the mailbox, and one that compared it with a name read for somebody else — another
-user, or a second deployment — would be comparing two values that were never in one naming space.
+The generated identifier is unique across the whole deployment, and the display name alone is unique only within one
+user. Resolution runs against the accounts the caller's user owns, so two users each calling an account `Work mail` is
+no ambiguity at all, and neither of them can name the other's account by its identifier either. A client storing the
+identifier stores a deployment-wide key for the mailbox; a client storing the display name stores this user's name for
+it, and one that compared that name with a name read for somebody else — another user, or a second deployment — would
+be comparing two values that were never in one naming space.
 
 ### Which accounts an unscoped request reads
 

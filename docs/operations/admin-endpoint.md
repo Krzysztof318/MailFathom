@@ -603,10 +603,10 @@ synchronization run, so this terminal is not what keeps it alive and closing it 
 asking once, and the command says which of the two happened:
 
 ```console
-$ mfctl rules run --account work
+$ mfctl rules run --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 A rule run over work has been asked for.
 Progress:  0 evaluated, 0 matched, 0 skipped
-The run is carried by the account's synchronization runs. Watch it with 'mfctl rules run-status --account work'.
+The run is carried by the account's synchronization runs. Watch it with 'mfctl rules run-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10'.
 ```
 
 `mfctl rules run-status --account <id>` is where it is watched from, and an account nobody has ever asked for a run is
@@ -623,7 +623,7 @@ and never matches; narrowing to a message with `--email` answers "why is this me
 `--cursor` walk it, newest first:
 
 ```console
-$ mfctl rules history --account work --rule file-invoices
+$ mfctl rules history --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10 --rule file-invoices
 Evaluated             Rule           Outcome  Message                               Rule set                             Read                           Asked
 2026-08-08 11:59:00Z  file-invoices  Matched  0199c3d0-0000-7000-8000-000000000002  a1b2c3d4e5f6 (RequestedRun, 4.0 ms)  senderDomain, attachmentCount  relocate → archive: Requested
 ```
@@ -672,12 +672,12 @@ written the request down and never waits for the walk; the run is carried by the
 this terminal is not what keeps it alive and closing it cannot cancel one:
 
 ```console
-$ mfctl spam run --account work
+$ mfctl spam run --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 A classification run over work has been asked for.
 Folders:   INBOX
 Acting:    no — this is a dry run; it records verdicts and leaves the mailbox alone. Add --apply to carry out what the switches ask for.
 Progress:  0 scored, 0 already decided, 0 unreadable
-The run is carried by the account's synchronization runs. Watch it with 'mfctl spam run-status --account work'.
+The run is carried by the account's synchronization runs. Watch it with 'mfctl spam run-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10'.
 ```
 
 `--folder` narrows the walk and is repeatable; it narrows *within* that user's own scope, and a folder outside it is
@@ -691,7 +691,7 @@ request carried were not applied to the walk under way.
 is read:
 
 ```console
-$ mfctl spam run-status --account work
+$ mfctl spam run-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 Account:    work — Completed at 2026-08-12 11:30:00Z
 Requested:  2026-08-12 11:00:00Z
 Folders:    INBOX
@@ -712,7 +712,7 @@ answers "why is this in junk"; narrowing with `--verdict` answers "what would th
 `--cursor` walk it, newest first:
 
 ```console
-$ mfctl spam classifications --account work --verdict Spam
+$ mfctl spam classifications --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10 --verdict Spam
 Evaluated             Verdict                Message                               Folder  Under                                                     Signals                  Asked
 2026-08-12 11:04:11Z  Spam (Scanner 15.2/5)  0199c3d0-0000-7000-8000-000000000002  INBOX   a1b2c3d4e5f6, scanner corpus spamassassin.4.0.2+20260801  X-Spam-Status, BAYES_99  relocate (0199c3d0-0000-7000-8000-000000000009)
 ```
@@ -852,7 +852,7 @@ file](../features/imap-synchronization.md#what-a-mapping-decides-beyond-where-th
 somebody's mail. That leaves an operator who means it with nothing to ask, and this is the ask.
 
 ```console
-$ mfctl folder erase --account work --folder archive
+$ mfctl folder erase --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10 --folder archive
 500 stored emails erased so far
 1000 stored emails erased so far
 1043 stored emails erased from ARCHIVE under work. The folder holds none, and its checkpoint went with them, so
@@ -894,11 +894,11 @@ own disk, so it is a local read, a parse, and an update of the message's own col
 it cannot set `\Seen`, and it rewrites no stored content:
 
 ```console
-$ mfctl mailbox rederive --account work
+$ mfctl mailbox rederive --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 A re-derivation of every folder under work has been asked for.
 Requested:  2026-08-18 12:00:00Z
 Progress:   0 re-read, 0 unparseable, 0 no longer stored
-The deployment carries the run in the background. Watch it with 'mfctl mailbox rederive-status --account work'.
+The deployment carries the run in the background. Watch it with 'mfctl mailbox rederive-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10'.
 ```
 
 **The request records the run and returns; the deployment carries it.** The walk is durable background work under the
@@ -919,7 +919,7 @@ nothing is walking would wait forever, and the two are undone by different comma
 **A second command reads it**, on the same path with `GET` and the scope in the query string:
 
 ```console
-$ mfctl mailbox rederive-status --account work
+$ mfctl mailbox rederive-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 Scope:      every folder under work — under way
 Requested:  2026-08-18 12:00:00Z
 Progress:   1,043 re-read, 0 unparseable, 0 no longer stored
@@ -939,7 +939,7 @@ flag, a keyword, the internal date. It discards the durable synchronization prog
 the next runs read them from the first UID inside the account's window and everything the server knows is read again:
 
 ```console
-$ mfctl mailbox rewind --account work
+$ mfctl mailbox rewind --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 Scope:  every folder under work
 Cost:   22,500 stored emails would be fetched from the mail server, re-read, and stored again.
 Rewind that scope? [y/N] y
