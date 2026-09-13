@@ -28,7 +28,7 @@ internal sealed record SetMailFlagsToolResult
     public required string StoredEmailId { get; init; }
 
     /// <summary>Gets the account whose run will carry the change.</summary>
-    [Description("The account the email belongs to. Its next synchronization run is what issues the change to the mail server.")]
+    [Description("The account the email belongs to. Its next synchronization run is what issues a recorded change to the mail server; an applied change has no mail server to reach.")]
     public required string AccountId { get; init; }
 
     /// <summary>Gets the operator's own name for the folder the email is in.</summary>

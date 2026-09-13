@@ -71,4 +71,12 @@ public enum MailRuleActionFailureReason
     /// <summary>The account is held, and the change is one a held account cannot commit to stored state yet.</summary>
     /// <remarks>A copy is the one such change: a held account's copy is a second stored message with a payload of its own, which cannot be placed inside the transaction a rule's batch commits in.</remarks>
     ActionNotAvailableOnHeldAccount = 7,
+
+    /// <summary>The account is held, and it no longer stores the email the rule matched.</summary>
+    /// <remarks>
+    /// The email was erased between the pass reading it and the change being committed — a person emptying the trash, or
+    /// a folder deletion's erasure pass. There is no mail server to point at on a held account, so this is its own
+    /// reason rather than <see cref="EmailNotOnMailServer" />.
+    /// </remarks>
+    EmailNoLongerStored = 8,
 }

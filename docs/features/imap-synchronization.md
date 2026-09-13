@@ -615,7 +615,7 @@ message ends up filed once whichever command the stop landed between.
 
 **An account whose mailbox MailFathom holds itself writes no record for most changes**, because there is no server to
 issue one to. A flag, a keyword, a move, or a delete into the local trash is made to the stored message in the
-transaction that authored it, beside its audit entry, and the answer says `applied` rather than naming a record; the
+transaction that authored it, beside its audit entry where the account keeps one, and the answer says `applied` rather than naming a record; the
 [client endpoint](../operations/client-endpoint.md#the-local-folder-routes) holds what each act does there. The exception
 is a delete of a message already in the local trash: it erases the message and every row derived from it, so it is
 recorded like any delete and held for its withdrawal window, and once that window passes the account's run erases the

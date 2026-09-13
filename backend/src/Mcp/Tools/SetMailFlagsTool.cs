@@ -100,7 +100,8 @@ internal sealed class SetMailFlagsTool(MailFlagChangeRecorder flagChangeRecorder
         + "carries a changeRecordId and the lifecycle it has reached. To read where a change has got to, call again with "
         + "the same requestId, which answers with the same records and their current lifecycle. On an account MailFathom "
         + "holds on its own there is no mail server to wait on: the result says applied, the change has already "
-        + "happened, and no records are returned. Every change is "
+        + "happened, and no records are returned; requestId matches a repeated call only against a record, so there a "
+        + "repeat under the same requestId applies the change again rather than answering with the first call. Every change is "
         + "reversible: call again with the opposite value. keywordChange replace states the whole keyword set — a "
         + "keyword you do not list is removed, and an empty list clears them all — so read the email's keywords first, "
         + "or use add and remove, which touch only what they name. Only these three values can be written: this tool "
@@ -116,7 +117,7 @@ internal sealed class SetMailFlagsTool(MailFlagChangeRecorder flagChangeRecorder
         SetMailFlagsKeywordChange? keywordChange = null,
         [Description("The keywords the change names, at most 64, each at most 64 characters. A keyword is an IMAP atom: no space, no control character, none of ( ) { % * \" \\ ], nothing above plain ASCII, and no leading backslash, which is how system flags are spelled. Two spellings differing only in case are one keyword. An empty list is accepted only with replace, where it clears every keyword.")]
         IReadOnlyList<string>? keywords = null,
-        [Description("Your own identifier for this request, at most 128 characters. Send the same one when retrying a call that may have gone through: the change is then the same request and is not made twice. A call with a new value, or with none, is a new request — which is what lets you star a message, unstar it, and star it again. Reusing one to ask for a different value is refused, so send a new identifier whenever you mean a new change.")]
+        [Description("Your own identifier for this request, at most 128 characters. Send the same one when retrying a call that may have gone through: the change is then the same request and is not made twice. A call with a new value, or with none, is a new request — which is what lets you star a message, unstar it, and star it again. Reusing one to ask for a different value is refused, so send a new identifier whenever you mean a new change. These guarantees hold for a change written down as a record; on a held account, where the result says applied, nothing is matched and every call applies the change it names.")]
         string? requestId = null,
         CancellationToken cancellationToken = default)
     {

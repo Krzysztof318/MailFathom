@@ -429,6 +429,7 @@ Each is recorded against the rule that asked, and the actions beside it are stil
 | `ActionNoLongerPermitted` | The account has stopped permitting this action since the rule set that declares it was read |
 | `EmailNotOnMailServer` | The stored email carries no occurrence, because no mail server holds it any longer, so there is nowhere a change could be carried to |
 | `ActionNotAvailableOnHeldAccount` | The account's mailbox is one MailFathom holds itself, and the action is a copy, which a held account does not offer |
+| `EmailNoLongerStored` | The account's mailbox is one MailFathom holds itself, and the email was erased between the pass reading it and the change being made |
 
 On a held account every other action is made to the stored email as the pass commits, in the transaction that records
 the rule's decision, rather than written down for a server: a move files into the local folder the destination's role

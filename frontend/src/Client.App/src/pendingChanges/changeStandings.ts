@@ -113,6 +113,11 @@ export function readSubmission(submission: ChangeSubmission): SubmissionReading 
     const refused = new Map<MailMutationOutcome, string[]>();
 
     for (const result of submission.results ?? []) {
+        // Already made by the deployment, so there is neither a record to follow nor a refusal to report.
+        if (result.outcome === 'applied') {
+            continue;
+        }
+
         if (result.outcome !== 'recorded') {
             refused.set(result.outcome, [...(refused.get(result.outcome) ?? []), result.storedEmailId]);
 

@@ -1726,7 +1726,7 @@ mail into a folder the caller cannot read would move it out of sight rather than
 
 **On an account whose mailbox MailFathom holds, a change is made rather than recorded.** There is no server to carry it
 to, so a flag, a keyword, a move, or a delete on a [held account](#the-local-folder-routes) is committed to the stored
-message in the same transaction as its audit entry, the answer is `applied`, and `changes` is empty because no record
+message in the same transaction as its audit entry where the account keeps one, the answer is `applied`, and `changes` is empty because no record
 exists to follow. Treat `applied` as finished: nothing converges afterwards and no later state will be reported. A move
 files into the local folder the destination's role names, or into the local folder the destination's source folder
 created; a destination with neither is `destination-not-found`, and a message already in that local folder is

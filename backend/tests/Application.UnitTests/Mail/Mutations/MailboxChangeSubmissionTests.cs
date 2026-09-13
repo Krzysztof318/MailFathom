@@ -67,9 +67,9 @@ public sealed class MailboxChangeSubmissionTests
         Assert.Empty(this.states.States);
     }
 
-    /// <summary>A move onto the folder a mirrored message is already in would ask a server to move a message onto itself.</summary>
+    /// <summary>Whether a rule's move is worth carrying is the rule's decision, so the submission records what it is handed.</summary>
     [Fact]
-    public async Task SubmitAsync_AMoveIntoTheFolderAMirroredMessageIsIn_WritesNothing()
+    public async Task SubmitAsync_AMoveIntoTheFolderAMirroredMessageIsIn_RecordsWhatItWasHanded()
     {
         // Arrange
         var submission = MailboxChangeSubmissions.Over(this.records);
@@ -77,6 +77,22 @@ public sealed class MailboxChangeSubmissionTests
 
         // Act
         var submitted = await submission.SubmitAsync(this.session, MoveRequest(Inbox.RemotePath), destination, null, Token);
+
+        // Assert
+        Assert.Equal(MailboxChangeSubmissionOutcome.Recorded, submitted.Outcome);
+        Assert.Equal(1, this.records.OpenedRecordCount);
+    }
+
+    /// <summary>A person moving a mirrored message into the folder it is in is told it is already there, and nothing is recorded.</summary>
+    [Fact]
+    public async Task SubmitMoveAsync_AMoveIntoTheFolderAMirroredMessageIsIn_AnswersAlreadyThereWithoutARecord()
+    {
+        // Arrange
+        var submission = MailboxChangeSubmissions.Over(this.records);
+        var destination = new MailboxDestination(Inbox, IsMirrored: true);
+
+        // Act
+        var submitted = await submission.SubmitMoveAsync(this.session, MoveRequest(Inbox.RemotePath), destination, Token);
 
         // Assert
         Assert.Equal(MailboxChangeSubmissionOutcome.AlreadyInDestination, submitted.Outcome);
@@ -359,7 +375,37 @@ public sealed class MailboxChangeSubmissionTests
         }
 
         // Assert
-        await channel.ReceivedWithAnyArgs(1).PublishAsync(default!, Token);
+        await channel.Received(1).PublishAsync(
+            Arg.Is<ClientSignal>(signal =>
+                signal != null
+                && signal.Kind == ClientSignalKind.MailFlagsChanged
+                && signal.Folder == Inbox.Alias
+                && signal.Flags.SequenceEqual(new[] { new SignalledEmailFlags(Email, true, null) })),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A committed move changes where the row is drawn, so clients are told to re-read rather than to apply a flag.</summary>
+    [Fact]
+    public async Task Announce_ACommittedMove_PublishesAMailChangeNamingTheMessage()
+    {
+        // Arrange
+        var channel = Substitute.For<IClientSignalChannel>();
+        var change = new AppliedMailboxChange(Account, Inbox.Alias, Email, Flags: null);
+
+        // Act
+        await using (var signals = new ClientSignals([channel], new FakeTimeProvider(Now)))
+        {
+            this.Held(signals: signals).Announce(change);
+        }
+
+        // Assert
+        await channel.Received(1).PublishAsync(
+            Arg.Is<ClientSignal>(signal =>
+                signal != null
+                && signal.Kind == ClientSignalKind.MailChanged
+                && signal.Folder == Inbox.Alias
+                && signal.Emails.SequenceEqual(new[] { Email })),
+            Arg.Any<CancellationToken>());
     }
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;

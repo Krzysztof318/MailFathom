@@ -172,11 +172,10 @@ public sealed class MailRelocationRecorder
         // Whether the message is already there is the submission's to answer, because it is a different question on a
         // held account: the alias a message was stored under is its source folder, and the folder it is in is local.
         var submitted = await this.commitPolicy.CommitAsync(
-            (session, attemptCancellationToken) => this.submission.SubmitAsync(
+            (session, attemptCancellationToken) => this.submission.SubmitMoveAsync(
                 session,
                 request,
                 folder,
-                heldUntil: null,
                 attemptCancellationToken),
             cancellationToken);
 

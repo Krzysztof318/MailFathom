@@ -110,12 +110,16 @@ const heldForNobody: Held = { session: null, directory: null, asked: new Map() }
  * A message the deployment did not record is mail that has moved on since the list drew it, an account it no longer
  * serves, or a message already where it was asked to go. Each is that message's own answer rather than the request's,
  * which is what lets the rest of a batch stand — and it is read the same way whichever direction the act was going in.
+ * A message answered `applied` counts beside a recorded one: the deployment already made the change, on an account it
+ * holds alone, so the act stands even though there is no record to follow.
  */
 function writtenDown(batches: readonly Submitted[]): ReadonlySet<string> {
     return new Set(
         batches.flatMap(({ answer }) =>
             answer.outcome === 'read'
-                ? answer.value.filter((result) => result.outcome === 'recorded').map((result) => result.storedEmailId)
+                ? answer.value
+                      .filter((result) => result.outcome === 'recorded' || result.outcome === 'applied')
+                      .map((result) => result.storedEmailId)
                 : [],
         ),
     );

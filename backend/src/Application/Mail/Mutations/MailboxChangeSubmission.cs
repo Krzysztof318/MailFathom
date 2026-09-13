@@ -95,11 +95,40 @@ public sealed class MailboxChangeSubmission
     /// announce and <see cref="Announce" /> publishes it: a signal raised inside a transaction that then rolls back would
     /// send a client to read a change that never happened.
     /// </remarks>
-    public async Task<SubmittedMailboxChange> SubmitAsync(
+    public Task<SubmittedMailboxChange> SubmitAsync(
         IPersistenceSession session,
         MailboxMutationRequest request,
         MailboxDestination? destination,
         DateTimeOffset? heldUntil,
+        CancellationToken cancellationToken) =>
+        this.SubmitAsync(session, request, destination, heldUntil, refusesMoveIntoCurrentFolder: false, cancellationToken);
+
+    /// <summary>Records or commits a move a person asked for, answering one into the folder the message is in as already there.</summary>
+    /// <param name="session">The transaction the move commits in.</param>
+    /// <param name="request">The move asked for.</param>
+    /// <param name="destination">Where the move files the message, resolved before the transaction opened.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>The record written, the local move committed, or why neither happened.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A rule's move into the folder a mirrored message is in is still recorded, as it always was, which is why the
+    /// refusal is asked for rather than applied to every requester. The question is answered here rather than by the
+    /// caller because it differs by phase: on a held account the folder a message is in is local, not the alias it was
+    /// stored under.
+    /// </remarks>
+    public Task<SubmittedMailboxChange> SubmitMoveAsync(
+        IPersistenceSession session,
+        MailboxMutationRequest request,
+        MailboxDestination destination,
+        CancellationToken cancellationToken) =>
+        this.SubmitAsync(session, request, destination, heldUntil: null, refusesMoveIntoCurrentFolder: true, cancellationToken);
+
+    private async Task<SubmittedMailboxChange> SubmitAsync(
+        IPersistenceSession session,
+        MailboxMutationRequest request,
+        MailboxDestination? destination,
+        DateTimeOffset? heldUntil,
+        bool refusesMoveIntoCurrentFolder,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -110,10 +139,9 @@ public sealed class MailboxChangeSubmission
 
         if (holding is not { Phase: MailAccountCustodyPhase.Held })
         {
-            // A copy into the folder it is in is a duplicate somebody asked for, so only a move is refused as a no-op.
-            if (request.Mutation == MailboxMutation.Relocate
-                && destination is not null
-                && destination.Alias == request.Occurrence.FolderResolutionId.Alias)
+            if (refusesMoveIntoCurrentFolder
+                && request.Mutation == MailboxMutation.Relocate
+                && destination?.Alias == request.Occurrence.FolderResolutionId.Alias)
             {
                 return SubmittedMailboxChange.NotSubmitted(MailboxChangeSubmissionOutcome.AlreadyInDestination);
             }

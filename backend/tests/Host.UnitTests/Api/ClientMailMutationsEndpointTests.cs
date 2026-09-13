@@ -267,6 +267,45 @@ public sealed class ClientMailMutationsEndpointTests
     }
 
     /// <summary>
+    /// On a held account the change is made rather than recorded, so the route answers <c>applied</c> with no record: a
+    /// client that read <c>recorded</c> with an empty list would wait on a record that was never opened.
+    /// </summary>
+    [Fact]
+    public async Task SubmitFlagChangesAsync_AHeldAccount_AnswersAppliedWithNoRecord()
+    {
+        // Act
+        var result = await ClientMailMutationsEndpoint.SubmitFlagChangesAsync(
+            new ClientMailFlagChangesRequest(
+                "call-1",
+                [new ClientMailFlagChangeRequest(Message, new ClientMailFlagStateRequest(Seen: true, null), null)]),
+            this.FlagRecorder(TargetInInbox(), held: true),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var change = Assert.Single(Assert.IsType<Ok<ClientMailFlagChangesResponse>>(result.Result).Value!.Results);
+
+        Assert.Equal(ClientMailChangeOutcomes.Applied, change.Outcome);
+        Assert.Empty(change.Changes);
+        await this.records.DidNotReceiveWithAnyArgs().OpenAsync(default!, default!, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>A move a held account applied is published as <c>applied</c>, naming where it went and no record to follow.</summary>
+    [Fact]
+    public void MoveResult_AMoveAHeldAccountApplied_IsPublishedAsAppliedWithNoChange()
+    {
+        // Arrange
+        var archive = MailFolderAlias.Create("Archive");
+
+        // Act
+        var move = ClientMailMoveResultResponse.For(Message, AuthoredMailRelocationResult.Applied(archive));
+
+        // Assert
+        Assert.Equal(ClientMailChangeOutcomes.Applied, move.Outcome);
+        Assert.Equal(archive.Value, move.DestinationFolder);
+        Assert.Null(move.Change);
+    }
+
+    /// <summary>
     /// A message the use case cannot find reaches the route as an exception and has to leave it as that one message's
     /// result, because a batch carries on past a message that has gone.
     /// </summary>
@@ -377,6 +416,25 @@ public sealed class ClientMailMutationsEndpointTests
         Assert.Equal(Message, deleted.StoredEmailId);
         Assert.Equal(ClientMailChangeOutcomes.Recorded, deleted.Outcome);
         Assert.Equal(MailboxMutation.Delete.Name, deleted.Change?.Mutation);
+    }
+
+    /// <summary>A delete on a held account moves the message into the local trash at once, so the route answers <c>applied</c> with no record.</summary>
+    [Fact]
+    public async Task SubmitDeletesAsync_AHeldAccount_AnswersAppliedWithNoRecord()
+    {
+        // Act
+        var result = await ClientMailMutationsEndpoint.SubmitDeletesAsync(
+            new ClientMailDeletesRequest("call-1", [new ClientMailDeleteRequest(Message)]),
+            this.DeletionRecorder(TargetInInbox(), held: true),
+            Preferences(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var deleted = Assert.Single(Assert.IsType<Ok<ClientMailDeletesResponse>>(result.Result).Value!.Results);
+
+        Assert.Equal(ClientMailChangeOutcomes.Applied, deleted.Outcome);
+        Assert.Null(deleted.Change);
+        await this.records.DidNotReceiveWithAnyArgs().OpenAsync(default!, default!, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -642,19 +700,49 @@ public sealed class ClientMailMutationsEndpointTests
         this.records,
         CommitPolicy());
 
-    /// <summary>Builds the submission every use case here writes through, for an account whose source is the truth.</summary>
-    private MailboxChangeSubmission Submission() => new(
-        Substitute.For<ILocalMailFolderStore>(),
-        this.records,
-        Substitute.For<ILocalEmailStateStore>(),
-        Substitute.For<IMailboxMutationAuditSettingsReader>(),
-        Substitute.For<IMailboxMutationAuditEntryStore>(),
-        ClientSignalPublishers.ReachingNobody,
-        new FakeTimeProvider(RecordedAt));
+    /// <summary>Builds the submission every use case here writes through.</summary>
+    /// <param name="held">Whether the account's mailbox is one MailFathom holds, storing the message the inbox target names; otherwise its source is the truth.</param>
+    private MailboxChangeSubmission Submission(bool held)
+    {
+        var localFolders = Substitute.For<ILocalMailFolderStore>();
+        var states = Substitute.For<ILocalEmailStateStore>();
+        var auditSettings = Substitute.For<IMailboxMutationAuditSettingsReader>();
+
+        if (held)
+        {
+            localFolders
+                .ReadAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<LocalMailFolderHolding?>(
+                    new LocalMailFolderHolding(MailAccountCustodyPhase.Held, [], [])));
+            states
+                .ReadAsync(
+                    Arg.Any<IPersistenceSession>(),
+                    Arg.Any<MailAccountIdentity>(),
+                    Arg.Any<StoredEmailId>(),
+                    Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<LocalEmailState?>(new LocalEmailState(
+                    TargetInInbox().Folder,
+                    Folder: null,
+                    IsSeen: false,
+                    IsFlagged: false,
+                    RemoteEmailKeywords.Create([]))));
+            auditSettings.GetAuditSettings(Arg.Any<MailAccountId>()).Returns(MailboxMutationAuditSettings.Disabled);
+        }
+
+        return new MailboxChangeSubmission(
+            localFolders,
+            this.records,
+            states,
+            auditSettings,
+            Substitute.For<IMailboxMutationAuditEntryStore>(),
+            ClientSignalPublishers.ReachingNobody,
+            new FakeTimeProvider(RecordedAt));
+    }
 
     /// <summary>Builds the flag-change use case the routes are given.</summary>
     /// <param name="target">The message the caller names, defaulting to none, which is the absence the recorder reports as a message that has gone.</param>
-    private MailFlagChangeRecorder FlagRecorder(AuthoredMailboxTarget? target = null)
+    /// <param name="held">Whether the account's mailbox is one MailFathom holds.</param>
+    private MailFlagChangeRecorder FlagRecorder(AuthoredMailboxTarget? target = null, bool held = false)
     {
         var targets = Substitute.For<IAuthoredMailboxTargetReader>();
         targets.FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(target));
@@ -666,7 +754,7 @@ public sealed class ClientMailMutationsEndpointTests
                     ? null
                     : StubMailFolderParticipation.Mapping(new MailFolderIdentity(ServedAccount, Inbox))),
             targets,
-            this.Submission(),
+            this.Submission(held),
             CommitPolicy(),
             new MailAccountRunSignal());
     }
@@ -677,13 +765,14 @@ public sealed class ClientMailMutationsEndpointTests
         Substitute.For<IAuthoredMailboxTargetReader>(),
         DestinationResolver(),
         Substitute.For<IAuthoredDeleteEmailDispositionReader>(),
-        this.Submission(),
+        this.Submission(held: false),
         CommitPolicy(),
         new MailAccountRunSignal());
 
     /// <summary>Builds the deleting use case the route is given, under the grant that route carries.</summary>
     /// <param name="target">The message the caller names, defaulting to none, which is the absence the recorder reports as a message that has gone.</param>
-    private MailDeletionRecorder DeletionRecorder(AuthoredMailboxTarget? target = null)
+    /// <param name="held">Whether the account's mailbox is one MailFathom holds.</param>
+    private MailDeletionRecorder DeletionRecorder(AuthoredMailboxTarget? target = null, bool held = false)
     {
         var targets = Substitute.For<IAuthoredMailboxTargetReader>();
         targets.FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(target));
@@ -701,7 +790,7 @@ public sealed class ClientMailMutationsEndpointTests
                     : StubMailFolderParticipation.Mapping(new MailFolderIdentity(ServedAccount, Inbox))),
             targets,
             dispositions,
-            this.Submission(),
+            this.Submission(held),
             CommitPolicy(),
             new MailAccountRunSignal(),
             new FakeTimeProvider(RecordedAt));

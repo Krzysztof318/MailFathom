@@ -196,7 +196,8 @@ public sealed class MailRuleActionRecorder
     {
         MailboxChangeSubmissionOutcome.DestinationMissing => MailRuleActionFailureReason.DestinationFolderUnresolved,
         MailboxChangeSubmissionOutcome.NotAvailableLocally => MailRuleActionFailureReason.ActionNotAvailableOnHeldAccount,
-        _ => MailRuleActionFailureReason.EmailNotOnMailServer,
+        MailboxChangeSubmissionOutcome.MessageMissing => MailRuleActionFailureReason.EmailNoLongerStored,
+        _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "The outcome wrote something, so it is not a refusal."),
     };
 
     /// <summary>Reads what the account permits, or nothing when the configuration no longer declares it.</summary>

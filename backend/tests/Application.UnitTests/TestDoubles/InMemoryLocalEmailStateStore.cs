@@ -34,10 +34,12 @@ internal sealed class InMemoryLocalEmailStateStore(MailAccountIdentity account) 
         LocalEmailState state,
         CancellationToken cancellationToken)
     {
-        if (account1 == account && this.states.ContainsKey(email))
+        if (account1 != account || !this.states.ContainsKey(email))
         {
-            this.states[email] = state;
+            throw new InvalidOperationException("A held account's change is written only to a message its own read found.");
         }
+
+        this.states[email] = state;
 
         return Task.CompletedTask;
     }

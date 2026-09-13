@@ -523,6 +523,32 @@ public sealed class MailRuleActionRecorderTests
             recording.Failures.Select(failure => failure.Reason));
     }
 
+    /// <summary>A held account that erased the email before the pass committed says so, rather than naming a mail server it has none of.</summary>
+    [Fact]
+    public async Task RecordAsync_AHeldAccountNoLongerStoringTheEmail_RefusesTheActionAsNoLongerStored()
+    {
+        // Arrange
+        var recorder = new MailRuleActionRecorder(
+            MailboxChangeSubmissions.Over(
+                this.records,
+                new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held),
+                new InMemoryLocalEmailStateStore(Account)),
+            this.dispositions,
+            this.permissions);
+
+        // Act
+        var recording = await this.RecordAsync(
+            recorder,
+            LocalEmail,
+            OccurrenceAt(7),
+            Planned("mark-them-read", MailRuleAction.SetSeen(isSeen: true)),
+            Revision);
+
+        // Assert
+        Assert.Equal(0, recording.RecordedCount);
+        Assert.Equal(MailRuleActionFailureReason.EmailNoLongerStored, Assert.Single(recording.Failures).Reason);
+    }
+
     [Fact]
     public async Task RecordAsync_APlanThatAsksForNothing_WritesNothing()
     {

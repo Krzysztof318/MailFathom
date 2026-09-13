@@ -70,6 +70,7 @@ public sealed class SetMailFlagsToolTests
         Assert.Equal(storedEmailId.ToString(), result.StoredEmailId);
         Assert.Equal(Account.Value, result.AccountId);
         Assert.Equal(Inbox.Value, result.FolderAlias);
+        Assert.False(result.Applied);
         Assert.Equal(
             ["set-seen", "set-flagged", "add-keywords"],
             result.RecordedChanges.Select(recorded => recorded.Change));
@@ -77,6 +78,25 @@ public sealed class SetMailFlagsToolTests
         // Nothing has been issued to a mail server yet, which is the whole reason the result reports records.
         Assert.All(result.RecordedChanges, recorded => Assert.Equal("pending", recorded.State));
         Assert.All(result.RecordedChanges, recorded => Assert.True(Guid.TryParse(recorded.ChangeRecordId, out _)));
+    }
+
+    /// <summary>On a held account there is no mail server to wait on, so the result says the change is made and names no record to follow.</summary>
+    [Fact]
+    public async Task SetMailFlagsAsync_AHeldAccount_AnswersAppliedWithNoRecords()
+    {
+        // Arrange
+        var tool = ToolOver(out var records, out _, held: true);
+
+        // Act
+        var result = await tool.SetMailFlagsAsync(
+            Guid.CreateVersion7().ToString(),
+            seen: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(result.Applied);
+        Assert.Empty(result.RecordedChanges);
+        Assert.Empty(records.OpenedRequests);
     }
 
     /// <summary>A value the call left out is a value no record is written for, which is what makes each one optional.</summary>
@@ -327,11 +347,32 @@ public sealed class SetMailFlagsToolTests
     private static SetMailFlagsTool ToolOver(
         out RecordingMailboxMutationRecordStore records,
         out IAuthoredMailboxTargetReader targets,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        bool held = false)
     {
         records = new RecordingMailboxMutationRecordStore();
 
         var folder = MailFolderResolution.FirstBindingOf(Inbox, RemoteFolderPath.Create("INBOX", '/'));
+        var localFolders = Substitute.For<ILocalMailFolderStore>();
+        var states = Substitute.For<ILocalEmailStateStore>();
+        var auditSettings = Substitute.For<IMailboxMutationAuditSettingsReader>();
+
+        if (held)
+        {
+            localFolders
+                .ReadAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<LocalMailFolderHolding?>(
+                    new LocalMailFolderHolding(MailAccountCustodyPhase.Held, [], [])));
+            states
+                .ReadAsync(
+                    Arg.Any<IPersistenceSession>(),
+                    Arg.Any<MailAccountIdentity>(),
+                    Arg.Any<StoredEmailId>(),
+                    Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<LocalEmailState?>(
+                    new LocalEmailState(folder, Folder: null, IsSeen: false, IsFlagged: false, RemoteEmailKeywords.Create([]))));
+            auditSettings.GetAuditSettings(Arg.Any<MailAccountId>()).Returns(MailboxMutationAuditSettings.Disabled);
+        }
         targets = Substitute.For<IAuthoredMailboxTargetReader>();
         targets
             .FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
@@ -355,10 +396,10 @@ public sealed class SetMailFlagsToolTests
                 StubMailFolderMappings.ResolvingNothing),
             targets,
             new MailboxChangeSubmission(
-                Substitute.For<ILocalMailFolderStore>(),
+                localFolders,
                 records,
-                Substitute.For<ILocalEmailStateStore>(),
-                Substitute.For<IMailboxMutationAuditSettingsReader>(),
+                states,
+                auditSettings,
                 Substitute.For<IMailboxMutationAuditEntryStore>(),
                 ClientSignalPublishers.ReachingNobody,
                 new FakeTimeProvider()),
