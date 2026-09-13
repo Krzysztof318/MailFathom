@@ -154,10 +154,11 @@ internal sealed partial class BootstrapLogger : IDisposable
     /// otherwise report this process under a second identity, since the SDK's own fallback is
     /// <c>unknown_service:{processName}</c>. The build is what both pipelines do put on the resource, as the version and
     /// the source revision and from the same stamped source, so a startup record and everything exported after it name
-    /// one build.
+    /// one build. The replica is put there the same way, from the composition the host registers, so a startup record
+    /// is filtered to its replica by the value every later record carries.
     /// </remarks>
     internal static ResourceBuilder CreateResourceBuilder() =>
-        ResourceBuilder.CreateDefault().AddStampedBuildIdentity();
+        ResourceBuilder.CreateDefault().AddReplicaIdentity(HostComposition.ThisReplica()).AddStampedBuildIdentity();
 
     [LoggerMessage(
         Level = LogLevel.Information,

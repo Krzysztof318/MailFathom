@@ -141,10 +141,29 @@ variable is the one thing that could make it wrong. They are the same two values
 properties, and the version is the one the MCP surface reports to a client during `initialize`, from the same source, so
 no two of them can disagree.
 
-The rest of the resource is left to the OpenTelemetry SDK. `service.name` comes from `OTEL_SERVICE_NAME`, or from the
-SDK's `unknown_service:{processName}` fallback where that is unset, and nothing names the service a second time;
-[host startup telemetry](host-startup-telemetry.md) records why one process reporting under two identities is the
-failure that arrangement avoids.
+The rest of the resource is left to the OpenTelemetry SDK, apart from the replica below. `service.name` comes from
+`OTEL_SERVICE_NAME`, or from the SDK's `unknown_service:{processName}` fallback where that is unset, and nothing names
+the service a second time; [host startup telemetry](host-startup-telemetry.md) records why one process reporting under
+two identities is the failure that arrangement avoids.
+
+## The replica every record names
+
+Every record also carries `service.instance.id`, naming the replica that produced it. Several replicas export under one
+service name and one build, so without it a backend that derives a series from the resource — Prometheus and Grafana
+map `service.instance.id` to `instance` — receives cumulative points from every replica into one series, and a log
+record or a span cannot be filtered to one process. **It is the attribute to aggregate over** wherever this page says to
+sum what is additive across replicas or take the maximum of what is a level.
+
+The value is `<host name>:<process id>`, the same replica identity the host stamps on every `work_leases` row and reports
+in the administrative answers naming who holds a synchronization or a backfill. It is composed once per process, so
+the replica such an answer names is the value its telemetry is filtered on. It names a machine and a process and nothing
+else: inside a container the host name is the pod's or the container's, and outside one it is whatever the operator
+called the machine. A host name that would make it longer than 128 characters is truncated.
+
+A `service.instance.id` written into `OTEL_RESOURCE_ATTRIBUTES` takes precedence, which is the opposite of the build
+above and deliberately so: how instances are named is a fact about the deployment rather than about the process, and an
+estate with its own naming convention keeps it. The override reaches telemetry alone — the lease rows and the
+administrative answers keep the composed value, so a deployment that overrides it gives up that join.
 
 ## What MailFathom publishes under its own name
 
@@ -775,8 +794,9 @@ allowed. A steady non-zero rate says the lease duration is short for what the de
 is.
 
 `mailfathom.work_leases.held` reports which scopes *this* replica is holding right now, as one series per scope with
-the value `1`. Read across the replicas of a deployment — each of which names itself through the resource attributes on
-every measurement it publishes — that is the whole answer to who holds what. A scope leaves the gauge when the replica
+the value `1`. Read across the replicas of a deployment — each of which names itself through
+[`service.instance.id`](#the-replica-every-record-names) on every measurement it publishes — that is the whole answer to
+who holds what. A scope leaves the gauge when the replica
 releases it and when a renewal reports the hold gone, so the two replicas involved in a takeover never both publish it;
 a replica holding nothing publishes no series at all rather than a row of zeroes.
 
@@ -1073,7 +1093,8 @@ The period is a ledger row every replica admits and charges against, so what a g
 when this process last read it — which it does on every admission and every spend. So a replica answering questions
 publishes current numbers and one answering none publishes what it last saw, which is the honest reading and is what
 matters when several replicas' instruments are aggregated: **take the maximum across replicas rather than the sum**,
-because each is reporting the same shared figure and adding them multiplies it. A replica that has observed nothing in
+over [`service.instance.id`](#the-replica-every-record-names), because each is reporting the same shared figure and
+adding them multiplies it. A replica that has observed nothing in
 the current window reports it unspent, which is what that replica knows rather than what the deployment holds.
 
 An endpoint that reports no usage advances neither token figure, which is why the run and period ceilings exist in a

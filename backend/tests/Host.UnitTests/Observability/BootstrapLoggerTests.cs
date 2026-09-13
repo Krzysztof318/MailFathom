@@ -164,6 +164,23 @@ public sealed class BootstrapLoggerTests
             resource.Attributes.Single(attribute => attribute.Key == "service.name").Value);
     }
 
+    /// <summary>
+    /// A startup record is the one a crashing replica leaves behind, so it has to name the replica by the value every
+    /// later record and every lease row carries.
+    /// </summary>
+    [Fact]
+    public void CreateResourceBuilder_Always_NamesTheReplicaTheHostRegisters()
+    {
+        // Act
+        var resource = BootstrapLogger.CreateResourceBuilder().Build();
+
+        // Assert
+        var instance = Assert.Single(
+            resource.Attributes,
+            attribute => attribute.Key == ReplicaResourceExtensions.ServiceInstanceIdAttributeName);
+        Assert.Equal(HostComposition.ThisReplica().Value, instance.Value);
+    }
+
     [Fact]
     public void Dispose_Always_ReleasesTheOwnedPipeline()
     {
