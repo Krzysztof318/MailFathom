@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientLocalMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -64,6 +64,11 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/session/token/revocation` | none |
 | `GET /api/client/accounts` | `mailfathom.mail.read` |
 | `GET /api/client/folders` | `mailfathom.mail.read` |
+| `GET /api/client/local-folders` | `mailfathom.mail.read` |
+| `POST /api/client/local-folders` | `mailfathom.mail.folders.write` |
+| `POST /api/client/local-folders/renames` | `mailfathom.mail.folders.write` |
+| `POST /api/client/local-folders/moves` | `mailfathom.mail.folders.write` |
+| `POST /api/client/local-folders/deletions` | `mailfathom.mail.folders.write` |
 | `GET /api/client/emails` | `mailfathom.mail.read` |
 | `GET /api/client/emails/search` | `mailfathom.mail.read` |
 | `GET /api/client/emails/search/phrasing` | `mailfathom.mail.ask` |
@@ -467,6 +472,90 @@ folders is the same disclosure as naming their mailboxes.
 
 The answer is bounded by the folders the user's accounts have, which configuration bounds, and by nothing the mailbox
 can grow. Nothing here contacts a mail server, and asking cannot set the remote `\Seen` flag.
+
+### The local folder routes
+
+```http
+GET  /api/client/local-folders?account=work
+POST /api/client/local-folders
+POST /api/client/local-folders/renames
+POST /api/client/local-folders/moves
+POST /api/client/local-folders/deletions
+```
+
+These serve the folders MailFathom keeps for an account whose mailbox it holds itself rather than mirrors from its
+source server, under [ADR 0034](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md).
+They are a different hierarchy from [the folders route](#the-folders-route): those folders are the source server's and
+are changed there, while these exist only in this deployment. No route here contacts a mail server.
+
+The read answers with the account's phase and, where the mailbox is held, its live folders ordered by name:
+
+```jsonc
+{
+  "phase": "Held",
+  "folders": [
+    { "id": "0199a0c0-0000-7000-8000-000000000001", "parentId": null, "name": "INBOX", "role": "Inbox" },
+    { "id": "0199a0c0-0000-7000-8000-000000000007", "parentId": null, "name": "Projects", "role": null }
+  ]
+}
+```
+
+`phase` is `Mirrored`, `Held`, or `Restoring`, and `folders` is empty unless it reads `Held`. A folder is named by `id`
+everywhere, so a rename or a move never invalidates a reference a client holds, and a client builds the tree from
+`parentId`. An account the caller does not hold is answered `404`, and one the request does not name `400`.
+
+Each write takes a strict JSON body — a key nothing binds is refused — of at most 4096 bytes, and a body past that is
+answered `413` before the write is reached. It answers with the change made and the folder as it left it:
+
+| Route | Body | `change` |
+| --- | --- | --- |
+| `POST /api/client/local-folders` | `account`, `parentId` (or `null` for the top), `name` | `Created` |
+| `POST /api/client/local-folders/renames` | `account`, `folderId`, `name` | `Renamed` |
+| `POST /api/client/local-folders/moves` | `account`, `folderId`, `parentId` (or `null` for the top) | `Moved`, or `MovedToTrash` where the new parent is the trash or a folder within it |
+| `POST /api/client/local-folders/deletions` | `account`, `folderId` | `MovedToTrash`, or `Erased` where the folder was already in the trash |
+
+```jsonc
+{ "change": "Created", "folder": { "id": "0199a0c0-0000-7000-8000-000000000008", "parentId": null, "name": "Clients", "role": null }, "mailErasureDeferred": false }
+```
+
+**Five folders are protected**: the inbox, drafts, sent, junk, and trash, carrying `role` `Inbox`, `Drafts`, `Sent`,
+`Junk`, and `Trash`. They are supplied by the first read, act, or arrival that finds them missing, so a held account's
+first read already lists all five, and none of them can be renamed, moved, or deleted.
+
+**A deletion is a move into the trash, with everything beneath the folder**, and it is not held to the depth limit,
+since it takes the folder out of the hierarchy rather than deeper into it. Deleting a folder already inside the trash
+erases it: the folder and everything beneath it leave every listing when the request commits, and the messages in them
+are erased afterwards in bounded passes on the job queue, through the same erasure a single stored message goes through.
+Every write answers `mailErasureDeferred`, which is `true` only for an erasure that committed while the queue already
+held as many erasure passes as it accepts: the folders are gone, and their mail stays stored and out of every listing
+until the account's next erasure queues a pass, which erases the mail of every folder the account has erased.
+
+**A name** is 1 to 255 characters after trimming, carries no control character, no format character such as a
+zero-width space or a bidirectional override, and no `/`, is unique among its siblings
+without regard to case, and is not `INBOX` at the top of the hierarchy. A hierarchy is at most 16 levels deep and an
+account holds at most 1000 live folders.
+
+**What mail synchronization brings in lands by correspondence.** A message arriving from a source folder playing one of
+the five roles lands in that protected folder. A message from any other source folder lands in the local folder created
+for that folder the first time one arrived — named after the source folder's own name or, where that cannot be a
+top-level name, its alias, and matched by the source folder's alias, so renaming or moving the local folder keeps it.
+It lands in the inbox where that folder is now in the trash or has been erased, where the account is at its folder
+limit, or where neither name can be placed at the top of the hierarchy, because a top-level folder already carries it
+or because it is `INBOX`; no folder is created then, so a person who creates a top-level folder of the same name first
+sends that source's mail to the inbox. Creating folders this way raises `folders.changed` once the message commits.
+
+A refusal is a problem response whose `refusal` member names it, so a client branches on the name rather than the prose:
+
+| Status | `refusal` |
+| --- | --- |
+| `404` | `AccountMissing`, `FolderMissing`, `ParentMissing` |
+| `400` | `NameInvalid`, `InboxNameAtTopLevel` |
+| `409` | `AccountNotHeld`, `ProtectedRole`, `NameTaken`, `NestedInItself`, `TooDeep`, `TooManyFolders` |
+
+`AccountNotHeld` is what every write on a mirrored or restoring account answers. The read takes `mailfathom.mail.read`
+and the writes take [`mailfathom.mail.folders.write`](permissions.md#the-published-set); each committed write is
+written to the service log as an audit record naming the account, the folder's identity, and the kind of change — never
+a folder's name — and tells the caller's clients over [the signal channel](#the-signal-channel) that the folder set moved.
 
 ### The mail list route
 
@@ -2534,7 +2623,7 @@ record's already-derived text and reach a client entitled to read that record ov
 | `mail.arrived` | A run committed mail into one folder, and how much |
 | `mail.changed` | Stored mail in one folder is no longer what a client last read, naming up to 100 of the rows |
 | `mail.flags.changed` | Nothing moved but the `\Seen` or `\Flagged` flag of up to 100 rows, and where each of those flags now stands |
-| `folders.changed` | The set of folders an account mirrors has moved |
+| `folders.changed` | The set of folders an account mirrors, or a held account's local folders, has moved |
 | `notification.raised` | A notification was written, with its kind, its two lines, and how many now stand unread |
 | `account.state` | An account's synchronization run finished, so what a client says about it is out of date |
 

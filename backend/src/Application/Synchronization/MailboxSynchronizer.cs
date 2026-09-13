@@ -7,6 +7,7 @@ using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Mutations;
@@ -53,6 +54,7 @@ public sealed class MailboxSynchronizer
     private readonly IMailSynchronizationPhaseTelemetry phaseTelemetry;
     private readonly SpamClassificationArrivals classificationArrivals;
     private readonly MailContactCollector contactCollection;
+    private readonly LocalMailFolderArrivals localFolderArrivals;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly TimeProvider timeProvider;
     private readonly MailboxSynchronizationOptions options;
@@ -81,6 +83,7 @@ public sealed class MailboxSynchronizer
         IMailSynchronizationPhaseTelemetry phaseTelemetry,
         SpamClassificationArrivals classificationArrivals,
         MailContactCollector contactCollection,
+        LocalMailFolderArrivals localFolderArrivals,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options)
@@ -107,6 +110,7 @@ public sealed class MailboxSynchronizer
         this.phaseTelemetry = phaseTelemetry;
         this.classificationArrivals = classificationArrivals;
         this.contactCollection = contactCollection;
+        this.localFolderArrivals = localFolderArrivals;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.timeProvider = timeProvider;
         this.options = options;
@@ -233,6 +237,7 @@ public sealed class MailboxSynchronizer
         // Opened here for the reason the content budget above is, and with the same scope: what needs bounding is one
         // pass over one folder, and the account's own settings decide how much of it may reach the contact book.
         var collection = this.contactCollection.OpenRun(account, folderRole);
+        var arrivalSource = new LocalMailFolderArrivalSource(folder.Alias, folderRole, folder.RemotePath.ToHierarchyLevels()[^1]);
 
         var storedCount = 0;
 
@@ -340,6 +345,7 @@ public sealed class MailboxSynchronizer
                         budget,
                         collection,
                         storageRefusal,
+                        arrivalSource,
                         cancellationToken);
                     processedThroughUid = metadata.OccurrenceId.Uid;
 
@@ -475,6 +481,7 @@ public sealed class MailboxSynchronizer
                 user,
                 budget,
                 collection,
+                arrivalSource,
                 cancellationToken);
 
             refillingContent.Completed();
@@ -642,6 +649,7 @@ public sealed class MailboxSynchronizer
         MailUserId user,
         SynchronizationContentBudget budget,
         ContactCollectionRun collection,
+        LocalMailFolderArrivalSource arrivalSource,
         CancellationToken cancellationToken)
     {
         var awaiting = await this.contentInventory.GetEmailsAwaitingContentAsync(
@@ -674,6 +682,7 @@ public sealed class MailboxSynchronizer
                 budget,
                 collection,
                 storageAlreadyRefused: null,
+                arrivalSource,
                 cancellationToken);
 
             // A ceiling filled up again while this pass ran. The pass stops asking rather than working down the queue
@@ -901,6 +910,7 @@ public sealed class MailboxSynchronizer
         SynchronizationContentBudget budget,
         ContactCollectionRun collection,
         StoredContentBound? storageAlreadyRefused,
+        LocalMailFolderArrivalSource arrivalSource,
         CancellationToken cancellationToken)
     {
         if (!this.WouldFetchContentOf(metadata))
@@ -912,6 +922,7 @@ public sealed class MailboxSynchronizer
                 filing,
                 StoredEmailContentAvailability.ExceededSizeLimit,
                 StoredContentBound.None,
+                arrivalSource,
                 cancellationToken);
         }
 
@@ -926,6 +937,7 @@ public sealed class MailboxSynchronizer
                 filing,
                 StoredEmailContentAvailability.AwaitingStorageHeadroom,
                 refusedBound,
+                arrivalSource,
                 cancellationToken);
         }
 
@@ -950,6 +962,7 @@ public sealed class MailboxSynchronizer
                 filing,
                 StoredEmailContentAvailability.AwaitingStorageHeadroom,
                 storageAttempt.ReachedBound,
+                arrivalSource,
                 cancellationToken);
         }
 
@@ -982,6 +995,7 @@ public sealed class MailboxSynchronizer
                 filing,
                 StoredEmailContentAvailability.ExceededSizeLimit,
                 StoredContentBound.None,
+                arrivalSource,
                 cancellationToken);
         }
 
@@ -1015,6 +1029,7 @@ public sealed class MailboxSynchronizer
             EmailContentKind.IncomingMessage,
             content.RawMime,
             cancellationToken);
+        var folderSetMoved = false;
 
         await this.concurrencyRetryPolicy.CommitAsync(
             async (persistenceSession, attemptCancellationToken) =>
@@ -1035,10 +1050,23 @@ public sealed class MailboxSynchronizer
 
                 await this.ObservePlacementAsync(persistenceSession, placement, attemptCancellationToken);
                 await this.ObserveFilingAsync(persistenceSession, filing, storedEmailId, attemptCancellationToken);
+                folderSetMoved = await this.localFolderArrivals.PlaceAsync(
+                    persistenceSession,
+                    MailAccountIdentity.Create(user, metadata.OccurrenceId.AccountId),
+                    storedEmailId,
+                    arrivalSource,
+                    attemptCancellationToken);
             },
             cancellationToken);
 
         budget.RecordStored(content.RawMime.Length);
+
+        // Announced after the commit for the reason a binding's signal is: a folder a rolled-back attempt created is not
+        // one a client may be sent to read.
+        if (folderSetMoved)
+        {
+            this.localFolderArrivals.AnnounceFoldersChanged(MailAccountIdentity.Create(user, metadata.OccurrenceId.AccountId));
+        }
 
         // Asked for after the commit rather than inside it, because the queue takes no persistence session by design:
         // work enqueued against a transaction that then rolled back would name a message no local state holds. It is one
@@ -1083,9 +1111,11 @@ public sealed class MailboxSynchronizer
         OutgoingMailFilingRecord? filing,
         StoredEmailContentAvailability availability,
         StoredContentBound reachedStorageBound,
+        LocalMailFolderArrivalSource arrivalSource,
         CancellationToken cancellationToken)
     {
         var storedEmailId = default(StoredEmailId);
+        var folderSetMoved = false;
 
         await this.concurrencyRetryPolicy.CommitAsync(
             async (persistenceSession, attemptCancellationToken) =>
@@ -1100,8 +1130,19 @@ public sealed class MailboxSynchronizer
 
                 await this.ObservePlacementAsync(persistenceSession, placement, attemptCancellationToken);
                 await this.ObserveFilingAsync(persistenceSession, filing, storedEmailId, attemptCancellationToken);
+                folderSetMoved = await this.localFolderArrivals.PlaceAsync(
+                    persistenceSession,
+                    MailAccountIdentity.Create(user, metadata.OccurrenceId.AccountId),
+                    storedEmailId,
+                    arrivalSource,
+                    attemptCancellationToken);
             },
             cancellationToken);
+
+        if (folderSetMoved)
+        {
+            this.localFolderArrivals.AnnounceFoldersChanged(MailAccountIdentity.Create(user, metadata.OccurrenceId.AccountId));
+        }
 
         // An occurrence whose content was never retrieved has no MIME to read, so it is neither enriched nor counted as
         // unreadable.

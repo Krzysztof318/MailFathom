@@ -37,6 +37,8 @@ public sealed class PersistenceConcurrencyConflictsTests
         PersistenceConstraintNames.ContentMoveRunPrimaryKeyConstraintName,
         PersistenceConstraintNames.StoredSecretUserNameUniqueIndexName,
         PersistenceConstraintNames.NotificationUnreadConditionUniqueIndexName,
+        PersistenceConstraintNames.LocalMailFolderSiblingNameUniqueIndexName,
+        PersistenceConstraintNames.LocalMailFolderRoleUniqueIndexName,
         PersistenceConstraintNames.EmailThreadStatePrimaryKeyConstraintName,
     ];
 

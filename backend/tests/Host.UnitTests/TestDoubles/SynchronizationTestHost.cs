@@ -20,6 +20,7 @@ using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Filing;
@@ -314,6 +315,11 @@ internal static class SynchronizationTestHost
             ContactBookOwnerships.For(provider.GetRequiredService<AccessAuthorization>()));
         services.AddScoped<ContactBook>();
         services.AddScoped<MailContactCollector>();
+
+        // Where a stored message lands on an account whose mailbox MailFathom holds. No account these tests configure is
+        // held, so the substituted store answers every read with no account and nothing is ever placed.
+        services.AddSingleton(Substitute.For<ILocalMailFolderStore>());
+        services.AddScoped<LocalMailFolderArrivals>();
 
         // The cut is the run's last local step, after the rules for the ordering the arrival pipeline is built on, and a
         // supervisor resolves it from the same scope. The store answers that no message is awaiting passages, which is

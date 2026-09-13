@@ -175,6 +175,13 @@ internal static class PersistenceConcurrencyConflicts
     /// failed while the person has already been told exactly once.
     /// </para>
     /// <para>
+    /// The two local folder indexes are one held account's hierarchy written by two edits at once, or by an edit and an
+    /// arrival supplying the protected folders together. Both read the hierarchy before either commits, and the insert
+    /// of a sibling name or a role the other just wrote can reach the database before the revision both advance does.
+    /// The retry decides again from what the winner wrote, which refuses a duplicate name and finds the protected
+    /// folders already there.
+    /// </para>
+    /// <para>
     /// The last is where one conversation stands, derived twice at once. The derivation reads whether the conversation
     /// already has a state and inserts one when it does not, so two runs reaching a correspondence neither has read
     /// yet both insert and the loser violates the key. The retry is what converges them: it re-reads, finds the
@@ -213,6 +220,8 @@ internal static class PersistenceConcurrencyConflicts
                 or PersistenceConstraintNames.StoredSecretUserNameUniqueIndexName
                 or PersistenceConstraintNames.EmailThreadIdentifierPrimaryKeyConstraintName
                 or PersistenceConstraintNames.NotificationUnreadConditionUniqueIndexName
+                or PersistenceConstraintNames.LocalMailFolderSiblingNameUniqueIndexName
+                or PersistenceConstraintNames.LocalMailFolderRoleUniqueIndexName
                 or PersistenceConstraintNames.EmailThreadStatePrimaryKeyConstraintName,
         };
 }

@@ -192,6 +192,24 @@ public readonly record struct MailFathomPermission
     public static MailFathomPermission MailAccountsWrite { get; } =
         new("mailfathom.mail.accounts.write", ProtectedSurface.Mail);
 
+    /// <summary>Gets the permission covering creating, renaming, moving, and deleting the folders of a mailbox MailFathom holds.</summary>
+    /// <remarks>
+    /// <para>
+    /// It reaches only an account whose mailbox MailFathom holds, where the folders are MailFathom's own and no act on
+    /// them reaches a mail server. On a mirrored account every one of these acts is refused whatever the grant, because
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
+    /// still governs a mailbox a server holds.
+    /// </para>
+    /// <para>
+    /// It is apart from <see cref="MailMove" /> and <see cref="MailDelete" /> because it changes the shape of the
+    /// mailbox rather than where one message is: deleting a folder moves everything beneath it into the trash, and
+    /// deleting one already in the trash erases all of its mail. Reading mail confers none of it. See
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+    /// </para>
+    /// </remarks>
+    public static MailFathomPermission MailFoldersWrite { get; } =
+        new("mailfathom.mail.folders.write", ProtectedSurface.Mail);
+
     #endregion
 
     #region Administration
@@ -247,6 +265,7 @@ public readonly record struct MailFathomPermission
         MailDraftsWrite,
         MailSend,
         MailAccountsWrite,
+        MailFoldersWrite,
         AdminRead,
         AdminAuditRead,
         AdminOperate,

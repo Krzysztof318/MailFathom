@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -11,9 +12,10 @@ namespace MailFathom.Infrastructure.Persistence.Accounts.Configurations;
 /// <summary>Declares the account row every folder binding, message, and durable job hangs on.</summary>
 /// <remarks>
 /// <para>
-/// The row carries the configured alias and nothing else: what is known about an account beyond its identity is
-/// configuration, which is read-only, so the table exists to give the rows that reference an account something to
-/// reference rather than to hold state of its own.
+/// The row carries the configured alias, which gives the rows that reference an account something to reference, and two
+/// pieces of state configuration cannot hold because configuration is read-only: the custody phase, which says whether
+/// MailFathom mirrors, holds, or is restoring the mailbox, and the local folders revision, which every write to a held
+/// account's folder hierarchy bumps so that write commits only over the hierarchy it read.
 /// </para>
 /// <para>
 /// It is keyed by the user and the identifier together, which is what ADR 0014 decided an account is identified by.
@@ -40,6 +42,14 @@ internal sealed class MailboxAccountConfiguration : IEntityTypeConfiguration<Mai
         entity.HasKey(account => new { account.UserId, account.Id })
             .HasName(PersistenceConstraintNames.MailboxAccountPrimaryKeyConstraintName);
         entity.Property(account => account.Id).HasMaxLength(128);
+
+        // Stored by name like every other stage and phase, and defaulted in the database so every account that existed
+        // before the column is mirrored, which is exactly what it was.
+        entity.Property(account => account.CustodyPhase)
+            .HasConversion<string>()
+            .HasMaxLength(64)
+            .HasDefaultValueSql($"'{nameof(MailAccountCustodyPhase.Mirrored)}'");
+        entity.Property(account => account.LocalMailFoldersRevision).IsConcurrencyToken();
 
         // The user is required, so a mailbox belongs to somebody from the moment its row exists rather than from the
         // moment something remembers to say so. The cascade is what makes erasing a user one statement: the mail

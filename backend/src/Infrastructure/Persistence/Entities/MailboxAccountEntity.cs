@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Infrastructure.Persistence.Entities;
 
@@ -20,6 +21,18 @@ internal sealed class MailboxAccountEntity
     /// the account: <see cref="Id" /> alone names one mailbox within this user and a different one within another.
     /// </remarks>
     public required Guid UserId { get; set; }
+
+    /// <summary>Gets or sets which copy of the mailbox is the truth, which is <see cref="MailAccountCustodyPhase.Mirrored" /> for every account nothing has switched.</summary>
+    public MailAccountCustodyPhase CustodyPhase { get; set; }
+
+    /// <summary>Gets or sets the revision of the account's local folder hierarchy, which every write to that hierarchy advances.</summary>
+    /// <remarks>
+    /// A concurrency token on the account rather than on each folder, because the rules a folder edit is decided by —
+    /// no folder beneath itself, no two siblings of one name — are about the whole hierarchy, and two edits that each
+    /// hold for the picture they read can together break one. Advancing the one row both read is what makes the second
+    /// commit conflict and decide again.
+    /// </remarks>
+    public int LocalMailFoldersRevision { get; set; }
 
     public ICollection<MailFolderEntity> MailFolders { get; } = [];
 }

@@ -17,6 +17,7 @@ using MailFathom.Infrastructure.Persistence.Emails.Threads.Configurations;
 using MailFathom.Infrastructure.Persistence.Embeddings.Configurations;
 using MailFathom.Infrastructure.Persistence.Enrichment.Configurations;
 using MailFathom.Infrastructure.Persistence.Entities;
+using MailFathom.Infrastructure.Persistence.Folders.Configurations;
 using MailFathom.Infrastructure.Persistence.Jobs.Configurations;
 using MailFathom.Infrastructure.Persistence.Mutations.Configurations;
 using MailFathom.Infrastructure.Persistence.Notifications.Configurations;
@@ -94,6 +95,8 @@ internal sealed class MailFathomDbContext : DbContext
     internal DbSet<MailboxAccountEntity> MailboxAccounts => this.Set<MailboxAccountEntity>();
 
     internal DbSet<MailFolderEntity> MailFolders => this.Set<MailFolderEntity>();
+
+    internal DbSet<LocalMailFolderEntity> LocalMailFolders => this.Set<LocalMailFolderEntity>();
 
     internal DbSet<StoredEmailEntity> StoredEmails => this.Set<StoredEmailEntity>();
 
@@ -236,6 +239,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new StoredContentClaimConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxAccountConfiguration());
         modelBuilder.ApplyConfiguration(new MailFolderConfiguration());
+        modelBuilder.ApplyConfiguration(new LocalMailFolderConfiguration());
         modelBuilder.ApplyConfiguration(new StoredEmailConfiguration());
         modelBuilder.ApplyConfiguration(new EmailMessageContentConfiguration());
         modelBuilder.ApplyConfiguration(new EmailSearchDocumentConfiguration(this.textSearchConfiguration));

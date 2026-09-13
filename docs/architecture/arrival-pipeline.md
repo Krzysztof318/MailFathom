@@ -21,7 +21,7 @@ flowchart TD
         fetch["Fetch raw MIME, without setting the remote Seen flag"]
         extract["Extract the body text"]
         judge["Judge the author, and read how machine written the message's own text is"]
-        commit[("Commit: metadata, the conversation it joins, raw MIME, search document")]
+        commit[("Commit: metadata, the conversation it joins, raw MIME, search document, and on a held account the local folder it lands in")]
         ask(["Ask for the message to be classified"])
         collect["Record the correspondent — only where the account collects contacts"]
         classify["Classification pass — only when somebody asked for a run over the whole mailbox"]
