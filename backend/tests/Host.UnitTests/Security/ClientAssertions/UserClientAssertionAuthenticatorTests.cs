@@ -15,7 +15,6 @@ using MailFathom.Host.UnitTests.TestDoubles;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -290,7 +289,7 @@ public sealed class UserClientAssertionAuthenticatorTests
         string assertion)
     {
         var handler = new UserClientAssertionAuthenticationHandler(
-            new StaticOptionsMonitor(new UserClientAssertionAuthenticationSchemeOptions { Surface = surface }),
+            new TestOptionsMonitor<UserClientAssertionAuthenticationSchemeOptions>(new UserClientAssertionAuthenticationSchemeOptions { Surface = surface }),
             NullLoggerFactory.Instance,
             UrlEncoder.Default,
             harness.Authenticator);
@@ -399,17 +398,6 @@ public sealed class UserClientAssertionAuthenticatorTests
     private static byte[] Utf8(string document) => Encoding.UTF8.GetBytes(document);
 
     private static string Encode(ReadOnlySpan<byte> document) => Base64Url.EncodeToString(document);
-
-    /// <summary>Hands the handler the one options instance it is built with.</summary>
-    private sealed class StaticOptionsMonitor(UserClientAssertionAuthenticationSchemeOptions schemeOptions)
-        : IOptionsMonitor<UserClientAssertionAuthenticationSchemeOptions>
-    {
-        public UserClientAssertionAuthenticationSchemeOptions CurrentValue { get; } = schemeOptions;
-
-        public UserClientAssertionAuthenticationSchemeOptions Get(string? name) => this.CurrentValue;
-
-        public IDisposable? OnChange(Action<UserClientAssertionAuthenticationSchemeOptions, string?> listener) => null;
-    }
 
     /// <summary>The authenticator under test, beside the store it resolves credentials through.</summary>
     private sealed record Harness(

@@ -7,11 +7,11 @@ using MailFathom.Application.Access.Credentials;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Security.ApiKeys;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
 
@@ -76,7 +76,7 @@ public sealed class UserApiKeyAuthenticationHandlerTests
                 endpointAccess));
 
         var handler = new UserApiKeyAuthenticationHandler(
-            new StaticOptionsMonitor(new UserApiKeyAuthenticationSchemeOptions { Surface = surface }),
+            new TestOptionsMonitor<UserApiKeyAuthenticationSchemeOptions>(new UserApiKeyAuthenticationSchemeOptions { Surface = surface }),
             NullLoggerFactory.Instance,
             UrlEncoder.Default,
             new UserApiKeyAuthenticator(credentials, new StatedApiKeyMinter()));
@@ -106,16 +106,5 @@ public sealed class UserApiKeyAuthenticationHandlerTests
 
             return lookup.IsSpecified;
         }
-    }
-
-    /// <summary>Hands the handler the one options instance it is built with.</summary>
-    private sealed class StaticOptionsMonitor(UserApiKeyAuthenticationSchemeOptions schemeOptions)
-        : IOptionsMonitor<UserApiKeyAuthenticationSchemeOptions>
-    {
-        public UserApiKeyAuthenticationSchemeOptions CurrentValue { get; } = schemeOptions;
-
-        public UserApiKeyAuthenticationSchemeOptions Get(string? name) => this.CurrentValue;
-
-        public IDisposable? OnChange(Action<UserApiKeyAuthenticationSchemeOptions, string?> listener) => null;
     }
 }

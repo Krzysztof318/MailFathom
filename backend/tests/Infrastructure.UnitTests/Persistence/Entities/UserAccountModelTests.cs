@@ -165,19 +165,20 @@ public sealed class UserAccountModelTests
     /// The sentinel is the database default, so a row an administrator keeps off an endpoint is written with the false
     /// it carries instead of that false being read as "unset" and replaced by the default.
     /// </summary>
-    [Fact]
-    public void UserAccountModel_EndpointSwitches_SendAnExplicitOffRatherThanTheDefault()
+    [Theory]
+    [InlineData(nameof(UserAccountEntity.McpEndpointEnabled))]
+    [InlineData(nameof(UserAccountEntity.ClientEndpointEnabled))]
+    public void UserAccountModel_EndpointSwitch_SendsAnExplicitOffRatherThanTheDefault(string switchName)
     {
         // Arrange
         using var context = CreateContext();
-        var entityType = EntityTypeOf<UserAccountEntity>(context);
 
         // Act
-        var sentinels = new[] { nameof(UserAccountEntity.McpEndpointEnabled), nameof(UserAccountEntity.ClientEndpointEnabled) }
-            .Select(name => entityType.FindProperty(name)!.Sentinel);
+        var endpointSwitch = EntityTypeOf<UserAccountEntity>(context).FindProperty(switchName);
 
         // Assert
-        Assert.All(sentinels, sentinel => Assert.Equal(true, sentinel));
+        Assert.NotNull(endpointSwitch);
+        Assert.Equal(true, endpointSwitch.Sentinel);
     }
 
     /// <summary>

@@ -1260,7 +1260,7 @@ switches are the record's `EndpointAccess:McpEndpoint` and `EndpointAccess:Clien
 changes them too, and `mfctl user show` reads them back once either has been written:
 
 ```json
-{ "Language": "English", "EndpointAccess": { "McpEndpoint": false } }
+{ "Language": "English", "EndpointAccess": { "McpEndpoint": "false" } }
 ```
 
 Whichever of the two writes them, the commit that stores the record copies both onto the user's row in the same

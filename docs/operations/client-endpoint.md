@@ -2698,7 +2698,8 @@ holds the whole rule.
 Two things the switch does not reach. **A signal connection already open stays open**: it was admitted against a ticket
 when it connected, and nothing is re-judged on a connection that is already carrying statements — so the client goes on
 being told that something changed until the connection closes, while every route it then calls to read what changed is
-refused, and no new ticket is minted for them. And **this endpoint configured to require no credential judges no
+refused, and no new ticket is minted for them — though a ticket minted just before the switch moved still opens a
+connection until it expires, thirty seconds after it was minted. And **this endpoint configured to require no credential judges no
 switch**, because a request presents nothing that names a user and every one is served as the single user the
 deployment holds; keeping somebody off it means configuring a credential for it, or disabling it.
 

@@ -333,7 +333,7 @@ internal sealed class UserRecordAdministration(
             inForce,
             SettingsDocumentPatch.Apply(inForce.Json, edits),
             UserRecordAuthority.Administrator,
-            UserRecordArrival.BeingWritten,
+            UserRecordArrival.AlreadyHeld,
             cancellationToken);
 
         return outcome is null

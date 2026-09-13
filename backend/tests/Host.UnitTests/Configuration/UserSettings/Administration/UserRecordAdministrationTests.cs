@@ -820,6 +820,34 @@ public sealed class UserRecordAdministrationTests
                 TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// A record committed before the language became required still takes a switch, because the switch is all the write
+    /// changes and a rule that arrived after the record was accepted must not keep its user served where they are.
+    /// </summary>
+    [Fact]
+    public async Task SetEndpointAccessAsync_ARecordStatingNoLanguage_StillWritesTheSwitch()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(SyntheticMailUser.Deployment, "{}", version: 2);
+
+        // Act
+        var written = await harness.Records.SetEndpointAccessAsync(
+            SyntheticMailUser.Deployment,
+            mcpEndpoint: false,
+            clientEndpoint: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(written!.Outcome.IsCommitted);
+        await harness.Store.Received(1).CommitAsync(
+            SyntheticMailUser.Deployment,
+            Arg.Any<string>(),
+            new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
+            2,
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A row that is not a document of settings is refused with a sentence the administrator can act on, rather than failing the route.</summary>
     [Fact]
     public async Task SetEndpointAccessAsync_ARecordThatIsNotADocumentOfSettings_IsRefusedWithoutWriting()
@@ -886,6 +914,30 @@ public sealed class UserRecordAdministrationTests
 
         // Assert
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Deleting the block is the other way a user's own save would reach both switches on, because a switch the record does not state binds as on.</summary>
+    [Fact]
+    public async Task ApplyOwnRecordAsync_ARecordDroppingTheEndpointAccessBlock_IsRefusedWithoutWriting()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(
+            SyntheticMailUser.Deployment,
+            """{"Language":"English","EndpointAccess":{"McpEndpoint":"false"}}""",
+            version: 1);
+
+        // Act
+        var outcome = await harness.Records.ApplyOwnRecordAsync(
+            """{"Language":"English"}""",
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains(outcome.Messages, message => message.Contains("EndpointAccess", StringComparison.Ordinal));
         await harness.Store.DidNotReceiveWithAnyArgs()
             .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
