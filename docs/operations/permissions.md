@@ -435,10 +435,11 @@ surface or the client surface is admitted to act for one user, and every mailbox
 that user owns before any grant is consulted; a caller admitted on the administrative surface acts for no user at all,
 so a user-scoped use case refuses it however broad its grant. That is why no permission names an account and adding
 one would be the wrong repair: a grant says what may be done, and whose mail it may be done to is decided by what
-admitted the caller. A deployment may declare several users and serve each of them the mail accounts they own, and
-every credential a mail-serving surface accepts now names the user it admits — but a deployment serving several still
-refuses to come up while any of the three surfaces is enabled, because the reads that resolve a user from the
-deployment rather than from the caller have not moved yet.
+admitted the caller. A deployment may record several users and serve each of them the mail accounts they own, because
+every credential a mail-serving surface accepts names the user it admits. It is refused several only while the MCP
+endpoint or the client endpoint requires no authentication, since a caller that brought nothing names no user; the
+administrative endpoint is outside that bound, and [the users a deployment
+serves](configuration-sources.md#the-users-a-deployment-serves) holds the rule.
 [Who a use case is running for](../architecture/authorized-principal.md) records the whole of it.
 
 **Whether a capability exists.** A grant composes with availability rather than replacing it: a tool may be
