@@ -21,4 +21,7 @@ public sealed record FiledLocalEmail(
 {
     /// <summary>Gets the stored message this one replaced and the same transaction erased, or <see langword="null" /> where it replaced none.</summary>
     public StoredEmailId? Replaced { get; init; }
+
+    /// <summary>Gets the alias of the folder binding <see cref="Replaced" /> was erased from, which differs from <see cref="Folder" /> where the role moved between the two.</summary>
+    public MailFolderAlias? ReplacedIn { get; init; }
 }

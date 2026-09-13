@@ -150,7 +150,8 @@ public sealed class OutgoingMailFilingPass
     /// It runs on the outbox pass rather than on the synchronization run that discovers the duplicate, because taking a
     /// message out of a folder is a write and no read path may obtain the session that makes one. The cost is one query
     /// per pass on an account whose sent folder holds no duplicate, which is every account whose provider files
-    /// nothing.
+    /// nothing. A held account withdraws nothing: its source is drained, and a copy appended there while it was still
+    /// mirrored is the drain's to remove.
     /// </para>
     /// <para>
     /// One pass withdraws no more copies than it delivers sends, for the reason the mirror is bounded by that same
@@ -163,7 +164,8 @@ public sealed class OutgoingMailFilingPass
         MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        if (!this.filingPolicies.WithdrawsDuplicateSentCopy(account.Id))
+        if (!this.filingPolicies.WithdrawsDuplicateSentCopy(account.Id)
+            || await this.localFiler.HoldsAsync(account, cancellationToken))
         {
             return [];
         }
@@ -210,15 +212,17 @@ public sealed class OutgoingMailFilingPass
     /// earned was the one that said it was waiting.
     /// </para>
     /// <para>
-    /// A held account's sent copy is not appended here: the delivery filed it into the local sent folder in the commit that
-    /// recorded it, and an append to a drained source would be drained straight back.
+    /// A held account is settled with nothing issued at all. Its sent copy was filed into the local sent folder in the
+    /// commit that recorded the delivery, an append to a drained source would be drained straight back, and a mirror
+    /// appended while the account was still mirrored is left for the drain to remove rather than withdrawn over IMAP.
     /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<OutgoingMailFilingResult>> SettleFiledCopiesAsync(
         OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken)
     {
-        if (await this.outgoingEmails.FindAsync(outgoingEmailId, cancellationToken) is not { IsTerminal: true } record)
+        if (await this.outgoingEmails.FindAsync(outgoingEmailId, cancellationToken) is not { IsTerminal: true } record
+            || await this.localFiler.HoldsAsync(record.Account, cancellationToken))
         {
             return [];
         }
@@ -243,11 +247,6 @@ public sealed class OutgoingMailFilingPass
                 OutgoingMailFilingOutcome.NotRequested,
                 Failure: null));
 
-            return results;
-        }
-
-        if (await this.localFiler.HoldsAsync(record.Account, cancellationToken))
-        {
             return results;
         }
 

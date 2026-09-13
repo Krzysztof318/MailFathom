@@ -1069,7 +1069,8 @@ state the account can be in, and a delivery recorded once files once. The messag
 searched, threaded, and listed like any other; it is bound to the source folder mapped to the sent role, and an account
 that maps none, or whose binding of it is gone by the time the delivery commits, records the delivery and files
 nothing, with the reason on the filing. Such an account has no outbox
-mirror either, because its outgoing record is its outbox.
+mirror either, because its outgoing record is its outbox, and it withdraws nothing: a mirror or a sent copy appended
+while the account was still mirrored stays in the source until the drain removes it.
 
 **A copy the provider files on its own is recognised rather than stored a second time.** When synchronization meets a
 message in the held account's sent folder carrying the `Message-ID` this deployment minted for a send, and a local sent

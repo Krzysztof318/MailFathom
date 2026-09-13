@@ -197,6 +197,49 @@ public sealed class MailDraftBookTests
         Assert.Contains(held.Stored[0].Email, changed.Emails);
     }
 
+    /// <summary>A revision filed after the drafts role moved to another source folder names the replaced message in a signal of its own rather than in the new folder's.</summary>
+    [Fact]
+    public async Task SaveAsync_RevisionOnAHeldAccountAfterTheDraftsRoleMoved_AnnouncesTheReplacedMessageOutsideTheNewFolder()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider(Moment);
+        var harness = HarnessOn(clock);
+        harness.MapDraftsFolder(Account.Id);
+        var held = harness.HoldAccount(Account);
+        var channel = new RecordingClientSignalChannel();
+        await using var signals = new ClientSignals([channel], clock);
+        held.Publisher = signals;
+        harness.BeginNewScope();
+        var draft = await SaveAsync(harness, "first version");
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+        var announcedBefore = channel.Published.Count;
+        var movedTo = MailFolderAlias.Create("drafts-moved");
+        held.UnmapRoles();
+        held.MapRole(MailFolderSpecialUse.Drafts, movedTo.Value);
+        harness.BeginNewScope();
+
+        // Act
+        await harness.Book.SaveAsync(
+            Account,
+            OutgoingEmailRequester.Command("mfctl-4f2a"),
+            Composed("second version"),
+            draft.Id,
+            CancellationToken.None);
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var changed = channel.Published
+            .Skip(announcedBefore)
+            .Where(signal => signal.Kind == ClientSignalKind.MailChanged)
+            .ToArray();
+
+        Assert.Equal(2, changed.Length);
+        Assert.Equal([held.Stored[1].Email], changed.Single(signal => signal.Folder == movedTo).Emails);
+        Assert.Equal([held.Stored[0].Email], changed.Single(signal => signal.Folder != movedTo).Emails);
+    }
+
     /// <summary>Giving up a held account's draft erases the filed message and the record, and reaches no mail server.</summary>
     [Fact]
     public async Task DiscardAsync_DraftOnAHeldAccount_ErasesTheFiledMessageAndTheRecord()

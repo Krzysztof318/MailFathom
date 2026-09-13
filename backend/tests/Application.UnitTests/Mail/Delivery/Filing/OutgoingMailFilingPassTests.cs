@@ -361,6 +361,39 @@ public sealed class OutgoingMailFilingPassTests
         Assert.Equal(OutgoingMailFilingStage.Withdrawn, mirrored.Stage);
     }
 
+    /// <summary>A mirror appended before the account was drained is left for the drain, so settling the send issues nothing to the source.</summary>
+    [Fact]
+    public async Task SettleFiledCopiesAsync_AMirrorAppendedBeforeTheAccountWasHeld_WithdrawsNothingFromTheSource()
+    {
+        // Arrange
+        var context = new FilingContext(holdsAccount: true);
+        context.Held!.Folders.Phase = MailAccountCustodyPhase.Mirrored;
+        context.Filing.Map(Account.Id, MailFolderSpecialUse.Outbox, "outbox", "INBOX.Outbox");
+        context.Filing.AppendAnswer = new AppendedMailCopy(
+            RemoteEmailPlacement.Reported(ImapUidValidity.Create(11), ImapUid.Create(3)),
+            "mint-1@mailfathom.invalid");
+        var waiting = await context.EnqueueAsync(availableIn: TimeSpan.FromHours(4));
+        await context.Filing.Pass.MirrorWaitingSendsAsync(Account, TestContext.Current.CancellationToken);
+        context.Held.Folders.Phase = MailAccountCustodyPhase.Held;
+        context.Advance(TimeSpan.FromHours(5));
+        await context.MarkDeliveredAsync(waiting);
+
+        // Act
+        var results = await context.Filing.Pass.SettleFiledCopiesAsync(
+            waiting,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(results);
+        await context.Filing.WriteSession.DidNotReceiveWithAnyArgs().WithdrawAppendedAsync(
+            Arg.Any<ImapUidValidity>(),
+            Arg.Any<ImapUid>(),
+            Arg.Any<CancellationToken>());
+
+        var mirrored = Assert.Single(context.Filing.Filings.Read(waiting));
+        Assert.NotEqual(OutgoingMailFilingStage.Withdrawn, mirrored.Stage);
+    }
+
     /// <summary>
     /// A mirror whose append was never answered is left exactly where it is. Nobody knows whether the copy reached the
     /// folder, so recording it withdrawn would be MailFathom stating that it did not — and it would take the one row
@@ -487,6 +520,38 @@ public sealed class OutgoingMailFilingPassTests
 
         var filed = Assert.Single(context.Filing.Filings.Read(delivered));
         Assert.Equal(OutgoingMailFilingStage.Withdrawn, filed.Stage);
+    }
+
+    /// <summary>A sent copy appended before the account was drained is the drain's to remove, so a duplicate met afterwards withdraws nothing.</summary>
+    [Fact]
+    public async Task WithdrawDuplicatedSentCopiesAsync_ACopyAppendedBeforeTheAccountWasHeld_WithdrawsNothingFromTheSource()
+    {
+        // Arrange
+        var context = new FilingContext(holdsAccount: true);
+        context.Held!.Folders.Phase = MailAccountCustodyPhase.Mirrored;
+        var sentFolder = context.Filing.Map(Account.Id, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
+        var delivered = await context.FileSentCopyAsync();
+        context.Filing.Filings.RecordDiscoveredOccurrence(
+            sentFolder.RemotePath,
+            ImapUidValidity.Create(42),
+            ImapUid.Create(8),
+            "mint-1@mailfathom.invalid");
+        context.Held.Folders.Phase = MailAccountCustodyPhase.Held;
+
+        // Act
+        var results = await context.Filing.Pass.WithdrawDuplicatedSentCopiesAsync(
+            Account,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(results);
+        await context.Filing.WriteSession.DidNotReceiveWithAnyArgs().WithdrawAppendedAsync(
+            Arg.Any<ImapUidValidity>(),
+            Arg.Any<ImapUid>(),
+            Arg.Any<CancellationToken>());
+
+        var filed = Assert.Single(context.Filing.Filings.Read(delivered));
+        Assert.Equal(OutgoingMailFilingStage.Confirmed, filed.Stage);
     }
 
     /// <summary>An account that would rather keep both copies keeps both, and nothing is asked of its mail server.</summary>
@@ -639,13 +704,18 @@ public sealed class OutgoingMailFilingPassTests
                 TimeSpan.FromHours(1),
                 TimeSpan.FromHours(8));
 
+            this.Held = holdsAccount ? new HeldLocalMailbox(Account, this.clock) : null;
+
             this.Filing = new OutgoingMailFilingHarness(
                 this.Store,
                 this.Content,
                 settings,
                 this.clock,
-                holdsAccount ? new HeldLocalMailbox(Account, this.clock).FilerOver(this.Content) : null);
+                this.Held?.FilerOver(this.Content));
         }
+
+        /// <summary>Gets the account's local mailbox where the context was built holding it, whose phase a test may move.</summary>
+        internal HeldLocalMailbox? Held { get; }
 
         internal InMemoryOutgoingEmailStore Store { get; }
 

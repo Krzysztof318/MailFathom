@@ -275,8 +275,10 @@ public sealed class MailOutboxDelivery
     /// <remarks>
     /// On a held account the sent copy is filed in the commit that records the delivery, so a crash cannot fall between
     /// the two and the copy is filed exactly as often as the send reaches <see cref="OutgoingEmailStage.Sent" />, which the
-    /// lease makes once. Preparing that copy stops with the host rather than with the attempt's budget: the server has
-    /// already taken the message, and a budget the transmission used up would otherwise cost the account its sent copy.
+    /// lease makes once. Preparing that copy runs under a fresh budget of the attempt's length rather than the attempt's
+    /// own: the server has already taken the message, so a budget the transmission used up must not cost the account its
+    /// sent copy, and a content store that stops answering must not hold the send until its lease runs out — a preparation
+    /// that times out is recorded as a filing failure and the delivery commits without the copy.
     /// A copy the transaction found nowhere to put — the binding it was prepared against is gone — commits the delivery
     /// without it and records the filing failure beside it.
     /// </remarks>
@@ -293,7 +295,10 @@ public sealed class MailOutboxDelivery
             return await this.DeferOrExhaustAsync(claimed, outcomes, failure: null, replyCode);
         }
 
-        var sentCopy = await this.localFiler.PrepareSentCopyAsync(claimed.Record, stoppingToken);
+        using var preparationBudget = new CancellationTokenSource(this.settings.AttemptTimeout, this.timeProvider);
+        using var preparationToken = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, preparationBudget.Token);
+
+        var sentCopy = await this.localFiler.PrepareSentCopyAsync(claimed.Record, preparationToken.Token);
         FiledLocalEmail? filed = null;
 
         await this.CommitAsync(async (session, token) =>

@@ -175,12 +175,13 @@ public sealed class MailDraftFiler
 
         var replaced = await this.drafts.RecordFiledAsync(session, draftId, filed.Email, revision, cancellationToken);
 
-        if (replaced is { } previous)
+        if (replaced is not { } previous
+            || await this.localFiler.EraseAsync(session, copy.Account, previous, cancellationToken) is not { } erasedFrom)
         {
-            await this.localFiler.EraseAsync(session, copy.Account, previous, cancellationToken);
+            return filed;
         }
 
-        return filed with { Replaced = replaced };
+        return filed with { Replaced = previous, ReplacedIn = erasedFrom };
     }
 
     /// <summary>Tells the account's clients what a committed local filing changed.</summary>

@@ -284,15 +284,27 @@ public sealed class LocalMailFiler
     /// <summary>Tells the account's clients what a committed filing changed.</summary>
     /// <param name="filed">What was filed.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="filed" /> is <see langword="null" />.</exception>
-    /// <remarks>Announced only after the commit, because a message a rolled-back attempt filed is not one a client may be sent to read.</remarks>
+    /// <remarks>
+    /// Announced only after the commit, because a message a rolled-back attempt filed is not one a client may be sent to
+    /// read. A replaced message is named in the folder it was erased from, which is another folder where the role moved
+    /// between the two filings.
+    /// </remarks>
     public void Announce(FiledLocalEmail filed)
     {
         ArgumentNullException.ThrowIfNull(filed);
 
-        this.signals.Publish(ClientSignal.MailChanged(
-            filed.Account,
-            filed.Folder,
-            filed.Replaced is { } replaced ? [filed.Email, replaced] : [filed.Email]));
+        if (filed is { Replaced: { } replaced, ReplacedIn: { } erasedFrom } && erasedFrom != filed.Folder)
+        {
+            this.signals.Publish(ClientSignal.MailChanged(filed.Account, filed.Folder, [filed.Email]));
+            this.AnnounceErased(filed.Account, erasedFrom, replaced);
+        }
+        else
+        {
+            this.signals.Publish(ClientSignal.MailChanged(
+                filed.Account,
+                filed.Folder,
+                filed.Replaced is { } sameFolderReplaced ? [filed.Email, sameFolderReplaced] : [filed.Email]));
+        }
 
         if (filed.CreatedFolders)
         {

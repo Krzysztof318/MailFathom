@@ -33,7 +33,8 @@ internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
 
     internal MailAccountIdentity Account { get; }
 
-    internal MailAccountCustodyPhase Phase { get; }
+    /// <summary>Gets or sets the account's custody phase, which a test moves to arrange an account drained after something was appended.</summary>
+    internal MailAccountCustodyPhase Phase { get; set; }
 
     internal IReadOnlyCollection<LocalMailFolder> Folders => this.folders.Values;
 

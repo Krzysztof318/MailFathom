@@ -12,6 +12,7 @@ using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Transmission;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Signals;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
@@ -91,6 +92,39 @@ public sealed class MailOutboxDeliveryTests
         Assert.Equal(claimed.Record.Id, filed.FiledFrom);
         Assert.Equal(AppendedMailFlags.Seen, filed.Flags);
         Assert.Equal(MailFolderSpecialUse.Sent, placedIn.Role);
+    }
+
+    /// <summary>A sent copy filed for a held account is announced to its clients in the sent folder once the delivery commits.</summary>
+    [Fact]
+    public async Task DeliverAsync_HeldAccountThatFilesSentCopies_AnnouncesTheSentCopyInTheSentFolder()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider(ClaimedAt);
+        var held = new HeldLocalMailbox(Account, clock);
+        held.MapRole(MailFolderSpecialUse.Sent, "sent");
+        var channel = new RecordingClientSignalChannel();
+        await using var signals = new ClientSignals([channel], clock);
+        held.Publisher = signals;
+        var context = new DeliveryContext(localFiler: held.FilerOver);
+        var claimed = await context.ClaimAsync("anna@example.test");
+        context.Transmit = (request, envelope, _) =>
+        {
+            AcceptEveryRecipient(request, envelope);
+
+            return Task.FromResult(new MailTransmission(MailTransmissionOutcome.Accepted, 250));
+        };
+
+        // Act
+        await context.DeliverAsync(claimed, TestContext.Current.CancellationToken);
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var filed = Assert.Single(held.Stored);
+        var changed = Assert.Single(channel.Published, signal => signal.Kind == ClientSignalKind.MailChanged);
+
+        Assert.Equal(MailFolderAlias.Create("sent"), changed.Folder);
+        Assert.Equal([filed.Email], changed.Emails);
     }
 
     /// <summary>A held account that asked for no sent copy gets none, and its delivery is recorded all the same.</summary>
