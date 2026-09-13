@@ -400,9 +400,10 @@ these rows are administered through.
 | `CreatedAt` | When the credential was provisioned |
 | `MaterialChangedAt` | When what the client presents was last replaced. A rotation moves it; the rehash the deployment performs on its own when a password record falls behind the current work parameters does not, because nothing about the password changed |
 
-Two indexes and no more: the unique one on `(Method, OrganizationId, Lookup)`, with nulls not distinct so the credentials
-scoped to no organization stay unique among themselves, which is the read every authentication performs, and one
-on `(UserId, CreatedAt)`, which is the listing an administrator reads. That listing is bounded at 100 credentials per
+Three indexes and no more: the unique one on `(Method, OrganizationId, Lookup)`, with nulls not distinct so the
+credentials scoped to no organization stay unique among themselves, which is the read every authentication performs;
+`IX_user_credentials_OrganizationId` on `OrganizationId`, which the restricting foreign key to `organizations` reads
+when an organization is removed; and one on `(UserId, CreatedAt)`, which is the listing an administrator reads. That listing is bounded at 100 credentials per
 user, which is a ceiling rather than a number anybody reaches — and it is the same ceiling provisioning enforces, in
 the insert itself rather than in a count read beforehand. Two administrators provisioning at the same instant cannot
 leave a user above it either: the insert runs in a transaction that first takes a row lock on the user's

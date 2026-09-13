@@ -44,6 +44,7 @@ internal static class FakeUserCredentialDeployment
     /// <param name="users">The users the roster reports.</param>
     /// <param name="provisionedLookup">What the deployment reports the credential is resolved by.</param>
     /// <param name="mintedKey">The plaintext a minting method answers with, and <see langword="null" /> where the method mints nothing.</param>
+    /// <param name="provisionedLogin">What the deployment reports a password is typed as, and <see langword="null" /> where it reports none.</param>
     /// <returns>The handler.</returns>
     /// <remarks>
     /// A name of its own rather than an overload of <see cref="Holding(IReadOnlyList{Guid}, string[])" />, because the
@@ -53,7 +54,8 @@ internal static class FakeUserCredentialDeployment
     internal static FakeHttpMessageHandler Provisioning(
         IReadOnlyList<Guid> users,
         string provisionedLookup,
-        string? mintedKey) =>
+        string? mintedKey,
+        string? provisionedLogin = null) =>
         new((request, _) => Task.FromResult(Answer(
             request,
             users,
@@ -61,7 +63,8 @@ internal static class FakeUserCredentialDeployment
             HttpStatusCode.OK,
             string.Empty,
             provisionedLookup,
-            mintedKey)));
+            mintedKey,
+            provisionedLogin)));
 
     /// <summary>Builds a deployment that refuses whatever write is asked of it.</summary>
     /// <param name="users">The users the roster reports.</param>
@@ -127,7 +130,8 @@ internal static class FakeUserCredentialDeployment
         HttpStatusCode writeStatus,
         string detail,
         string provisionedLookup,
-        string? mintedKey)
+        string? mintedKey,
+        string? provisionedLogin = null)
     {
         var path = request.RequestUri?.AbsolutePath ?? string.Empty;
 
@@ -147,7 +151,7 @@ internal static class FakeUserCredentialDeployment
                 : Written(
                     writeStatus,
                     detail,
-                    $$"""{"credentialId":"{{ProvisionedCredentialId:D}}","lookup":"{{provisionedLookup}}","key":{{Written(mintedKey)}}}""");
+                    $$"""{"credentialId":"{{ProvisionedCredentialId:D}}","lookup":"{{provisionedLookup}}","key":{{Written(mintedKey)}},"login":{{Written(provisionedLogin)}}}""");
         }
 
         if (path.EndsWith("/material", StringComparison.Ordinal))
@@ -155,7 +159,7 @@ internal static class FakeUserCredentialDeployment
             return Written(
                 writeStatus,
                 detail,
-                $$"""{"lookup":"{{provisionedLookup}}","key":{{Written(mintedKey)}}}""");
+                $$"""{"lookup":"{{provisionedLookup}}","key":{{Written(mintedKey)}},"login":{{Written(provisionedLogin)}}}""");
         }
 
         if (path.Contains("/credentials/", StringComparison.Ordinal))

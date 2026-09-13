@@ -94,7 +94,7 @@ public sealed class OrganizationEndpointsTests
     public async Task ChangeShortNameAsync_AShortNameAnotherOrganizationHolds_IsAConflict()
     {
         // Arrange
-        var harness = new EndpointHarness(MailFathomPermission.AdminConfigurationWrite);
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
         harness.Organizations.ChangeShortNameAsync(OrganizationId, Arg.Any<OrganizationShortName>(), Arg.Any<CancellationToken>())
             .Returns(OrganizationWriteResult.Of(OrganizationWriteOutcome.ShortNameTaken));
 
@@ -109,6 +109,32 @@ public sealed class OrganizationEndpointsTests
         var problem = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status409Conflict, problem.StatusCode);
         Assert.Contains("'ACME'", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>An organization past the listing's bound would sign people in where no listing shows it, so the deployment refuses it and says why.</summary>
+    [Fact]
+    public async Task CreateAsync_ADeploymentAtTheOrganizationCeiling_IsAConflictNamingTheCeiling()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Organizations.CreateAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<OrganizationShortName>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<CancellationToken>())
+            .Returns(OrganizationWriteResult.Of(OrganizationWriteOutcome.OrganizationCeilingReached));
+
+        // Act
+        var result = await OrganizationEndpoints.CreateAsync(
+            new OrganizationProvisioningRequest("Acme Corporation", "ACME"),
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var problem = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.StatusCode);
+        Assert.Contains($"{Organization.MaximumListed}", problem.ProblemDetails.Detail, StringComparison.Ordinal);
     }
 
     [Fact]

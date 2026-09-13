@@ -17,8 +17,8 @@ namespace MailFathom.Host.Api;
 /// routes decide how the deployment's people are named when they sign in, and nothing about what any of them may read.
 /// </para>
 /// <para>
-/// Reading is <see cref="MailFathomPermission.AdminRead" />, acts on an organization are
-/// <see cref="MailFathomPermission.AdminConfigurationWrite" />, and moving a user is
+/// Reading is <see cref="MailFathomPermission.AdminRead" />, recording, renaming, and removing an organization are
+/// <see cref="MailFathomPermission.AdminConfigurationWrite" />, and changing a short name and moving a user are
 /// <see cref="MailFathomPermission.AdminCredentialsWrite" />, for the reasons <see cref="OrganizationAdministration" />
 /// gives.
 /// </para>
@@ -64,7 +64,7 @@ internal static class OrganizationEndpoints
 
         api.MapPut(OrganizationShortNameRoute, ChangeShortNameAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+            .RequirePermission(MailFathomPermission.AdminCredentialsWrite);
 
         api.MapDelete(OrganizationRoute, DeleteAsync)
             .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
@@ -93,7 +93,7 @@ internal static class OrganizationEndpoints
     /// <param name="request">The display name and the short name.</param>
     /// <param name="organizations">The organization administration.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
-    /// <returns><c>200</c> with the minted identifier, <c>409</c> when the short name is taken, or <c>400</c> naming what was wrong with the request.</returns>
+    /// <returns><c>200</c> with the minted identifier, <c>409</c> when the short name is taken or the deployment already holds as many organizations as one may, or <c>400</c> naming what was wrong with the request.</returns>
     internal static async Task<Results<Ok<OrganizationProvisionedResponse>, ProblemHttpResult>> CreateAsync(
         [FromBody] OrganizationProvisioningRequest? request,
         [FromServices] OrganizationAdministration organizations,
@@ -113,9 +113,15 @@ internal static class OrganizationEndpoints
 
         var result = await organizations.CreateAsync(request.DisplayName, shortName, cancellationToken);
 
-        return result.Outcome == OrganizationWriteOutcome.Written
-            ? TypedResults.Ok(new OrganizationProvisionedResponse(result.OrganizationId))
-            : ShortNameTaken(shortName);
+        return result.Outcome switch
+        {
+            OrganizationWriteOutcome.Written => TypedResults.Ok(new OrganizationProvisionedResponse(result.OrganizationId)),
+            OrganizationWriteOutcome.OrganizationCeilingReached => TypedResults.Problem(
+                $"This deployment already holds the {Organization.MaximumListed} organizations one deployment may, so "
+                + "no other is recorded. Remove one nobody belongs to first.",
+                statusCode: StatusCodes.Status409Conflict),
+            _ => ShortNameTaken(shortName),
+        };
     }
 
     /// <summary>Replaces the name an operator reads an organization by.</summary>

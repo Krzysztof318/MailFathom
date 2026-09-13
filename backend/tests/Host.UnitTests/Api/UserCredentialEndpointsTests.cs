@@ -61,6 +61,31 @@ public sealed class UserCredentialEndpointsTests
         Assert.True(credential.Enabled);
     }
 
+    /// <summary>
+    /// A member of an organization signs in with its short name in front of the username, so the answers to provisioning
+    /// and rotating a password name that login rather than the bare username Basic authentication would refuse.
+    /// </summary>
+    [Fact]
+    public void ProvisionedAndRotatedAnswers_APasswordScopedToAnOrganization_ReportTheLoginAsItIsTyped()
+    {
+        // Arrange
+        var lookup = UserCredentialLookup.ForUsername(UserCredentialUsername.Create("jan"));
+        var organization = OrganizationShortName.Create("ACME");
+
+        // Act
+        var provisioned = UserCredentialProvisionedResponse.For(
+            UserCredentialMethod.Password,
+            new UserCredentialProvisioning(UserCredentialWriteOutcome.Written, CredentialId, lookup, MintedKey: null, organization));
+        var rotated = UserCredentialRotatedResponse.For(
+            UserCredentialMethod.Password,
+            new UserCredentialRotation(UserCredentialWriteOutcome.Written, lookup, MintedKey: null, organization));
+
+        // Assert
+        Assert.Equal("ACME/jan", provisioned.Login);
+        Assert.Equal("ACME/jan", rotated.Login);
+        Assert.Equal("jan", provisioned.Lookup);
+    }
+
     /// <summary>A password credential of a member of an organization is listed in the form it is typed.</summary>
     [Fact]
     public async Task ListAsync_APasswordCredentialScopedToAnOrganization_ReportsTheLoginAsItIsTyped()

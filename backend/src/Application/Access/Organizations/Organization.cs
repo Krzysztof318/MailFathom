@@ -27,6 +27,6 @@ public sealed record Organization(
     public const int MaximumDisplayNameLength = 128;
 
     /// <summary>The most organizations one listing reads.</summary>
-    /// <remarks>A bound rather than a page: a deployment hosting more companies than this is past what one instance is meant to serve, and the listing says so by stopping rather than by reading without end.</remarks>
+    /// <remarks>A bound rather than a page, and only sound because recording enforces it: an organization past it is refused rather than written, so every organization a deployment holds is one this listing shows and can therefore be renamed or removed. A deployment hosting more companies than this is past what one instance is meant to serve.</remarks>
     public const int MaximumListed = 1000;
 }

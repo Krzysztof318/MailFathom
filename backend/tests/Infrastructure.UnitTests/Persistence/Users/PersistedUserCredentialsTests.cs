@@ -48,7 +48,7 @@ public sealed class PersistedUserCredentialsTests
         // Assert
         Assert.Contains("FROM organizations", sql, StringComparison.Ordinal);
         Assert.Contains("\"ShortName\" = ", sql, StringComparison.Ordinal);
-        Assert.Contains("\"OrganizationId\"", sql, StringComparison.Ordinal);
+        Assert.Matches(@"\w+\.""Id"" = \w+\.""OrganizationId""|\w+\.""OrganizationId"" = \w+\.""Id""", sql);
         Assert.DoesNotContain("\"OrganizationId\" IS NULL", sql, StringComparison.Ordinal);
     }
 

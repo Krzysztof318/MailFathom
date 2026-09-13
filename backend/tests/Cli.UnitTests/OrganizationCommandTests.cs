@@ -123,6 +123,86 @@ public sealed class OrganizationCommandTests : IDisposable
         Assert.Empty(deployment.RequestsTo(HttpMethod.Put, AdminEndpointRoutes.UserOrganizationPath(User)));
     }
 
+    /// <summary>Renaming reaches the display name alone, so a rename can never move the half of every member's login the short name is.</summary>
+    [Fact]
+    public async Task Rename_ADisplayName_SendsItToTheDisplayNameRouteAndNowhereElse()
+    {
+        // Arrange
+        using var deployment = FakeOrganizationDeployment.Holding([User]);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "organization",
+            "rename",
+            "--organization",
+            $"{Organization:D}",
+            "--display-name",
+            "Acme Holdings",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var rename = Assert.Single(deployment.RequestsTo(HttpMethod.Put, AdminEndpointRoutes.OrganizationDisplayNamePath(Organization)));
+        using var body = JsonDocument.Parse(rename.ContentAsUtf8String());
+
+        Assert.Equal("Acme Holdings", body.RootElement.GetProperty("displayName").GetString());
+        Assert.Empty(deployment.RequestsTo(HttpMethod.Put, AdminEndpointRoutes.OrganizationShortNamePath(Organization)));
+    }
+
+    /// <summary>A short name moves every member's login, so it is sent to its own route and never to the display name's.</summary>
+    [Fact]
+    public async Task SetShortName_AShortName_SendsItToTheShortNameRouteAndNowhereElse()
+    {
+        // Arrange
+        using var deployment = FakeOrganizationDeployment.Holding([User]);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "organization",
+            "set-short-name",
+            "--organization",
+            $"{Organization:D}",
+            "--short-name",
+            "ACMEH",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var change = Assert.Single(deployment.RequestsTo(HttpMethod.Put, AdminEndpointRoutes.OrganizationShortNamePath(Organization)));
+        using var body = JsonDocument.Parse(change.ContentAsUtf8String());
+
+        Assert.Equal("ACMEH", body.RootElement.GetProperty("shortName").GetString());
+        Assert.Empty(deployment.RequestsTo(HttpMethod.Put, AdminEndpointRoutes.OrganizationDisplayNamePath(Organization)));
+    }
+
+    [Fact]
+    public async Task Remove_AnOrganization_DeletesThatOrganizationAndWritesNothingElse()
+    {
+        // Arrange
+        using var deployment = FakeOrganizationDeployment.Holding([User]);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "organization",
+            "remove",
+            "--organization",
+            $"{Organization:D}",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Single(deployment.RequestsTo(HttpMethod.Delete, AdminEndpointRoutes.OrganizationPath(Organization)));
+        Assert.DoesNotContain(deployment.RecordedRequests, request => request.Method == HttpMethod.Put);
+    }
+
     public void Dispose() => this.harness.Dispose();
 
     private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>

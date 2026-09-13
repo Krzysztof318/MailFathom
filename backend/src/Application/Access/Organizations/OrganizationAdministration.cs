@@ -9,11 +9,11 @@ namespace MailFathom.Application.Access.Organizations;
 /// <summary>What a deployment administrator does to organizations and to which organization a user belongs.</summary>
 /// <remarks>
 /// <para>
-/// Reading is <see cref="MailFathomPermission.AdminRead" />. Recording, renaming, re-short-naming, and deleting an
-/// organization is <see cref="MailFathomPermission.AdminConfigurationWrite" />, the grant that already records users,
-/// because it changes how the deployment's people are grouped rather than who can reach anybody's mail. Moving a user is
-/// <see cref="MailFathomPermission.AdminCredentialsWrite" />, because it changes the login every password of theirs is
-/// typed as, which is a decision about how a person signs in.
+/// Reading is <see cref="MailFathomPermission.AdminRead" />. Recording, renaming, and deleting an organization is
+/// <see cref="MailFathomPermission.AdminConfigurationWrite" />, the grant that already records users, because those
+/// change how the deployment's people are grouped rather than how any of them signs in. Changing an organization's short
+/// name and moving a user are <see cref="MailFathomPermission.AdminCredentialsWrite" />, because each changes the login a
+/// password is typed as — a short name every member's at once — which is a decision about how people sign in.
 /// </para>
 /// <para>
 /// The identifier is a version 4 value for the reason a user's is: it reaches administrative listings, and a time-ordered
@@ -106,13 +106,13 @@ public sealed class OrganizationAdministration
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="shortName" /> is the unspecified struct default.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
     public Task<OrganizationWriteResult> ChangeShortNameAsync(
         Guid organizationId,
         OrganizationShortName shortName,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+        this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
 
         return this.organizations.ChangeShortNameAsync(organizationId, RequireShortName(shortName), cancellationToken);
     }

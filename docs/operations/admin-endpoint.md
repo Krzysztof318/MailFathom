@@ -226,9 +226,9 @@ what it was never granted is what the record exists to make visible.
 | `POST /api/admin/users/{userId}/record/mail-accounts/removal` | `mailfathom.admin.configuration.write` | Stops the record declaring one mailbox, named by the identifier it was declared under. It withdraws no mail: everything already stored for that account stays where it is. |
 | `POST /api/admin/users/{userId}/secrets` | `mailfathom.admin.configuration.write` | Seals the material carried in the body under the active data-encryption key and answers only with its `database:<uuid>` reference. Sending the same declared name for that user rotates the existing row and returns the same reference. It refuses when the user does not exist or the deployment configures no data-encryption key ring. |
 | `GET /api/admin/organizations` | `mailfathom.admin.read` | Reads [the organizations](#organizations) this deployment holds, ordered by short name and at most 1000, each with its display name, its short name, how many users belong to it, and when it was recorded. This is what `mfctl organization list` asks. |
-| `POST /api/admin/organizations` | `mailfathom.admin.configuration.write` | Records an organization from the display name and short name the body carries, and answers with the identifier it was minted under. It answers `409` for a short name another organization holds and `400` naming what was wrong with either name. |
+| `POST /api/admin/organizations` | `mailfathom.admin.configuration.write` | Records an organization from the display name and short name the body carries, and answers with the identifier it was minted under. It answers `409` for a short name another organization holds or for a deployment already holding 1000 organizations, and `400` naming what was wrong with either name. |
 | `PUT /api/admin/organizations/{organizationId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the name an operator reads the organization by. It answers `204`, `404` for an organization this deployment does not hold, and `400` for a name it does not accept. |
-| `PUT /api/admin/organizations/{organizationId}/short-name` | `mailfathom.admin.configuration.write` | Replaces the short name its members sign in under, which moves every member's login with it. It answers `204`, `404`, `409` for a short name another organization holds, and `400`. |
+| `PUT /api/admin/organizations/{organizationId}/short-name` | `mailfathom.admin.credentials.write` | Replaces the short name its members sign in under, which moves every member's login with it. It answers `204`, `404`, `409` for a short name another organization holds, and `400`. |
 | `DELETE /api/admin/organizations/{organizationId}` | `mailfathom.admin.configuration.write` | Removes an organization nobody belongs to. It answers `204`, `404`, and `409` naming how many members it still has. |
 | `PUT /api/admin/users/{userId}/organization` | `mailfathom.admin.credentials.write` | Moves the user into the organization the body names, or out of every organization where it names `null`, re-scoping their passwords in the same transaction. This is what `mfctl user set-organization` sends. It answers `204`, `404` for a user this deployment does not hold, `400` for an organization it does not hold, and `409` naming the username the target already holds for another user. |
 | `GET /api/admin/users/{userId}/credentials` | `mailfathom.admin.read` | Reads one user's [credentials](#user-credentials), each with its method, what it grants, whether it still authenticates, and when its material was last replaced. It publishes what each is resolved by, except where that value is derived from the secret, and for a password the `login` a person types to sign in with it. |
@@ -1381,10 +1381,15 @@ what order. The display name is what an operator reads it by, trimmed and 1 to 1
 32 characters of `A`–`Z`, `0`–`9`, and `-`, folded to upper case when it is written, and unique across the deployment,
 because it is half of a login; a `/` can never appear in one, since that is what separates it from the username.
 
-**Grouping people is a configuration write, and moving a person is a credential write.** Recording, renaming,
-re-short-naming, and removing an organization take `mailfathom.admin.configuration.write`, the grant that records
-users, because they change how the deployment's people are grouped rather than who can reach anybody's mail. Moving a
-user takes `mailfathom.admin.credentials.write`, because it changes the login every password of theirs is typed as.
+**Grouping people is a configuration write, and changing how they sign in is a credential write.** Recording,
+renaming, and removing an organization take `mailfathom.admin.configuration.write`, the grant that records users,
+because they change how the deployment's people are grouped rather than how any of them signs in. Changing a short
+name and moving a user take `mailfathom.admin.credentials.write`, because each changes the login a password is typed
+as — a short name every member's at once.
+
+**A deployment holds at most 1000 organizations.** That is the most the listing reads, and recording one past it is
+refused with `409` rather than written, so every organization a deployment holds is one the listing shows and can
+therefore be renamed or removed.
 
 **Changing a short name moves every member's login with it and rewrites no credential.** A credential refers to its
 organization by identifier rather than by short name, so the new login works and the old one stops at the instant the

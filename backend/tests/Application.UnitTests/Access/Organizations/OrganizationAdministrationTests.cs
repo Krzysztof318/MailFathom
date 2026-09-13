@@ -65,6 +65,25 @@ public sealed class OrganizationAdministrationTests
         Assert.Empty(harness.Organizations.ReceivedCalls());
     }
 
+    /// <summary>A short name is half of every member's login, so changing it takes the grant a move takes rather than the configuration grant.</summary>
+    [Fact]
+    public async Task ChangeShortNameAsync_ACallerGrantedOnlyTheConfigurationWrite_IsRefusedWithoutTouchingTheStore()
+    {
+        // Arrange
+        var harness = new AdministrationHarness(MailFathomPermission.AdminConfigurationWrite);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            harness.Administration.ChangeShortNameAsync(
+                OrganizationId,
+                OrganizationShortName.Create("ACME"),
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminCredentialsWrite, refusal.RequiredPermission);
+        Assert.Empty(harness.Organizations.ReceivedCalls());
+    }
+
     [Fact]
     public async Task DeleteAsync_ACallerGrantedOnlyTheAdministrativeRead_IsRefused()
     {

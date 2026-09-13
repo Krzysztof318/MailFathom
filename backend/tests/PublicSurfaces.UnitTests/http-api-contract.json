@@ -8067,6 +8067,12 @@
               "string"
             ]
           },
+          "login": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "lookup": {
             "type": [
               "null",
@@ -8077,7 +8083,8 @@
         "required": [
           "credentialId",
           "lookup",
-          "key"
+          "key",
+          "login"
         ],
         "type": "object"
       },
@@ -8208,6 +8215,12 @@
               "string"
             ]
           },
+          "login": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "lookup": {
             "type": [
               "null",
@@ -8217,7 +8230,8 @@
         },
         "required": [
           "lookup",
-          "key"
+          "key",
+          "login"
         ],
         "type": "object"
       },

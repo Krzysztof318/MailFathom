@@ -53,6 +53,22 @@ public sealed class UserCredentialCommandTests : IDisposable
         Assert.Equal("user", ReadField(provisioning.ContentAsUtf8String(), "username"));
     }
 
+    /// <summary>A member of an organization signs in with its short name in front of the username, so that login is what the operator is told to hand over.</summary>
+    [Fact]
+    public async Task Create_APasswordTheDeploymentScopedToAnOrganization_ReportsTheLoginRatherThanTheBareUsername()
+    {
+        // Arrange
+        using var deployment = FakeUserCredentialDeployment.Provisioning([User], "user", mintedKey: null, provisionedLogin: "ACME/user");
+        this.harness.Console.SecretToSupply = Password;
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "credential", "create", "--method", "password", "--username", "user", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("'ACME/user'", StringComparison.Ordinal));
+    }
+
     /// <summary>Everything a person reads is written down somewhere, so the one thing that was typed is in none of it.</summary>
     [Fact]
     public async Task Create_AProvisionedCredential_ReportsTheIdentifierWithoutRepeatingThePassword()

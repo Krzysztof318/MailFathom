@@ -323,7 +323,7 @@ public sealed class AdminApiEndpointsTests
                 $"GET {prefix}{OrganizationEndpoints.OrganizationsRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{OrganizationEndpoints.OrganizationsRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
                 $"PUT {prefix}{OrganizationEndpoints.OrganizationDisplayNameRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
-                $"PUT {prefix}{OrganizationEndpoints.OrganizationShortNameRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"PUT {prefix}{OrganizationEndpoints.OrganizationShortNameRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
                 $"DELETE {prefix}{OrganizationEndpoints.OrganizationRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
                 $"PUT {prefix}{OrganizationEndpoints.UserOrganizationRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
                 $"GET {prefix}{ContentReleaseEndpoints.ReleaseRoute} -> {MailFathomPermission.AdminRead.Name}",

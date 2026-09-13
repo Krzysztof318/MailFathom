@@ -31,7 +31,7 @@ public interface IOrganizationStore
     /// <param name="shortName">The short name its members will sign in under.</param>
     /// <param name="createdAt">When it was recorded.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><see cref="OrganizationWriteOutcome.Written" /> or <see cref="OrganizationWriteOutcome.ShortNameTaken" />.</returns>
+    /// <returns><see cref="OrganizationWriteOutcome.Written" />, <see cref="OrganizationWriteOutcome.ShortNameTaken" />, or <see cref="OrganizationWriteOutcome.OrganizationCeilingReached" />.</returns>
     Task<OrganizationWriteResult> CreateAsync(
         Guid organizationId,
         string displayName,

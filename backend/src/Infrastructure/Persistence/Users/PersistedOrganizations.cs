@@ -69,6 +69,19 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
 
         var storedShortName = RequireShortName(shortName);
 
+        await using var creation = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        // Two creations at the ceiling would otherwise each read room for one more. The lock serializes writers and
+        // still admits every read, and recording an organization is rare enough that serializing it costs nothing.
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "LOCK TABLE organizations IN SHARE ROW EXCLUSIVE MODE",
+            cancellationToken);
+
+        if (await dbContext.Organizations.CountAsync(cancellationToken) >= Organization.MaximumListed)
+        {
+            return OrganizationWriteResult.Of(OrganizationWriteOutcome.OrganizationCeilingReached);
+        }
+
         // The identifier is freshly minted, so the short name's index is the one constraint a loser can meet.
         var written = await dbContext.Database.ExecuteSqlAsync(
             $"""
@@ -77,6 +90,8 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
              ON CONFLICT DO NOTHING
              """,
             cancellationToken);
+
+        await creation.CommitAsync(cancellationToken);
 
         return OrganizationWriteResult.Of(
             written == 1 ? OrganizationWriteOutcome.Written : OrganizationWriteOutcome.ShortNameTaken);
