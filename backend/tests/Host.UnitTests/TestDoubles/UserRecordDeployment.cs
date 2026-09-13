@@ -60,8 +60,13 @@ internal sealed class UserRecordDeployment
 
         this.Store = Substitute.For<IUserSettingsDocumentWriter>();
         this.Store
-            .CommitAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(call => (long?)call.ArgAt<long>(2) + 1);
+            .CommitAsync(
+                Arg.Any<MailUserId>(),
+                Arg.Any<string>(),
+                Arg.Any<MailUserEndpointAccess>(),
+                Arg.Any<long>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => (long?)call.ArgAt<long>(3) + 1);
 
         this.Directory = Substitute.For<IMailUserDirectory>();
         this.Directory.ReadUsersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);

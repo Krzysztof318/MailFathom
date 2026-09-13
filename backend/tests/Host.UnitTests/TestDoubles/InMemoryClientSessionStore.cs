@@ -19,8 +19,8 @@ namespace MailFathom.Host.UnitTests.TestDoubles;
 /// </para>
 /// <para>
 /// What it does model deliberately is the one refusal a unit test must be able to state: a user or a credential that
-/// no longer admits a session, through <see cref="NoLongerAdmits" />, so the route's three answers can be told apart
-/// without a database.
+/// no longer admits a session, through <see cref="NoLongerAdmits" /> or a client switch turned off in
+/// <see cref="EndpointAccess" />, so the route's three answers can be told apart without a database.
 /// </para>
 /// </remarks>
 internal sealed class InMemoryClientSessionStore : IClientSessionStore
@@ -57,7 +57,9 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
     {
         this.RefuseWhenUnusable(cancellationToken);
 
-        if (this.NoLongerAdmits)
+        // The statement mints under a lock on the user row that only matches while the client switch is on, so a user
+        // kept off the client is the same refusal as one who is gone.
+        if (this.NoLongerAdmits || !this.EndpointAccess.ClientEndpoint)
         {
             return Task.FromResult(ClientSessionMintOutcome.NoLongerAdmitted);
         }
@@ -71,7 +73,7 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
             grant,
             row.SecretDigest,
             row.ExpiresAt,
-            MailUserEndpointAccess.Everywhere);
+            this.EndpointAccess);
 
         return Task.FromResult(ClientSessionMintOutcome.Minted);
     }
@@ -102,7 +104,8 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
         if (this.held.GetValueOrDefault(identifier) is not { } presented
             || !presented.SecretDigest.Span.SequenceEqual(secretDigest.Span)
             || presented.ExpiresAt < renewableFrom
-            || this.NoLongerAdmits)
+            || this.NoLongerAdmits
+            || !this.EndpointAccess.ClientEndpoint)
         {
             return Task.FromResult<ClientSessionGrant?>(null);
         }
@@ -112,7 +115,7 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
             presented.Grant,
             replacement.SecretDigest,
             replacement.ExpiresAt,
-            MailUserEndpointAccess.Everywhere);
+            this.EndpointAccess);
 
         return Task.FromResult<ClientSessionGrant?>(presented.Grant);
     }

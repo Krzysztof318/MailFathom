@@ -18,7 +18,8 @@ namespace MailFathom.Cli.Commands.Users;
 /// </para>
 /// <para>
 /// Either option may be left out and the deployment leaves that switch where it stands, so keeping a person off one
-/// endpoint never rewrites the other.
+/// endpoint never rewrites the other. The switches are keys of the user's record, so this is the narrow form of what
+/// <c>user edit</c> can also change.
 /// </para>
 /// </remarks>
 internal static class SetUserEndpointsCommand

@@ -892,7 +892,9 @@ endpoint is refused here whichever credential they present — including an acce
 issued before the switch changed — with the challenge a credential nobody holds receives, so no agent can act for them
 while the same person's password still opens their mail client. The switch is read with the credential on every
 request, so a change reaches every replica on that user's next request. It decides whether the user is admitted here;
-the grant still decides which tools an admitted caller is offered.
+the grant still decides which tools an admitted caller is offered. The switch is judged only where this endpoint
+authenticates: configured to require no credential, it names no user from a request and serves the single user the
+deployment holds, so keeping somebody off it means configuring a credential for it, or disabling it.
 
 **A refused caller is told nothing**, for the reason
 [what a refused caller is told](permissions.md#what-a-refused-caller-is-told) gives: a message a client could tell apart

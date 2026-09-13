@@ -352,7 +352,7 @@ public sealed class UserRecordAdministrationTests
         // Assert
         Assert.Equal(MailFathomErrorCode.ConfigurationVersionSuperseded, outcome!.Refusal);
         Assert.Equal(7, outcome.Version);
-        await harness.Store.DidNotReceiveWithAnyArgs().CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+        await harness.Store.DidNotReceiveWithAnyArgs().CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>The candidate is put through the same binder a start reads a record with, so what a write accepts is what the next start would read.</summary>
@@ -373,7 +373,7 @@ public sealed class UserRecordAdministrationTests
         // Assert
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
         Assert.NotEmpty(outcome.Messages);
-        await harness.Store.DidNotReceiveWithAnyArgs().CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+        await harness.Store.DidNotReceiveWithAnyArgs().CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>Anything but an object of that account's settings is a caller sending the wrong thing, and the parser's own message names which — and names no value.</summary>
@@ -433,6 +433,7 @@ public sealed class UserRecordAdministrationTests
         await harness.Store.Received(1).CommitAsync(
             SyntheticMailUser.Deployment,
             Arg.Is<string>(candidate => candidate!.Contains("archive", StringComparison.Ordinal)),
+            MailUserEndpointAccess.Everywhere,
             3,
             Arg.Any<CancellationToken>());
     }
@@ -487,7 +488,7 @@ public sealed class UserRecordAdministrationTests
             Assert.Single(outcome.Messages),
             StringComparison.Ordinal);
         await harness.Store.DidNotReceiveWithAnyArgs()
-            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -537,7 +538,7 @@ public sealed class UserRecordAdministrationTests
         // Assert
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
         await harness.Store.DidNotReceiveWithAnyArgs()
-            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -562,7 +563,7 @@ public sealed class UserRecordAdministrationTests
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
         Assert.Contains("not provisioned for you", Assert.Single(outcome.Messages), StringComparison.Ordinal);
         await harness.Store.DidNotReceiveWithAnyArgs()
-            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -616,7 +617,7 @@ public sealed class UserRecordAdministrationTests
                 nameof(SecretResolutionFailure.MaterialNotFound),
                 StringComparison.Ordinal));
         await harness.Store.DidNotReceiveWithAnyArgs()
-            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -644,7 +645,7 @@ public sealed class UserRecordAdministrationTests
             outcome.Messages,
             message => message.Contains("already carries this name", StringComparison.Ordinal));
         await harness.Store.DidNotReceiveWithAnyArgs()
-            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -660,6 +661,7 @@ public sealed class UserRecordAdministrationTests
         harness.Store.CommitAsync(
                 SyntheticMailUser.Deployment,
                 Arg.Any<string>(),
+                Arg.Any<MailUserEndpointAccess>(),
                 Arg.Any<long>(),
                 Arg.Any<CancellationToken>())
             .Returns((long?)null);
@@ -717,6 +719,7 @@ public sealed class UserRecordAdministrationTests
         await harness.Store.Received(1).CommitAsync(
             SyntheticMailUser.Deployment,
             Arg.Is<string>(candidate => !candidate!.Contains("archive", StringComparison.Ordinal)),
+            Arg.Any<MailUserEndpointAccess>(),
             1,
             Arg.Any<CancellationToken>());
     }
@@ -740,6 +743,152 @@ public sealed class UserRecordAdministrationTests
         await harness.Store.Received(1).CommitAsync(
             SyntheticMailUser.Deployment,
             Arg.Any<string>(),
+            Arg.Any<MailUserEndpointAccess>(),
+            1,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>The switch is a key of the record, so writing one lands in the document and the commit carries both onto the row — the one left out as the record already stated it.</summary>
+    [Fact]
+    public async Task SetEndpointAccessAsync_OneSwitchNamed_WritesItIntoTheRecordAndCarriesBothOntoTheRow()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 3);
+
+        // Act
+        var written = await harness.Records.SetEndpointAccessAsync(
+            SyntheticMailUser.Deployment,
+            mcpEndpoint: false,
+            clientEndpoint: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(written!.Outcome.IsCommitted);
+        Assert.Equal(new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true), written.EndpointAccess);
+        await harness.Store.Received(1).CommitAsync(
+            SyntheticMailUser.Deployment,
+            Arg.Is<string>(candidate =>
+                candidate!.Contains("\"McpEndpoint\":\"false\"", StringComparison.Ordinal)
+                && !candidate.Contains("ClientEndpoint", StringComparison.Ordinal)),
+            new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
+            3,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A switch already where it was asked to be spends no version, so an editor open over the record is not superseded by a write that changed nothing.</summary>
+    [Fact]
+    public async Task SetEndpointAccessAsync_TheSwitchesTheRecordAlreadyStates_WritesNothing()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(
+            SyntheticMailUser.Deployment,
+            """{"Language":"English","EndpointAccess":{"ClientEndpoint":"false"}}""",
+            version: 2);
+
+        // Act
+        var written = await harness.Records.SetEndpointAccessAsync(
+            SyntheticMailUser.Deployment,
+            mcpEndpoint: true,
+            clientEndpoint: false,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(written!.Outcome.IsSettled);
+        Assert.False(written.Outcome.IsCommitted);
+        Assert.Equal(new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false), written.EndpointAccess);
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Deciding where the deployment serves somebody is the configuration write, so a caller that may only read is refused before the record is read.</summary>
+    [Fact]
+    public async Task SetEndpointAccessAsync_ACallerHoldingOnlyTheAdministrativeRead_IsRefused()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.AdminRead);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => harness.Records.SetEndpointAccessAsync(
+                SyntheticMailUser.Deployment,
+                mcpEndpoint: false,
+                clientEndpoint: null,
+                TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>An administrator editing the whole record reaches the switches too, and what the saved record states is what the row is given.</summary>
+    [Fact]
+    public async Task ApplyRecordAsync_ARecordSavedKeepingTheUserOffTheClientEndpoint_CarriesTheSwitchOntoTheRow()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 5);
+
+        // Act
+        var outcome = await harness.Records.ApplyRecordAsync(
+            SyntheticMailUser.Deployment,
+            """{"Language":"English","EndpointAccess":{"ClientEndpoint":false}}""",
+            expectedVersion: 5,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+        await harness.Store.Received(1).CommitAsync(
+            SyntheticMailUser.Deployment,
+            Arg.Any<string>(),
+            new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false),
+            5,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Which endpoints somebody is served on is the deployment's decision about them, so a user saving their own record cannot turn a switch back on.</summary>
+    [Fact]
+    public async Task ApplyOwnRecordAsync_ARecordMovingTheUsersOwnSwitch_IsRefusedWithoutWriting()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(
+            SyntheticMailUser.Deployment,
+            """{"Language":"English","EndpointAccess":{"McpEndpoint":"false"}}""",
+            version: 1);
+
+        // Act
+        var outcome = await harness.Records.ApplyOwnRecordAsync(
+            """{"Language":"English","EndpointAccess":{"McpEndpoint":"true"}}""",
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>A switch an administrator set travels through the user's own save unchanged, so keeping somebody off one endpoint does not lock them out of editing the rest of their record.</summary>
+    [Fact]
+    public async Task ApplyOwnRecordAsync_ARecordCarryingTheSwitchesAsTheyStand_CommitsWithThemUnchanged()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(
+            SyntheticMailUser.Deployment,
+            """{"Language":"English","EndpointAccess":{"McpEndpoint":"false"}}""",
+            version: 1);
+
+        // Act
+        var outcome = await harness.Records.ApplyOwnRecordAsync(
+            """{"Language":"english","EndpointAccess":{"McpEndpoint":"false"}}""",
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+        await harness.Store.Received(1).CommitAsync(
+            SyntheticMailUser.Deployment,
+            Arg.Any<string>(),
+            new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
             1,
             Arg.Any<CancellationToken>());
     }
@@ -797,6 +946,7 @@ public sealed class UserRecordAdministrationTests
             Arg.Is<string>(candidate =>
                 candidate!.Contains("/run/secrets/primary-password", StringComparison.Ordinal)
                 && !candidate.Contains(SettingRedaction.Marker, StringComparison.Ordinal)),
+            Arg.Any<MailUserEndpointAccess>(),
             1,
             Arg.Any<CancellationToken>());
     }
@@ -830,7 +980,7 @@ public sealed class UserRecordAdministrationTests
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
         Assert.Contains("mfctl user account add", Assert.Single(outcome.Messages), StringComparison.Ordinal);
         await harness.Store.DidNotReceiveWithAnyArgs()
-            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -866,7 +1016,7 @@ public sealed class UserRecordAdministrationTests
             Assert.Single(outcome.Messages),
             StringComparison.Ordinal);
         await harness.Store.DidNotReceiveWithAnyArgs()
-            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>A save that composes what the record already carries spends no version, and says so rather than reporting a commit.</summary>
@@ -894,7 +1044,7 @@ public sealed class UserRecordAdministrationTests
         Assert.True(outcome!.IsSettled);
         Assert.False(outcome.IsCommitted);
         Assert.Equal(5, outcome.Version);
-        await harness.Store.DidNotReceiveWithAnyArgs().CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+        await harness.Store.DidNotReceiveWithAnyArgs().CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -942,6 +1092,7 @@ public sealed class UserRecordAdministrationTests
                 candidate!.Contains($"{RegisteredSchemeSecretReferenceResolver.UnreadableTarget}/primary-password", StringComparison.Ordinal)
                 && candidate.Contains("SpamClassification", StringComparison.Ordinal)
                 && !candidate.Contains(SettingRedaction.Marker, StringComparison.Ordinal)),
+            Arg.Any<MailUserEndpointAccess>(),
             3,
             Arg.Any<CancellationToken>());
     }
@@ -970,7 +1121,7 @@ public sealed class UserRecordAdministrationTests
         // Assert
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
         await harness.Store.DidNotReceiveWithAnyArgs()
-            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -998,7 +1149,7 @@ public sealed class UserRecordAdministrationTests
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
         Assert.Contains(outcome.Messages, message => message.Contains("MailAccounts:1", StringComparison.Ordinal));
         await harness.Store.DidNotReceiveWithAnyArgs()
-            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>The buffer is what somebody typed, so every way it can be wrong is theirs to correct rather than a defect to raise.</summary>
@@ -1119,9 +1270,10 @@ public sealed class UserRecordAdministrationTests
             this.Store.CommitAsync(
                     Arg.Any<MailUserId>(),
                     Arg.Any<string>(),
+                    Arg.Any<MailUserEndpointAccess>(),
                     Arg.Any<long>(),
                     Arg.Any<CancellationToken>())
-                .Returns(call => (long?)call.ArgAt<long>(2) + 1);
+                .Returns(call => (long?)call.ArgAt<long>(3) + 1);
 
             // The roster is settled with somebody the tests never write for, so the default deployment reads as a
             // user nothing declares — which is the ordinary case — until a test states otherwise.

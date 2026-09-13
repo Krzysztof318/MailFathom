@@ -449,7 +449,9 @@ minted before the switch changed — and the refusal is the one a credential nob
 told that what they presented is good somewhere else. A grant decides what an admitted caller may do and a switch
 decides whether the user is admitted on that endpoint at all; neither widens the other, and no permission name turns a
 switch back on. The switch is read in the same statement that resolves the credential or the session on every request,
-so a change reaches every replica on that user's next request and nothing needs to be revoked for it to hold.
+so a change reaches every replica on that user's next request and nothing needs to be revoked for it to hold. It holds
+where an endpoint authenticates: an endpoint configured to require no credential names no user from a request, so it
+has no switch to consult.
 
 **Whether a capability exists.** A grant composes with availability rather than replacing it: a tool may be
 unavailable, unauthorized, or both, and no grant makes a capability this deployment does not have appear. An endpoint

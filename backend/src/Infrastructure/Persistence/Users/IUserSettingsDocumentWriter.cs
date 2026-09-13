@@ -19,6 +19,7 @@ public interface IUserSettingsDocumentWriter
     /// <summary>Replaces one user's record, if it still stands at the expected version.</summary>
     /// <param name="user">The user whose record is written.</param>
     /// <param name="json">The candidate record, as the JSON object the row will hold.</param>
+    /// <param name="endpointAccess">The endpoint switches the candidate states, which the same statement writes onto the user's row.</param>
     /// <param name="expectedVersion">The version the candidate was composed over.</param>
     /// <param name="cancellationToken">Cancels the commit.</param>
     /// <returns>The version the commit produced, or <see langword="null" /> when the deployment holds no such user or their record had already moved past <paramref name="expectedVersion" />.</returns>
@@ -26,13 +27,20 @@ public interface IUserSettingsDocumentWriter
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="expectedVersion" /> is negative.</exception>
     /// <exception cref="UserSettingsUnwritableException">Thrown when the statement did not commit. Every failure but two leaves the user's record exactly as it was; the exceptions are a command timeout and a connection lost while the statement was in flight, because the statement had been sent by then, so whether it applied is settled by reading the version now in force rather than assumed here.</exception>
     /// <remarks>
+    /// <para>
     /// A user the deployment does not hold and a record somebody else moved are one answer, because the statement
     /// distinguishes neither and a caller acts on both the same way: it re-reads the user's record, which either
     /// reports the version now in force or reports that there is nobody to write for.
+    /// </para>
+    /// <para>
+    /// The switches are passed beside the document rather than read out of it, because reading the document is the
+    /// caller's binder's to do; what this owes is that the row never holds switches the committed record does not state.
+    /// </para>
     /// </remarks>
     Task<long?> CommitAsync(
         MailUserId user,
         string json,
+        MailUserEndpointAccess endpointAccess,
         long expectedVersion,
         CancellationToken cancellationToken);
 }

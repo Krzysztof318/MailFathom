@@ -12,8 +12,8 @@ namespace MailFathom.Infrastructure.Security.Passwords;
 /// A refused credential is an expected outcome of serving an open endpoint rather than an exceptional state, so
 /// authentication returns this instead of throwing. The successful result carries what every user-facing method
 /// establishes and nothing else: the credential's identifier, which an audit record and a diagnostic correlate on, the
-/// user the request will act for, and what that request may do. The username is deliberately absent so nothing
-/// downstream can write one down.
+/// user the request will act for, what that request may do, and which endpoints that user's switches serve them on. The
+/// username is deliberately absent so nothing downstream can write one down.
 /// </remarks>
 public sealed record UserPasswordAuthenticationResult
 {

@@ -1742,6 +1742,12 @@ somebody's mail is not deciding which mailboxes are read for them.
 | `POST /api/client/record/mail-accounts/folders/replacement` | States one folder afresh, in place of the one carrying an alias |
 | `POST /api/client/record/mail-accounts/folders/removal` | Stops the mailbox declaring one folder, named by its alias |
 
+**A user's record states which endpoints they are served on, and saving it here never changes that.** The record
+carries `EndpointAccess` once an administrator has written it, and a record committed back here may carry it through
+exactly as it stands; one moving either switch is refused naming the block, because
+[whether a person is served on an endpoint](admin-endpoint.md#users-and-their-records) is decided by whoever
+administers the deployment.
+
 **The three folder routes are the whole of what a client may do to a folder, and none of them touches a mail
 server.** Each is a change to the mapping the record declares: a declaration adds one and lets the account's next run
 create the folder its own configuration names, a replacement states that mapping afresh in the position the old one
@@ -2688,6 +2694,13 @@ switch back on serves the sessions they still hold. The switch decides where som
 what they may do once they are; neither widens the other, and an automation account kept off this endpoint still reads
 mail over MCP with exactly its grant. [What a permission does not decide](permissions.md#what-a-permission-does-not-decide)
 holds the whole rule.
+
+Two things the switch does not reach. **A signal connection already open stays open**: it was admitted against a ticket
+when it connected, and nothing is re-judged on a connection that is already carrying statements — so the client goes on
+being told that something changed until the connection closes, while every route it then calls to read what changed is
+refused, and no new ticket is minted for them. And **this endpoint configured to require no credential judges no
+switch**, because a request presents nothing that names a user and every one is served as the single user the
+deployment holds; keeping somebody off it means configuring a credential for it, or disabling it.
 
 A grant is recorded on the credential rather than on the entry, and it draws from the mailbox half of the published set
 — a name reaching only the administrative half is refused where the credential is provisioned.

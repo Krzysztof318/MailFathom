@@ -318,6 +318,24 @@ A change naming `MailSynchronization:Accounts` is refused too, and by the bindin
 
 This is the one place the page's standing claim needs reading carefully. **No file MailFathom reads is ever written back** — that still holds, and nothing here writes into anybody's file. What a file can no longer show is who this deployment serves or which mailboxes they own; the startup line above is what says so.
 
+### Which endpoints one user is served on
+
+A user's record carries an `EndpointAccess` block with two switches, `McpEndpoint` and `ClientEndpoint`, and a record
+that states none of it reads as both on — which is every record written before the block existed.
+
+```json
+{
+  "Language": "English",
+  "EndpointAccess": { "McpEndpoint": false, "ClientEndpoint": true }
+}
+```
+
+`mfctl user endpoints` writes them one at a time and `mfctl user edit` writes them with the rest of the record; both
+reach the same commit, which stores the record and copies the two switches onto the user's row in one statement. A
+request is judged against that row rather than against the document, so authentication never reads a record. A user
+saving their own record is refused a change to either switch; what the switches do is
+[the administrative page's](admin-endpoint.md#users-and-their-records).
+
 ### One user's own classification posture
 
 A user's record carries a `SpamClassification` property beside their `MailAccounts`, and it is the only source of their

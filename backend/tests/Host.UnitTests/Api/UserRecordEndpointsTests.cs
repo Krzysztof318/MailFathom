@@ -144,21 +144,18 @@ public sealed class UserRecordEndpointsTests
             .EraseAsync(default, TestContext.Current.CancellationToken);
     }
 
-    /// <summary>The label the request carried is the whole of what changed, so acceptance is the whole answer.</summary>
-    /// <summary>The answer carries both switches as the row now holds them, including the one the request left out.</summary>
+    /// <summary>The answer carries both switches as the record now states them, including the one the request left out.</summary>
     [Fact]
     public async Task SetEndpointAccessAsync_AUserThisDeploymentHolds_AnswersBothSwitches()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Provisioning
-            .SetEndpointAccessAsync(SyntheticMailUser.Deployment, null, false, Arg.Any<CancellationToken>())
-            .Returns(new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false));
+        deployment.Holding(SyntheticMailUser.Deployment, """{"Language":"English"}""", version: 3);
 
         // Act
         var result = await UserRecordEndpoints.SetEndpointAccessAsync(
             SyntheticMailUser.Deployment.Value,
-            deployment.Roster,
+            deployment.Records,
             new UserEndpointAccessRequest(McpEndpoint: null, ClientEndpoint: false),
             TestContext.Current.CancellationToken);
 
@@ -177,7 +174,7 @@ public sealed class UserRecordEndpointsTests
         // Act
         var result = await UserRecordEndpoints.SetEndpointAccessAsync(
             SyntheticMailUser.Another.Value,
-            deployment.Roster,
+            deployment.Records,
             new UserEndpointAccessRequest(McpEndpoint: false, ClientEndpoint: null),
             TestContext.Current.CancellationToken);
 
@@ -185,9 +182,36 @@ public sealed class UserRecordEndpointsTests
         Assert.IsType<NotFound<ProblemDetails>>(result.Result);
     }
 
+    /// <summary>A write that lost the record to another writer is a conflict the caller re-runs, not a request they wrote wrong.</summary>
+    [Fact]
+    public async Task SetEndpointAccessAsync_ARecordAnotherWriterMovedFirst_AnswersAConflict()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(SyntheticMailUser.Deployment, """{"Language":"English"}""", version: 3);
+        deployment.Store
+            .CommitAsync(
+                Arg.Any<MailUserId>(),
+                Arg.Any<string>(),
+                Arg.Any<MailUserEndpointAccess>(),
+                Arg.Any<long>(),
+                Arg.Any<CancellationToken>())
+            .Returns((long?)null);
+
+        // Act
+        var result = await UserRecordEndpoints.SetEndpointAccessAsync(
+            SyntheticMailUser.Deployment.Value,
+            deployment.Records,
+            new UserEndpointAccessRequest(McpEndpoint: false, ClientEndpoint: null),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        AssertRefusal(result.Result, StatusCodes.Status409Conflict);
+    }
+
     /// <summary>A body naming neither switch would change nothing, so it is refused rather than answered as a write.</summary>
     [Fact]
-    public async Task SetEndpointAccessAsync_ARequestNamingNeitherSwitch_IsRefusedWithoutReachingTheRow()
+    public async Task SetEndpointAccessAsync_ARequestNamingNeitherSwitch_IsRefusedWithoutReachingTheRecord()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
@@ -195,16 +219,17 @@ public sealed class UserRecordEndpointsTests
         // Act
         var result = await UserRecordEndpoints.SetEndpointAccessAsync(
             SyntheticMailUser.Deployment.Value,
-            deployment.Roster,
+            deployment.Records,
             new UserEndpointAccessRequest(McpEndpoint: null, ClientEndpoint: null),
             TestContext.Current.CancellationToken);
 
         // Assert
         AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
-        await deployment.Provisioning.DidNotReceiveWithAnyArgs()
-            .SetEndpointAccessAsync(default, default, default, CancellationToken.None);
+        await deployment.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, default, CancellationToken.None);
     }
 
+    /// <summary>The label the request carried is the whole of what changed, so acceptance is the whole answer.</summary>
     [Fact]
     public async Task RelabelAsync_AUserThisDeploymentHolds_AnswersWithNoContent()
     {

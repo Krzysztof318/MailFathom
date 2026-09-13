@@ -30,6 +30,13 @@ internal static class FakeUserRecordDeployment
     internal static FakeHttpMessageHandler Holding(params Guid[] users) =>
         Answering(users, WriteCommitted, records: [EmptyRecord]);
 
+    /// <summary>Builds a deployment holding the users stated, each served on the endpoints stated beside them.</summary>
+    /// <param name="users">The users the roster reports, in the order it serves them, with their two switches.</param>
+    /// <returns>The deployment.</returns>
+    internal static FakeHttpMessageHandler HoldingServedOn(
+        params (Guid User, bool McpEndpoint, bool ClientEndpoint)[] users) =>
+        AnsweringServedOn(users, WriteCommitted, records: [EmptyRecord]);
+
     /// <summary>Builds a deployment whose one user's record is the document stated.</summary>
     /// <param name="user">The user the roster reports.</param>
     /// <param name="records">What each successive read of the record answers with, the last one repeating.</param>
@@ -107,22 +114,31 @@ internal static class FakeUserRecordDeployment
     /// <summary>Builds the deployment every shape above is one arrangement of.</summary>
     /// <remarks>The count of record reads is the deployment's own rather than a parameter, so a suite arranging several records states them and nothing else.</remarks>
     private static FakeHttpMessageHandler Answering(
-        IReadOnlyList<Guid> users,
+        Guid[] users,
+        string writeAnswer,
+        string[] records) =>
+        AnsweringServedOn([.. users.Select(user => (user, true, true))], writeAnswer, records);
+
+    private static FakeHttpMessageHandler AnsweringServedOn(
+        (Guid User, bool McpEndpoint, bool ClientEndpoint)[] rosterEntries,
         string writeAnswer,
         string[] records)
     {
+        var users = rosterEntries.Select(entry => entry.User).ToArray();
         var reads = 0;
 
         // Advanced where the record is read rather than per request, so a suite's second record is what the second
         // reading of the record meets rather than whatever the command happened to ask for next.
         string NextRecord() => records[Math.Min(reads++, records.Length - 1)];
 
-        return new((request, _) => Task.FromResult(Answer(request, users, writeAnswer, NextRecord)));
+        return new((request, _) =>
+            Task.FromResult(Answer(request, users, rosterEntries, writeAnswer, NextRecord)));
     }
 
     private static HttpResponseMessage Answer(
         HttpRequestMessage request,
-        IReadOnlyList<Guid> users,
+        Guid[] users,
+        (Guid User, bool McpEndpoint, bool ClientEndpoint)[] rosterEntries,
         string writeAnswer,
         Func<string> nextRecord)
     {
@@ -133,13 +149,13 @@ internal static class FakeUserRecordDeployment
             return request.Method == HttpMethod.Get
                 ? FakeAdminEndpoint.Json(
                     HttpStatusCode.OK,
-                    $$"""{"users":[{{string.Join(',', users.Select(Roster))}}]}""")
+                    $$"""{"users":[{{string.Join(',', rosterEntries.Select(Roster))}}]}""")
                 : FakeAdminEndpoint.Json(
                     HttpStatusCode.OK,
                     $$"""{"id":"{{ProvisionedUser:D}}"}""");
         }
 
-        if (users.Count > 0 && path == AdminEndpointRoutes.UserPath(users[0]))
+        if (users.Length > 0 && path == AdminEndpointRoutes.UserPath(users[0]))
         {
             return FakeAdminEndpoint.Json(HttpStatusCode.OK, """{"erased":true,"wasServed":true}""");
         }
@@ -175,13 +191,13 @@ internal static class FakeUserRecordDeployment
     /// <summary>The identifier a provisioning reports, which is the one thing a script cannot reconstruct from what it typed.</summary>
     private static Guid ProvisionedUser { get; } = new("55555555-5555-5555-5555-555555555555");
 
-    private static string Roster(Guid user) =>
-        $$"""{"id":"{{user:D}}","displayName":"user-{{user:D}}","served":true,"mcpEndpoint":true,"clientEndpoint":true}""";
+    private static string Roster((Guid User, bool McpEndpoint, bool ClientEndpoint) entry) =>
+        $$"""{"id":"{{entry.User:D}}","displayName":"user-{{entry.User:D}}","served":true,"mcpEndpoint":{{(entry.McpEndpoint ? "true" : "false")}},"clientEndpoint":{{(entry.ClientEndpoint ? "true" : "false")}}}""";
 
-    private static string Record(IReadOnlyList<Guid> users, string document) => string.Create(
+    private static string Record(Guid[] users, string document) => string.Create(
         CultureInfo.InvariantCulture,
         $$"""
-          {"user":"{{(users.Count > 0 ? users[0] : Guid.Empty):D}}","displayName":"user-{{(users.Count > 0 ? users[0] : Guid.Empty):D}}",
+          {"user":"{{(users.Length > 0 ? users[0] : Guid.Empty):D}}","displayName":"user-{{(users.Length > 0 ? users[0] : Guid.Empty):D}}",
           "version":{{RecordVersion}},"document":{{JsonSerializer.Serialize(document)}}}
           """);
 }

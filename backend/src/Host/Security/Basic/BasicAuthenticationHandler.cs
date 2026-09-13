@@ -19,8 +19,8 @@ namespace MailFathom.Host.Security.Basic;
 /// <remarks>
 /// <para>
 /// The handler is the adapter and nothing more: it lifts the header out of the request, names the source the attempt
-/// came from, hands both to <see cref="UserPasswordAuthenticator" />, and turns the answer into the framework's own
-/// vocabulary. Every rule worth asserting — what a readable credential is, what a username folds to, how a password is
+/// came from, hands both to <see cref="UserPasswordAuthenticator" />, asks the surface whether the user the credential
+/// resolved is served on it, and turns the answer into the framework's own vocabulary. Every rule worth asserting — what a readable credential is, what a username folds to, how a password is
 /// compared, how often one may be tried, and what a refusal is allowed to distinguish — lives below this boundary,
 /// where a test reaches it without a request pipeline.
 /// </para>

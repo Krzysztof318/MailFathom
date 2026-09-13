@@ -117,6 +117,7 @@ public sealed class UserRosterAdministrationTests
         await harness.Documents.Received(1).CommitAsync(
             outcome.User,
             """{"Language":"English"}""",
+            MailUserEndpointAccess.Everywhere,
             1,
             Arg.Any<CancellationToken>());
         Assert.Contains(harness.ServedUsers.Users, user => user.User == outcome.User);
@@ -222,7 +223,7 @@ public sealed class UserRosterAdministrationTests
         // Assert
         Assert.False(outcome.IsProvisioned);
         await harness.Documents.DidNotReceiveWithAnyArgs()
-            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -236,7 +237,12 @@ public sealed class UserRosterAdministrationTests
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
         harness.Documents
-            .CommitAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .CommitAsync(
+                Arg.Any<MailUserId>(),
+                Arg.Any<string>(),
+                Arg.Any<MailUserEndpointAccess>(),
+                Arg.Any<long>(),
+                Arg.Any<CancellationToken>())
             .Returns((long?)null);
 
         // Act
@@ -630,7 +636,6 @@ public sealed class UserRosterAdministrationTests
                 TestContext.Current.CancellationToken));
     }
 
-    /// <summary>The roster over substituted rows, with the endpoint posture a deployment's several-user refusal is read from.</summary>
     /// <summary>An administrator reads which endpoints each user is served on where they select the user, so the roster carries both switches.</summary>
     [Fact]
     public async Task ReadRosterAsync_AUserKeptOffAnEndpoint_ReportsTheirSwitches()
@@ -649,45 +654,7 @@ public sealed class UserRosterAdministrationTests
         Assert.Equal(new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true), Assert.Single(roster).EndpointAccess);
     }
 
-    /// <summary>A switch the administrator did not name reaches the row as absent, so keeping somebody off one endpoint never rewrites the other.</summary>
-    [Fact]
-    public async Task SetEndpointAccessAsync_OneSwitchNamed_WritesThatSwitchAloneAndAnswersWhatTheRowCarries()
-    {
-        // Arrange
-        var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Provisioning
-            .SetEndpointAccessAsync(SyntheticMailUser.Deployment, false, null, Arg.Any<CancellationToken>())
-            .Returns(new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true));
-
-        // Act
-        var written = await harness.Roster.SetEndpointAccessAsync(
-            SyntheticMailUser.Deployment,
-            mcpEndpoint: false,
-            clientEndpoint: null,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true), written);
-    }
-
-    /// <summary>Deciding where the deployment serves somebody is the configuration write, so a caller that may only read is refused before the row is reached.</summary>
-    [Fact]
-    public async Task SetEndpointAccessAsync_ACallerHoldingNoConfigurationWrite_IsRefusedWithoutWriting()
-    {
-        // Arrange
-        var harness = new RosterHarness(MailFathomPermission.AdminRead);
-
-        // Act & Assert
-        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
-            () => harness.Roster.SetEndpointAccessAsync(
-                SyntheticMailUser.Deployment,
-                mcpEndpoint: false,
-                clientEndpoint: null,
-                TestContext.Current.CancellationToken));
-        await harness.Provisioning.DidNotReceiveWithAnyArgs()
-            .SetEndpointAccessAsync(default, default, default, CancellationToken.None);
-    }
-
+    /// <summary>The roster over substituted rows, with the endpoint posture a deployment's several-user refusal is read from.</summary>
     private sealed class RosterHarness
     {
         internal RosterHarness(
@@ -713,7 +680,12 @@ public sealed class UserRosterAdministrationTests
 
             this.Documents = Substitute.For<IUserSettingsDocumentWriter>();
             this.Documents
-                .CommitAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+                .CommitAsync(
+                    Arg.Any<MailUserId>(),
+                    Arg.Any<string>(),
+                    Arg.Any<MailUserEndpointAccess>(),
+                    Arg.Any<long>(),
+                    Arg.Any<CancellationToken>())
                 .Returns((long?)2);
 
             // A roster naming somebody no test acts on, so "served" is a fact a test states rather than a default.

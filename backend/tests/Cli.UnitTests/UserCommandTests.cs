@@ -218,6 +218,27 @@ public sealed class UserCommandTests : IDisposable
             line => line.Contains("Record the first one with 'user add'", StringComparison.Ordinal));
     }
 
+    /// <summary>Each user's switches are printed under that user, so a listing of several never leaves an operator reading one person's line as another's.</summary>
+    [Fact]
+    public async Task List_UsersServedOnDifferentEndpoints_StatesEachOnesSwitchesUnderThem()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingServedOn((User, true, true), (AnotherUser, false, true));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        List<string> lines = [.. this.harness.Console.Lines];
+        var first = lines.FindIndex(line => line.StartsWith($"{User:D}", StringComparison.Ordinal));
+        var second = lines.FindIndex(line => line.StartsWith($"{AnotherUser:D}", StringComparison.Ordinal));
+
+        Assert.Contains("MCP endpoint: on; client endpoint: on", lines[first + 1], StringComparison.Ordinal);
+        Assert.Contains("MCP endpoint: off; client endpoint: on", lines[second + 1], StringComparison.Ordinal);
+    }
+
     /// <summary>A deployment serving one user needs no identifier typed, which is what makes the ordinary invocation short.</summary>
     [Fact]
     public async Task Show_ADeploymentHoldingOneUser_ResolvesThemWithoutAnIdentifierBeingTyped()

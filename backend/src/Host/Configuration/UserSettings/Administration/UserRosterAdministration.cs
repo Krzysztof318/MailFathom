@@ -163,7 +163,12 @@ internal sealed partial class UserRosterAdministration(
 
         // Committed rather than published from the insert alone, because the commit is what proves the row still
         // stands and it answers the version the published record is composed over.
-        if (await documents.CommitAsync(user, ProvisionedRecord, ProvisionedVersion, cancellationToken) is not { } committed)
+        if (await documents.CommitAsync(
+                user,
+                ProvisionedRecord,
+                MailUserEndpointAccess.Everywhere,
+                ProvisionedVersion,
+                cancellationToken) is not { } committed)
         {
             // The envelope was written and the row is gone again, which is another administrator erasing this user
             // between the two statements. Reporting the user as recorded would hand back an identifier nothing holds.
@@ -235,42 +240,6 @@ internal sealed partial class UserRosterAdministration(
         this.LogUserRelabelled();
 
         return UserRelabelOutcome.Relabelled;
-    }
-
-    /// <summary>Keeps a user off either mail-serving endpoint, or lets them back on, leaving a switch not named where it is.</summary>
-    /// <param name="user">The user whose switches are written.</param>
-    /// <param name="mcpEndpoint">Whether they are served on the MCP endpoint from now on, or <see langword="null" /> to leave it.</param>
-    /// <param name="clientEndpoint">Whether they are served on the client endpoint from now on, or <see langword="null" /> to leave it.</param>
-    /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>The switches the user carries afterwards, or <see langword="null" /> when this deployment holds no such user.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
-    /// <remarks>
-    /// The configuration grant rather than the erasing one, because it decides where the deployment serves somebody
-    /// rather than disposing of anything they hold: no mail, credential, or session is removed, and a switch turned
-    /// back on serves them again with what they already had.
-    /// </remarks>
-    internal async Task<MailUserEndpointAccess?> SetEndpointAccessAsync(
-        MailUserId user,
-        bool? mcpEndpoint,
-        bool? clientEndpoint,
-        CancellationToken cancellationToken)
-    {
-        if (!user.IsSpecified)
-        {
-            throw new ArgumentException("A user's endpoint switches are written for a named user.", nameof(user));
-        }
-
-        authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
-
-        var written = await provisioning.SetEndpointAccessAsync(user, mcpEndpoint, clientEndpoint, cancellationToken);
-
-        if (written is { } access)
-        {
-            this.LogEndpointAccessWritten(access.McpEndpoint, access.ClientEndpoint);
-        }
-
-        return written;
     }
 
     /// <summary>Erases one user and everything this deployment recorded for them.</summary>
@@ -354,12 +323,6 @@ internal sealed partial class UserRosterAdministration(
         Level = LogLevel.Information,
         Message = "A user this deployment holds was relabelled. Which user, and under what label, is read from the roster rather than from here.")]
     private partial void LogUserRelabelled();
-
-    /// <remarks>Which user is read from the roster rather than from here, for the reason the relabel line gives; what the switches now say is not about the person, and is what an operator reading the log after a refusal needs.</remarks>
-    [LoggerMessage(
-        Level = LogLevel.Information,
-        Message = "A user's endpoint switches were written. MCP endpoint: {McpEndpoint}; client endpoint: {ClientEndpoint}. Every replica applies them on that user's next request.")]
-    private partial void LogEndpointAccessWritten(bool mcpEndpoint, bool clientEndpoint);
 
     /// <remarks>The record names no user at all: a person's whole record was disposed of, and a log line naming them would outlive the erasure it reports.</remarks>
     [LoggerMessage(

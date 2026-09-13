@@ -5,6 +5,7 @@
 using System.Text;
 using System.Text.Json;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.UserSettings.Administration;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Infrastructure.Persistence.Users;
@@ -245,21 +246,27 @@ internal static class UserRecordEndpoints
 
     /// <summary>Keeps one user off either mail-serving endpoint, or lets them back on.</summary>
     /// <param name="userId">The user whose switches are written.</param>
-    /// <param name="roster">The roster administration.</param>
+    /// <param name="records">The record administration.</param>
     /// <param name="request">The switches to write, either of which may be left out.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
-    /// <returns><c>200</c> with both switches as the row now carries them, <c>404</c> when this deployment holds no such user, or <c>400</c> when the request names neither switch.</returns>
+    /// <returns><c>200</c> with both switches as the record now states them, <c>404</c> when this deployment holds no such user, <c>409</c> when another write moved the record first, or <c>400</c> when the request names neither switch or the record refused the change.</returns>
     /// <remarks>
+    /// <para>
+    /// The switches are keys of the user's record, so this is a narrower way to write what saving the whole record also
+    /// writes, and the commit copies them onto the user's row where every request reads them.
+    /// </para>
+    /// <para>
     /// Nothing the user holds is ended: every request re-reads the switch beside the credential or the session it
     /// presents, so the next one is refused on every replica, and turning the switch back on serves what they still hold.
+    /// </para>
     /// </remarks>
     internal static async Task<Results<Ok<UserEndpointAccessResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> SetEndpointAccessAsync(
         Guid userId,
-        [FromServices] UserRosterAdministration roster,
+        [FromServices] UserRecordAdministration records,
         [FromBody] UserEndpointAccessRequest request,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(roster);
+        ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(request);
 
         if (!TryReadUser(userId, out var user))
@@ -272,10 +279,21 @@ internal static class UserRecordEndpoints
             return Refusal("A write to a user's endpoint switches names at least one of mcpEndpoint and clientEndpoint.");
         }
 
-        return await roster.SetEndpointAccessAsync(user, request.McpEndpoint, request.ClientEndpoint, cancellationToken)
-            is { } written
-            ? TypedResults.Ok(new UserEndpointAccessResponse(written.McpEndpoint, written.ClientEndpoint))
-            : NoSuchUser();
+        if (await records.SetEndpointAccessAsync(user, request.McpEndpoint, request.ClientEndpoint, cancellationToken)
+            is not { } written)
+        {
+            return NoSuchUser();
+        }
+
+        return written.Outcome.IsSettled
+            ? TypedResults.Ok(new UserEndpointAccessResponse(
+                written.EndpointAccess.McpEndpoint,
+                written.EndpointAccess.ClientEndpoint))
+            : TypedResults.Problem(
+                string.Join(' ', written.Outcome.Messages),
+                statusCode: written.Outcome.Refusal == MailFathomErrorCode.ConfigurationVersionSuperseded
+                    ? StatusCodes.Status409Conflict
+                    : StatusCodes.Status400BadRequest);
     }
 
     /// <summary>Hands over one user's record, as the redacted JSON an editing session opens.</summary>
