@@ -228,8 +228,13 @@ internal static class HostComposition
     /// may be is a deployment naming its machines unusually, and failing a start over the identity an administrative
     /// answer is labelled with would take the service down for a reading.
     /// </para>
+    /// <para>
+    /// It is also the <c>service.instance.id</c> every exported record carries, including the startup records written
+    /// before this composition runs, which is why it is reachable from <see cref="Observability.BootstrapLogger" />.
+    /// </para>
     /// </remarks>
-    private static ReplicaIdentity ThisReplica()
+    /// <returns>The identity this process registers and exports under.</returns>
+    internal static ReplicaIdentity ThisReplica()
     {
         var process = Environment.ProcessId.ToString(CultureInfo.InvariantCulture);
         var room = ReplicaIdentity.MaximumLength - process.Length - 1;
@@ -242,10 +247,14 @@ internal static class HostComposition
     /// <summary>Registers the telemetry, resilience, clock, and secret resolution every other stage assumes.</summary>
     private static void AddPlatformDefaults(WebApplicationBuilder builder)
     {
-        builder.AddServiceDefaults();
+        // Composed once, so the replica the telemetry resource names and the one the container hands to lease rows and
+        // administrative answers are the same value.
+        var replica = ThisReplica();
+
+        builder.AddServiceDefaults(replica);
         builder.Services.AddProblemDetails();
         builder.Services.AddSingleton(TimeProvider.System);
-        builder.Services.AddSingleton(ThisReplica());
+        builder.Services.AddSingleton(replica);
         // What the application layer is told a unit of work is running for. Registered here rather than beside the
         // transport, because it answers for work reached outside a request as well: a scope with no request behind it
         // is this process's own, and a use case that runs without a caller depends on being told so.

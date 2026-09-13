@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics;
+using MailFathom.Application.Coordination;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting;
@@ -33,11 +34,12 @@ internal static class ServiceDefaultsExtensions
     /// </summary>
     /// <typeparam name="TBuilder">The host application builder type.</typeparam>
     /// <param name="builder">The host application builder to configure.</param>
+    /// <param name="replica">The replica this process is, which every exported record names.</param>
     /// <returns>The same builder instance for chaining.</returns>
-    public static TBuilder AddServiceDefaults<TBuilder>(this TBuilder builder)
+    public static TBuilder AddServiceDefaults<TBuilder>(this TBuilder builder, ReplicaIdentity replica)
         where TBuilder : IHostApplicationBuilder
     {
-        builder.ConfigureOpenTelemetry();
+        builder.ConfigureOpenTelemetry(replica);
         builder.AddDefaultHealthChecks();
 
         builder.Services.AddServiceDiscovery();
@@ -56,20 +58,22 @@ internal static class ServiceDefaultsExtensions
     /// </summary>
     /// <typeparam name="TBuilder">The host application builder type.</typeparam>
     /// <param name="builder">The host application builder to configure.</param>
+    /// <param name="replica">The replica this process is, which every exported record names.</param>
     /// <returns>The same builder instance for chaining.</returns>
     /// <remarks>
     /// The resource is configured once for all three signals, so a log record, a metric point, and a span all name the
-    /// build they came from. <see cref="StampedBuildResourceExtensions" /> holds what that adds and what it leaves to
-    /// the OpenTelemetry SDK, and <see cref="TraceSamplingExtensions" /> holds which traces are recorded and which of
-    /// that decision is the operator's.
+    /// replica and the build they came from. <see cref="ReplicaResourceExtensions" /> and
+    /// <see cref="StampedBuildResourceExtensions" /> hold what that adds, what it leaves to the OpenTelemetry SDK, and
+    /// which of it an operator's environment overrides, and <see cref="TraceSamplingExtensions" /> holds which traces
+    /// are recorded and which of that decision is the operator's.
     /// </remarks>
-    public static TBuilder ConfigureOpenTelemetry<TBuilder>(this TBuilder builder)
+    public static TBuilder ConfigureOpenTelemetry<TBuilder>(this TBuilder builder, ReplicaIdentity replica)
         where TBuilder : IHostApplicationBuilder
     {
         builder.Logging.AddOpenTelemetry(ConfigureExportedLogRecords);
 
         builder.Services.AddOpenTelemetry()
-            .ConfigureResource(resource => resource.AddStampedBuildIdentity())
+            .ConfigureResource(resource => resource.AddReplicaIdentity(replica).AddStampedBuildIdentity())
             .WithMetrics(metrics =>
             {
                 metrics.AddAspNetCoreInstrumentation()
