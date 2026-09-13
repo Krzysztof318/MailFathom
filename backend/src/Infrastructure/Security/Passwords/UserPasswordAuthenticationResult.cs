@@ -39,13 +39,15 @@ public sealed record UserPasswordAuthenticationResult
     /// <param name="authenticatedCredentialId">The identifier of the matching credential.</param>
     /// <param name="user">The user the request acts for.</param>
     /// <param name="permissions">What the request may do.</param>
+    /// <param name="endpointAccess">Which endpoints the user may be served on, read beside the credential.</param>
     /// <returns>The successful result.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="permissions" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the identifier is empty or <paramref name="user" /> names nobody.</exception>
     public static UserPasswordAuthenticationResult Authenticated(
         Guid authenticatedCredentialId,
         MailUserId user,
-        IReadOnlyList<MailFathomPermission> permissions)
+        IReadOnlyList<MailFathomPermission> permissions,
+        MailUserEndpointAccess endpointAccess)
     {
         ArgumentNullException.ThrowIfNull(permissions);
 
@@ -64,7 +66,7 @@ public sealed record UserPasswordAuthenticationResult
         }
 
         return new UserPasswordAuthenticationResult(
-            new AdmittedUserCredential(authenticatedCredentialId, user, permissions),
+            new AdmittedUserCredential(authenticatedCredentialId, user, permissions, endpointAccess),
             rejection: null);
     }
 

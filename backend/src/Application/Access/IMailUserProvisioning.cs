@@ -56,4 +56,22 @@ public interface IMailUserProvisioning
     /// </para>
     /// </remarks>
     Task<bool> RelabelAsync(MailUserId user, string displayName, CancellationToken cancellationToken);
+
+    /// <summary>Turns either of a user's two endpoint switches on or off, leaving a switch the caller did not name where it is.</summary>
+    /// <param name="user">The user whose switches are written.</param>
+    /// <param name="mcpEndpoint">Whether the user is served on the MCP endpoint from now on, or <see langword="null" /> to leave it.</param>
+    /// <param name="clientEndpoint">Whether the user is served on the client endpoint from now on, or <see langword="null" /> to leave it.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>The switches the row carries once the write has run, or <see langword="null" /> when this deployment holds no such user.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
+    /// <remarks>
+    /// One statement, and nothing ends a session or a token here: every request re-reads the switch beside the
+    /// credential or the session it presents, so a user switched off is refused on their next request on every replica,
+    /// and one switched on again is served again by whatever they still hold.
+    /// </remarks>
+    Task<MailUserEndpointAccess?> SetEndpointAccessAsync(
+        MailUserId user,
+        bool? mcpEndpoint,
+        bool? clientEndpoint,
+        CancellationToken cancellationToken);
 }

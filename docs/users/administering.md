@@ -682,6 +682,11 @@ on the single user there is, and refuses rather than guessing where there are se
 the label you tell somebody apart by; nothing is keyed by it, so it moves no mail and invalidates no identifier, and
 the new label lasts — no start reads anybody's label out of a file any more, so there is nobody a rename is undone for.
 
+**Keeping somebody off one endpoint is `mfctl user endpoints`.** `--mcp false` stops any agent acting for a person who
+only reads their mail, and `--client false` keeps an automation account out of the mail client; both switches start on,
+and one you do not name stays as it is. It holds whichever password, key, or token they present, and whatever they are
+already signed in with stops working there on their next request. Nothing is deleted, so `--mcp true` lets them back on.
+
 **Changing more than one thing about somebody at once is `mfctl user edit`.** `mfctl user account add` and
 `mfctl user account remove` each name one mailbox, so two changes are two commands and the deployment briefly reads what
 is between them. `mfctl user edit` opens that person's whole record in your `$VISUAL` or `$EDITOR` and commits what you

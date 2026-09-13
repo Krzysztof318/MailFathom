@@ -156,7 +156,7 @@ internal static partial class TransportSecurityExtensions
                             authorizationServer,
                             oauthMethod,
                             transportFactory,
-                            context => ResolveTheUserAValidatedTokenNames(context, narrowedByTokenScopes)));
+                            context => ResolveTheUserAValidatedTokenNames(context, surface, narrowedByTokenScopes)));
             }
         }
 
@@ -185,6 +185,7 @@ internal static partial class TransportSecurityExtensions
     /// </remarks>
     private static async Task ResolveTheUserAValidatedTokenNames(
         TokenValidatedContext context,
+        TransportSurface surface,
         bool narrowedByTokenScopes)
     {
         var identity = context.Principal is { } validatedPrincipal
@@ -205,6 +206,15 @@ internal static partial class TransportSecurityExtensions
         if (admitted is null)
         {
             context.Fail("The validated token names no user this deployment serves.");
+
+            return;
+        }
+
+        // Asked of every token, including one minted before an administrator turned the switch off, because the
+        // switch is read with the mapping on each request rather than carried by the token.
+        if (!surface.Admits(admitted.EndpointAccess))
+        {
+            context.Fail("The validated token names a user kept off this endpoint.");
 
             return;
         }

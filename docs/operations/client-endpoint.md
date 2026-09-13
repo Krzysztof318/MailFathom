@@ -2679,6 +2679,16 @@ settings here, and one credential is presented on whichever surface accepts its 
 signed assertion is the audience it names, `urn:mailfathom:client`, so an assertion minted to read a mailbox as an agent
 cannot sign in as somebody's mail client.
 
+**Whether a person reaches this endpoint at all is their own switch rather than their credential's.** Each user carries
+one switch for this endpoint and one for the MCP endpoint, both on until `mfctl user endpoints --client false` turns this
+one off. A user kept off it is refused here whichever credential they present, with the same `401` a credential nobody
+holds receives: the exchange mints them no session, and a session they already hold stops working on their next
+request, on every replica, because the switch is read beside the session on each one. Nothing is revoked, so turning the
+switch back on serves the sessions they still hold. The switch decides where somebody is served and the grant decides
+what they may do once they are; neither widens the other, and an automation account kept off this endpoint still reads
+mail over MCP with exactly its grant. [What a permission does not decide](permissions.md#what-a-permission-does-not-decide)
+holds the whole rule.
+
 A grant is recorded on the credential rather than on the entry, and it draws from the mailbox half of the published set
 — a name reaching only the administrative half is refused where the credential is provisioned.
 [Writing a grant](permissions.md#writing-a-grant) is the whole of that rule; nothing about it is particular to this

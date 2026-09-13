@@ -353,7 +353,7 @@ public sealed class OrchestratedClientSessionTests(MailFathomOrchestrationFixtur
     }
 
     private static AdmittedUserCredential Admitted(Guid user, Guid credentialId) =>
-        new(credentialId, MailUserId.Create(user), WholeMailSurface);
+        new(credentialId, MailUserId.Create(user), WholeMailSurface, MailUserEndpointAccess.Everywhere);
 
     /// <summary>Mints and verifies through the host's own registered store, the way the exchange and the handler do.</summary>
     /// <remarks>Over a clock this class fixes rather than the wall clock, so a session's expiry and the sweep's threshold are this class's. Each replica gets its own instance at the same instant, as two processes would.</remarks>

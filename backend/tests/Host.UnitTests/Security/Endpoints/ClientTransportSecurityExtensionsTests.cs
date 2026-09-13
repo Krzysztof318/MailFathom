@@ -411,7 +411,8 @@ public sealed class ClientTransportSecurityExtensionsTests
     private static AdmittedUserCredential AdmittedByACredential() => new(
         MappedCredentialId,
         MailUserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff")),
-        [MailFathomPermission.MailRead]);
+        [MailFathomPermission.MailRead],
+        MailUserEndpointAccess.Everywhere);
 
     private static void MapsTheSubject(IServiceCollection services)
     {
@@ -425,7 +426,8 @@ public sealed class ClientTransportSecurityExtensionsTests
                 UserCredentialMethod.OAuthSubject,
                 [MailFathomPermission.MailRead],
                 Enabled: true,
-                Material: null));
+                Material: null,
+                MailUserEndpointAccess.Everywhere));
 
         services.AddSingleton(credentials);
         services.AddScoped<UserOAuthSubjectResolver>();

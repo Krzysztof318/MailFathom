@@ -33,6 +33,12 @@ internal sealed class UserAccountEntity
     /// <summary>The key column, named here for the same reason the table is.</summary>
     internal const string IdColumnName = "Id";
 
+    /// <summary>The MCP endpoint switch's column, named here because a session's statements read the client one beside it.</summary>
+    internal const string McpEndpointEnabledColumnName = nameof(McpEndpointEnabled);
+
+    /// <summary>The client endpoint switch's column, named here because a session's statements read and lock on it.</summary>
+    internal const string ClientEndpointEnabledColumnName = nameof(ClientEndpointEnabled);
+
     /// <summary>The longest label a user is told apart by, which is what a mail account's identifier is bounded at.</summary>
     /// <remarks>Taken from the application's own statement of the bound, so the column and the rule that judges a declaration carrying a label cannot disagree about it.</remarks>
     public const int MaximumDisplayNameLength = MailUserRecord.MaximumDisplayNameLength;
@@ -63,6 +69,13 @@ internal sealed class UserAccountEntity
     /// table exists to give that layer a row per user rather than to interpret one.
     /// </remarks>
     public required string Document { get; set; }
+
+    /// <summary>Whether this user is served on the MCP endpoint, whichever credential they present there.</summary>
+    /// <remarks>On until an administrator turns it off, on the row as in the database default, so a row written by a statement naming no switch reaches both endpoints.</remarks>
+    public bool McpEndpointEnabled { get; set; } = true;
+
+    /// <summary>Whether this user is served on the client endpoint, whichever credential or session they present there.</summary>
+    public bool ClientEndpointEnabled { get; set; } = true;
 
     /// <summary>The version a write is accepted against, so two writers cannot both commit over one document.</summary>
     public long Version { get; set; }

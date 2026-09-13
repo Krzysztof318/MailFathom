@@ -631,6 +631,63 @@ public sealed class UserRosterAdministrationTests
     }
 
     /// <summary>The roster over substituted rows, with the endpoint posture a deployment's several-user refusal is read from.</summary>
+    /// <summary>An administrator reads which endpoints each user is served on where they select the user, so the roster carries both switches.</summary>
+    [Fact]
+    public async Task ReadRosterAsync_AUserKeptOffAnEndpoint_ReportsTheirSwitches()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminRead);
+        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex")
+        {
+            EndpointAccess = new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
+        });
+
+        // Act
+        var roster = await harness.Roster.ReadRosterAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true), Assert.Single(roster).EndpointAccess);
+    }
+
+    /// <summary>A switch the administrator did not name reaches the row as absent, so keeping somebody off one endpoint never rewrites the other.</summary>
+    [Fact]
+    public async Task SetEndpointAccessAsync_OneSwitchNamed_WritesThatSwitchAloneAndAnswersWhatTheRowCarries()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Provisioning
+            .SetEndpointAccessAsync(SyntheticMailUser.Deployment, false, null, Arg.Any<CancellationToken>())
+            .Returns(new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true));
+
+        // Act
+        var written = await harness.Roster.SetEndpointAccessAsync(
+            SyntheticMailUser.Deployment,
+            mcpEndpoint: false,
+            clientEndpoint: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true), written);
+    }
+
+    /// <summary>Deciding where the deployment serves somebody is the configuration write, so a caller that may only read is refused before the row is reached.</summary>
+    [Fact]
+    public async Task SetEndpointAccessAsync_ACallerHoldingNoConfigurationWrite_IsRefusedWithoutWriting()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminRead);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => harness.Roster.SetEndpointAccessAsync(
+                SyntheticMailUser.Deployment,
+                mcpEndpoint: false,
+                clientEndpoint: null,
+                TestContext.Current.CancellationToken));
+        await harness.Provisioning.DidNotReceiveWithAnyArgs()
+            .SetEndpointAccessAsync(default, default, default, CancellationToken.None);
+    }
+
     private sealed class RosterHarness
     {
         internal RosterHarness(

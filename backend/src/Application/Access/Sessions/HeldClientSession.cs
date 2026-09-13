@@ -2,12 +2,15 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
+
 namespace MailFathom.Application.Access.Sessions;
 
 /// <summary>One session the deployment is holding, as the row naming it reports it.</summary>
 /// <param name="Grant">What the session admits, which the exchange established and a renewal carries forward.</param>
 /// <param name="SecretDigest">The digest of the secret half, which the presented secret is compared against in constant time.</param>
 /// <param name="ExpiresAt">When presenting the token stops working, in UTC.</param>
+/// <param name="EndpointAccess">Which endpoints the session's user may be served on now, read from the user row in the statement that read the session rather than stored on it, so a switch turned off reaches a session minted before it.</param>
 /// <remarks>
 /// The digest crosses the port rather than the comparison, for the reason the signal ticket's does: the store answers
 /// what it holds, and whether a presented value proves it is decided by the type that also decides what a malformed
@@ -16,4 +19,5 @@ namespace MailFathom.Application.Access.Sessions;
 public sealed record HeldClientSession(
     ClientSessionGrant Grant,
     ReadOnlyMemory<byte> SecretDigest,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt,
+    MailUserEndpointAccess EndpointAccess);

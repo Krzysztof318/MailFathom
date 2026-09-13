@@ -58,6 +58,10 @@ internal static class UserRecordEndpoints
     /// <remarks>Beneath the user rather than beside the roster, because it changes one user's row; a route on the collection would read as one that decides which users there are.</remarks>
     internal const string UserDisplayNameRoute = $"{UserRoute}/display-name";
 
+    /// <summary>The route one user's two endpoint switches are written at.</summary>
+    /// <remarks>Beneath the user for the reason the label's route is: it changes one user's row, and the roster is where both switches are read back.</remarks>
+    internal const string UserEndpointAccessRoute = $"{UserRoute}/endpoint-access";
+
     /// <summary>The route one user's record is read at and saved back to.</summary>
     internal const string UserRecordRoute = $"{UserRoute}/record";
 
@@ -103,6 +107,10 @@ internal static class UserRecordEndpoints
             .RequirePermission(MailFathomPermission.AdminErase);
 
         api.MapPut(UserDisplayNameRoute, RelabelAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+
+        api.MapPut(UserEndpointAccessRoute, SetEndpointAccessAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
             .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
 
@@ -233,6 +241,41 @@ internal static class UserRecordEndpoints
         return outcome.RefusalMessage is { } refused
             ? Refusal(refused)
             : TypedResults.NoContent();
+    }
+
+    /// <summary>Keeps one user off either mail-serving endpoint, or lets them back on.</summary>
+    /// <param name="userId">The user whose switches are written.</param>
+    /// <param name="roster">The roster administration.</param>
+    /// <param name="request">The switches to write, either of which may be left out.</param>
+    /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
+    /// <returns><c>200</c> with both switches as the row now carries them, <c>404</c> when this deployment holds no such user, or <c>400</c> when the request names neither switch.</returns>
+    /// <remarks>
+    /// Nothing the user holds is ended: every request re-reads the switch beside the credential or the session it
+    /// presents, so the next one is refused on every replica, and turning the switch back on serves what they still hold.
+    /// </remarks>
+    internal static async Task<Results<Ok<UserEndpointAccessResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> SetEndpointAccessAsync(
+        Guid userId,
+        [FromServices] UserRosterAdministration roster,
+        [FromBody] UserEndpointAccessRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(roster);
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!TryReadUser(userId, out var user))
+        {
+            return EmptyUser();
+        }
+
+        if (request is { McpEndpoint: null, ClientEndpoint: null })
+        {
+            return Refusal("A write to a user's endpoint switches names at least one of mcpEndpoint and clientEndpoint.");
+        }
+
+        return await roster.SetEndpointAccessAsync(user, request.McpEndpoint, request.ClientEndpoint, cancellationToken)
+            is { } written
+            ? TypedResults.Ok(new UserEndpointAccessResponse(written.McpEndpoint, written.ClientEndpoint))
+            : NoSuchUser();
     }
 
     /// <summary>Hands over one user's record, as the redacted JSON an editing session opens.</summary>

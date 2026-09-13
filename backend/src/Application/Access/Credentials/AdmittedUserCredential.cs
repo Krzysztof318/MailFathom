@@ -10,6 +10,7 @@ namespace MailFathom.Application.Access.Credentials;
 /// <param name="CredentialId">The credential that matched, which is what an audit record and a diagnostic correlate on.</param>
 /// <param name="User">The user the request acts for.</param>
 /// <param name="Permissions">What the request may do, in the published order.</param>
+/// <param name="EndpointAccess">Which endpoints the user may be served on, as read when the credential or the session was resolved, which the surface judging the request asks of its own switch.</param>
 /// <remarks>
 /// <para>
 /// The three facts are one shape because they are established together and travel together: a credential resolves a
@@ -25,7 +26,8 @@ namespace MailFathom.Application.Access.Credentials;
 public sealed record AdmittedUserCredential(
     Guid CredentialId,
     MailUserId User,
-    IReadOnlyList<MailFathomPermission> Permissions)
+    IReadOnlyList<MailFathomPermission> Permissions,
+    MailUserEndpointAccess EndpointAccess)
 {
     /// <summary>Describes the credential one resolution admitted, refusing an answer that names nothing.</summary>
     /// <param name="credential">The credential the store resolved.</param>
@@ -37,7 +39,11 @@ public sealed record AdmittedUserCredential(
         ArgumentNullException.ThrowIfNull(credential);
 
         return credential.User.IsSpecified
-            ? new AdmittedUserCredential(credential.Id, credential.User, credential.Permissions)
+            ? new AdmittedUserCredential(
+                credential.Id,
+                credential.User,
+                credential.Permissions,
+                credential.EndpointAccess)
             : throw new ArgumentException(
                 "An admitted credential names the user the request acts for.",
                 nameof(credential));

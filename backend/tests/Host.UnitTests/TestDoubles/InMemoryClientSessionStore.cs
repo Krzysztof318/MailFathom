@@ -4,6 +4,7 @@
 
 using System.Collections.Concurrent;
 using MailFathom.Application.Access.Sessions;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Host.UnitTests.TestDoubles;
 
@@ -28,6 +29,9 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
 
     /// <summary>Gets or sets whether the next write finds the user or the credential behind the session gone or disabled.</summary>
     internal bool NoLongerAdmits { get; set; }
+
+    /// <summary>Gets or sets the endpoint switches of the user behind every session, as a read finds them on the user row.</summary>
+    internal MailUserEndpointAccess EndpointAccess { get; set; } = MailUserEndpointAccess.Everywhere;
 
     /// <summary>Gets or sets what every operation raises instead of answering, so a test can state an unreachable store.</summary>
     internal Exception? Unreachable { get; set; }
@@ -63,7 +67,11 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
             return Task.FromResult(ClientSessionMintOutcome.BoundReached);
         }
 
-        this.held[row.Identifier] = new HeldClientSession(grant, row.SecretDigest, row.ExpiresAt);
+        this.held[row.Identifier] = new HeldClientSession(
+            grant,
+            row.SecretDigest,
+            row.ExpiresAt,
+            MailUserEndpointAccess.Everywhere);
 
         return Task.FromResult(ClientSessionMintOutcome.Minted);
     }
@@ -73,7 +81,12 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
     {
         this.RefuseWhenUnusable(cancellationToken);
 
-        return Task.FromResult(this.held.GetValueOrDefault(identifier));
+        // The switches are the user row's rather than the session's, so they are read as they stand now, the way the
+        // statement joining the user row reads them.
+        return Task.FromResult(
+            this.held.GetValueOrDefault(identifier) is { } session
+                ? session with { EndpointAccess = this.EndpointAccess }
+                : null);
     }
 
     /// <inheritdoc />
@@ -98,7 +111,8 @@ internal sealed class InMemoryClientSessionStore : IClientSessionStore
         this.held[replacement.Identifier] = new HeldClientSession(
             presented.Grant,
             replacement.SecretDigest,
-            replacement.ExpiresAt);
+            replacement.ExpiresAt,
+            MailUserEndpointAccess.Everywhere);
 
         return Task.FromResult<ClientSessionGrant?>(presented.Grant);
     }

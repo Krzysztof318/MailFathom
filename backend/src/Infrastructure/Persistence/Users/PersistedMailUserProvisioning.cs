@@ -79,6 +79,36 @@ internal sealed class PersistedMailUserProvisioning(MailFathomDbContext dbContex
             .AnyAsync(record => record.Id == userId && record.DisplayName == displayName, cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task<MailUserEndpointAccess?> SetEndpointAccessAsync(
+        MailUserId user,
+        bool? mcpEndpoint,
+        bool? clientEndpoint,
+        CancellationToken cancellationToken)
+    {
+        var userId = RequireNamed(user);
+
+        // A switch the caller did not name is written back as itself, so two administrators switching the two
+        // endpoints at once each land their own and neither puts the other's back.
+        await dbContext.UserAccounts
+            .Where(record => record.Id == userId)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(record => record.McpEndpointEnabled, record => mcpEndpoint ?? record.McpEndpointEnabled)
+                    .SetProperty(record => record.ClientEndpointEnabled, record => clientEndpoint ?? record.ClientEndpointEnabled),
+                cancellationToken);
+
+        var written = await dbContext.UserAccounts
+            .AsNoTracking()
+            .Where(record => record.Id == userId)
+            .Select(record => new { record.McpEndpointEnabled, record.ClientEndpointEnabled })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return written is null
+            ? null
+            : new MailUserEndpointAccess(written.McpEndpointEnabled, written.ClientEndpointEnabled);
+    }
+
     /// <summary>Composes the rows a relabel writes to: this user's, and only while no other user carries the label.</summary>
     /// <param name="records">The user records to select from.</param>
     /// <param name="userId">The user being relabelled.</param>

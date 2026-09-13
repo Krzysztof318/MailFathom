@@ -442,6 +442,15 @@ administrative endpoint is outside that bound, and [the users a deployment
 serves](configuration-sources.md#the-users-a-deployment-serves) holds the rule.
 [Who a use case is running for](../architecture/authorized-principal.md) records the whole of it.
 
+**Which endpoint a user is served on.** Each user carries two switches, one for the MCP endpoint and one for the client
+endpoint, both on until an administrator turns one off with `mfctl user endpoints`. A user kept off an endpoint is
+refused there whichever credential they present — a password, a key, a key pair, an access token, or a client session
+minted before the switch changed — and the refusal is the one a credential nobody holds receives, so a caller is not
+told that what they presented is good somewhere else. A grant decides what an admitted caller may do and a switch
+decides whether the user is admitted on that endpoint at all; neither widens the other, and no permission name turns a
+switch back on. The switch is read in the same statement that resolves the credential or the session on every request,
+so a change reaches every replica on that user's next request and nothing needs to be revoked for it to hold.
+
 **Whether a capability exists.** A grant composes with availability rather than replacing it: a tool may be
 unavailable, unauthorized, or both, and no grant makes a capability this deployment does not have appear. An endpoint
 whose chat provider is unconfigured withholds `ask_mail` from a caller granted `mailfathom.mail.ask` exactly as it does

@@ -40,6 +40,12 @@ internal sealed class UserAccountConfiguration : IEntityTypeConfiguration<UserAc
         // what it holds is decided by the configuration layer that writes it.
         entity.Property(user => user.Document).HasColumnType("jsonb").IsRequired();
 
+        // Defaulted in the database, so the provisioning insert naming neither and every row an upgrade finds read as
+        // on. The sentinel is the default rather than false, so EF Core leaves out exactly the value the database
+        // would write anyway and still sends a false it is handed, instead of reading false as "unset".
+        entity.Property(user => user.McpEndpointEnabled).HasDefaultValue(true).HasSentinel(true);
+        entity.Property(user => user.ClientEndpointEnabled).HasDefaultValue(true).HasSentinel(true);
+
         // The version is the document's own rather than PostgreSQL's row version, because a writer has to be able to
         // state which version it read, be refused by number, and report the version it was refused against.
         entity.Property(user => user.Version).IsConcurrencyToken();

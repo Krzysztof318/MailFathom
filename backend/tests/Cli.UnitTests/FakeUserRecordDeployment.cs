@@ -150,6 +150,12 @@ internal static class FakeUserRecordDeployment
             return FakeAdminEndpoint.Json(HttpStatusCode.NoContent, string.Empty);
         }
 
+        if (path.EndsWith("/endpoint-access", StringComparison.Ordinal))
+        {
+            // Both switches as the row carries them, including the one a command left out.
+            return FakeAdminEndpoint.Json(HttpStatusCode.OK, """{"mcpEndpoint":false,"clientEndpoint":true}""");
+        }
+
         if (path.Contains("/record/mail-accounts", StringComparison.Ordinal))
         {
             return FakeAdminEndpoint.Json(HttpStatusCode.OK, writeAnswer);
@@ -170,7 +176,7 @@ internal static class FakeUserRecordDeployment
     private static Guid ProvisionedUser { get; } = new("55555555-5555-5555-5555-555555555555");
 
     private static string Roster(Guid user) =>
-        $$"""{"id":"{{user:D}}","displayName":"user-{{user:D}}","served":true}""";
+        $$"""{"id":"{{user:D}}","displayName":"user-{{user:D}}","served":true,"mcpEndpoint":true,"clientEndpoint":true}""";
 
     private static string Record(IReadOnlyList<Guid> users, string document) => string.Create(
         CultureInfo.InvariantCulture,

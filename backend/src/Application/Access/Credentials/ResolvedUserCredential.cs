@@ -13,6 +13,7 @@ namespace MailFathom.Application.Access.Credentials;
 /// <param name="Permissions">What a request this credential admits may do, in the published order.</param>
 /// <param name="Enabled">Whether the credential still authenticates anything.</param>
 /// <param name="Material">The stored record the presented credential is judged against, or <see langword="null" /> for a method whose lookup is the whole of what is kept.</param>
+/// <param name="EndpointAccess">Which endpoints the credential's user may be served on, read in the same statement that resolved the credential.</param>
 /// <remarks>
 /// <para>
 /// This is the one shape that carries stored material out of persistence, and it exists for exactly one caller: the
@@ -37,7 +38,8 @@ public sealed record ResolvedUserCredential(
     UserCredentialMethod Method,
     IReadOnlyList<MailFathomPermission> Permissions,
     bool Enabled,
-    string? Material)
+    string? Material,
+    MailUserEndpointAccess EndpointAccess)
 {
     /// <inheritdoc />
     public override string ToString() => $"{nameof(ResolvedUserCredential)} {{ {this.Id} }}";

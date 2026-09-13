@@ -1232,6 +1232,32 @@ internal sealed class AdminApiClient
             NoSuchUser);
     }
 
+    /// <summary>Writes either or both of one user's endpoint switches.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="userId">The user whose switches are written.</param>
+    /// <param name="request">The switches to write; one left out stays where it is.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>Both switches as the deployment now holds them.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> or <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, holds no such user, or answered with something that is not a pair of switches.</exception>
+    internal Task<UserEndpointAccess> SetUserEndpointAccessAsync(
+        string token,
+        Guid userId,
+        UserEndpointAccessRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Put,
+            AdminEndpointRoutes.UserEndpointAccessPath(userId),
+            token,
+            CliJsonContext.Default.UserEndpointAccess,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.UserEndpointAccessRequest),
+            absenceMessage: NoSuchUser);
+    }
+
     /// <summary>Erases one user and everything the deployment recorded for them.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="userId">The user to remove.</param>

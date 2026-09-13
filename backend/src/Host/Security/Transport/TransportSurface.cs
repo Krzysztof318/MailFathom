@@ -26,7 +26,8 @@ namespace MailFathom.Host.Security.Transport;
 /// does not is never consulted here. That isolation is by scheme name rather than by an explicit check, which is what
 /// makes it hold for every route on the surface instead of for the routes somebody remembered. It isolates the schemes
 /// rather than the credentials: where both mail-serving surfaces accept one method, both resolve the same user rows
-/// through it, for the reason <see cref="Client" /> gives.
+/// through it, and the user's own switch is what serves them on one and not the other, for the reason
+/// <see cref="Client" /> gives.
 /// </para>
 /// <para>
 /// The authentication names are internal handles: nothing published, persisted, or configured reads them. A challenge
@@ -92,12 +93,11 @@ internal readonly record struct TransportSurface
     /// What is separate is its listener, its bounds, and its assertion audience — the last of which is what still keeps
     /// a client assertion signed for one of the two mail surfaces from being replayed against the other.
     /// <para>
-    /// Its credentials are no longer separate, and that is a deliberate consequence of resolving every user-facing
-    /// credential to a user row: a row names a user and a method and carries no surface, so an api-key, a password,
-    /// or an OAuth subject that admits a user admits them wherever the deployment accepts that method. An operator
-    /// who wants a client credential that opens no agent surface configures the two endpoints to accept different
-    /// methods. Carrying the surface on the row is what would restore the narrower guarantee, and it is not in this
-    /// release.
+    /// Its credentials are not separate, and that is a deliberate consequence of resolving every user-facing credential
+    /// to a user row: a row names a user and a method and carries no surface. What decides whether a person is served
+    /// here rather than on <see cref="Mcp" /> is the user's own switch, which <see cref="Admits" /> reads, so a person
+    /// kept off one surface is refused there whichever credential they present — and a credential never carries a
+    /// surface of its own that could be provisioned around it.
     /// </para>
     /// <para>
     /// The administrative surface is unaffected either way, because its credentials stay configured under
@@ -109,6 +109,18 @@ internal readonly record struct TransportSurface
         ClientEndpointOptions.RoutePrefix,
         ClientAssertion.ClientAudience,
         ClientEndpointOptions.GrantedSurface);
+
+    /// <summary>Reports whether a user with the given endpoint switches may be served on this surface.</summary>
+    /// <param name="access">The switches read beside the credential or the session the request presented.</param>
+    /// <returns><see langword="true" /> when this is a mail-serving surface whose switch the user has on; otherwise <see langword="false" />.</returns>
+    /// <remarks>
+    /// Asked by every scheme that resolves a user, at authentication rather than in the surface's policy, so a user
+    /// kept off a surface receives there exactly the answer a credential nobody holds receives: a policy refusing an
+    /// authenticated principal is a <c>403</c>, which would tell a caller that what they presented is good somewhere.
+    /// The administrative surface resolves no user and admits none through this.
+    /// </remarks>
+    internal bool Admits(MailUserEndpointAccess access) =>
+        this == Mcp ? access.McpEndpoint : this == Client && access.ClientEndpoint;
 
     /// <summary>Gets whether this value names a surface rather than the unusable struct default.</summary>
     internal bool IsSpecified => this.name is not null;

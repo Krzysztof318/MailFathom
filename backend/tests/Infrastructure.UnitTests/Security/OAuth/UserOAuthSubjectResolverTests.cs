@@ -140,7 +140,8 @@ public sealed class UserOAuthSubjectResolverTests
                     UserCredentialMethod.OAuthSubject,
                     Grant,
                     enabled,
-                    Material: null));
+                    Material: null,
+                    MailUserEndpointAccess.Everywhere));
         }
 
         internal Task<AdmittedUserCredential?> ResolveAsync(string? issuer, string? subject) =>

@@ -10,6 +10,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <param name="User">The identifier every mail account and every stored message of theirs hangs on.</param>
 /// <param name="DisplayName">The label an operator tells this user apart by, which nothing resolves them by.</param>
 /// <param name="Served">Whether this process is serving them, which every user it holds is.</param>
+/// <param name="EndpointAccess">Which of the two mail-serving endpoints they may be served on.</param>
 /// <remarks>
 /// <para>
 /// The label is here because a column of generated identifiers is not a roster anybody can read. Nothing resolves a
@@ -24,4 +25,5 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 internal sealed record UserRosterEntry(
     MailUserId User,
     string DisplayName,
-    bool Served);
+    bool Served,
+    MailUserEndpointAccess EndpointAccess);

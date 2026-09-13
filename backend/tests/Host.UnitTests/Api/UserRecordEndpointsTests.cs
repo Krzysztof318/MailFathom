@@ -145,6 +145,66 @@ public sealed class UserRecordEndpointsTests
     }
 
     /// <summary>The label the request carried is the whole of what changed, so acceptance is the whole answer.</summary>
+    /// <summary>The answer carries both switches as the row now holds them, including the one the request left out.</summary>
+    [Fact]
+    public async Task SetEndpointAccessAsync_AUserThisDeploymentHolds_AnswersBothSwitches()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Provisioning
+            .SetEndpointAccessAsync(SyntheticMailUser.Deployment, null, false, Arg.Any<CancellationToken>())
+            .Returns(new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false));
+
+        // Act
+        var result = await UserRecordEndpoints.SetEndpointAccessAsync(
+            SyntheticMailUser.Deployment.Value,
+            deployment.Roster,
+            new UserEndpointAccessRequest(McpEndpoint: null, ClientEndpoint: false),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var answered = Assert.IsType<Ok<UserEndpointAccessResponse>>(result.Result);
+        Assert.Equal(new UserEndpointAccessResponse(McpEndpoint: true, ClientEndpoint: false), answered.Value);
+    }
+
+    /// <summary>A user this deployment does not hold is the same answer every route naming one gives.</summary>
+    [Fact]
+    public async Task SetEndpointAccessAsync_AUserThisDeploymentDoesNotHold_AnswersThatThereIsNoSuchRecord()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+
+        // Act
+        var result = await UserRecordEndpoints.SetEndpointAccessAsync(
+            SyntheticMailUser.Another.Value,
+            deployment.Roster,
+            new UserEndpointAccessRequest(McpEndpoint: false, ClientEndpoint: null),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<NotFound<ProblemDetails>>(result.Result);
+    }
+
+    /// <summary>A body naming neither switch would change nothing, so it is refused rather than answered as a write.</summary>
+    [Fact]
+    public async Task SetEndpointAccessAsync_ARequestNamingNeitherSwitch_IsRefusedWithoutReachingTheRow()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+
+        // Act
+        var result = await UserRecordEndpoints.SetEndpointAccessAsync(
+            SyntheticMailUser.Deployment.Value,
+            deployment.Roster,
+            new UserEndpointAccessRequest(McpEndpoint: null, ClientEndpoint: null),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
+        await deployment.Provisioning.DidNotReceiveWithAnyArgs()
+            .SetEndpointAccessAsync(default, default, default, CancellationToken.None);
+    }
+
     [Fact]
     public async Task RelabelAsync_AUserThisDeploymentHolds_AnswersWithNoContent()
     {

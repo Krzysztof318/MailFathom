@@ -263,7 +263,8 @@ public sealed class UserClientAssertionAuthenticatorTests
                     UserCredentialMethod.PublicKey,
                     MailFathomPermission.PublishedFor(ProtectedSurface.Mail),
                     enabled,
-                    material ?? registeredMaterial)
+                    material ?? registeredMaterial,
+                    MailUserEndpointAccess.Everywhere)
                 : null);
 
         var clock = new FakeTimeProvider(VerifiedAt);

@@ -886,6 +886,14 @@ therefore reaches the contact book and nothing else, and one granted no name tha
 empty tool list and refused every call it makes. `mailfathom.mail.send` is the one worth checking a narrowed credential
 against deliberately, because it is the only name here whose effect leaves the deployment and cannot be recalled.
 
+**Whether a person is served here at all is their own switch.** Each user carries one switch for this endpoint and one
+for the client endpoint, both on until an administrator runs `mfctl user endpoints --mcp false`. A user kept off this
+endpoint is refused here whichever credential they present — including an access token their authorization server
+issued before the switch changed — with the challenge a credential nobody holds receives, so no agent can act for them
+while the same person's password still opens their mail client. The switch is read with the credential on every
+request, so a change reaches every replica on that user's next request. It decides whether the user is admitted here;
+the grant still decides which tools an admitted caller is offered.
+
 **A refused caller is told nothing**, for the reason
 [what a refused caller is told](permissions.md#what-a-refused-caller-is-told) gives: a message a client could tell apart
 from an unknown tool would disclose the capability the listing withheld. Diagnosing a client that stopped working is

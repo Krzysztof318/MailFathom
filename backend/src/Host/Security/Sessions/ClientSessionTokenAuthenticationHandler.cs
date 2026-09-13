@@ -76,6 +76,13 @@ internal sealed class ClientSessionTokenAuthenticationHandler
             return AuthenticateResult.Fail("The request presented no usable session token.");
         }
 
+        // Read beside the session rather than stored on it, so a user switched off this surface after they signed in
+        // is refused on their next request, with the answer a session nobody holds receives.
+        if (!this.Options.Surface.Admits(admitted.EndpointAccess))
+        {
+            return AuthenticateResult.Fail("The session's user is kept off this endpoint.");
+        }
+
         var identity = TransportGrant.IdentityFor(
             admitted.CredentialId.ToString("D", CultureInfo.InvariantCulture),
             ClientSessionTokenAuthentication.CredentialIdClaimType,

@@ -20,13 +20,17 @@ internal sealed record MailUserList(
 /// <param name="Id">The identifier the deployment minted for them, which every act names them by.</param>
 /// <param name="DisplayName">The label an administrator tells them apart by, which may change and is never the identity.</param>
 /// <param name="Served">Whether the running deployment is serving them, which is whether this user's mail is read now.</param>
+/// <param name="McpEndpoint">Whether the deployment serves them on the MCP endpoint.</param>
+/// <param name="ClientEndpoint">Whether the deployment serves them on the client endpoint.</param>
 /// <remarks>
 /// The label is here because an identifier is what a command needs and a person is what an operator is thinking about.
 /// </remarks>
 internal sealed record MailUserRosterEntry(
     [property: JsonPropertyName("id")] Guid Id,
     [property: JsonPropertyName("displayName")] string? DisplayName,
-    [property: JsonPropertyName("served")] bool Served)
+    [property: JsonPropertyName("served")] bool Served,
+    [property: JsonPropertyName("mcpEndpoint")] bool McpEndpoint,
+    [property: JsonPropertyName("clientEndpoint")] bool ClientEndpoint)
 {
     /// <summary>States the user as a line an operator selects from.</summary>
     /// <returns>The identifier with the label beside it, or the identifier alone where the deployment published none.</returns>

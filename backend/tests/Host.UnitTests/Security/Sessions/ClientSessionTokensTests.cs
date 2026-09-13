@@ -395,7 +395,11 @@ public sealed class ClientSessionTokensTests
     {
         // Arrange
         var sessions = Sessions(out var store);
-        var admitted = new AdmittedUserCredential(Guid.Empty, SyntheticMailUser.Deployment, [MailFathomPermission.MailRead]);
+        var admitted = new AdmittedUserCredential(
+            Guid.Empty,
+            SyntheticMailUser.Deployment,
+            [MailFathomPermission.MailRead],
+            MailUserEndpointAccess.Everywhere);
 
         // Act
         var minted = await sessions.MintAsync(admitted, TestContext.Current.CancellationToken);
@@ -450,7 +454,8 @@ public sealed class ClientSessionTokensTests
                 new HeldClientSession(
                     new ClientSessionGrant(SyntheticMailUser.Deployment, CredentialId, [MailFathomPermission.MailRead]),
                     SHA256.HashData([(byte)ordinal]),
-                    Instant - TimeSpan.FromSeconds(1)));
+                    Instant - TimeSpan.FromSeconds(1),
+                    MailUserEndpointAccess.Everywhere));
         }
 
         // Act
@@ -477,7 +482,8 @@ public sealed class ClientSessionTokensTests
                 new HeldClientSession(
                     new ClientSessionGrant(SyntheticMailUser.Deployment, CredentialId, [MailFathomPermission.MailRead]),
                     SHA256.HashData([(byte)ordinal]),
-                    Instant + ClientSessionTokens.Lifetime));
+                    Instant + ClientSessionTokens.Lifetime,
+                    MailUserEndpointAccess.Everywhere));
         }
 
         // Act
@@ -579,10 +585,10 @@ public sealed class ClientSessionTokensTests
         new("The deployment's client sessions could not be reached.", new InvalidOperationException("No connection."));
 
     private static AdmittedUserCredential Admitted(params MailFathomPermission[] permissions) =>
-        new(CredentialId, SyntheticMailUser.Deployment, permissions.Length == 0 ? [MailFathomPermission.MailRead] : permissions);
+        new(CredentialId, SyntheticMailUser.Deployment, permissions.Length == 0 ? [MailFathomPermission.MailRead] : permissions, MailUserEndpointAccess.Everywhere);
 
     private static AdmittedUserCredential Admitted(MailUserId user) =>
-        new(CredentialId, user, [MailFathomPermission.MailRead]);
+        new(CredentialId, user, [MailFathomPermission.MailRead], MailUserEndpointAccess.Everywhere);
 
     /// <summary>The half of a token that is looked up, separator included, so a test can compose one from two.</summary>
     private static string NameOf(string token) => token[..(token.IndexOf('.', StringComparison.Ordinal) + 1)];
