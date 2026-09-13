@@ -279,6 +279,39 @@ public sealed class LocalMailFolderTreeTests
         Assert.Equal(LocalMailFolderRefusal.NameTaken, edit.Refusal);
     }
 
+    /// <summary>A deletion takes a folder out of the hierarchy rather than deeper into it, so the deepest legal hierarchy can still be deleted from its root.</summary>
+    [Fact]
+    public void Delete_ARootWhoseSubtreeReachesTheDeepestLevel_MovesItBeneathTheTrash()
+    {
+        // Arrange
+        var chain = Chain(LocalMailFolderTree.MaximumDepth);
+        var tree = HeldTree(chain);
+        var trash = tree.Folders.Single(static folder => folder.Role == MailFolderSpecialUse.Trash);
+
+        // Act
+        var edit = tree.Delete(chain[0].Id);
+
+        // Assert
+        Assert.Null(edit.Refusal);
+        Assert.Equal([chain[0] with { ParentId = trash.Id }], edit.Saved);
+    }
+
+    /// <summary>Rows written in a cycle end the downward walk a move measures its depth by, rather than the process.</summary>
+    [Fact]
+    public void Move_AFolderWhoseParentRowsFormACycle_DecidesRatherThanRecursingWithoutEnd()
+    {
+        // Arrange
+        var first = Ordinary("First");
+        var second = Ordinary("Second") with { ParentId = first.Id };
+        var tree = HeldTree(first with { ParentId = second.Id }, second);
+
+        // Act
+        var edit = tree.Move(second.Id, parentId: null);
+
+        // Assert
+        Assert.True(edit.Refusal is not null || edit.Saved.Count is 1);
+    }
+
     /// <summary>A folder outside the trash is moved into it as one row, so everything beneath it goes with it whatever it holds.</summary>
     [Fact]
     public void Delete_AFolderOutsideTheTrash_MovesItBeneathTheTrash()

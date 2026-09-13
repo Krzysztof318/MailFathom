@@ -208,7 +208,7 @@ internal static class ClientLocalMailFoldersEndpoint
 
     private static Results<Ok<ClientLocalMailFolderEditResponse>, ProblemHttpResult> Answer(LocalMailFolderEditOutcome outcome) =>
         outcome is { Folder: { } folder, Kind: { } kind }
-            ? TypedResults.Ok(new ClientLocalMailFolderEditResponse(kind.ToString(), ClientLocalMailFolderResponse.For(folder)))
+            ? TypedResults.Ok(new ClientLocalMailFolderEditResponse(kind.ToString(), ClientLocalMailFolderResponse.For(folder), outcome.MailErasureDeferred))
             : Refused(outcome.Refusal ?? throw new InvalidOperationException("An edit outcome carried neither a folder nor a refusal."));
 
     private static MailAccountId? AccountNamed(string? account) =>
@@ -317,4 +317,5 @@ internal sealed record ClientLocalMailFolderResponse(Guid Id, Guid? ParentId, st
 /// <summary>What an accepted write changed.</summary>
 /// <param name="Change">Which change it was — <c>Created</c>, <c>Renamed</c>, <c>Moved</c>, <c>MovedToTrash</c>, or <c>Erased</c>.</param>
 /// <param name="Folder">The folder as the write left it; an erased folder is reported as it was at its erasure.</param>
-internal sealed record ClientLocalMailFolderEditResponse(string Change, ClientLocalMailFolderResponse Folder);
+/// <param name="MailErasureDeferred">Whether an erasure found the job queue full, so its mail waits for the account's next erasure.</param>
+internal sealed record ClientLocalMailFolderEditResponse(string Change, ClientLocalMailFolderResponse Folder, bool MailErasureDeferred);

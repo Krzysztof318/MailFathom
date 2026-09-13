@@ -212,6 +212,42 @@ public sealed class MailboxSynchronizerTests
         Assert.Equal(0, result.ArrivedEmailCount);
     }
 
+    /// <summary>
+    /// On a held account a stored message lands in the local folder its source corresponds to, and the source is what
+    /// the run resolved: its alias to match it by, its role to decide whether a protected folder takes it, and the last
+    /// level of its remote path as the name a folder created for it takes.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_AMessageStoredForAHeldAccount_LandsInTheLocalFolderCreatedForItsSource()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, accountId);
+        var uidValidity = ImapUidValidity.Create(5);
+        var occurrence = EmailOccurrenceId.Create(accountId, ArchiveFolder.Id, uidValidity, ImapUid.Create(10));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var localFolders = new InMemoryLocalMailFolderStore(account, MailAccountCustodyPhase.Held);
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [MetadataOf(occurrence, 600)],
+            occurrence.Uid,
+            runFolder: ArchiveFolder,
+            localFolderArrivals: new LocalMailFolderArrivals(localFolders, new FakeTimeProvider()));
+        StubRetrievedContent(arrangement.Session, options, occurrence, 600);
+
+        // Act
+        await arrangement.Synchronizer.SynchronizeAsync(account, ArchiveMapping, CancellationToken.None);
+
+        // Assert
+        var created = Assert.Single(localFolders.Folders, folder => folder.Role is null);
+        var placement = Assert.Single(localFolders.Placements);
+
+        Assert.Equal(ArchiveAlias, created.SourceFolderAlias);
+        Assert.Equal("Archive", created.Name.Value);
+        Assert.Equal(created.Id, placement.Value);
+    }
+
     /// <summary>The run records what the classification gate says about an arriving message, although it derives nothing from it.</summary>
     /// <remarks>
     /// The two withholding answers are reached nowhere else: every later stage either sees a message the gate admits or
@@ -2841,7 +2877,8 @@ public sealed class MailboxSynchronizerTests
         IMailSynchronizationPhaseTelemetry? phaseTelemetry = null,
         IJobStore? jobStore = null,
         MailContactCollector? contactCollector = null,
-        IOutgoingMailFilingStore? filingStore = null)
+        IOutgoingMailFilingStore? filingStore = null,
+        LocalMailFolderArrivals? localFolderArrivals = null)
     {
         var concurrencyRetryPolicy = new OptimisticConcurrencyRetryPolicy(
             persistenceSessionFactory,
@@ -2888,7 +2925,7 @@ public sealed class MailboxSynchronizerTests
                     classificationSettings ?? SpamClassificationSettings.Disabled,
                     ClassifiedAccount)),
             contactCollector ?? CreateCollectorThatCollectsNothing(persistenceSessionFactory, timeProvider),
-            new LocalMailFolderArrivals(Substitute.For<ILocalMailFolderStore>(), timeProvider),
+            localFolderArrivals ?? new LocalMailFolderArrivals(Substitute.For<ILocalMailFolderStore>(), timeProvider),
             concurrencyRetryPolicy,
             timeProvider,
             options);
@@ -3502,7 +3539,8 @@ public sealed class MailboxSynchronizerTests
         StoredContentCeiling? storedContentCeiling = null,
         IUserStoredContentLedger? userContentLedger = null,
         SpamClassificationSettings? classificationSettings = null,
-        MailFolderResolution? runFolder = null)
+        MailFolderResolution? runFolder = null,
+        LocalMailFolderArrivals? localFolderArrivals = null)
     {
         var folder = runFolder ?? InboxFolder;
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
@@ -3555,7 +3593,8 @@ public sealed class MailboxSynchronizerTests
             rawMimeMemoryBudget: rawMimeMemoryBudget,
             storedContentCeiling: storedContentCeiling,
             classificationSettings: classificationSettings,
-            jobStore: jobStore);
+            jobStore: jobStore,
+            localFolderArrivals: localFolderArrivals);
 
         return new ContentRunArrangement(
             synchronizer,

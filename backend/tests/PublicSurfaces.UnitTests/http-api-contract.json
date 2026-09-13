@@ -973,11 +973,15 @@
           },
           "folder": {
             "$ref": "#/components/schemas/ClientLocalMailFolderResponse"
+          },
+          "mailErasureDeferred": {
+            "type": "boolean"
           }
         },
         "required": [
           "change",
-          "folder"
+          "folder",
+          "mailErasureDeferred"
         ],
         "type": "object"
       },

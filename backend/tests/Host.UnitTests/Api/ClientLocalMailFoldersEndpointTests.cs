@@ -67,7 +67,14 @@ public sealed class ClientLocalMailFoldersEndpointTests
         var deployment = new EndpointDeployment();
         deployment.Holding(new LocalMailFolderHolding(
             MailAccountCustodyPhase.Held,
-            [Folder("projects"), Folder("Archive", MailFolderSpecialUse.Archive), Folder("INBOX", MailFolderSpecialUse.Inbox)],
+            [
+                Folder("projects"),
+                Folder("Trash", MailFolderSpecialUse.Trash),
+                Folder("Sent", MailFolderSpecialUse.Sent),
+                Folder("Junk", MailFolderSpecialUse.Junk),
+                Folder("INBOX", MailFolderSpecialUse.Inbox),
+                Folder("Drafts", MailFolderSpecialUse.Drafts),
+            ],
             []));
 
         // Act
@@ -77,8 +84,8 @@ public sealed class ClientLocalMailFoldersEndpointTests
         var answered = Assert.IsType<Ok<ClientLocalMailFoldersResponse>>(result.Result).Value!;
 
         Assert.Equal(nameof(MailAccountCustodyPhase.Held), answered.Phase);
-        Assert.Equal(["Archive", "INBOX", "projects"], answered.Folders.Select(folder => folder.Name));
-        Assert.Equal(["Archive", "Inbox", null], answered.Folders.Select(folder => folder.Role));
+        Assert.Equal(["Drafts", "INBOX", "Junk", "projects", "Sent", "Trash"], answered.Folders.Select(folder => folder.Name));
+        Assert.Equal(["Drafts", "Inbox", "Junk", null, "Sent", "Trash"], answered.Folders.Select(folder => folder.Role));
     }
 
     [Fact]

@@ -64,6 +64,11 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/session/token/revocation` | none |
 | `GET /api/client/accounts` | `mailfathom.mail.read` |
 | `GET /api/client/folders` | `mailfathom.mail.read` |
+| `GET /api/client/local-folders` | `mailfathom.mail.read` |
+| `POST /api/client/local-folders` | `mailfathom.mail.folders.write` |
+| `POST /api/client/local-folders/renames` | `mailfathom.mail.folders.write` |
+| `POST /api/client/local-folders/moves` | `mailfathom.mail.folders.write` |
+| `POST /api/client/local-folders/deletions` | `mailfathom.mail.folders.write` |
 | `GET /api/client/emails` | `mailfathom.mail.read` |
 | `GET /api/client/emails/search` | `mailfathom.mail.read` |
 | `GET /api/client/emails/search/phrasing` | `mailfathom.mail.ask` |
@@ -508,16 +513,20 @@ as it left it:
 | `POST /api/client/local-folders/deletions` | `account`, `folderId` | `MovedToTrash`, or `Erased` where the folder was already in the trash |
 
 ```jsonc
-{ "change": "Created", "folder": { "id": "0199a0c0-0000-7000-8000-000000000008", "parentId": null, "name": "Clients", "role": null } }
+{ "change": "Created", "folder": { "id": "0199a0c0-0000-7000-8000-000000000008", "parentId": null, "name": "Clients", "role": null }, "mailErasureDeferred": false }
 ```
 
 **Five folders are protected**: the inbox, drafts, sent, junk, and trash, carrying `role` `Inbox`, `Drafts`, `Sent`,
-`Junk`, and `Trash`. They are supplied by the first act or arrival that finds them missing, and none of them can be
-renamed, moved, or deleted.
+`Junk`, and `Trash`. They are supplied by the first read, act, or arrival that finds them missing, so a held account's
+first read already lists all five, and none of them can be renamed, moved, or deleted.
 
-**A deletion is a move into the trash, with everything beneath the folder.** Deleting a folder already inside the trash
+**A deletion is a move into the trash, with everything beneath the folder**, and it is not held to the depth limit,
+since it takes the folder out of the hierarchy rather than deeper into it. Deleting a folder already inside the trash
 erases it: the folder and everything beneath it leave every listing when the request commits, and the messages in them
 are erased afterwards in bounded passes on the job queue, through the same erasure a single stored message goes through.
+Every write answers `mailErasureDeferred`, which is `true` only for an erasure that committed while the queue already
+held as many erasure passes as it accepts: the folders are gone, and their mail stays stored and out of every listing
+until the account's next erasure queues a pass, which erases the mail of every folder the account has erased.
 
 **A name** is 1 to 255 characters after trimming, carries no control character and no `/`, is unique among its siblings
 without regard to case, and is not `INBOX` at the top of the hierarchy. A hierarchy is at most 16 levels deep and an

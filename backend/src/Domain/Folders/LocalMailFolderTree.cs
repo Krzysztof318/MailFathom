@@ -153,7 +153,32 @@ public sealed class LocalMailFolderTree
     /// <param name="id">The folder.</param>
     /// <param name="parentId">The folder to move it beneath, or <see langword="null" /> for the top of the hierarchy.</param>
     /// <returns>The folder to write, or the refusal.</returns>
-    public LocalMailFolderEdit Move(LocalMailFolderId id, LocalMailFolderId? parentId)
+    public LocalMailFolderEdit Move(LocalMailFolderId id, LocalMailFolderId? parentId) =>
+        this.MoveBeneath(id, parentId, boundedByDepth: true);
+
+    /// <summary>Decides deleting a folder: into the trash, or out of existence where it is already there.</summary>
+    /// <param name="id">The folder.</param>
+    /// <returns>The folder moved into the trash, the subtree to erase, or the refusal.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the tree has no trash folder, which <see cref="MissingProtectedFolders" /> supplies.</exception>
+    /// <remarks>
+    /// The move into the trash is not held to <see cref="MaximumDepth" />: it takes the subtree out of the live hierarchy
+    /// rather than deeper into it, so a folder any legal hierarchy can hold can always be deleted.
+    /// </remarks>
+    public LocalMailFolderEdit Delete(LocalMailFolderId id)
+    {
+        if (this.RefuseActingOn(id) is { } refusal)
+        {
+            return LocalMailFolderEdit.Refused(refusal);
+        }
+
+        var trash = this.RequireRole(MailFolderSpecialUse.Trash);
+
+        return this.IsWithin(id, trash.Id)
+            ? LocalMailFolderEdit.Erasing(this.folders[id], [.. this.SubtreeOf(id).Distinct()])
+            : this.MoveBeneath(id, trash.Id, boundedByDepth: false);
+    }
+
+    private LocalMailFolderEdit MoveBeneath(LocalMailFolderId id, LocalMailFolderId? parentId, bool boundedByDepth)
     {
         if (this.RefuseActingOn(id) is { } refusal)
         {
@@ -180,27 +205,9 @@ public sealed class LocalMailFolderTree
             return LocalMailFolderEdit.Refused(placementRefusal);
         }
 
-        return this.LevelBeneath(parentId) + this.HeightOf(id) - 1 > MaximumDepth
+        return boundedByDepth && this.LevelBeneath(parentId) + this.HeightOf(id) - 1 > MaximumDepth
             ? LocalMailFolderEdit.Refused(LocalMailFolderRefusal.TooDeep)
             : LocalMailFolderEdit.Saving(folder with { ParentId = parentId });
-    }
-
-    /// <summary>Decides deleting a folder: into the trash, or out of existence where it is already there.</summary>
-    /// <param name="id">The folder.</param>
-    /// <returns>The folder moved into the trash, the subtree to erase, or the refusal.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the tree has no trash folder, which <see cref="MissingProtectedFolders" /> supplies.</exception>
-    public LocalMailFolderEdit Delete(LocalMailFolderId id)
-    {
-        if (this.RefuseActingOn(id) is { } refusal)
-        {
-            return LocalMailFolderEdit.Refused(refusal);
-        }
-
-        var trash = this.RequireRole(MailFolderSpecialUse.Trash);
-
-        return this.IsWithin(id, trash.Id)
-            ? LocalMailFolderEdit.Erasing(this.folders[id], [.. this.SubtreeOf(id)])
-            : this.Move(id, trash.Id);
     }
 
     /// <summary>Decides where a message arriving from a source folder goes.</summary>
@@ -323,16 +330,24 @@ public sealed class LocalMailFolderTree
         }
     }
 
-    private int HeightOf(LocalMailFolderId id) =>
-        1 + this.folders.Values
-            .Where(folder => folder.ParentId == id)
-            .Select(child => this.HeightOf(child.Id))
-            .DefaultIfEmpty(0)
-            .Max();
+    /// <summary>Counts the levels from a folder to the deepest folder beneath it, the folder itself being one.</summary>
+    /// <remarks>Bounded by the folder count for the reason <see cref="AncestorsOf" /> is.</remarks>
+    private int HeightOf(LocalMailFolderId id, int level = 1) =>
+        level > this.folders.Count
+            ? 1
+            : 1 + this.folders.Values
+                .Where(folder => folder.ParentId == id)
+                .Select(child => this.HeightOf(child.Id, level + 1))
+                .DefaultIfEmpty(0)
+                .Max();
 
-    private IEnumerable<LocalMailFolderId> SubtreeOf(LocalMailFolderId id) =>
-        this.folders.Values
-            .Where(folder => folder.ParentId == id)
-            .SelectMany(child => this.SubtreeOf(child.Id))
-            .Prepend(id);
+    /// <summary>Walks a folder and everything beneath it, the folder itself first.</summary>
+    /// <remarks>Bounded by the folder count for the reason <see cref="AncestorsOf" /> is; a caller removes the repeats a cycle yields.</remarks>
+    private IEnumerable<LocalMailFolderId> SubtreeOf(LocalMailFolderId id, int level = 1) =>
+        level > this.folders.Count
+            ? [id]
+            : this.folders.Values
+                .Where(folder => folder.ParentId == id)
+                .SelectMany(child => this.SubtreeOf(child.Id, level + 1))
+                .Prepend(id);
 }

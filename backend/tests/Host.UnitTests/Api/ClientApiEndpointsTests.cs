@@ -546,6 +546,33 @@ public sealed class ClientApiEndpointsTests
             write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
     }
 
+    /// <summary>Every local folder write reads a body of a name and two identities, so each carries the bound sized for that.</summary>
+    /// <param name="route">The route the write is made on.</param>
+    [Theory]
+    [InlineData(ClientLocalMailFoldersEndpoint.LocalFoldersRoute)]
+    [InlineData(ClientLocalMailFoldersEndpoint.RenamesRoute)]
+    [InlineData(ClientLocalMailFoldersEndpoint.MovesRoute)]
+    [InlineData(ClientLocalMailFoldersEndpoint.DeletionsRoute)]
+    public void MapClientApi_ALocalFolderWrite_CarriesTheRequestBodyBound(string route)
+    {
+        // Arrange
+        var endpoints = BuildRouteBuilder();
+
+        // Act
+        endpoints.MapClientApi();
+
+        // Assert
+        var write = endpoints.Materialize()
+            .OfType<RouteEndpoint>()
+            .Single(endpoint =>
+                $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}" == $"{ClientEndpointOptions.RoutePrefix}{route}"
+                && endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains("POST"));
+
+        Assert.Equal(
+            ClientLocalMailFoldersEndpoint.MaxWriteRequestBytes,
+            write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
+    }
+
     /// <summary>
     /// The preferences write carries a bound of its own rather than the record's. The document is three scalars, so a
     /// body sized for a page of mail-account declarations would be a bound nobody decided on.

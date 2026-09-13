@@ -169,6 +169,78 @@ public sealed class LocalMailFolderEditorTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>A full queue writes no pass, and the erasure that already committed says so rather than reading as complete.</summary>
+    [Fact]
+    public async Task DeleteAsync_AnErasureTheQueueIsTooFullToTake_ReportsTheMailErasureDeferred()
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
+        deployment.Jobs.EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>())
+            .Returns(JobEnqueueResult.RefusedAtCapacity());
+        var projects = await deployment.CreateAsync("Projects");
+        await deployment.Editor.DeleteAsync(Account.Id, projects.Id, TestContext.Current.CancellationToken);
+
+        // Act
+        var outcome = await deployment.Editor.DeleteAsync(Account.Id, projects.Id, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(LocalMailFolderChangeKind.Erased, outcome.Kind);
+        Assert.True(outcome.MailErasureDeferred);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_AnErasureTheQueueTakes_ReportsNothingDeferred()
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
+        deployment.Jobs.EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>())
+            .Returns(JobEnqueueResult.Created(JobId.Create(Guid.CreateVersion7())));
+        var projects = await deployment.CreateAsync("Projects");
+        await deployment.Editor.DeleteAsync(Account.Id, projects.Id, TestContext.Current.CancellationToken);
+
+        // Act
+        var outcome = await deployment.Editor.DeleteAsync(Account.Id, projects.Id, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(outcome.MailErasureDeferred);
+    }
+
+    /// <summary>The audit record names the act that was asked for, so a rename that leaves the text as it was is still a rename.</summary>
+    [Fact]
+    public async Task RenameAsync_ToTheNameTheFolderAlreadyCarries_ReportsARename()
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
+        var projects = await deployment.CreateAsync("Projects");
+
+        // Act
+        var outcome = await deployment.Editor.RenameAsync(Account.Id, projects.Id, " Projects ", TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(LocalMailFolderChangeKind.Renamed, outcome.Kind);
+    }
+
+    /// <summary>A held account nobody has acted on yet still lists its inbox, drafts, sent, junk, and trash, and a second read writes nothing more.</summary>
+    [Fact]
+    public async Task ReadAsync_AHeldAccountNothingHasActedOn_ListsAndKeepsTheFiveProtectedFolders()
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
+
+        // Act
+        var first = await deployment.Editor.ReadAsync(Account.Id, TestContext.Current.CancellationToken);
+        var second = await deployment.Editor.ReadAsync(Account.Id, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            ["Drafts", "INBOX", "Junk", "Sent", "Trash"],
+            first!.Folders.Select(folder => folder.Name.Value).Order(StringComparer.Ordinal));
+        Assert.Equal(
+            first.Folders.Select(folder => folder.Id.Value).Order(),
+            second!.Folders.Select(folder => folder.Id.Value).Order());
+        Assert.Equal(1, deployment.Store.SaveCount);
+    }
+
     private static bool IsFirstErasurePassOf(JobEnqueueRequest? request, LocalMailFolderId folder) =>
         request?.Payload is EraseLocalMailFolderMailJobPayload { Pass: 0 } payload && payload.FolderId == folder.Value;
 

@@ -20,8 +20,9 @@ namespace MailFathom.Application.Folders.Local;
 /// account's folders are the source server's, and ADR 0007 still governs those. No act reaches a mail server.
 /// </para>
 /// <para>
-/// The five protected folders are supplied in the same transaction as the first act that finds them missing, so the
-/// hierarchy an act is decided against always has them, and a refused act writes nothing at all.
+/// The five protected folders are supplied in the same transaction as the first read or act that finds them missing, so
+/// a held account is never listed without them, the hierarchy an act is decided against always has them, and a refused
+/// act writes nothing at all.
 /// </para>
 /// </remarks>
 public sealed class LocalMailFolderEditor
@@ -69,16 +70,31 @@ public sealed class LocalMailFolderEditor
         this.timeProvider = timeProvider;
     }
 
-    /// <summary>Reads the caller's account's phase and live folders.</summary>
+    /// <summary>Reads the caller's account's phase and live folders, supplying the protected folders a held account lacks.</summary>
     /// <param name="account">The caller's account.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The holding, or <see langword="null" /> where the caller holds no such account.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <c>mailfathom.mail.read</c>.</exception>
-    public Task<LocalMailFolderHolding?> ReadAsync(MailAccountId account, CancellationToken cancellationToken)
+    /// <remarks>
+    /// The protected folders are written rather than only shown, so the identities a client reads are the ones every later
+    /// act and arrival finds; a read of a hierarchy that already has them writes nothing.
+    /// </remarks>
+    public async Task<LocalMailFolderHolding?> ReadAsync(MailAccountId account, CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        return this.store.ReadAsync(MailAccountIdentity.Create(this.authorization.RequireUser(), account), cancellationToken);
+        var identity = MailAccountIdentity.Create(this.authorization.RequireUser(), account);
+        var holding = await this.store.ReadAsync(identity, cancellationToken);
+
+        if (holding is not { Phase: MailAccountCustodyPhase.Held }
+            || holding.ToTree().MissingProtectedFolders(this.MintId).Count is 0)
+        {
+            return holding;
+        }
+
+        return await this.concurrencyRetryPolicy.CommitAsync(
+            (session, attemptCancellationToken) => this.SupplyProtectedFoldersAsync(session, identity, attemptCancellationToken),
+            cancellationToken);
     }
 
     /// <summary>Creates a folder.</summary>
@@ -93,7 +109,7 @@ public sealed class LocalMailFolderEditor
         LocalMailFolderId? parentId,
         string? name,
         CancellationToken cancellationToken) =>
-        this.EditAsync(account, tree => tree.Create(this.MintId(), parentId, name), cancellationToken);
+        this.EditAsync(account, LocalMailFolderChangeKind.Created, tree => tree.Create(this.MintId(), parentId, name), cancellationToken);
 
     /// <summary>Renames a folder.</summary>
     /// <param name="account">The caller's account.</param>
@@ -107,7 +123,7 @@ public sealed class LocalMailFolderEditor
         LocalMailFolderId folderId,
         string? name,
         CancellationToken cancellationToken) =>
-        this.EditAsync(account, tree => tree.Rename(folderId, name), cancellationToken);
+        this.EditAsync(account, LocalMailFolderChangeKind.Renamed, tree => tree.Rename(folderId, name), cancellationToken);
 
     /// <summary>Moves a folder, with everything beneath it, to another place in the hierarchy.</summary>
     /// <param name="account">The caller's account.</param>
@@ -121,7 +137,7 @@ public sealed class LocalMailFolderEditor
         LocalMailFolderId folderId,
         LocalMailFolderId? parentId,
         CancellationToken cancellationToken) =>
-        this.EditAsync(account, tree => tree.Move(folderId, parentId), cancellationToken);
+        this.EditAsync(account, LocalMailFolderChangeKind.Moved, tree => tree.Move(folderId, parentId), cancellationToken);
 
     /// <summary>Deletes a folder: into the trash, or, where it is already there, out of existence with all of its mail.</summary>
     /// <param name="account">The caller's account.</param>
@@ -137,10 +153,36 @@ public sealed class LocalMailFolderEditor
         MailAccountId account,
         LocalMailFolderId folderId,
         CancellationToken cancellationToken) =>
-        this.EditAsync(account, tree => tree.Delete(folderId), cancellationToken);
+        this.EditAsync(account, LocalMailFolderChangeKind.MovedToTrash, tree => tree.Delete(folderId), cancellationToken);
+
+    private async Task<LocalMailFolderHolding?> SupplyProtectedFoldersAsync(
+        IPersistenceSession session,
+        MailAccountIdentity account,
+        CancellationToken cancellationToken)
+    {
+        var holding = await this.store.ReadAsync(session, account, cancellationToken);
+
+        if (holding is not { Phase: MailAccountCustodyPhase.Held })
+        {
+            return holding;
+        }
+
+        var found = holding.ToTree();
+        var missing = found.MissingProtectedFolders(this.MintId);
+
+        if (missing.Count is 0)
+        {
+            return holding;
+        }
+
+        await this.store.SaveAsync(session, account, missing, [], cancellationToken);
+
+        return holding with { Folders = [.. found.With(missing).Folders] };
+    }
 
     private async Task<LocalMailFolderEditOutcome> EditAsync(
         MailAccountId accountId,
+        LocalMailFolderChangeKind act,
         Func<LocalMailFolderTree, LocalMailFolderEdit> decide,
         CancellationToken cancellationToken)
     {
@@ -149,7 +191,7 @@ public sealed class LocalMailFolderEditor
         var account = MailAccountIdentity.Create(this.authorization.RequireUser(), accountId);
 
         var decision = await this.concurrencyRetryPolicy.CommitAsync(
-            (session, attemptCancellationToken) => this.DecideAndSaveAsync(session, account, decide, attemptCancellationToken),
+            (session, attemptCancellationToken) => this.DecideAndSaveAsync(session, account, act, decide, attemptCancellationToken),
             cancellationToken);
 
         if (decision.Edit.Refusal is { } refusal)
@@ -157,14 +199,15 @@ public sealed class LocalMailFolderEditor
             return LocalMailFolderEditOutcome.Refused(refusal);
         }
 
-        await this.AnnounceAsync(account, decision, cancellationToken);
+        var mailErasureDeferred = await this.AnnounceAsync(account, decision, cancellationToken);
 
-        return new LocalMailFolderEditOutcome(decision.Edit.Folder, decision.Kind, Refusal: null);
+        return new LocalMailFolderEditOutcome(decision.Edit.Folder, decision.Kind, Refusal: null, mailErasureDeferred);
     }
 
     private async Task<LocalMailFolderDecision> DecideAndSaveAsync(
         IPersistenceSession session,
         MailAccountIdentity account,
+        LocalMailFolderChangeKind act,
         Func<LocalMailFolderTree, LocalMailFolderEdit> decide,
         CancellationToken cancellationToken)
     {
@@ -199,29 +242,28 @@ public sealed class LocalMailFolderEditor
             edit.Erased,
             cancellationToken);
 
-        return new LocalMailFolderDecision(edit, Classify(tree, edit));
+        return new LocalMailFolderDecision(edit, Classify(act, tree, edit));
     }
 
-    private static LocalMailFolderChangeKind Classify(LocalMailFolderTree before, LocalMailFolderEdit edit)
+    /// <summary>Names what the act did, from the act that was asked for rather than from what text changed.</summary>
+    /// <remarks>A rename to the name a folder already carries is still a rename, and a move beneath the trash is the deletion it amounts to.</remarks>
+    private static LocalMailFolderChangeKind Classify(LocalMailFolderChangeKind act, LocalMailFolderTree before, LocalMailFolderEdit edit)
     {
         if (edit.Erased.Count > 0)
         {
             return LocalMailFolderChangeKind.Erased;
         }
 
-        var after = edit.Folder!;
-
-        return before.Find(after.Id) switch
-        {
-            null => LocalMailFolderChangeKind.Created,
-            { } earlier when earlier.Name != after.Name => LocalMailFolderChangeKind.Renamed,
-            _ when after.ParentId is { } parent && before.Find(parent)?.Role == MailFolderSpecialUse.Trash
-                => LocalMailFolderChangeKind.MovedToTrash,
-            _ => LocalMailFolderChangeKind.Moved,
-        };
+        return act is LocalMailFolderChangeKind.Moved
+            && edit.Folder!.ParentId is { } parent
+            && before.Find(parent)?.Role == MailFolderSpecialUse.Trash
+                ? LocalMailFolderChangeKind.MovedToTrash
+                : act;
     }
 
-    private async Task AnnounceAsync(
+    /// <summary>Audits and signals a committed act, and queues the first erasure pass of one that erased folders.</summary>
+    /// <returns>Whether an erasure found the queue full, so no pass was queued for it.</returns>
+    private async Task<bool> AnnounceAsync(
         MailAccountIdentity account,
         LocalMailFolderDecision decision,
         CancellationToken cancellationToken)
@@ -241,18 +283,21 @@ public sealed class LocalMailFolderEditor
 
         if (decision.Edit.Erased.Count is 0)
         {
-            return;
+            return false;
         }
 
         var erasure = EraseLocalMailFolderMailJobPayload.For(account, folder.Id);
 
-        // ponytail: queued after the commit, because the job store joins no transaction. A process ending between the two
-        // leaves the erased folders' mail stored and hidden until the account's next erasure queues a pass, which erases
-        // every erased folder's mail rather than only its own; enqueue in the committing transaction once the store can.
+        // ponytail: queued after the commit, because the job store joins no transaction. A process ending between the two,
+        // or a queue already full, leaves the erased folders' mail stored and hidden until the account's next erasure
+        // queues a pass, which erases every erased folder's mail rather than only its own; a full queue is reported to the
+        // caller, and a sweep over accounts holding such mail is the upgrade once erasure has a schedule of its own.
         // Outside the caller's cancellation for the reason a hand-on is: the folders are already gone from every listing.
-        await this.jobs.EnqueueAsync(
+        var enqueued = await this.jobs.EnqueueAsync(
             JobEnqueueRequest.Create(erasure.ToIdempotencyKey(), erasure, account),
             CancellationToken.None);
+
+        return enqueued is { Outcome: JobEnqueueOutcome.RefusedAtCapacity };
     }
 
     private LocalMailFolderId MintId() => LocalMailFolderId.Create(Guid.CreateVersion7(this.timeProvider.GetUtcNow()));
