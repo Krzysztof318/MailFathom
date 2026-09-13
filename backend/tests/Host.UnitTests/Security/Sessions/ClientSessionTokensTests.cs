@@ -332,6 +332,22 @@ public sealed class ClientSessionTokensTests
         Assert.Null(renewed);
     }
 
+    /// <summary>A renewal for a user an administrator kept off the client meanwhile answers nothing, so the switch reaches a client that stays signed in by renewing.</summary>
+    [Fact]
+    public async Task RenewAsync_WhenTheUserIsKeptOffTheClientEndpoint_AnswersNothing()
+    {
+        // Arrange
+        var sessions = Sessions(out var store);
+        var minted = await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken);
+
+        // Act
+        store.EndpointAccess = new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false);
+        var renewed = await sessions.RenewAsync(minted.Token!.Value, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(renewed);
+    }
+
     /// <summary>Signing out ends the session at once rather than leaving the token good until it expires.</summary>
     [Fact]
     public async Task RevokeAsync_ALiveSession_LeavesTheTokenRefusedOnTheNextRequest()
@@ -375,6 +391,22 @@ public sealed class ClientSessionTokensTests
         // Arrange
         var sessions = Sessions(out var store);
         store.NoLongerAdmits = true;
+
+        // Act
+        var minted = await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ClientSessionMintOutcome.NoLongerAdmitted, minted.Outcome);
+        Assert.Null(minted.Token);
+    }
+
+    /// <summary>A sign-in for a user kept off the client endpoint mints no session, and is reported as a sign-in the deployment no longer admits.</summary>
+    [Fact]
+    public async Task MintAsync_ForAUserKeptOffTheClientEndpoint_ReportsNoLongerAdmittedAndMintsNothing()
+    {
+        // Arrange
+        var sessions = Sessions(out var store);
+        store.EndpointAccess = new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false);
 
         // Act
         var minted = await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken);

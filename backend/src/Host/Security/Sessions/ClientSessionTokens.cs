@@ -211,7 +211,7 @@ internal sealed class ClientSessionTokens
     /// <summary>Replaces a live session with a fresh token, so a client renews without anybody typing a password.</summary>
     /// <param name="presented">The token the renewing request carried.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>The new token, or <see langword="null" /> where the presented one no longer authenticates or the credential behind it no longer admits a session.</returns>
+    /// <returns>The new token, or <see langword="null" /> where the presented one no longer authenticates, the credential behind it no longer admits a session, or the user it names is kept off the client endpoint.</returns>
     /// <exception cref="ClientSessionStoreUnavailableException">Thrown when the deployment's sessions could not be reached, which the route answers as unavailable rather than by refusing the renewal.</exception>
     /// <remarks>
     /// The presented token stops working the moment this answers, which is what keeps one sign-in to one live token

@@ -285,7 +285,25 @@ internal sealed class UserRecordAdministration(
             return null;
         }
 
-        var standing = UserEndpointAccessOptions.ReadFrom(RedactedDocumentSave.Flatten(inForce.Json));
+        MailUserEndpointAccess standing;
+
+        try
+        {
+            standing = UserEndpointAccessOptions.ReadFrom(RedactedDocumentSave.Flatten(inForce.Json));
+        }
+        catch (Exception refused)
+            when (refused is FormatException or System.Text.Json.JsonException or InvalidDataException)
+        {
+            // The parser's own message names the path it stopped at, composed from the row's own key names — which for a
+            // user's record are their mailboxes — so the refusal says what to do rather than repeating it.
+            return new UserEndpointAccessWrite(
+                UserRecordWriteOutcome.Refused(
+                    MailFathomErrorCode.ConfigurationCandidateInvalid,
+                    inForce.Version,
+                    ["This user's record is not a document of settings, so its endpoint switches cannot be written. Correct the row where it was written."]),
+                default);
+        }
+
         var requested = new MailUserEndpointAccess(
             mcpEndpoint ?? standing.McpEndpoint,
             clientEndpoint ?? standing.ClientEndpoint);
@@ -315,6 +333,7 @@ internal sealed class UserRecordAdministration(
             inForce,
             SettingsDocumentPatch.Apply(inForce.Json, edits),
             UserRecordAuthority.Administrator,
+            UserRecordArrival.BeingWritten,
             cancellationToken);
 
         return outcome is null

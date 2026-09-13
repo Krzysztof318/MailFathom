@@ -15,7 +15,7 @@ namespace MailFathom.Cli.Commands.Users;
 /// </remarks>
 internal static class UserOutput
 {
-    /// <summary>Writes the users a deployment holds, one to a line.</summary>
+    /// <summary>Writes the users a deployment holds, each followed by the endpoints they are served on.</summary>
     /// <param name="console">Where the listing is written.</param>
     /// <param name="users">The users, in the deployment's own order.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>

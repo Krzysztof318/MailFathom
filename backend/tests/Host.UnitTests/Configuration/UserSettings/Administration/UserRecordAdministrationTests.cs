@@ -102,6 +102,7 @@ public sealed class UserRecordAdministrationTests
         await harness.Store.DidNotReceive().CommitAsync(
             Arg.Any<MailUserId>(),
             Arg.Any<string>(),
+            Arg.Any<MailUserEndpointAccess>(),
             Arg.Any<long>(),
             Arg.Any<CancellationToken>());
     }
@@ -192,6 +193,7 @@ public sealed class UserRecordAdministrationTests
         await harness.Store.Received(1).CommitAsync(
             SyntheticMailUser.Deployment,
             Arg.Is<string>(json => json!.Contains(written.ToString(), StringComparison.Ordinal)),
+            Arg.Any<MailUserEndpointAccess>(),
             5,
             Arg.Any<CancellationToken>());
     }
@@ -816,6 +818,28 @@ public sealed class UserRecordAdministrationTests
                 mcpEndpoint: false,
                 clientEndpoint: null,
                 TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>A row that is not a document of settings is refused with a sentence the administrator can act on, rather than failing the route.</summary>
+    [Fact]
+    public async Task SetEndpointAccessAsync_ARecordThatIsNotADocumentOfSettings_IsRefusedWithoutWriting()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(SyntheticMailUser.Deployment, "not a document", version: 4);
+
+        // Act
+        var written = await harness.Records.SetEndpointAccessAsync(
+            SyntheticMailUser.Deployment,
+            mcpEndpoint: false,
+            clientEndpoint: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, written!.Outcome.Refusal);
+        Assert.Contains("not a document of settings", Assert.Single(written.Outcome.Messages), StringComparison.Ordinal);
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>An administrator editing the whole record reaches the switches too, and what the saved record states is what the row is given.</summary>

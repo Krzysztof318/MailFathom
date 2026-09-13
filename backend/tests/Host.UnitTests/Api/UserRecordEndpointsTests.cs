@@ -33,7 +33,10 @@ public sealed class UserRecordEndpointsTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
-        deployment.Held(new MailUserRecord(SyntheticMailUser.Deployment, "alex"));
+        deployment.Held(new MailUserRecord(SyntheticMailUser.Deployment, "alex")
+        {
+            EndpointAccess = new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true),
+        });
 
         // Act
         var result = await UserRecordEndpoints.ReadRosterAsync(
@@ -45,6 +48,8 @@ public sealed class UserRecordEndpointsTests
 
         Assert.Equal(SyntheticMailUser.Deployment.Value, entry.Id);
         Assert.Equal("alex", entry.DisplayName);
+        Assert.False(entry.McpEndpoint);
+        Assert.True(entry.ClientEndpoint);
     }
 
     [Fact]

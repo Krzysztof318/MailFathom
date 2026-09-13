@@ -7,6 +7,7 @@ using MailFathom.Application.Access.Sessions;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Security.Sessions;
 using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -237,6 +238,48 @@ public sealed class OrchestratedClientSessionTests(MailFathomOrchestrationFixtur
         finally
         {
             await OrchestratedForeignUser.EraseAsync(renewingHost, user);
+        }
+    }
+
+    /// <summary>A sign-in for a user whose record keeps them off the client mints no session, decided by the user row the mint locks rather than by anything the exchange read first.</summary>
+    /// <remarks>
+    /// The admitted credential this passes still says the user is served everywhere, as one read before the switch moved
+    /// would, so the only thing that can refuse the mint is the <c>"ClientEndpointEnabled"</c> predicate on the lock.
+    /// </remarks>
+    [Fact]
+    public async Task MintAsync_AUserTheirRecordKeepsOffTheClient_MintsNoSession()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var host = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var user = Guid.NewGuid();
+
+        await OrchestratedForeignUser.ProvisionAsync(host, user, cancellationToken);
+
+        try
+        {
+            // Arrange
+            var credential = await ProvisionCredentialAsync(host, user, "kept-off-the-client", cancellationToken);
+            var committed = await host.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<IUserSettingsDocumentWriter>().CommitAsync(
+                    MailUserId.Create(user),
+                    """{"EndpointAccess":{"ClientEndpoint":"false"}}""",
+                    new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false),
+                    expectedVersion: 1,
+                    token),
+                cancellationToken);
+
+            // Act
+            var minted = await (await SessionsOnAsync(host, cancellationToken))
+                .MintAsync(Admitted(user, credential), cancellationToken);
+
+            // Assert
+            Assert.NotNull(committed);
+            Assert.Equal(ClientSessionMintOutcome.NoLongerAdmitted, minted.Outcome);
+            Assert.Equal(0, await CountSessionsOfAsync(host, credential, cancellationToken));
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(host, user);
         }
     }
 
