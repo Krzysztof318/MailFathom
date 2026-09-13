@@ -37,6 +37,8 @@ internal static class PersistenceConstraintNames
 
     internal const string StoredEmailOccurrenceUniqueIndexName = "ix_stored_emails_folder_uidvalidity_uid";
 
+    internal const string StoredEmailOccurrenceCompleteCheckConstraintName = "ck_stored_emails_occurrence_complete";
+
     /// <summary>The order every timeline is walked in, whether it names one of a user's accounts or all of them.</summary>
     /// <remarks>
     /// ADR 0014 names a user-led index beside this one as the candidate for <em>all of my mail</em>, on the reading

@@ -227,13 +227,15 @@ internal sealed class MailRuleEvaluationStore(
         [
             .. candidates.Select(candidate => new StoredEmailAwaitingRuleEvaluation(
                 StoredEmailId.Create(candidate.Id),
-                EmailOccurrenceId.Create(
-                    account.Id,
-                    new MailFolderResolutionId(
-                        MailFolderAlias.Create(candidate.Alias),
-                        MailFolderResolutionGeneration.Create(candidate.ResolutionGeneration)),
-                    ImapUidValidity.Create(candidate.UidValidity),
-                    ImapUid.Create(candidate.Uid)),
+                candidate is { UidValidity: { } uidValidity, Uid: { } uid }
+                    ? EmailOccurrenceId.Create(
+                        account.Id,
+                        new MailFolderResolutionId(
+                            MailFolderAlias.Create(candidate.Alias),
+                            MailFolderResolutionGeneration.Create(candidate.ResolutionGeneration)),
+                        ImapUidValidity.Create(uidValidity),
+                        ImapUid.Create(uid))
+                    : null,
                 new MailRuleEmailFacts
                 {
                     Account = mailboxAccountId,

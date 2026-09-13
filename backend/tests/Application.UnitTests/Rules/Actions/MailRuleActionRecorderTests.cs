@@ -495,6 +495,33 @@ public sealed class MailRuleActionRecorderTests
         Assert.Equal(3, this.records.OpenedRecordCount);
     }
 
+    /// <summary>
+    /// A stored email no mail server holds any longer has nowhere a change could be carried to, so every action is
+    /// refused visibly rather than recorded against an occurrence that does not exist.
+    /// </summary>
+    [Fact]
+    public async Task RecordAsync_AStoredEmailWithNoOccurrence_RefusesEveryActionAsNotOnTheMailServer()
+    {
+        // Arrange
+        this.MapMirrored(Archive, "INBOX/Archive");
+        this.folders.Bind(Account.Id, Archive);
+        var plan = MailRuleActionPlan.Compose(
+        [
+            RuleNamed("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))),
+            RuleNamed("mark-them-read", MailRuleAction.SetSeen(isSeen: true)),
+        ]);
+
+        // Act
+        var recording = await this.RecordAsync(this.CreateRecorder(), LocalEmail, occurrence: null, plan, Revision);
+
+        // Assert
+        Assert.Equal(0, this.records.OpenedRecordCount);
+        Assert.Equal(0, recording.RecordedCount);
+        Assert.Equal(
+            [MailRuleActionFailureReason.EmailNotOnMailServer, MailRuleActionFailureReason.EmailNotOnMailServer],
+            recording.Failures.Select(failure => failure.Reason));
+    }
+
     [Fact]
     public async Task RecordAsync_APlanThatAsksForNothing_WritesNothing()
     {
@@ -527,7 +554,7 @@ public sealed class MailRuleActionRecorderTests
     private async Task<MailRuleActionRecording> RecordAsync(
         MailRuleActionRecorder recorder,
         StoredEmailId storedEmailId,
-        EmailOccurrenceId occurrence,
+        EmailOccurrenceId? occurrence,
         MailRuleActionPlan plan,
         MailRuleSetRevision revision)
     {

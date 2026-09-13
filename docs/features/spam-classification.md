@@ -33,7 +33,7 @@ content written to deceive a reader would reach the model as ordinary correspond
 
 ## What a classification records
 
-One classification per occurrence, replacing whatever was recorded for it. It is derived data of the same kind as an
+One classification per stored email, replacing whatever was recorded for it. It is derived data of the same kind as an
 embedding: computed locally, never mirrored to the mail server, and never a statement about where the message lives or
 which flags it carries. Where a message lives is the server's, which is why acting on a verdict is a separate decision
 behind switches of its own — described in [what an operator can let a verdict do](#what-an-operator-can-let-a-verdict-do).
@@ -378,7 +378,7 @@ passage reaches either of them, or a log line about them.
 
 ## Classifying is idempotent, and reclassifying is explicit
 
-Classification is keyed to the occurrence, so repeating it either leaves the existing record alone or replaces it with
+Classification is keyed to the stored email, so repeating it either leaves the existing record alone or replaces it with
 what the same inputs produce. Two callers asking together resolve to one record rather than to a history: a concurrent
 write conflicts on the record's own optimistic-concurrency token and is retried from a fresh read.
 
@@ -396,7 +396,11 @@ soon as it has committed the message and its content, and the work then runs as 
 that carries every other background job: leased to one worker, bounded by a timeout, retried with a jittered backoff,
 and dead-lettered once it has spent its attempts. A job that stopped is read and acted on through
 [administering a deployment](../operations/admin-endpoint.md#reading-the-background-work-that-stopped-and-deciding-what-becomes-of-it),
-under the job type `classify-email-spam`.
+under the job type `classify-stored-email-spam`. The job names the stored email rather than where the server holds it,
+so a message the source has since expunged is still classified; only the action a verdict asks for needs the occurrence,
+and is not recorded without one. A `classify-email-spam` job names the message by its occurrence instead; nothing
+enqueues one any more, and it runs only work an earlier build queued, by finding the stored email that occurrence
+belongs to and classifying it exactly as above, or ending as done when no stored email holds it.
 
 **Why a job rather than another step of the synchronization run.** Rule evaluation is a step of that run and needs
 nothing else, because evaluating a rule over committed local state has no transient failure and therefore nothing to
@@ -567,7 +571,7 @@ exactly the second copy of the mailbox a record read back over an administrative
 ## Privacy
 
 A classification is derived from mail content and inherits its classification, retention, and deletion constraints: the
-record hangs off the message occurrence and is removed with it, so whatever erasure and retention already reach the
+record hangs off the stored email, whether or not a mail server still holds it, and is removed with it, so whatever erasure and retention already reach the
 message reach the record too. A change a verdict asked for is the same kind of thing and follows the same rule: the
 mutation record says where a person's mail was moved and holds a folder path, a UID, and a decision profile — never
 anything from the message — and it is removed with the email it describes.

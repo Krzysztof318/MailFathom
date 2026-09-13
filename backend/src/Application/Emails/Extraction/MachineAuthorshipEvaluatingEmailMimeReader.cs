@@ -2,8 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.EmailContent.Storage;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails.Authorship;
 
 namespace MailFathom.Application.Emails.Extraction;
@@ -48,11 +47,11 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReader : IEmailMimeReade
 
     /// <inheritdoc />
     public async Task<EmailMimeExtractionResult> ReadMetadataAsync(
-        RemoteEmailContent content,
-        MailUserId user,
+        MailAccountIdentity account,
+        ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken)
     {
-        var extraction = await this.inner.ReadMetadataAsync(content, user, cancellationToken);
+        var extraction = await this.inner.ReadMetadataAsync(account, rawMime, cancellationToken);
 
         // A message nobody could parse yielded no text to read, and reaches storage carrying the not-assessed state it
         // already holds — which is the same state a message with an empty body reaches by being read.

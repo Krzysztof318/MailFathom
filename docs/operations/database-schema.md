@@ -250,6 +250,9 @@ already serving:
   same terms as before — the predicate compares the backend name and null-tests the locator, the payload, and the new
   column, none of which dereferences a payload PostgreSQL stored out of line — and the column is added without a
   rewrite, since a nullable column with no default is a catalog change.
+  `MakeStoredEmailOccurrenceOptional` adds `ck_stored_emails_occurrence_complete` to `stored_emails`, so the message
+  table is scanned under `ACCESS EXCLUSIVE` once; dropping `NOT NULL` from `uid_validity` and `uid` beside it is a
+  catalog change.
 
 The first release's script creates a schema from nothing, so none of these applies to an empty database.
 
@@ -276,6 +279,12 @@ names the account identifier as the conflict target, no unique constraint matche
 statement is refused — so a rotation an older build receives against this schema is logged as a failure to store rather
 than stored. Keep the middle of the rollout short on these releases, and do not treat a previous image as something
 that can be left running against them.
+
+**The release carrying `MakeStoredEmailOccurrenceOptional` leaves queued classifications alone.** Arriving mail is
+now classified under a job type of its own, `classify-stored-email-spam`, which names the stored email; a replica of
+the previous build does not declare that type and so never claims one. `classify-email-spam` keeps its contract and a
+handler, so the jobs a previous build queued — and still queues in the middle of the rollout — are claimed and run by
+either build. Nothing in the queue is rewritten and nothing waits on the rollout finishing.
 
 **`AddMailboxMutationWithdrawalHold` shortens a way back rather than failing anything.** It adds `HeldUntil` to
 `mailbox_mutations`, nullable with no default, so it is a catalog change on a table of any size. A build older than the

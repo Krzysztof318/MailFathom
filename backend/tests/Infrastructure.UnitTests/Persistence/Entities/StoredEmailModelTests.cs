@@ -78,6 +78,70 @@ public sealed class StoredEmailModelTests
         Assert.Equal(["MailFolderId", "UidValidity", "Uid"], index.Properties.Select(property => property.Name));
     }
 
+    /// <summary>
+    /// The row identifier is the stored message's identity and the occurrence is an attribute of it, so both occurrence
+    /// columns accept null and the check constraint keeps them present or absent together.
+    /// </summary>
+    [Fact]
+    public void StoredEmailModel_RemoteOccurrence_IsOptionalAndHeldCompleteByACheckConstraint()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var storedEmail = StoredEmailEntityType(context);
+
+        // Act
+        var check = storedEmail
+            .GetCheckConstraints()
+            .SingleOrDefault(constraint => constraint.Name == PersistenceConstraintNames.StoredEmailOccurrenceCompleteCheckConstraintName);
+
+        // Assert
+        Assert.True(storedEmail.FindProperty(nameof(StoredEmailEntity.UidValidity))!.IsNullable);
+        Assert.True(storedEmail.FindProperty(nameof(StoredEmailEntity.Uid))!.IsNullable);
+        Assert.False(storedEmail.FindProperty(nameof(StoredEmailEntity.MailFolderId))!.IsNullable);
+        Assert.NotNull(check);
+        Assert.Equal("(\"UidValidity\" IS NULL) = (\"Uid\" IS NULL)", check.Sql);
+    }
+
+    /// <summary>The identity is assigned by the writer when the message is first stored and never by the database, so no later write can change it.</summary>
+    [Fact]
+    public void StoredEmailModel_Identity_IsTheKeyAndIsNeverGeneratedByTheDatabase()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var key = StoredEmailEntityType(context).FindPrimaryKey()!;
+
+        // Assert
+        Assert.Equal([nameof(StoredEmailEntity.Id)], key.Properties.Select(property => property.Name));
+        Assert.Equal(ValueGenerated.Never, key.Properties[0].ValueGenerated);
+    }
+
+    /// <summary>
+    /// Erasing a stored message reaches every row derived from it through its identity alone, so no derived table
+    /// outlives the message or needs an occurrence to be found. A reply is the one reference that survives, as a root.
+    /// </summary>
+    [Fact]
+    public void StoredEmailModel_EveryReferenceToTheIdentity_CascadesExceptTheParentOfAReply()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var references = StoredEmailEntityType(context).GetReferencingForeignKeys().ToArray();
+
+        // Assert
+        Assert.NotEmpty(references);
+        Assert.All(references, reference =>
+        {
+            Assert.Equal([nameof(StoredEmailEntity.Id)], reference.PrincipalKey.Properties.Select(property => property.Name));
+            var expected = reference.Properties.Select(property => property.Name).SequenceEqual(["ParentStoredEmailId"])
+                ? DeleteBehavior.SetNull
+                : DeleteBehavior.Cascade;
+            Assert.Equal(expected, reference.DeleteBehavior);
+        });
+    }
+
     /// <summary>A recipient filter is a containment test over an array, which only a GIN index can serve.</summary>
     [Theory]
     [InlineData(PersistenceConstraintNames.StoredEmailToAddressesIndexName, "ToAddresses")]

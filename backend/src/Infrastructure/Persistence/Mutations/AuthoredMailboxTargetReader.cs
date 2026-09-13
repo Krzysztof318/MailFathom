@@ -60,7 +60,9 @@ internal sealed class AuthoredMailboxTargetReader(MailFathomDbContext readContex
             })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (located is null)
+        // A row no mail server holds any longer has nothing a change could be issued against, exactly like the retained
+        // copy the filter above refuses.
+        if (located is not { UidValidity: { } uidValidity, Uid: { } uid })
         {
             return null;
         }
@@ -75,8 +77,8 @@ internal sealed class AuthoredMailboxTargetReader(MailFathomDbContext readContex
             EmailOccurrenceId.Create(
                 MailAccountId.Create(located.MailboxAccountId),
                 folder.Id,
-                ImapUidValidity.Create(located.UidValidity),
-                ImapUid.Create(located.Uid)),
+                ImapUidValidity.Create(uidValidity),
+                ImapUid.Create(uid)),
             folder);
     }
 }

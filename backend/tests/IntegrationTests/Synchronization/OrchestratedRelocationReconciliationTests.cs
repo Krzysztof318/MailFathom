@@ -264,8 +264,8 @@ public sealed class OrchestratedRelocationReconciliationTests(MailFathomOrchestr
                 .Select(storedEmail => new StoredEmailRow(
                     StoredEmailId.Create(storedEmail.Id),
                     storedEmail.MailFolder.Alias,
-                    ImapUidValidity.Create(storedEmail.UidValidity),
-                    ImapUid.Create(storedEmail.Uid),
+                    ImapUidValidity.Create(storedEmail.UidValidity!.Value),
+                    ImapUid.Create(storedEmail.Uid!.Value),
                     storedEmail.RemoteExpungeObservedAt))
                 .SingleAsync(token),
             cancellationToken);

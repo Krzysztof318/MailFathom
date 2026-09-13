@@ -303,9 +303,10 @@ public sealed class MailboxSynchronizerTests
         session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
         session.GetEmailBatchAfterAsync(null, 25, MailSynchronizationWindow.Unbounded, CancellationToken.None).Returns(new RemoteEmailMetadataBatch([metadata], uid, HasMore: false));
         StubRetrievedContent(session, options, occurrence, payloadLength: 3);
+        var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
         metadataRepository
             .UpsertMetadataAsync(persistenceSession, SyntheticMailUser.Deployment, metadata, Arg.Any<ExtractedEmailMetadata?>(), StoredEmailContentAvailability.Available, CancellationToken.None)
-            .Returns(StoredEmailId.Create(Guid.CreateVersion7()));
+            .Returns(storedEmailId);
 
         // Act
         var result = await synchronizer.SynchronizeAsync(MailAccountIdentity.Create(SyntheticMailUser.Deployment, accountId), InboxMapping, CancellationToken.None);
@@ -315,8 +316,8 @@ public sealed class MailboxSynchronizerTests
 
         var request = Assert.Single(EnqueuedJobs(jobStore));
 
-        Assert.Equal(JobType.ClassifyEmailSpam, request.JobType);
-        Assert.Equal(occurrence, Assert.IsType<ClassifyEmailSpamJobPayload>(request.Payload).ToOccurrenceId());
+        Assert.Equal(JobType.ClassifyStoredEmailSpam, request.JobType);
+        Assert.Equal(storedEmailId, Assert.IsType<ClassifyStoredEmailSpamJobPayload>(request.Payload).ToStoredEmailId());
     }
 
     /// <summary>A message stored from its envelope alone is asked of nothing: no content means no verdict is coming.</summary>
@@ -1808,7 +1809,10 @@ public sealed class MailboxSynchronizerTests
         // Assert
         Assert.Equal(1, result.StoredEmailCount);
         Assert.Equal(0, result.UnreadableMimeEmailCount);
-        await mimeReader.Received(1).ReadMetadataAsync(content, SyntheticMailUser.Deployment, CancellationToken.None);
+        await mimeReader.Received(1).ReadMetadataAsync(
+            MailAccountIdentity.Create(SyntheticMailUser.Deployment, accountId),
+            Arg.Is<ReadOnlyMemory<byte>>(rawMime => rawMime.Equals(content.RawMime)),
+            CancellationToken.None);
         await session.Received(1).FetchEmailContentWithoutSettingSeenAsync(occurrence, 1024, CancellationToken.None);
     }
 
@@ -1832,10 +1836,10 @@ public sealed class MailboxSynchronizerTests
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 28, 12, 0, 0, TimeSpan.Zero));
         var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
         var content = new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]));
-        var extracted = CreateExtractedMetadata(occurrence);
+        var extracted = CreateExtractedMetadata(accountId);
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(content, Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailMimeExtractionResult.Extracted(extracted)));
         var synchronizer = CreateSynchronizer(
             sessionFactory,
@@ -1887,7 +1891,7 @@ public sealed class MailboxSynchronizerTests
         var content = new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]));
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(content, Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailMimeExtractionResult.MalformedContent()));
         var synchronizer = CreateSynchronizer(
             sessionFactory,
@@ -1945,7 +1949,10 @@ public sealed class MailboxSynchronizerTests
         var readableContent = new RemoteEmailContent(readableOccurrence, new ReadOnlyMemory<byte>([2]));
         var mimeReader = CreateMimeReaderThatExtractsEverything();
         mimeReader
-            .ReadMetadataAsync(unreadableContent, Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(
+                Arg.Any<MailAccountIdentity>(),
+                Arg.Is<ReadOnlyMemory<byte>>(rawMime => rawMime.Equals(unreadableContent.RawMime)),
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(CreateFailedExtraction(unreadableOutcome)));
         var synchronizer = CreateSynchronizer(
             sessionFactory,
@@ -2146,9 +2153,9 @@ public sealed class MailboxSynchronizerTests
 
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(
-                CreateExtractedMetadata(call.Arg<RemoteEmailContent>()!.OccurrenceId) with
+                CreateExtractedMetadata(call.Arg<MailAccountIdentity>().Id) with
                 {
                     Participants = [new EmailParticipant(EmailAddressRole.From, sender)],
                 })));
@@ -2915,15 +2922,15 @@ public sealed class MailboxSynchronizerTests
     {
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(
-                EmailMimeExtractionResult.Extracted(CreateExtractedMetadata(call.Arg<RemoteEmailContent>()!.OccurrenceId))));
+                EmailMimeExtractionResult.Extracted(CreateExtractedMetadata(call.Arg<MailAccountIdentity>().Id))));
 
         return mimeReader;
     }
 
-    private static ExtractedEmailMetadata CreateExtractedMetadata(EmailOccurrenceId occurrenceId) => new(
-        occurrenceId,
+    private static ExtractedEmailMetadata CreateExtractedMetadata(MailAccountId accountId) => new(
+        accountId,
         Subject: "Subject",
         SentAt: null,
         ReceivedAt: null,

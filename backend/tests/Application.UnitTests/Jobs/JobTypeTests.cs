@@ -21,6 +21,7 @@ public sealed class JobTypeTests
         JobType[] expected =
         [
             JobType.ClassifyEmailSpam,
+            JobType.ClassifyStoredEmailSpam,
             JobType.RunScheduledMailRules,
             JobType.RederiveStoredMail,
             JobType.DispatchHeldSend,
@@ -49,6 +50,7 @@ public sealed class JobTypeTests
     /// <summary>The name is what a log line, a span, a counter dimension, and the stored row all show, so it is the published identity.</summary>
     [Theory]
     [InlineData("classify-email-spam")]
+    [InlineData("classify-stored-email-spam")]
     public void TryParseName_ADeclaredName_ReturnsTheTypeItNames(string name)
     {
         // Act

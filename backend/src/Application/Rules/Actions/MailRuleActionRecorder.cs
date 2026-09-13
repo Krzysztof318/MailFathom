@@ -68,7 +68,10 @@ public sealed class MailRuleActionRecorder
     /// <param name="session">The session the records are staged in, which is the one the batch commits.</param>
     /// <param name="storedEmailId">The local email the rules matched.</param>
     /// <param name="user">The user whose account the email belongs to, which every record written here carries.</param>
-    /// <param name="occurrence">Where that email is, which is what an IMAP command will be issued against.</param>
+    /// <param name="occurrence">
+    /// Where that email is, which is what an IMAP command will be issued against, or <see langword="null" /> where no mail
+    /// server holds it any longer — which fails every action the plan asks for rather than recording one.
+    /// </param>
     /// <param name="plan">What the matching rules together ask for.</param>
     /// <param name="revision">The rule set revision the pass ran under, which is part of every request's identity.</param>
     /// <param name="destinations">Where the folders this batch's actions name currently are, resolved before the transaction opened.</param>
@@ -80,14 +83,13 @@ public sealed class MailRuleActionRecorder
         IPersistenceSession session,
         StoredEmailId storedEmailId,
         MailUserId user,
-        EmailOccurrenceId occurrence,
+        EmailOccurrenceId? occurrence,
         MailRuleActionPlan plan,
         MailRuleSetRevision revision,
         MailboxDestinations destinations,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
-        ArgumentNullException.ThrowIfNull(occurrence);
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(destinations);
 
@@ -101,9 +103,14 @@ public sealed class MailRuleActionRecorder
             return MailRuleActionRecording.Nothing;
         }
 
+        if (occurrence is null)
+        {
+            return new MailRuleActionRecording([], FailuresOf(plan, MailRuleActionFailureReason.EmailNotOnMailServer));
+        }
+
         if (this.TryReadPermissions(occurrence.AccountId) is not { } permitted)
         {
-            return new MailRuleActionRecording([], WithdrawnAccountFailures(plan));
+            return new MailRuleActionRecording([], FailuresOf(plan, MailRuleActionFailureReason.AccountNoLongerConfigured));
         }
 
         var failures = new List<MailRuleActionFailure>();
@@ -159,14 +166,16 @@ public sealed class MailRuleActionRecorder
         }
     }
 
-    /// <summary>Reports every action of a plan as failed, for an account the configuration has stopped declaring.</summary>
-    private static IReadOnlyList<MailRuleActionFailure> WithdrawnAccountFailures(MailRuleActionPlan plan) =>
+    /// <summary>Reports every action of a plan as failed under the reason it is given.</summary>
+    private static IReadOnlyList<MailRuleActionFailure> FailuresOf(
+        MailRuleActionPlan plan,
+        MailRuleActionFailureReason reason) =>
     [
         .. plan.Actions.Select(planned => new MailRuleActionFailure(
             planned.RuleName,
             planned.Position,
             planned.Action.Mutation,
-            MailRuleActionFailureReason.AccountNoLongerConfigured,
+            reason,
             planned.Action.Destination)),
     ];
 

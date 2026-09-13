@@ -72,14 +72,14 @@ internal sealed class StoredMailRederivationStore(
             .Where(email => resumeAfterId == null || email.Id > resumeAfterId)
             .OrderBy(email => email.Id)
             .Take(batchSize)
-            .Select(StoredEmailOccurrenceRow.Projection)
+            .Select(email => new { email.Id, email.MailboxAccountId })
             .ToArrayAsync(cancellationToken);
 
         return
         [
             .. candidates.Select(candidate => new StoredMailAwaitingRederivation(
                 StoredEmailId.Create(candidate.Id),
-                candidate.ToOccurrenceId())),
+                MailAccountId.Create(candidate.MailboxAccountId))),
         ];
     }
 

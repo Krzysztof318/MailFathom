@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260913102318_MakeStoredEmailOccurrenceOptional")]
+    partial class MakeStoredEmailOccurrenceOptional
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2889,62 +2892,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         });
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredFileEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Backend")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasDefaultValue("Database");
-
-                    b.Property<long>("ByteLength")
-                        .HasColumnType("bigint");
-
-                    b.Property<byte[]>("Content")
-                        .HasColumnType("bytea");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("MediaType")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<string>("ObjectLocator")
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)");
-
-                    b.Property<DateTimeOffset?>("ObjectVerifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<byte[]>("Sha256Hash")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("bytea");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ObjectLocator")
-                        .IsUnique()
-                        .HasDatabaseName("ix_stored_files_object_locator")
-                        .HasFilter("\"Backend\" = 'ObjectStorage'");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("stored_files", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_stored_files_backend_payload", "(\"Backend\" = 'Database' AND \"Content\" IS NOT NULL AND \"ObjectLocator\" IS NULL AND \"ObjectVerifiedAt\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL\n    AND (\"Content\" IS NULL OR \"ObjectVerifiedAt\" IS NOT NULL))");
-                        });
-                });
-
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredSecretEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3099,6 +3046,26 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_user_credentials_user_created_at");
 
                     b.ToTable("user_credentials", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.UserPortraitEntity", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("user_portraits", (string)null);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.UserStoredContentEntity", b =>
@@ -3603,16 +3570,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("MailFolder");
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredFileEntity", b =>
-                {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.UserAccountEntity", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_stored_files_settings_accounts");
-                });
-
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredSecretEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.UserAccountEntity", "User")
@@ -3637,6 +3594,15 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.UserCredentialEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.UserAccountEntity", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.UserPortraitEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.UserAccountEntity", null)
                         .WithMany()

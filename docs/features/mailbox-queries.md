@@ -66,7 +66,7 @@ would leave a caller reading an empty page as an empty folder.
 A listing that names no folder reads every folder the account maps and lets tools read, so a message that exists in two
 of them — because it was copied, by
 the mailbox user or by MailFathom — is two entries, one per folder. Nothing collapses them, because a stored row is one
-occurrence and no identity spans two;
+stored email in one folder and no identity spans two;
 [what a message MailFathom copied becomes locally](imap-synchronization.md#what-a-message-mailfathom-copied-becomes-locally)
 states what that costs and why.
 

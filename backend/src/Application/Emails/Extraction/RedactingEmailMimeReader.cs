@@ -2,10 +2,9 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Detection;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Emails.Extraction;
 
@@ -63,16 +62,18 @@ public sealed class RedactingEmailMimeReader : IEmailMimeReader
     /// <inheritdoc />
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the body carries, which refuses the derivation.</exception>
     public async Task<EmailMimeExtractionResult> ReadMetadataAsync(
-        RemoteEmailContent content,
-        MailUserId user,
+        MailAccountIdentity account,
+        ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken)
     {
+        var user = account.User;
+
         // Read before the scan rather than where the reading is written, and before the scan rather than after it.
         // A posture republished while this message is being scanned then leaves the row stamped with the older one,
         // which reads as stale and is re-derived — the safe direction, where a stamp taken at the write would record a
         // posture the text never went through and the row would never be revisited.
         var redactedUnder = this.guard.StampFor(user);
-        var extraction = await this.inner.ReadMetadataAsync(content, user, cancellationToken);
+        var extraction = await this.inner.ReadMetadataAsync(account, rawMime, cancellationToken);
 
         // A message nobody could parse carries no text to redact, and neither does one whose body held no words or
         // arrived inside a cryptographic envelope. Each of those reaches the derived store as the absence it already

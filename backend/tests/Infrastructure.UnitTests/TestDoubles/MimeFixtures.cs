@@ -8,6 +8,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 
 namespace MailFathom.Infrastructure.UnitTests.TestDoubles;
 
@@ -25,16 +26,16 @@ internal static class MimeFixtures
         ImapUidValidity.Create(5),
         ImapUid.Create(10));
 
+    /// <summary>Gets the account every fixture is read for, which is the account its occurrence identity names.</summary>
+    public static MailAccountIdentity Account { get; } = MailAccountIdentity.Create(
+        SyntheticMailUser.Deployment,
+        MailAccountId.Create("primary"));
+
     /// <summary>Turns MIME lines into the fetched content an extraction reads.</summary>
     /// <param name="lines">The message's lines, joined with CRLF as a mail transport writes them.</param>
     /// <returns>The content, carrying a fixed occurrence identity.</returns>
     public static RemoteEmailContent Message(params string[] lines) =>
         new(OccurrenceId, Encoding.UTF8.GetBytes(string.Join("\r\n", lines)));
-
-    /// <summary>Turns raw bytes into fetched content, for the cases that are about bytes rather than about headers.</summary>
-    /// <param name="rawMime">The raw payload.</param>
-    /// <returns>The content, carrying a fixed occurrence identity.</returns>
-    public static RemoteEmailContent RawContent(ReadOnlyMemory<byte> rawMime) => new(OccurrenceId, rawMime);
 
     /// <summary>Turns MIME lines into stored content a read renders, recorded as intact.</summary>
     /// <param name="lines">The message's lines, joined with CRLF as a mail transport writes them.</param>

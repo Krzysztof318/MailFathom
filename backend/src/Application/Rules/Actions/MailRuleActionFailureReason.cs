@@ -59,4 +59,12 @@ public enum MailRuleActionFailureReason
     /// path outright. Picking the first of several would let a reordered server response change where mail is filed.
     /// </remarks>
     DestinationFolderAmbiguous = 5,
+
+    /// <summary>No mail server holds the email any longer, so there is no occurrence a change could be issued against.</summary>
+    /// <remarks>
+    /// The email is still stored and was still evaluated; what is missing is the remote UID every change recorded here
+    /// is carried to the server under. Guessing where the message went would be MailFathom deciding which message a
+    /// command reaches.
+    /// </remarks>
+    EmailNotOnMailServer = 6,
 }

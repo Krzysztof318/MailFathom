@@ -183,8 +183,8 @@ public sealed class StoredEmailExtractionBackfill
             // fill in metadata it lacks, and a damaged payload simply fails to parse and is counted as unreadable; the
             // integrity check belongs to the read that serves content to a person, which can act on the difference.
             var extraction = await this.mimeReader.ReadMetadataAsync(
-                new RemoteEmailContent(email.OccurrenceId, storedContent.RawMime),
-                email.User,
+                email.Account,
+                storedContent.RawMime,
                 cancellationToken);
 
             // A message no reader can parse is stepped over exactly as it is during synchronization: it keeps whatever

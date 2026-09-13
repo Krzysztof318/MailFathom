@@ -190,8 +190,8 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
                 .Where(storedEmail => storedEmail.Subject == subject)
                 .Select(storedEmail => new StoredEmailRow(
                     StoredEmailId.Create(storedEmail.Id),
-                    ImapUidValidity.Create(storedEmail.UidValidity),
-                    ImapUid.Create(storedEmail.Uid)))
+                    ImapUidValidity.Create(storedEmail.UidValidity!.Value),
+                    ImapUid.Create(storedEmail.Uid!.Value)))
                 .SingleAsync(token),
             cancellationToken);
 

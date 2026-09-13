@@ -25,7 +25,10 @@ public enum SpamActionOutcome
     /// <summary>A scanner decided the verdict and its score is below the score the operator acts at.</summary>
     BelowThreshold = 3,
 
-    /// <summary>Nothing is stored under that identifier, which is what an expunged message reaches.</summary>
+    /// <summary>
+    /// There is no occurrence to issue a change against: nothing is stored under that identifier, which is what an
+    /// expunged message reaches, or the stored email carries no occurrence because no mail server holds it any longer.
+    /// </summary>
     OccurrenceMissing = 4,
 
     /// <summary>Filing is on and the destination named no folder on the account's server.</summary>

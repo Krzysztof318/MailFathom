@@ -3,11 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.RegularExpressions;
-using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Mail;
-using MailFathom.Domain.Access;
-using MailFathom.Domain.Emails;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Infrastructure.Mail.Dkim;
 using MimeKit;
@@ -79,13 +77,11 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
 
     /// <inheritdoc />
     public async Task<EmailMimeExtractionResult> ReadMetadataAsync(
-        RemoteEmailContent content,
-        MailUserId user,
+        MailAccountIdentity account,
+        ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(content);
-
-        await using var structuralPass = RawMimeStream.Open(content.RawMime);
+        await using var structuralPass = RawMimeStream.Open(rawMime);
 
         var exceededLimit = await MimeStructureLimitReader.FindExceededLimitAsync(
             structuralPass,
@@ -99,14 +95,14 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
                 : EmailMimeExtractionResult.NestingDepthLimitExceeded();
         }
 
-        await using var parsingPass = RawMimeStream.Open(content.RawMime);
+        await using var parsingPass = RawMimeStream.Open(rawMime);
 
         try
         {
             using var message = await this.loadMessage(parsingPass, cancellationToken);
 
             return EmailMimeExtractionResult.Extracted(
-                await this.ExtractMetadataAsync(content.OccurrenceId, message, cancellationToken));
+                await this.ExtractMetadataAsync(account.Id, message, cancellationToken));
         }
         catch (FormatException)
         {
@@ -135,7 +131,7 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
         MimeMessage.LoadAsync(ParserOptions.Default, rawMime, persistent: true, cancellationToken);
 
     private async Task<ExtractedEmailMetadata> ExtractMetadataAsync(
-        EmailOccurrenceId occurrenceId,
+        MailAccountId accountId,
         MimeMessage message,
         CancellationToken cancellationToken)
     {
@@ -146,7 +142,7 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
         var headers = MimeMessageHeaderReader.Read(message);
 
         return new ExtractedEmailMetadata(
-            occurrenceId,
+            accountId,
             headers.Subject,
             headers.SentAt,
             headers.ReceivedAt,
@@ -154,7 +150,7 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
             headers.ThreadReferences,
             classification.Summary,
             EmailBodyTextExtractor.Extract(classification, this.options.MaxExtractedTextCharacters),
-            await this.ReadSenderAuthenticationAsync(occurrenceId, message, cancellationToken))
+            await this.ReadSenderAuthenticationAsync(accountId, message, cancellationToken))
         {
             Automation = MailAutomationReading.Read(message),
         };
@@ -176,12 +172,12 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
     /// </para>
     /// </remarks>
     private async Task<SenderAuthentication> ReadSenderAuthenticationAsync(
-        EmailOccurrenceId occurrenceId,
+        MailAccountId accountId,
         MimeMessage message,
         CancellationToken cancellationToken)
     {
         var headers = AuthenticationResultsHeaderReader.Read(message);
-        var authority = this.trustedAuthorities.GetTrustedAuthority(occurrenceId.AccountId);
+        var authority = this.trustedAuthorities.GetTrustedAuthority(accountId);
         var displayedSenderAddress = message.From.Mailboxes.FirstOrDefault()?.Address;
 
         if (this.localSenderVerifier is { } verifier

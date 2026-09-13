@@ -522,7 +522,7 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
                 .ToArrayAsync(token),
             cancellationToken);
 
-        return rows.ToDictionary(row => row.Uid);
+        return rows.ToDictionary(row => row.Uid!.Value);
     }
 
     /// <summary>Counts what the database should have removed along with one stored email.</summary>

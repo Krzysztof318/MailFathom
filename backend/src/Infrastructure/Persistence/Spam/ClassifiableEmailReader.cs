@@ -27,12 +27,16 @@ internal sealed class ClassifiableEmailReader(MailFathomDbContext dbContext) : I
     /// copy is kept is a disposition a user chose; a copy that is kept is mail a reader can still reach, so refusing to
     /// classify it would leave exactly the mail nobody else can act on unclassified.
     /// </remarks>
-    public async Task<ClassifiableEmail?> FindAsync(StoredEmailId emailId, CancellationToken cancellationToken)
+    public async Task<ClassifiableEmail?> FindAsync(
+        MailUserId user,
+        StoredEmailId emailId,
+        CancellationToken cancellationToken)
     {
+        var userId = user.Value;
         var storedEmailId = emailId.Value;
         var row = await dbContext.StoredEmails
             .AsNoTracking()
-            .Where(email => email.Id == storedEmailId)
+            .Where(email => email.Id == storedEmailId && email.UserId == userId)
             .Select(email => new { email.MailboxAccountId, email.MailFolder.Alias })
             .SingleOrDefaultAsync(cancellationToken);
 

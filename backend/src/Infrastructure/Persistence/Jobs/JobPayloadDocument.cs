@@ -52,6 +52,8 @@ internal static class JobPayloadDocument
         {
             ClassifyEmailSpamJobPayload occurrence =>
                 JsonSerializer.Serialize(occurrence, JobPayloadJsonContext.Default.ClassifyEmailSpamJobPayload),
+            ClassifyStoredEmailSpamJobPayload storedEmail =>
+                JsonSerializer.Serialize(storedEmail, JobPayloadJsonContext.Default.ClassifyStoredEmailSpamJobPayload),
             RunScheduledMailRulesJobPayload account =>
                 JsonSerializer.Serialize(account, JobPayloadJsonContext.Default.RunScheduledMailRulesJobPayload),
             RederiveStoredMailJobPayload scope =>
@@ -102,6 +104,10 @@ internal static class JobPayloadDocument
             {
                 _ when jobType == JobType.ClassifyEmailSpam =>
                     JsonSerializer.Deserialize(document, JobPayloadJsonContext.Default.ClassifyEmailSpamJobPayload)
+                        ?? throw new InvalidOperationException(
+                            $"A '{jobType}' job carries a document that describes no payload."),
+                _ when jobType == JobType.ClassifyStoredEmailSpam =>
+                    JsonSerializer.Deserialize(document, JobPayloadJsonContext.Default.ClassifyStoredEmailSpamJobPayload)
                         ?? throw new InvalidOperationException(
                             $"A '{jobType}' job carries a document that describes no payload."),
                 _ when jobType == JobType.RunScheduledMailRules =>

@@ -18,6 +18,10 @@ public interface ISpamActionOccurrenceReader
     /// <summary>Finds the occurrence one local email currently has.</summary>
     /// <param name="emailId">The local email a classification was recorded for.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>Where the email is and how it stands, or <see langword="null" /> when nothing is stored under that identifier.</returns>
+    /// <returns>
+    /// Where the email is and how it stands, or <see langword="null" /> when there is nothing a change could be issued
+    /// against: nothing is stored under that identifier, or the stored email carries no occurrence because no mail
+    /// server holds it any longer.
+    /// </returns>
     Task<SpamActionOccurrence?> FindAsync(StoredEmailId emailId, CancellationToken cancellationToken);
 }

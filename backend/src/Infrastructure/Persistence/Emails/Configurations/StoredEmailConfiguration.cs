@@ -12,8 +12,12 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace MailFathom.Infrastructure.Persistence.Emails.Configurations;
 
-/// <summary>Declares the metadata of one remote email occurrence, which is the row the whole mailbox hangs off.</summary>
+/// <summary>Declares the metadata of one stored email, which is the row the whole mailbox hangs off.</summary>
 /// <remarks>
+/// <para>
+/// The row's identifier is the email's identity, and every table derived from the email references it. UIDVALIDITY and
+/// UID are where a mail server still holds the email, and both are absent where none does.
+/// </para>
 /// UIDVALIDITY and UID are modelled as CLR <see cref="uint" /> because that is the IMAP wire type, and PostgreSQL has
 /// no unsigned 32-bit integer. Npgsql maps both onto <c>bigint</c>, which the baseline migration emits and which holds
 /// every value the wire type can carry; the integration suite stores an occurrence at <see cref="uint.MaxValue" /> and
@@ -25,7 +29,14 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
     /// <inheritdoc />
     public void Configure(EntityTypeBuilder<StoredEmailEntity> entity)
     {
-        entity.ToTable("stored_emails");
+        // An occurrence is a UID within one UIDVALIDITY, so half of one names nothing. The unique index cannot say so:
+        // PostgreSQL treats a null as distinct from every other, which is what lets rows no server holds share the
+        // folder, and the same rule would let a row carrying only one of the two through.
+        entity.ToTable(
+            "stored_emails",
+            table => table.HasCheckConstraint(
+                PersistenceConstraintNames.StoredEmailOccurrenceCompleteCheckConstraintName,
+                $"(\"{nameof(StoredEmailEntity.UidValidity)}\" IS NULL) = (\"{nameof(StoredEmailEntity.Uid)}\" IS NULL)"));
         entity.HasKey(email => email.Id);
         entity.Property(email => email.Id).ValueGeneratedNever();
         entity.Property(email => email.MailboxAccountId).HasMaxLength(128);

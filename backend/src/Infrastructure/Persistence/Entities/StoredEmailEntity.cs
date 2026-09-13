@@ -52,9 +52,20 @@ internal sealed class StoredEmailEntity
 
     public required MailFolderEntity MailFolder { get; set; }
 
-    public uint UidValidity { get; set; }
+    /// <summary>
+    /// Gets or sets the UID space the remote occurrence was read in, or <see langword="null" /> where no mail server
+    /// holds this email any longer.
+    /// </summary>
+    /// <remarks>
+    /// The occurrence is an attribute of the email rather than what the email is: <see cref="Id" /> identifies it for
+    /// its whole life, and the UIDVALIDITY and UID beside it say where a server still holds it. The two are present
+    /// together or absent together, which a check constraint holds. See
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+    /// </remarks>
+    public uint? UidValidity { get; set; }
 
-    public uint Uid { get; set; }
+    /// <summary>Gets or sets the UID the remote occurrence carries, absent exactly where <see cref="UidValidity" /> is.</summary>
+    public uint? Uid { get; set; }
 
     public string? InternetMessageId { get; set; }
 

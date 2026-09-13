@@ -615,7 +615,7 @@ public sealed class StoredEmailMetadataMappingTests
         SenderTrust? senderTrust = null,
         MachineAuthorshipAssessment? machineAuthorship = null) =>
         new(
-            OccurrenceId,
+            MailAccountId.Create("primary"),
             "Quarterly report",
             SentAt,
             ReceivedAt,
