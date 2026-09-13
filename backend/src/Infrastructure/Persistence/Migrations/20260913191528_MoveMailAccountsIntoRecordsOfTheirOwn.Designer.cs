@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260913191528_MoveMailAccountsIntoRecordsOfTheirOwn")]
+    partial class MoveMailAccountsIntoRecordsOfTheirOwn
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1442,12 +1445,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<string>("DivergenceReason")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
-
-                    b.Property<int?>("FiledRevision")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("FiledStoredEmailId")
-                        .HasColumnType("uuid");
 
                     b.Property<int?>("LastFailureCode")
                         .HasColumnType("integer");
@@ -3050,10 +3047,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UserId", "MailboxAccountId", "Id" }, "ix_stored_emails_awaiting_rule_evaluation")
                         .HasDatabaseName("ix_stored_emails_awaiting_rule_evaluation")
                         .HasFilter("\"RulesEvaluatedAt\" IS NULL AND \"FiledFromOutgoingEmailId\" IS NULL");
-
-                    b.HasIndex(new[] { "UserId", "MailboxAccountId", "InternetMessageId" }, "ix_stored_emails_filed_sent_copy")
-                        .HasDatabaseName("ix_stored_emails_filed_sent_copy")
-                        .HasFilter("\"FiledFromOutgoingEmailId\" IS NOT NULL AND \"UidValidity\" IS NULL");
 
                     b.ToTable("stored_emails", null, t =>
                         {
