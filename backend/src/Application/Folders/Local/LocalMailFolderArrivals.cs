@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Signals;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -18,18 +19,22 @@ namespace MailFathom.Application.Folders.Local;
 public sealed class LocalMailFolderArrivals
 {
     private readonly ILocalMailFolderStore store;
+    private readonly ClientSignals signals;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes a new instance of the <see cref="LocalMailFolderArrivals" /> class.</summary>
     /// <param name="store">Persists the folders and the placement.</param>
+    /// <param name="signals">Tells the account's clients that a placement created folders.</param>
     /// <param name="timeProvider">Supplies the instant a new folder's identity is minted at.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
-    public LocalMailFolderArrivals(ILocalMailFolderStore store, TimeProvider timeProvider)
+    public LocalMailFolderArrivals(ILocalMailFolderStore store, ClientSignals signals, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(signals);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.store = store;
+        this.signals = signals;
         this.timeProvider = timeProvider;
     }
 
@@ -39,7 +44,8 @@ public sealed class LocalMailFolderArrivals
     /// <param name="email">The stored message.</param>
     /// <param name="source">The source folder it arrived from.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    public async Task PlaceAsync(
+    /// <returns>Whether the placement created folders, which the caller announces through <see cref="AnnounceFoldersChanged" /> once the transaction commits.</returns>
+    public async Task<bool> PlaceAsync(
         IPersistenceSession session,
         MailAccountIdentity account,
         StoredEmailId email,
@@ -52,7 +58,7 @@ public sealed class LocalMailFolderArrivals
 
         if (holding is not { Phase: MailAccountCustodyPhase.Held })
         {
-            return;
+            return false;
         }
 
         var found = holding.ToTree();
@@ -62,7 +68,13 @@ public sealed class LocalMailFolderArrivals
         // a folder erased by an edit committing meanwhile would otherwise receive a message after its erasure pass ended.
         await this.store.SaveAsync(session, account, [.. missing, .. arrival.Saved], [], cancellationToken);
         await this.store.PlaceAsync(session, account, email, arrival.Folder, cancellationToken);
+
+        return missing.Count > 0 || arrival.Saved.Count > 0;
     }
+
+    /// <summary>Tells the account's clients that its folder set moved, after the transaction that created the folders committed.</summary>
+    /// <param name="account">The account whose folders were created.</param>
+    public void AnnounceFoldersChanged(MailAccountIdentity account) => this.signals.Publish(ClientSignal.FoldersChanged(account));
 
     private LocalMailFolderId MintId() => LocalMailFolderId.Create(Guid.CreateVersion7(this.timeProvider.GetUtcNow()));
 }

@@ -73,6 +73,23 @@ public sealed class LocalMailFolderModelTests
         Assert.Equal(DeleteBehavior.NoAction, storedEmailKey.DeleteBehavior);
     }
 
+    /// <summary>Every hierarchy write bumps the revision, so it is what makes a write conditional on the hierarchy it read.</summary>
+    [Fact]
+    public void LocalMailFolderModel_TheAccountsFoldersRevision_IsAConcurrencyToken()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var revision = context.GetService<IDesignTimeModel>().Model
+            .FindEntityType(typeof(MailboxAccountEntity))!
+            .FindProperty(nameof(MailboxAccountEntity.LocalMailFoldersRevision));
+
+        // Assert
+        Assert.NotNull(revision);
+        Assert.True(revision.IsConcurrencyToken);
+    }
+
     private static IIndex FindIndex(string indexName, MailFathomDbContext context)
     {
         var index = context.GetService<IDesignTimeModel>().Model

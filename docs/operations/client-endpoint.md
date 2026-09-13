@@ -532,11 +532,14 @@ until the account's next erasure queues a pass, which erases the mail of every f
 without regard to case, and is not `INBOX` at the top of the hierarchy. A hierarchy is at most 16 levels deep and an
 account holds at most 1000 live folders.
 
-**Mail synchronization brings in lands by correspondence.** A message arriving from a source folder playing one of the
-five roles lands in that protected folder. A message from any other source folder lands in the local folder created for
-that folder the first time one arrived — matched by the source folder's alias, so renaming or moving the local folder
-keeps it — and in the inbox where that folder is now in the trash or has been erased, or where the account is at its
-folder limit.
+**What mail synchronization brings in lands by correspondence.** A message arriving from a source folder playing one of
+the five roles lands in that protected folder. A message from any other source folder lands in the local folder created
+for that folder the first time one arrived — named after the source folder's own name or, where that cannot be a
+top-level name, its alias, and matched by the source folder's alias, so renaming or moving the local folder keeps it.
+It lands in the inbox where that folder is now in the trash or has been erased, where the account is at its folder
+limit, or where neither name can be placed at the top of the hierarchy, because a top-level folder already carries it
+or because it is `INBOX`; no folder is created then, so a person who creates a top-level folder of the same name first
+sends that source's mail to the inbox. Creating folders this way raises `folders.changed` once the message commits.
 
 A refusal is a problem response whose `refusal` member names it, so a client branches on the name rather than the prose:
 
@@ -2617,7 +2620,7 @@ record's already-derived text and reach a client entitled to read that record ov
 | `mail.arrived` | A run committed mail into one folder, and how much |
 | `mail.changed` | Stored mail in one folder is no longer what a client last read, naming up to 100 of the rows |
 | `mail.flags.changed` | Nothing moved but the `\Seen` or `\Flagged` flag of up to 100 rows, and where each of those flags now stands |
-| `folders.changed` | The set of folders an account mirrors has moved |
+| `folders.changed` | The set of folders an account mirrors, or a held account's local folders, has moved |
 | `notification.raised` | A notification was written, with its kind, its two lines, and how many now stand unread |
 | `account.state` | An account's synchronization run finished, so what a client says about it is out of date |
 

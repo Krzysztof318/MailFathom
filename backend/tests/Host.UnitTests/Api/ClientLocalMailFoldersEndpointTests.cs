@@ -22,7 +22,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// <summary>
 /// Covers what the boundary decides about local folders: which status each refusal answers with and the name it carries,
 /// a request naming no account or an identity nobody issued refused before the use case is reached, the listing's order,
-/// and the strict binding of every write body.
+/// what an accepted write answers, and the strict binding of every write body.
 /// </summary>
 public sealed class ClientLocalMailFoldersEndpointTests
 {
@@ -138,13 +138,51 @@ public sealed class ClientLocalMailFoldersEndpointTests
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
     }
 
+    /// <summary>An accepted write answers the change it made, the folder it made it to, and whether the mail erasure it queued was deferred.</summary>
     [Fact]
-    public void Deserialize_AMoveNamingAKeyNothingBinds_IsRefused()
+    public async Task DeleteAsync_AFolderInTheTrashWhileTheQueueIsFull_AnswersTheErasureAndThatItsMailWaits()
+    {
+        // Arrange
+        var deployment = new EndpointDeployment();
+        var trash = Folder("Trash", MailFolderSpecialUse.Trash);
+        var old = Folder("old") with { ParentId = trash.Id };
+        deployment.Holding(new LocalMailFolderHolding(
+            MailAccountCustodyPhase.Held,
+            [
+                Folder("INBOX", MailFolderSpecialUse.Inbox),
+                Folder("Drafts", MailFolderSpecialUse.Drafts),
+                Folder("Sent", MailFolderSpecialUse.Sent),
+                Folder("Junk", MailFolderSpecialUse.Junk),
+                trash,
+                old,
+            ],
+            []));
+        deployment.Jobs.EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>())
+            .Returns(JobEnqueueResult.RefusedAtCapacity());
+
+        // Act
+        var result = await ClientLocalMailFoldersEndpoint.DeleteAsync(
+            new ClientLocalMailFolderDeleteRequest("primary", old.Id.Value),
+            deployment.Editor,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var answered = Assert.IsType<Ok<ClientLocalMailFolderEditResponse>>(result.Result).Value!;
+
+        Assert.Equal(nameof(LocalMailFolderChangeKind.Erased), answered.Change);
+        Assert.Equal(old.Id.Value, answered.Folder.Id);
+        Assert.True(answered.MailErasureDeferred);
+    }
+
+    [Theory]
+    [InlineData(typeof(ClientLocalMailFolderCreateRequest), """{"account":"primary","name":"Projects","path":"Archive"}""")]
+    [InlineData(typeof(ClientLocalMailFolderRenameRequest), """{"account":"primary","folderId":"0199a0c0-0000-7000-8000-000000000001","name":"Projects","path":"Archive"}""")]
+    [InlineData(typeof(ClientLocalMailFolderMoveRequest), """{"account":"primary","folderId":"0199a0c0-0000-7000-8000-000000000001","path":"Archive/2026"}""")]
+    [InlineData(typeof(ClientLocalMailFolderDeleteRequest), """{"account":"primary","folderId":"0199a0c0-0000-7000-8000-000000000001","path":"Archive"}""")]
+    public void Deserialize_AWriteNamingAKeyNothingBinds_IsRefused(Type requestType, string body)
     {
         // Assert
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<ClientLocalMailFolderMoveRequest>(
-            """{"account":"primary","folderId":"0199a0c0-0000-7000-8000-000000000001","path":"Archive/2026"}""",
-            WebFormat));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize(body, requestType, WebFormat));
     }
 
     [Fact]
@@ -172,13 +210,17 @@ public sealed class ClientLocalMailFoldersEndpointTests
         internal EndpointDeployment()
         {
             var clock = new FakeTimeProvider();
+            var session = Substitute.For<IPersistenceSession>();
+            session.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
+            var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
+            sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(session);
 
             this.Editor = new LocalMailFolderEditor(
                 this.Store,
-                new OptimisticConcurrencyRetryPolicy(Substitute.For<IPersistenceSessionFactory>(), new PersistenceConcurrencyOptions(), clock),
+                new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), clock),
                 Substitute.For<ILocalMailFolderChangeAuditor>(),
                 ClientSignalPublishers.ReachingNobody,
-                Substitute.For<IJobStore>(),
+                this.Jobs,
                 AccessAuthorizations.ForUserGranted(
                     SyntheticMailUser.Deployment,
                     [MailFathomPermission.MailRead, MailFathomPermission.MailFoldersWrite]),
@@ -187,11 +229,18 @@ public sealed class ClientLocalMailFoldersEndpointTests
 
         internal ILocalMailFolderStore Store { get; } = Substitute.For<ILocalMailFolderStore>();
 
+        internal IJobStore Jobs { get; } = Substitute.For<IJobStore>();
+
         internal LocalMailFolderEditor Editor { get; }
 
-        internal void Holding(LocalMailFolderHolding holding) =>
+        internal void Holding(LocalMailFolderHolding holding)
+        {
             this.Store
                 .ReadAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
                 .Returns(holding);
+            this.Store
+                .ReadAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
+                .Returns(holding);
+        }
     }
 }

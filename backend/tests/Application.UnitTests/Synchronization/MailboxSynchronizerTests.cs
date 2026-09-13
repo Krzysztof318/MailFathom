@@ -16,6 +16,7 @@ using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Signals;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.Synchronization;
@@ -215,7 +216,8 @@ public sealed class MailboxSynchronizerTests
     /// <summary>
     /// On a held account a stored message lands in the local folder its source corresponds to, and the source is what
     /// the run resolved: its alias to match it by, its role to decide whether a protected folder takes it, and the last
-    /// level of its remote path as the name a folder created for it takes.
+    /// level of its remote path as the name a folder created for it takes. Creating it is the folder set moving, so the
+    /// account's clients are told once the message commits.
     /// </summary>
     [Fact]
     public async Task SynchronizeAsync_AMessageStoredForAHeldAccount_LandsInTheLocalFolderCreatedForItsSource()
@@ -227,25 +229,34 @@ public sealed class MailboxSynchronizerTests
         var occurrence = EmailOccurrenceId.Create(accountId, ArchiveFolder.Id, uidValidity, ImapUid.Create(10));
         var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
         var localFolders = new InMemoryLocalMailFolderStore(account, MailAccountCustodyPhase.Held);
+        var signalClock = new FakeTimeProvider();
+        var signalChannel = new RecordingClientSignalChannel();
+        await using var signals = new ClientSignals([signalChannel], signalClock);
         var arrangement = ArrangeContentRun(
             options,
             uidValidity,
             [MetadataOf(occurrence, 600)],
             occurrence.Uid,
             runFolder: ArchiveFolder,
-            localFolderArrivals: new LocalMailFolderArrivals(localFolders, new FakeTimeProvider()));
+            localFolderArrivals: new LocalMailFolderArrivals(localFolders, signals, new FakeTimeProvider()));
         StubRetrievedContent(arrangement.Session, options, occurrence, 600);
 
         // Act
         await arrangement.Synchronizer.SynchronizeAsync(account, ArchiveMapping, CancellationToken.None);
 
+        signalClock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
         // Assert
         var created = Assert.Single(localFolders.Folders, folder => folder.Role is null);
         var placement = Assert.Single(localFolders.Placements);
+        var signal = Assert.Single(signalChannel.Published);
 
         Assert.Equal(ArchiveAlias, created.SourceFolderAlias);
         Assert.Equal("Archive", created.Name.Value);
         Assert.Equal(created.Id, placement.Value);
+        Assert.Equal(ClientSignalKind.FoldersChanged, signal.Kind);
+        Assert.Equal(accountId, signal.Account);
     }
 
     /// <summary>The run records what the classification gate says about an arriving message, although it derives nothing from it.</summary>
@@ -2925,7 +2936,7 @@ public sealed class MailboxSynchronizerTests
                     classificationSettings ?? SpamClassificationSettings.Disabled,
                     ClassifiedAccount)),
             contactCollector ?? CreateCollectorThatCollectsNothing(persistenceSessionFactory, timeProvider),
-            localFolderArrivals ?? new LocalMailFolderArrivals(Substitute.For<ILocalMailFolderStore>(), timeProvider),
+            localFolderArrivals ?? new LocalMailFolderArrivals(Substitute.For<ILocalMailFolderStore>(), ClientSignalPublishers.ReachingNobody, timeProvider),
             concurrencyRetryPolicy,
             timeProvider,
             options);

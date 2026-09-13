@@ -1029,6 +1029,7 @@ public sealed class MailboxSynchronizer
             EmailContentKind.IncomingMessage,
             content.RawMime,
             cancellationToken);
+        var folderSetMoved = false;
 
         await this.concurrencyRetryPolicy.CommitAsync(
             async (persistenceSession, attemptCancellationToken) =>
@@ -1049,7 +1050,7 @@ public sealed class MailboxSynchronizer
 
                 await this.ObservePlacementAsync(persistenceSession, placement, attemptCancellationToken);
                 await this.ObserveFilingAsync(persistenceSession, filing, storedEmailId, attemptCancellationToken);
-                await this.localFolderArrivals.PlaceAsync(
+                folderSetMoved = await this.localFolderArrivals.PlaceAsync(
                     persistenceSession,
                     MailAccountIdentity.Create(user, metadata.OccurrenceId.AccountId),
                     storedEmailId,
@@ -1059,6 +1060,13 @@ public sealed class MailboxSynchronizer
             cancellationToken);
 
         budget.RecordStored(content.RawMime.Length);
+
+        // Announced after the commit for the reason a binding's signal is: a folder a rolled-back attempt created is not
+        // one a client may be sent to read.
+        if (folderSetMoved)
+        {
+            this.localFolderArrivals.AnnounceFoldersChanged(MailAccountIdentity.Create(user, metadata.OccurrenceId.AccountId));
+        }
 
         // Asked for after the commit rather than inside it, because the queue takes no persistence session by design:
         // work enqueued against a transaction that then rolled back would name a message no local state holds. It is one
@@ -1107,6 +1115,7 @@ public sealed class MailboxSynchronizer
         CancellationToken cancellationToken)
     {
         var storedEmailId = default(StoredEmailId);
+        var folderSetMoved = false;
 
         await this.concurrencyRetryPolicy.CommitAsync(
             async (persistenceSession, attemptCancellationToken) =>
@@ -1121,7 +1130,7 @@ public sealed class MailboxSynchronizer
 
                 await this.ObservePlacementAsync(persistenceSession, placement, attemptCancellationToken);
                 await this.ObserveFilingAsync(persistenceSession, filing, storedEmailId, attemptCancellationToken);
-                await this.localFolderArrivals.PlaceAsync(
+                folderSetMoved = await this.localFolderArrivals.PlaceAsync(
                     persistenceSession,
                     MailAccountIdentity.Create(user, metadata.OccurrenceId.AccountId),
                     storedEmailId,
@@ -1129,6 +1138,11 @@ public sealed class MailboxSynchronizer
                     attemptCancellationToken);
             },
             cancellationToken);
+
+        if (folderSetMoved)
+        {
+            this.localFolderArrivals.AnnounceFoldersChanged(MailAccountIdentity.Create(user, metadata.OccurrenceId.AccountId));
+        }
 
         // An occurrence whose content was never retrieved has no MIME to read, so it is neither enriched nor counted as
         // unreadable.

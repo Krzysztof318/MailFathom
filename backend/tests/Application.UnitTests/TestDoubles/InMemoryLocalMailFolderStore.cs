@@ -11,11 +11,16 @@ using MailFathom.Domain.Folders;
 namespace MailFathom.Application.UnitTests.TestDoubles;
 
 /// <summary>Keeps one account's local folders and placements in memory, answering as the store does for any other account.</summary>
-/// <remarks>Folders are read back only while the account is held, which is what the real store loads, so a test cannot see a hierarchy the use case could not.</remarks>
+/// <remarks>
+/// Folders are read back only while the account is held, which is what the real store loads, so a test cannot see a
+/// hierarchy the use case could not. An erased folder's source alias is kept and reported, as the real store keeps the
+/// erased row, because it is what sends a later arrival from that source to the inbox.
+/// </remarks>
 internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
 {
     private readonly Dictionary<LocalMailFolderId, LocalMailFolder> folders = [];
     private readonly HashSet<LocalMailFolderId> erased = [];
+    private readonly HashSet<MailFolderAlias> erasedSourceAliases = [];
     private readonly Dictionary<StoredEmailId, LocalMailFolderId> placements = [];
 
     internal InMemoryLocalMailFolderStore(MailAccountIdentity account, MailAccountCustodyPhase phase)
@@ -44,7 +49,9 @@ internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
 
     public Task<LocalMailFolderHolding?> ReadAsync(MailAccountIdentity account, CancellationToken cancellationToken) =>
         Task.FromResult(account == this.Account
-            ? new LocalMailFolderHolding(this.Phase, this.Phase == MailAccountCustodyPhase.Held ? [.. this.folders.Values] : [], [])
+            ? this.Phase == MailAccountCustodyPhase.Held
+                ? new LocalMailFolderHolding(this.Phase, [.. this.folders.Values], [.. this.erasedSourceAliases])
+                : new LocalMailFolderHolding(this.Phase, [], [])
             : null);
 
     public Task SaveAsync(
@@ -63,7 +70,11 @@ internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
 
         foreach (var folder in erased)
         {
-            this.folders.Remove(folder);
+            if (this.folders.Remove(folder, out var removed) && removed.SourceFolderAlias is { } alias)
+            {
+                this.erasedSourceAliases.Add(alias);
+            }
+
             this.erased.Add(folder);
         }
 

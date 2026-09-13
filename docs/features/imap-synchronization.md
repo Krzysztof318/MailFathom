@@ -1195,10 +1195,12 @@ a list of what may not, which is what makes an account with no mapped folder rea
 On an account whose mailbox MailFathom holds, the transaction that stores a message also places it in one of the
 account's [local folders](../operations/client-endpoint.md#the-local-folder-routes). A message from a folder whose
 mapping carries the `Inbox`, `Drafts`, `Sent`, `Junk`, or `Trash` role lands in that protected local folder. A message
-from any other folder lands in the local folder corresponding to it, matched by the folder's alias and created, named
-after the last level of the source folder's path, the first time one arrives; it lands in the inbox instead where that
-folder is in the trash or was erased, or where the account is at its folder limit. On a mirrored account nothing is
-placed and the run is what it was.
+from any other folder lands in the local folder corresponding to it, matched by the folder's alias and created the first
+time one arrives, named after the last level of the source folder's path or, where that cannot be a top-level name,
+after the alias. It lands in the inbox instead where that folder is in the trash or was erased, where the account is at
+its folder limit, or where neither name can be placed at the top of the hierarchy — because a top-level folder already
+carries it, or because it is `INBOX` — and no folder is created then. On a mirrored account nothing is placed and the
+run is what it was.
 
 ## Session resilience
 

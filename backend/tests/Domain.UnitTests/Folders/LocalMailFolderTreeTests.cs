@@ -309,7 +309,8 @@ public sealed class LocalMailFolderTreeTests
         var edit = tree.Move(second.Id, parentId: null);
 
         // Assert
-        Assert.True(edit.Refusal is not null || edit.Saved.Count is 1);
+        Assert.Null(edit.Refusal);
+        Assert.Equal([second with { ParentId = null }], edit.Saved);
     }
 
     /// <summary>A folder outside the trash is moved into it as one row, so everything beneath it goes with it whatever it holds.</summary>

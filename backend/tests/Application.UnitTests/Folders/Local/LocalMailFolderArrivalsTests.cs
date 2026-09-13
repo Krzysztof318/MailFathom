@@ -78,10 +78,33 @@ public sealed class LocalMailFolderArrivalsTests
         Assert.Equal([projects.Id, projects.Id], [store.Placements[Email(1)], store.Placements[Email(2)]]);
     }
 
+    /// <summary>A source whose folder was erased keeps no folder of its own, so a later arrival from it goes to the inbox rather than recreating one.</summary>
+    [Fact]
+    public async Task PlaceAsync_AnArrivalFromASourceWhoseFolderWasErased_LandsInTheInbox()
+    {
+        // Arrange
+        var store = new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held);
+        var arrivals = ArrivalsOver(store);
+        await arrivals.PlaceAsync(Session, Account, Email(1), SourceProjects, TestContext.Current.CancellationToken);
+        var projects = Assert.Single(store.Folders, folder => folder.SourceFolderAlias == SourceProjects.Alias);
+        await store.SaveAsync(Session, Account, [], [projects.Id], TestContext.Current.CancellationToken);
+
+        // Act
+        var folderSetMoved = await arrivals.PlaceAsync(Session, Account, Email(2), SourceProjects, TestContext.Current.CancellationToken);
+
+        // Assert
+        var inbox = Assert.Single(store.Folders, folder => folder.Role == MailFolderSpecialUse.Inbox);
+
+        Assert.False(folderSetMoved);
+        Assert.Equal(inbox.Id, store.Placements[Email(2)]);
+        Assert.DoesNotContain(store.Folders, folder => folder.SourceFolderAlias == SourceProjects.Alias);
+    }
+
     private static IPersistenceSession Session { get; } = Substitute.For<IPersistenceSession>();
 
     private static StoredEmailId Email(int number) =>
         StoredEmailId.Create(Guid.Parse($"0199a0c0-0000-7000-8000-{number:D12}"));
 
-    private static LocalMailFolderArrivals ArrivalsOver(ILocalMailFolderStore store) => new(store, new FakeTimeProvider());
+    private static LocalMailFolderArrivals ArrivalsOver(ILocalMailFolderStore store) =>
+        new(store, ClientSignalPublishers.ReachingNobody, new FakeTimeProvider());
 }
