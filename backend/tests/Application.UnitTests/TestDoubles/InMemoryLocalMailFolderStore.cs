@@ -14,7 +14,8 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 /// <remarks>
 /// Folders are read back only while the account is held, which is what the real store loads, so a test cannot see a
 /// hierarchy the use case could not. An erased folder's source alias is kept and reported, as the real store keeps the
-/// erased row, because it is what sends a later arrival from that source to the inbox.
+/// erased row, because it is what sends a later arrival from that source to the inbox. Writes naming another account
+/// change nothing, as the real store's writes are scoped to the account they name.
 /// </remarks>
 internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
 {
@@ -61,6 +62,11 @@ internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
         IReadOnlyCollection<LocalMailFolderId> erased,
         CancellationToken cancellationToken)
     {
+        if (account != this.Account)
+        {
+            return Task.CompletedTask;
+        }
+
         this.SaveCount++;
 
         foreach (var folder in saved)
@@ -88,7 +94,10 @@ internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
         LocalMailFolderId folder,
         CancellationToken cancellationToken)
     {
-        this.placements.TryAdd(email, folder);
+        if (account == this.Account)
+        {
+            this.placements.TryAdd(email, folder);
+        }
 
         return Task.CompletedTask;
     }

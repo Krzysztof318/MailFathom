@@ -12,9 +12,10 @@ namespace MailFathom.Infrastructure.Persistence.Accounts.Configurations;
 /// <summary>Declares the account row every folder binding, message, and durable job hangs on.</summary>
 /// <remarks>
 /// <para>
-/// The row carries the configured alias and nothing else: what is known about an account beyond its identity is
-/// configuration, which is read-only, so the table exists to give the rows that reference an account something to
-/// reference rather than to hold state of its own.
+/// The row carries the configured alias, which gives the rows that reference an account something to reference, and two
+/// pieces of state configuration cannot hold because configuration is read-only: the custody phase, which says whether
+/// MailFathom mirrors, holds, or is restoring the mailbox, and the local folders revision, which every write to a held
+/// account's folder hierarchy bumps so that write commits only over the hierarchy it read.
 /// </para>
 /// <para>
 /// It is keyed by the user and the identifier together, which is what ADR 0014 decided an account is identified by.

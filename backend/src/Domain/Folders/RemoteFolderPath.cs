@@ -8,7 +8,9 @@ namespace MailFathom.Domain.Folders;
 /// <remarks>
 /// The path is owned by the server and may change under a stable <see cref="MailFolderAlias" />. It is treated as
 /// sensitive metadata, because a folder path can itself carry personal or organizational information, and it is
-/// therefore written only to the audit event that records a mapping change.
+/// therefore written only to the audit event that records a mapping change — with one exception: on an account whose
+/// mailbox MailFathom holds, the last level of the path is taken as the name of the local folder created for the first
+/// arrival from it, and is stored and served to the account's own user as that folder's name.
 /// </remarks>
 public readonly record struct RemoteFolderPath
 {

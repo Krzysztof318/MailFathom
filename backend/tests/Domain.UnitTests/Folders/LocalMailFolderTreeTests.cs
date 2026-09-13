@@ -430,6 +430,23 @@ public sealed class LocalMailFolderTreeTests
     }
 
     [Fact]
+    public void PlaceArrival_AnAccountHoldingTheMostFolders_GoesToTheInboxAndCreatesNothing()
+    {
+        // Arrange
+        var siblings = Enumerable
+            .Range(0, LocalMailFolderTree.MaximumFolders - LocalMailFolderTree.ProtectedRoles.Count)
+            .Select(static index => Ordinary($"Folder {index}"));
+        var tree = HeldTree([.. siblings]);
+
+        // Act
+        var arrival = tree.PlaceArrival(ProjectsAlias, null, "Projects", Mint);
+
+        // Assert
+        Assert.Equal(InboxOf(tree), arrival.Folder);
+        Assert.Empty(arrival.Saved);
+    }
+
+    [Fact]
     public void PlaceArrival_ASourceWhoseFolderWasErased_GoesToTheInboxRatherThanRecreatingIt()
     {
         // Arrange

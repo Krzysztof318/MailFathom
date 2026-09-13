@@ -32,6 +32,8 @@ public sealed class LocalMailFolderNameTests
     [InlineData("Archive/2026")]
     [InlineData("Arch\tive")]
     [InlineData("Arch\0ive")]
+    [InlineData("​")]
+    [InlineData("Arch‮ive")]
     public void TryCreate_TextThatIsNotOneLevel_IsRefused(string? written)
     {
         // Act

@@ -256,7 +256,7 @@ public sealed class LocalMailFolderEditor
 
         return act is LocalMailFolderChangeKind.Moved
             && edit.Folder!.ParentId is { } parent
-            && before.Find(parent)?.Role == MailFolderSpecialUse.Trash
+            && before.IsInTrash(parent)
                 ? LocalMailFolderChangeKind.MovedToTrash
                 : act;
     }

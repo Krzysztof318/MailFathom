@@ -10,7 +10,7 @@ public enum LocalMailFolderRefusal
     /// <summary>The caller holds no mail account by that identifier.</summary>
     AccountMissing = 0,
 
-    /// <summary>The account's mailbox is not held by MailFathom, so its folders are the source server's.</summary>
+    /// <summary>The hierarchy may be edited only while MailFathom holds the account's mailbox, and this account is mirrored or restoring.</summary>
     AccountNotHeld = 1,
 
     /// <summary>The account has no live folder by that identifier.</summary>
@@ -22,7 +22,7 @@ public enum LocalMailFolderRefusal
     /// <summary>The folder plays a protected role and cannot be renamed, moved, or deleted.</summary>
     ProtectedRole = 4,
 
-    /// <summary>The name is empty, too long, or carries a control character or the hierarchy delimiter.</summary>
+    /// <summary>The name is empty, too long, or carries a control character, a format character, or the hierarchy delimiter.</summary>
     NameInvalid = 5,
 
     /// <summary>The name is the inbox's, which no other folder may carry at the top of the hierarchy.</summary>

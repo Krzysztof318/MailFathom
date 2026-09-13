@@ -257,10 +257,12 @@ already serving:
 - **A foreign key added to a table that already holds rows is validated by scanning it.** `AddLocalMailFolders` adds
   `FK_stored_emails_local_mail_folders_LocalMailFolderId` to `stored_emails`, so the message table is read once under a
   lock that blocks writes to it; the column it constrains is added in the same migration and is null on every row, so
-  the scan finds nothing to look up. Nothing else in it is proportional to what is stored: the column is nullable with
-  no default, the two columns `mailbox_accounts` gains carry constant defaults recorded in the catalog, the partial
-  index over the new column is built empty, and the `local_mail_folders` table and its indexes are empty until an
-  account is held.
+  the scan finds nothing to look up. It also builds `IX_stored_emails_LocalMailFolderId`, a partial index over that
+  column, which scans `stored_emails` in full under a lock that blocks writes to it even though it is written empty,
+  because PostgreSQL evaluates the filter against every row — so budget two passes over the message table. Nothing
+  else in it is proportional to what is stored: the column is nullable with no default, the two columns
+  `mailbox_accounts` gains carry constant defaults recorded in the catalog, and the `local_mail_folders` table and its
+  indexes are empty until an account is held.
 
 The first release's script creates a schema from nothing, so none of these applies to an empty database.
 

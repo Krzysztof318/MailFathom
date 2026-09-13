@@ -126,6 +126,24 @@ public sealed class LocalMailFolderEditorTests
         Assert.Equal(projects.Id, outcome.Folder!.ParentId);
     }
 
+    /// <summary>A folder moved beneath one already in the trash is in the trash too, so the act is reported as the deletion it amounts to.</summary>
+    [Fact]
+    public async Task MoveAsync_BeneathAFolderWithinTheTrash_ReportsAMoveToTheTrash()
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
+        var projects = await deployment.CreateAsync("Projects");
+        var old = await deployment.CreateAsync("Old");
+        await deployment.Editor.DeleteAsync(Account.Id, old.Id, TestContext.Current.CancellationToken);
+
+        // Act
+        var outcome = await deployment.Editor.MoveAsync(Account.Id, projects.Id, old.Id, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(LocalMailFolderChangeKind.MovedToTrash, outcome.Kind);
+        Assert.Equal(old.Id, outcome.Folder!.ParentId);
+    }
+
     [Fact]
     public async Task DeleteAsync_AFolderOutsideTheTrash_MovesItThereAndQueuesNoErasure()
     {

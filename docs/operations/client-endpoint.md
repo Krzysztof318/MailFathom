@@ -502,14 +502,14 @@ The read answers with the account's phase and, where the mailbox is held, its li
 everywhere, so a rename or a move never invalidates a reference a client holds, and a client builds the tree from
 `parentId`. An account the caller does not hold is answered `404`, and one the request does not name `400`.
 
-Each write takes a strict JSON body — a key nothing binds is refused — and answers with the change made and the folder
-as it left it:
+Each write takes a strict JSON body — a key nothing binds is refused — of at most 4096 bytes, and a body past that is
+answered `413` before the write is reached. It answers with the change made and the folder as it left it:
 
 | Route | Body | `change` |
 | --- | --- | --- |
 | `POST /api/client/local-folders` | `account`, `parentId` (or `null` for the top), `name` | `Created` |
 | `POST /api/client/local-folders/renames` | `account`, `folderId`, `name` | `Renamed` |
-| `POST /api/client/local-folders/moves` | `account`, `folderId`, `parentId` (or `null` for the top) | `Moved`, or `MovedToTrash` where the new parent is the trash |
+| `POST /api/client/local-folders/moves` | `account`, `folderId`, `parentId` (or `null` for the top) | `Moved`, or `MovedToTrash` where the new parent is the trash or a folder within it |
 | `POST /api/client/local-folders/deletions` | `account`, `folderId` | `MovedToTrash`, or `Erased` where the folder was already in the trash |
 
 ```jsonc

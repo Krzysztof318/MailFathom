@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
+
 namespace MailFathom.Domain.Folders;
 
 /// <summary>The name of one level of a local folder hierarchy, as a person typed it or a source folder supplied it.</summary>
@@ -40,7 +42,12 @@ public readonly record struct LocalMailFolderName
     /// <summary>Gets the name the inbox carries.</summary>
     public static LocalMailFolderName Inbox { get; } = new(InboxName);
 
-    /// <summary>Reads a name, refusing one that is empty, too long, or carries a control character or the hierarchy delimiter.</summary>
+    /// <summary>Reads a name, refusing one that is empty, too long, or carries a control character, a format character, or the hierarchy delimiter.</summary>
+    /// <remarks>
+    /// Format characters — zero-width spaces and joiners, bidirectional overrides — are refused because a name may come
+    /// from a source server rather than a person, and such a character would make a name look blank, render the rest of
+    /// a row reversed, or make two siblings look identical while comparing as different.
+    /// </remarks>
     /// <param name="value">The name as supplied.</param>
     /// <param name="name">The name, when it is one.</param>
     /// <returns>Whether <paramref name="value" /> is a name.</returns>
@@ -50,7 +57,10 @@ public readonly record struct LocalMailFolderName
 
         if (string.IsNullOrEmpty(trimmed)
             || trimmed.Length > MaximumLength
-            || trimmed.Any(static character => char.IsControl(character) || character == HierarchyDelimiter))
+            || trimmed.Any(static character =>
+                char.IsControl(character)
+                || char.GetUnicodeCategory(character) == UnicodeCategory.Format
+                || character == HierarchyDelimiter))
         {
             name = default;
 
@@ -70,7 +80,7 @@ public readonly record struct LocalMailFolderName
         TryCreate(value, out var name)
             ? name
             : throw new ArgumentException(
-                $"A local folder name is non-empty, at most {MaximumLength} characters, and carries no control character and no '{HierarchyDelimiter}'.",
+                $"A local folder name is non-empty, at most {MaximumLength} characters, and carries no control or format character and no '{HierarchyDelimiter}'.",
                 nameof(value));
 
     /// <summary>Gets whether two names name the same folder among siblings.</summary>

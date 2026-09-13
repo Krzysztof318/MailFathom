@@ -54,6 +54,10 @@ public sealed class LocalMailFolderArrivals
     {
         ArgumentNullException.ThrowIfNull(source);
 
+        // ponytail: the hierarchy is read once per stored message, a bounded indexed read of at most MaximumFolders live
+        // rows beside the several writes that transaction already makes. Caching it across a folder run needs the store to
+        // hand back the revision its own save bumped, or every later arrival in the run conflicts once; do that if a
+        // held account's backfill measures this read as a real share of its cost.
         var holding = await this.store.ReadAsync(session, account, cancellationToken);
 
         if (holding is not { Phase: MailAccountCustodyPhase.Held })

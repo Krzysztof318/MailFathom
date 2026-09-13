@@ -50,6 +50,8 @@ public sealed class LocalMailFolderMailErasureHandler : IJobHandler
     public JobType JobType => JobType.EraseLocalMailFolderMail;
 
     /// <inheritdoc />
+    /// <exception cref="ArgumentException">Thrown when the payload is not the contract this job type names.</exception>
+    /// <exception cref="JobHandOnRefusedAtCapacityException">Thrown when the queue refused the pass carrying the rest of the erasure.</exception>
     public async Task RunAsync(IJobPayload payload, CancellationToken cancellationToken)
     {
         if (payload is not EraseLocalMailFolderMailJobPayload named)

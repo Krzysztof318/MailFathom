@@ -313,6 +313,12 @@ public sealed class LocalMailFolderTree
 
     private int LevelBeneath(LocalMailFolderId? parentId) => this.AncestorsOf(parentId).Count() + 1;
 
+    /// <summary>Gets whether a folder is the trash or sits anywhere beneath it, which is what makes deleting it an erasure.</summary>
+    /// <param name="id">The folder.</param>
+    /// <returns>Whether the folder is in the trash.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the tree lacks the trash, which <see cref="MissingProtectedFolders" /> supplies.</exception>
+    public bool IsInTrash(LocalMailFolderId id) => this.IsWithin(id, this.RequireRole(MailFolderSpecialUse.Trash).Id);
+
     private bool IsWithin(LocalMailFolderId candidate, LocalMailFolderId ancestor) =>
         this.AncestorsOf(candidate).Contains(ancestor);
 
