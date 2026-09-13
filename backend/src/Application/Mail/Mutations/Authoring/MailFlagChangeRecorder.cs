@@ -85,7 +85,7 @@ public sealed class MailFlagChangeRecorder
     /// <param name="change">What the caller asked for.</param>
     /// <param name="requester">The invocation asking, which is what decides whether asking again is the same request.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>The record opened for each value, in the order the change states them.</returns>
+    /// <returns>The record opened for each value, in the order the change states them, or no record where a held account applied the change.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="change" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the writing grant.</exception>
     /// <exception cref="AuthoredMailChangeTargetNotFoundException">Thrown when this deployment serves no readable email under that identity, or when the email it serves names a remote occurrence the mail server no longer holds.</exception>
@@ -96,7 +96,8 @@ public sealed class MailFlagChangeRecorder
     /// what makes a retried call safe to make, and it is why the identity is the invocation's rather than the change's —
     /// a caller that starred a message, unstarred it, and starred it again has made three requests and means all three.
     /// A second call is a retry only when it asks for what the first asked for, which is why the terms are compared
-    /// rather than assumed from the identity.
+    /// rather than assumed from the identity. All of this is the record's: a held account applies the change and keeps no
+    /// record for a repeat to be matched against, so there every call applies the change it names.
     /// </remarks>
     public async Task<AuthoredMailFlagChangeResult> RecordAsync(
         AuthoredMailFlagChange change,

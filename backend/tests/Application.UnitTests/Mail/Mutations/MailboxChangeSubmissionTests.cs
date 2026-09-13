@@ -270,6 +270,30 @@ public sealed class MailboxChangeSubmissionTests
         Assert.Contains(Email, this.states.States.Keys);
     }
 
+    /// <summary>A rule meeting its own earlier delete in the trash is not a person's second delete, so it erases nothing and records nothing.</summary>
+    [Fact]
+    public async Task SubmitAsync_ARuleDeletingAHeldMessageAlreadyInTheTrash_LeavesItThereWithoutARecord()
+    {
+        // Arrange
+        this.Store();
+        var submission = this.Held();
+        var ruleDelete = MailboxMutationRequest.Delete(
+            Email,
+            Account.User,
+            Occurrence,
+            MailboxMutationRequester.Rule("tidy-newsletters", "revision-1"),
+            AuthoredDeleteEmailDisposition.RetainLocalCopy);
+        await submission.SubmitAsync(this.session, ruleDelete, null, null, Token);
+
+        // Act
+        var submitted = await submission.SubmitAsync(this.session, ruleDelete, null, null, Token);
+
+        // Assert
+        Assert.Equal(MailboxChangeSubmissionOutcome.AlreadyInDestination, submitted.Outcome);
+        Assert.Equal(0, this.records.OpenedRecordCount);
+        Assert.Equal(this.FolderWithRole(MailFolderSpecialUse.Trash), this.states.States[Email].Folder);
+    }
+
     /// <summary>A local copy is a second stored message with a payload of its own, which is refused rather than faked.</summary>
     [Fact]
     public async Task SubmitAsync_ACopyOnAHeldAccount_IsRefusedAndWritesNothing()

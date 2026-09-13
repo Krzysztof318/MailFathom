@@ -201,6 +201,9 @@ public sealed class MailboxChangeSubmission
                 cancellationToken);
         }
 
+        // ponytail: ADR 0034 has the erasing transaction write a source removal record naming the occurrence, so a later
+        // drain can still remove the message from the source once the cascade has taken the row; MailboxMutation has no
+        // such member yet, so until #1946 drains the source a held erasure leaves the message there unrecorded.
         await this.states.EraseAsync(session, account, record.Request.StoredEmailId, cancellationToken);
 
         return new AppliedMailboxChange(account, state.SourceFolder.Alias, record.Request.StoredEmailId, Flags: null);
@@ -247,6 +250,8 @@ public sealed class MailboxChangeSubmission
 
         if (request.Mutation == MailboxMutation.AddKeywords)
         {
+            // ponytail: past MaximumKeywords the set gives up its ordinally greatest value, which on a held account is
+            // the only copy of it; refuse an add that would pass the bound once the four requesters share an outcome for it.
             return RemoteEmailKeywords.Create(carried.Values.Concat(named));
         }
 
@@ -298,6 +303,13 @@ public sealed class MailboxChangeSubmission
         {
             if (state.Folder is { } current && tree.IsInTrash(current))
             {
+                // Erasure is the one irreversible act, so it is only ever a person's second delete, held for their
+                // window; a rule or a verdict meeting its own earlier delete again finds nothing left to do.
+                if (request.Requester.Origin != MailboxMutationOrigin.Command)
+                {
+                    return SubmittedMailboxChange.NotSubmitted(MailboxChangeSubmissionOutcome.AlreadyInDestination);
+                }
+
                 var record = await this.records.OpenAsync(session, request, heldUntil, cancellationToken);
 
                 return SubmittedMailboxChange.Recorded(record);

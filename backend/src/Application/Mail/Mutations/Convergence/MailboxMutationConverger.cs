@@ -190,6 +190,13 @@ public sealed class MailboxMutationConverger
             {
                 this.submission.Announce(erased);
             }
+            else
+            {
+                // The cascade removes the record with the message, so only a message that was already gone leaves the
+                // record behind, and completing it is what stops every later pass reading it as outstanding again.
+                await new MailboxMutationJournal(this.store, this.commitPolicy, this.auditTrail, candidate.Record, candidate.Folder)
+                    .CompleteAsync(candidate.Record.Placement, cancellationToken);
+            }
 
             tally.CompletedCount++;
         }

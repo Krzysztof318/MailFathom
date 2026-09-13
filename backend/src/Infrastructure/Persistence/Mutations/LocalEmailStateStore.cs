@@ -11,6 +11,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
+using MailFathom.Infrastructure.Persistence.Synchronization;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Mutations;
@@ -38,13 +39,8 @@ internal sealed class LocalEmailStateStore : ILocalEmailStateStore
             return null;
         }
 
-        var sourceFolder = new MailFolderResolution(
-            MailFolderAlias.Create(row.MailFolder.Alias),
-            MailFolderResolutionGeneration.Create(row.MailFolder.ResolutionGeneration),
-            RemoteFolderPath.Create(row.MailFolder.RemotePath));
-
         return new LocalEmailState(
-            sourceFolder,
+            MailFolderEntityResolver.ToResolution(row.MailFolder),
             row.LocalMailFolderId is { } folder ? LocalMailFolderId.Create(folder) : null,
             row.IsRemotelySeen,
             row.IsRemotelyFlagged,

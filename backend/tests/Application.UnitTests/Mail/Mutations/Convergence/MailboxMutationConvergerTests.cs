@@ -97,6 +97,26 @@ public sealed class MailboxMutationConvergerTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>A held erasure whose message is already gone is completed, so no later pass reads it as outstanding again.</summary>
+    [Fact]
+    public async Task ConvergeAsync_AHeldErasureOfAMessageAlreadyGone_CompletesTheRecord()
+    {
+        // Arrange
+        var states = new InMemoryLocalEmailStateStore(Account);
+        var context = new ConvergerContext(
+            localFolders: new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held),
+            states: states);
+        var request = await context.LeaveOutstandingAsync(DeleteRequest(uid: 44U), record => record);
+
+        // Act
+        var report = await context.Converger.ConvergeAsync(Account, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, report.CompletedCount);
+        Assert.Equal(MailboxMutationStage.Completed, context.Store.RecordOf(request).Stage);
+        Assert.Empty(states.Erased);
+    }
+
     /// <summary>A record a held account inherited from before it was held is left where it is rather than carried to a source that is no longer the truth.</summary>
     [Fact]
     public async Task ConvergeAsync_AHeldAccountsInheritedMove_IsDeferredAndReachesNoServer()

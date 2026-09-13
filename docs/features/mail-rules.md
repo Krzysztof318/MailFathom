@@ -370,7 +370,9 @@ each is the point of the arrangement:
 - **Asking twice asks once.** The record's identity is the email occurrence, the mutation, and who asked — and for a
   rule, *who asked* is the rule's name together with the revision of the rule set that matched. So a whole-mailbox run
   over mail a rule has already acted on issues nothing, while an edit to the rule set is a new revision and therefore a
-  fresh request. A user who moved the message back by hand is not overruled by the rule that filed it.
+  fresh request. A user who moved the message back by hand is not overruled by the rule that filed it. A held account
+  opens no record to match against, so there a repeat is harmless for a different reason: a flag already set, a message
+  already in the folder, and a message already in the trash each leave nothing to do.
 
 **A change MailFathom made does not come back as something to act on.** A rule filing a message would otherwise meet it
 in its new folder, match again, and file it again for as long as the folder is watched;
@@ -431,15 +433,17 @@ Each is recorded against the rule that asked, and the actions beside it are stil
 | `ActionNotAvailableOnHeldAccount` | The account's mailbox is one MailFathom holds itself, and the action is a copy, which a held account does not offer |
 | `EmailNoLongerStored` | The account's mailbox is one MailFathom holds itself, and the email was erased between the pass reading it and the change being made |
 
-On a held account every other action is made to the stored email as the pass commits, in the transaction that records
-the rule's decision, rather than written down for a server: a move files into the local folder the destination's role
-or source folder corresponds to, and a delete moves the message into the local trash.
-
 Nothing is written down in any of these cases: filing into whichever folder looked closest to the name is precisely
 what a stale destination must not do. The account run reports how many changes it asked for, how many it withheld because
 another matching rule had already settled the same message, and how many named something that no longer resolves,
 together with the rules involved. Counts and rule names only — nothing derived from a message reaches a log line, a
 metric, or a span.
+
+On a held account every other action is made to the stored email as the pass commits, in the transaction that records
+the rule's decision, rather than written down for a server: a move files into the local folder the destination's role
+or source folder corresponds to, and a delete moves the message into the local trash. A delete meeting a message already
+in the trash does nothing: erasing it is a person's act, taken with the window a person can withdraw it in, and never a
+rule's.
 
 ## The facts a condition can read
 

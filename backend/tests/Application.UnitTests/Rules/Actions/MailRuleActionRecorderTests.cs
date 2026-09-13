@@ -7,9 +7,11 @@ using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
+using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
+using MailFathom.Application.Signals;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -547,6 +549,57 @@ public sealed class MailRuleActionRecorderTests
         // Assert
         Assert.Equal(0, recording.RecordedCount);
         Assert.Equal(MailRuleActionFailureReason.EmailNoLongerStored, Assert.Single(recording.Failures).Reason);
+    }
+
+    /// <summary>
+    /// A held account's action is made rather than written down, so the history names no record, and clients hear of it
+    /// only when the pass announces what its committed batch applied.
+    /// </summary>
+    [Fact]
+    public async Task RecordAsync_AHeldAccountApplyingAnAction_RecordsItWithNoRecordAndHandsBackWhatToAnnounce()
+    {
+        // Arrange
+        var channel = Substitute.For<IClientSignalChannel>();
+        var states = new InMemoryLocalEmailStateStore(Account);
+        states.Store(
+            LocalEmail,
+            new LocalEmailState(
+                MailFolderResolution.FirstBindingOf(Inbox, RemoteFolderPath.Create("INBOX")),
+                Folder: null,
+                IsSeen: false,
+                IsFlagged: false,
+                RemoteEmailKeywords.Create([])));
+        MailRuleActionRecording recording;
+
+        // Act
+        await using (var signals = new ClientSignals([channel], new FakeTimeProvider()))
+        {
+            var recorder = new MailRuleActionRecorder(
+                MailboxChangeSubmissions.Over(
+                    this.records,
+                    new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held),
+                    states,
+                    signals: signals),
+                this.dispositions,
+                this.permissions);
+
+            recording = await this.RecordAsync(
+                recorder,
+                LocalEmail,
+                OccurrenceAt(7),
+                Planned("mark-them-read", MailRuleAction.SetSeen(isSeen: true)),
+                Revision);
+            recorder.Announce(recording.Applied);
+        }
+
+        // Assert
+        Assert.Null(Assert.Single(recording.Recorded).RecordId);
+        Assert.Equal(0, this.records.OpenedRecordCount);
+        Assert.True(states.States[LocalEmail].IsSeen);
+        Assert.Equal(LocalEmail, Assert.Single(recording.Applied).Email);
+        await channel.Received(1).PublishAsync(
+            Arg.Is<ClientSignal>(signal => signal != null && signal.Kind == ClientSignalKind.MailFlagsChanged),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

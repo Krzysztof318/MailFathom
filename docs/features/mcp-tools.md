@@ -1056,7 +1056,8 @@ Three things follow, and the tool's description states each of them:
 - A protocol request never waits on IMAP and never opens a connection against an account's budget.
 - The result reports records rather than a mailbox that has already changed, each with the lifecycle it has reached.
   A value the user cannot see in their own client after a few minutes is followed up by calling again with the same
-  `requestId`, which answers with the same records and their current lifecycle.
+  `requestId`, which answers with the same records and their current lifecycle. On an account whose mailbox MailFathom
+  holds itself the result is `applied` instead, with no record to follow up.
 - A crash between the record and the command leaves a change that converges, rather than a stored value that quietly
   disagrees with the mailbox.
 
@@ -1084,7 +1085,7 @@ touch only what they name.
 | Field | Meaning |
 |---|---|
 | `storedEmailId` | The email the change was recorded against, which is the one the call named |
-| `accountId` | The account whose next synchronization run issues the change |
+| `accountId` | The account the change belongs to, whose next synchronization run issues a recorded change; an applied change has no mail server to reach |
 | `folderAlias` | The folder the email is in, as MailFathom's configuration names it |
 | `applied` | `true` when the account's mailbox is one MailFathom holds itself, so the change was made to the stored email as the call committed and nothing is left to converge; `recordedChanges` is then empty |
 | `recordedChanges[]` | One entry per value asked for, in the order `seen`, `flagged`, keywords |
@@ -1113,6 +1114,11 @@ carries the occurrence, the mutation, and who asked, and none of the three carri
 otherwise be answered with the first call's record while the mailbox is never unmarked — and the result publishes the
 record rather than the terms, so nothing the caller receives would say so. Two callers that happened to pick the same
 text collide the same way and get the same refusal.
+
+All of this is the record's. On an account whose mailbox MailFathom holds itself the result is `applied` and no record
+is opened, so nothing carries the `requestId` for a repeat to be matched against: every call applies the change it
+names, a retry after a timeout applies it again, and a reused `requestId` with a different value is applied rather than
+refused.
 
 The records for one call are written in one commit, so a call either records everything it asked for or nothing. A
 partially recorded triage is the outcome worth avoiding: a caller told its call failed while one of the three values is
