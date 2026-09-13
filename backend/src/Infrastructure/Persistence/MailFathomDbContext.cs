@@ -20,13 +20,13 @@ using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Jobs.Configurations;
 using MailFathom.Infrastructure.Persistence.Mutations.Configurations;
 using MailFathom.Infrastructure.Persistence.Notifications.Configurations;
-using MailFathom.Infrastructure.Persistence.Portraits.Configurations;
 using MailFathom.Infrastructure.Persistence.Preferences.Configurations;
 using MailFathom.Infrastructure.Persistence.Rules.Configurations;
 using MailFathom.Infrastructure.Persistence.Secrets.Configurations;
 using MailFathom.Infrastructure.Persistence.Settings.Configurations;
 using MailFathom.Infrastructure.Persistence.Signals.Configurations;
 using MailFathom.Infrastructure.Persistence.Spam.Configurations;
+using MailFathom.Infrastructure.Persistence.StoredFiles.Configurations;
 using MailFathom.Infrastructure.Persistence.Synchronization.Configurations;
 using MailFathom.Infrastructure.Persistence.ThreadStates.Configurations;
 using MailFathom.Infrastructure.Persistence.Users.Configurations;
@@ -75,7 +75,7 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<ClientPreferencesEntity> ClientPreferences => this.Set<ClientPreferencesEntity>();
 
-    internal DbSet<UserPortraitEntity> UserPortraits => this.Set<UserPortraitEntity>();
+    internal DbSet<StoredFileEntity> StoredFiles => this.Set<StoredFileEntity>();
 
     internal DbSet<SpentClientAssertionEntity> SpentClientAssertions => this.Set<SpentClientAssertionEntity>();
 
@@ -225,7 +225,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new StoredSecretConfiguration());
         modelBuilder.ApplyConfiguration(new UserCredentialConfiguration());
         modelBuilder.ApplyConfiguration(new ClientPreferencesConfiguration());
-        modelBuilder.ApplyConfiguration(new UserPortraitConfiguration());
+        modelBuilder.ApplyConfiguration(new StoredFileConfiguration());
         modelBuilder.ApplyConfiguration(new SpentClientAssertionConfiguration());
         modelBuilder.ApplyConfiguration(new ClientSignalTicketConfiguration());
         modelBuilder.ApplyConfiguration(new ClientSessionConfiguration());

@@ -74,6 +74,15 @@ internal sealed class ContentObjectReferenceReader(MailFathomDbContext dbContext
                 .Select(draft => draft.ObjectLocator!),
             cancellationToken);
 
+        await CollectAsync(
+            referenced,
+            dbContext.StoredFiles
+                .AsNoTracking()
+                .Where(file => file.Backend == ContentStorageBackend.ObjectStorage
+                    && objectLocators.Contains(file.ObjectLocator!))
+                .Select(file => file.ObjectLocator!),
+            cancellationToken);
+
         return referenced;
     }
 

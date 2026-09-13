@@ -134,6 +134,13 @@ internal sealed class RetainedContentReleaseStore(MailFathomDbContext dbContext)
                 .ExecuteUpdateAsync(
                     setters => setters.SetProperty(content => content.RawMime, (byte[]?)null),
                     cancellationToken),
+            EmailContentKind.StoredFile => await dbContext.StoredFiles
+                .Where(file => payloadIds.Contains(file.Id)
+                    && file.Backend == ContentStorageBackend.ObjectStorage
+                    && file.Content != null)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(file => file.Content, (byte[]?)null),
+                    cancellationToken),
             _ => throw UnknownKind(kind),
         };
 
@@ -180,6 +187,15 @@ internal sealed class RetainedContentReleaseStore(MailFathomDbContext dbContext)
                 PayloadId = content.MailDraftId,
                 ByteLength = content.MimeByteLength,
                 ObjectVerifiedAt = content.ObjectVerifiedAt,
+            }),
+        EmailContentKind.StoredFile => dbContext.StoredFiles
+            .AsNoTracking()
+            .Where(file => file.Backend == ContentStorageBackend.ObjectStorage && file.Content != null)
+            .Select(file => new RetainedPayloadRow
+            {
+                PayloadId = file.Id,
+                ByteLength = file.ByteLength,
+                ObjectVerifiedAt = file.ObjectVerifiedAt,
             }),
         _ => throw UnknownKind(kind),
     };

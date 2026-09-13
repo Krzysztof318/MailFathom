@@ -93,6 +93,11 @@ internal sealed class StoredContentMoveStore(MailFathomDbContext dbContext) : IS
                     && content.Backend == ContentStorageBackend.Database)
                 .Select(content => content.RawMime)
                 .SingleOrDefaultAsync(cancellationToken),
+            EmailContentKind.StoredFile => await dbContext.StoredFiles
+                .AsNoTracking()
+                .Where(file => file.Id == payloadId && file.Backend == ContentStorageBackend.Database)
+                .Select(file => file.Content)
+                .SingleOrDefaultAsync(cancellationToken),
             _ => throw UnknownKind(kind),
         };
 
@@ -159,6 +164,14 @@ internal sealed class StoredContentMoveStore(MailFathomDbContext dbContext) : IS
                         .SetProperty(content => content.Backend, ContentStorageBackend.ObjectStorage)
                         .SetProperty(content => content.ObjectLocator, objectLocator)
                         .SetProperty(content => content.ObjectVerifiedAt, verifiedAt),
+                    cancellationToken),
+            EmailContentKind.StoredFile => await dbContext.StoredFiles
+                .Where(file => file.Id == payloadId && file.Backend == ContentStorageBackend.Database)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(file => file.Backend, ContentStorageBackend.ObjectStorage)
+                        .SetProperty(file => file.ObjectLocator, objectLocator)
+                        .SetProperty(file => file.ObjectVerifiedAt, verifiedAt),
                     cancellationToken),
             _ => throw UnknownKind(kind),
         };
@@ -233,6 +246,15 @@ internal sealed class StoredContentMoveStore(MailFathomDbContext dbContext) : IS
                 PayloadId = content.MailDraftId,
                 ByteLength = content.MimeByteLength,
                 Sha256Hash = content.Sha256Hash,
+            }),
+        EmailContentKind.StoredFile => dbContext.StoredFiles
+            .AsNoTracking()
+            .Where(file => file.Backend == ContentStorageBackend.Database)
+            .Select(file => new ContentPayloadRow
+            {
+                PayloadId = file.Id,
+                ByteLength = file.ByteLength,
+                Sha256Hash = file.Sha256Hash,
             }),
         _ => throw UnknownKind(kind),
     };

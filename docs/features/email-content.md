@@ -752,7 +752,8 @@ is already stored across is a separate act an operator asks for, under
 [carrying what is already stored across](#carrying-what-is-already-stored-across).
 
 What a reader of the schema sees is one shape per row across all four tables that hold raw MIME —
-`email_message_contents`, `outgoing_email_contents`, `mail_draft_contents`, and `recurring_send_drafts`:
+`email_message_contents`, `outgoing_email_contents`, `mail_draft_contents`, and `recurring_send_drafts` — and across
+`stored_files`, which holds the files a user record links to, such as a portrait, the same way:
 
 - **`Backend`** names the store, `Database` or `ObjectStorage`. Its column default names the database, which is what
   makes every row written before the discriminator existed read as the thing it is, and what keeps an ordinary
@@ -798,8 +799,8 @@ Two consequences are worth reading off that, because both are observable:
 An object outlives the row that pointed at it in two ways, and both end with the object gone.
 
 **A row that goes takes its object with it, immediately after the transaction commits.** Deleting a stored email, an
-outgoing record, a recurring declaration, or a mail draft removes the payload from the endpoint as well as the record
-from the database. The order is the ordering
+outgoing record, a recurring declaration, a mail draft, or a stored file — and erasing the user any of them belongs to —
+removes the payload from the endpoint as well as the record from the database. The order is the ordering
 [ADR 0001](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md)
 requires of every remote call — the endpoint is reached after the commit rather than inside it, so a network that
 stalls holds no transaction open, and a delete that rolled back has removed nothing. The locators are read **inside**
@@ -904,7 +905,8 @@ configured bucket whether it answers, and the check that asks the stored content
   is stored against the draft and **rewritten** with each revision, because what it holds is a message somebody is
   still editing rather than bytes a later attempt has to reproduce. One port is what keeps raw MIME behind one seam,
   which is what let the object backend arrive as one adapter's concern rather than four — no use case above it knows
-  which store answered. [Mail delivery](mail-delivery.md) holds why the send's write may never be repeated and why the
+  which store answered. A file a user record links to is a fifth kind placed through the same port without being MIME,
+  so it follows the same backend and the same move. [Mail delivery](mail-delivery.md) holds why the send's write may never be repeated and why the
   draft's must be, and [where a payload is kept](#where-a-payload-is-kept) holds what the two backends are.
 - `MailFathom.Application.EmailContent.Storage.Reclamation` — what one bounded sweep of the endpoint reclaimed, and the
   port that runs one. The job handler beside them is what makes a sweep resumable: it hands the listing position of a

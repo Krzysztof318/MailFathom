@@ -31,4 +31,8 @@ public enum EmailContentKind
 
     /// <summary>One revision of a mail draft, which is the one payload kind a later write replaces.</summary>
     MailDraft = 3,
+
+    /// <summary>A binary file a user supplied, which a record links to rather than holds, such as the portrait.</summary>
+    /// <remarks>Not MIME, and placed through the same port so it follows the same backend and the same move.</remarks>
+    StoredFile = 4,
 }

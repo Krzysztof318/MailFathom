@@ -87,7 +87,7 @@ internal static class ReleasedContentObjects
             cancellationToken);
     }
 
-    /// <summary>States every object holding mail one user's erasure removes, across all four payload kinds.</summary>
+    /// <summary>States every object one user's erasure removes, across the four mail payload kinds and the user's stored files.</summary>
     /// <param name="session">The session the erasure runs in.</param>
     /// <param name="userId">The user being erased.</param>
     /// <param name="cancellationToken">Cancels the reads.</param>
@@ -139,6 +139,13 @@ internal static class ReleasedContentObjects
                 .Where(draft => draft.RecurringSend.UserId == userId
                     && draft.Backend == ContentStorageBackend.ObjectStorage)
                 .Select(draft => draft.ObjectLocator!),
+            cancellationToken);
+
+        await ReleaseAsync(
+            session,
+            sessionContext.StoredFiles
+                .Where(file => file.UserId == userId && file.Backend == ContentStorageBackend.ObjectStorage)
+                .Select(file => file.ObjectLocator!),
             cancellationToken);
     }
 

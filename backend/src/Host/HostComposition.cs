@@ -44,6 +44,7 @@ using MailFathom.Application.Signals;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Spam.Runs;
+using MailFathom.Application.StoredFiles;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Host.Api;
@@ -280,6 +281,9 @@ internal static class HostComposition
         // its operations are published under, and that service is scoped to whatever admitted the caller.
         builder.Services.AddScoped<UserRosterAdministration>();
         builder.Services.AddScoped<UserRecordAdministration>();
+        // The portrait link is a key of the user record, so the use case that stores the picture reaches the record
+        // through its administration rather than through the row.
+        builder.Services.AddScoped<IUserRecordFileLinks, OwnPortraitLinks>();
         builder.Services.AddScoped<OwnDisplayName>();
         builder.Services.AddScoped<StoredSecretAdministration>();
     }
@@ -1193,6 +1197,7 @@ internal static class HostComposition
         // stops, which is the same answer a conditional registration would give without putting the condition in a second
         // place.
         builder.Services.AddHostedService<JobWorker>();
+        builder.Services.AddHostedService<UnlinkedStoredFileSweepWorker>();
 
         // Started only where a provider was declared. A deployment that declared none resolves no generator at all, so a
         // worker registered anyway would fail on the first message the backlog handed it rather than idle harmlessly.

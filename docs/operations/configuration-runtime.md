@@ -83,6 +83,11 @@ content](../features/email-content.md#where-a-payload-is-kept) reads off the sch
 into the bucket is an operator's act rather than a setting; [moving stored content into the
 bucket](moving-stored-content.md) is the operation, and `ContentStorage:Move` below is what bounds its cost.
 
+**Files a user record links to follow the same setting.** A person's [portrait](client-endpoint.md#the-portrait-routes)
+is a stored file rather than mail, and it is written by the same placement: into PostgreSQL under `Database`, into the
+bucket under `ObjectStorage`, and carried by a move, freed by a release, reclaimed as an orphan, and erased with its user
+exactly as a message payload is.
+
 **A database backup stops being a complete backup while this names a bucket.** The rows point at objects by a locator
 nothing recomputes, so the two stores are one backup taken in two places and a restore brings the database back before
 the bucket — the other order leaves objects nothing points at, which the reclamation sweep below is entitled to delete.

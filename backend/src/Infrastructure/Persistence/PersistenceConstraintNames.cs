@@ -522,6 +522,12 @@ internal static class PersistenceConstraintNames
     /// <inheritdoc cref="EmailMessageContentObjectLocatorUniqueIndexName" />
     internal const string RecurringSendDraftObjectLocatorUniqueIndexName = "ix_recurring_send_drafts_object_locator";
 
+    /// <inheritdoc cref="EmailMessageContentObjectLocatorUniqueIndexName" />
+    internal const string StoredFileObjectLocatorUniqueIndexName = "ix_stored_files_object_locator";
+
+    /// <summary>The foreign key that removes a user's stored files with the user.</summary>
+    internal const string StoredFileUserForeignKeyName = "fk_stored_files_settings_accounts";
+
     /// <summary>The key of the one row a deployment's move of its stored content is kept in.</summary>
     internal const string ContentMoveRunPrimaryKeyConstraintName = "pk_content_move_runs";
 

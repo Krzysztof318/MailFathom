@@ -1992,8 +1992,10 @@ a sentence saying so in place of the switch — a control over a client that is 
 ### The portrait routes
 
 These three hold the picture a person is drawn by, which the account menu and the settings screen put beside their
-name. It is stored on the user axis beside the preferences document rather than inside one: a megabyte of image
-octets is not a small closed document, and reading a switch should not carry a photograph.
+name. It is a stored file the person's user record links to under `Portrait`, rather than octets inside the record:
+a megabyte of image is not a small closed document, and reading the record should not carry a photograph. The octets
+are held wherever [`ContentStorage:Backend`](configuration-runtime.md#contentstorage) places content — in the database,
+or in the object store mail content is written to.
 
 | Route | What it does |
 | --- | --- |
@@ -2009,7 +2011,12 @@ answered `415` naming both. A request carrying no body at all is answered `400`.
 
 **Nothing is done to the picture beyond that.** It is not resized, cropped, re-encoded, or stripped of its metadata,
 and it is served back exactly as it was supplied — so the bound and the kind check are the whole of what stands
-between an upload and the database. A person keeps one picture and no history of previous ones.
+between an upload and the store. A person keeps one picture and no history of previous ones.
+
+**A replacement writes the new file, links it, and only then removes the old one.** A failure between any two of those
+steps leaves the previous picture in force, or at worst a file nothing links to, which a sweep removes once it is an
+hour old; the record never links to a file that is gone. A user record written by any other route may name only a
+stored file of that same user under `Portrait`, and a write naming anybody else's is refused.
 
 **Having no picture is answered `204`, not `404`.** The client draws the initials it already has from the person's
 name, so an absent portrait is an ordinary state of the screen rather than an error on it; `404` on this surface says
@@ -2029,8 +2036,9 @@ two writes are deliberately not `mailfathom.mail.accounts.write`, for the reason
 write](#the-preferences-routes) is not: that grant decides which mailboxes this deployment connects to, and what a
 person is drawn by must not be decided by a grant over their mail configuration.
 
-**The octets hang off the user row.** Erasing a user erases their portrait with everything else derived from them,
-without an erasure naming that table.
+**The file hangs off the user row.** Erasing a user erases their portrait with everything else derived from them, in
+the database and in the object store alike, and [moving stored content](moving-stored-content.md) into the object store
+carries it with the mail.
 
 ### The drafts routes
 

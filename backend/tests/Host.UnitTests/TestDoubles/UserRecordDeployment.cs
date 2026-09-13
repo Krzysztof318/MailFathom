@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.StoredFiles;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
@@ -110,7 +111,8 @@ internal sealed class UserRecordDeployment
                 new FakeTimeProvider(Today),
                 Options.Create(new SensitiveContentOptions())),
             SecretValidation.OverRegisteredSchemes(),
-            this.servedUsers);
+            this.servedUsers,
+            Substitute.For<IStoredFileStore>());
 
         this.StoredSecrets = Substitute.For<IStoredSecretStore>();
         this.StoredSecrets.CanStore.Returns(true);

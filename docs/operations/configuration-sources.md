@@ -180,6 +180,10 @@ a record being written and of no other: a held record naming no language is serv
 time anybody writes it. The operator's action after upgrading is therefore a single `mfctl user edit` for each person
 who reads Polish, and nothing at all for anybody who reads English.
 
+| Key | Required | What it is |
+| --- | --- | --- |
+| `Portrait` | No | The identifier of the stored file this person is drawn by. [The portrait routes](client-endpoint.md#the-portrait-routes) write it; a record naming a file that is not a stored file of this same user is refused |
+
 ### A configuration still declaring users
 
 A deployment upgrading from a release that had the collection meets a refusal naming the section and what to run:
