@@ -413,7 +413,8 @@ public sealed class ClientEndpointOptionsTests
         {
             ["ClientEndpoint:Enabled"] = "true",
             ["ClientEndpoint:RateLimiting:MaxConcurrentRequests"] = "6",
-            ["ClientEndpoint:RateLimiting:TokenCapacity"] = "60",
+            ["ClientEndpoint:RateLimiting:MaxConcurrentRequestsPerUser"] = "3",
+            ["ClientEndpoint:RateLimiting:TokenCapacity"] = "180",
             ["ClientEndpoint:RateLimiting:ReplenishmentPeriod"] = "00:00:15",
         });
 
@@ -422,7 +423,8 @@ public sealed class ClientEndpointOptionsTests
 
         // Assert
         Assert.Equal(6, settings.RateLimiting.MaxConcurrentRequests);
-        Assert.Equal(60, settings.RateLimiting.TokenCapacity);
+        Assert.Equal(3, settings.RateLimiting.MaxConcurrentRequestsPerUser);
+        Assert.Equal(180, settings.RateLimiting.TokenCapacity);
         Assert.Equal(TimeSpan.FromSeconds(15), settings.RateLimiting.ReplenishmentPeriod);
         Assert.Empty(settings.FindConfigurationErrors());
     }

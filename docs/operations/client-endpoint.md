@@ -2807,6 +2807,11 @@ other two surfaces carry, and are configured independently of them: neither one'
 apply whether or not anyone wrote a number, which is what stops a surface reachable from a page from serving unbounded
 key guessing.
 
+**A user's every credential spends that user's one allowance here.** A signed-in session, a password, and a key held by
+the same user draw on one bucket and one concurrency allowance, and a colleague's traffic draws on theirs, so the
+endpoint behaves the same for a roster of twenty as for one person;
+[whose capacity a request spends](mcp-endpoint.md#whose-capacity-a-request-spends) is the rule.
+
 **Both are attached to this surface's routes rather than applied as the process's default policy**, which is what keeps
 the health probes answering while the client endpoint is refusing. A default limiter would count a readiness probe
 against the same capacity a browser is spending, and a deployment under load would start failing the probe that decides

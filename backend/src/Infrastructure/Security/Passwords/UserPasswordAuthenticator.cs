@@ -83,19 +83,22 @@ public sealed partial class UserPasswordAuthenticator
     /// <param name="authorizationHeaderValue">The raw header value, or <see langword="null" /> when the request carried none.</param>
     /// <param name="source">The address to bound this attempt by, or <see langword="null" /> where the caller cannot supply one that tells two callers apart — behind a reverse proxy above all, where every request reports the proxy. The username is then the whole bound, which is deliberate: a partition every caller shares is one a single guesser could empty for everybody.</param>
     /// <param name="attemptsPerMinute">How many attempts the surface allows one source and one username each minute.</param>
+    /// <param name="maxConcurrentVerifications">How many password verifications the surface may have in flight at once, whatever usernames they name.</param>
     /// <param name="cancellationToken">Cancels the credential read and the rehash that may follow a success.</param>
     /// <returns>The credential and user that matched, or the reason the credential was refused.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="surfaceName" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="attemptsPerMinute" /> is not positive, which would refuse every request rather than bounding any.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="attemptsPerMinute" /> or <paramref name="maxConcurrentVerifications" /> is not positive, which would refuse every request rather than bounding any.</exception>
     public async Task<UserPasswordAuthenticationResult> AuthenticateAsync(
         string surfaceName,
         string? authorizationHeaderValue,
         string? source,
         int attemptsPerMinute,
+        int maxConcurrentVerifications,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(surfaceName);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(attemptsPerMinute);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxConcurrentVerifications);
 
         // The credential owns the buffer its password was decoded into, so it is released on every path out of here
         // rather than only on the one that read it — which is what bounds the plaintext's life to this call.
@@ -119,7 +122,8 @@ public sealed partial class UserPasswordAuthenticator
                 surfaceName,
                 string.IsNullOrWhiteSpace(source) ? null : source,
                 username.Value,
-                attemptsPerMinute);
+                attemptsPerMinute,
+                maxConcurrentVerifications);
 
             // Disposed on every path out, which returns the capacity; a wrong password keeps it instead by spending the
             // reservation below, and disposing a spent one does nothing.

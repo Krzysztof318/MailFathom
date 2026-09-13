@@ -42,6 +42,7 @@ public sealed class McpEndpointOptionsBindingTests
             ["McpEndpoint:Cors:AllowedOrigins:0"] = "https://client.example.test",
             ["McpEndpoint:Cors:AllowedOrigins:1"] = "https://console.example.test:8443",
             ["McpEndpoint:RateLimiting:MaxConcurrentRequests"] = "12",
+            ["McpEndpoint:RateLimiting:MaxConcurrentRequestsPerUser"] = "6",
             ["McpEndpoint:RateLimiting:TokenCapacity"] = "40",
             ["McpEndpoint:RateLimiting:TokensPerReplenishmentPeriod"] = "10",
             ["McpEndpoint:RateLimiting:ReplenishmentPeriod"] = "00:00:30",
@@ -62,6 +63,7 @@ public sealed class McpEndpointOptionsBindingTests
             ["https://client.example.test", "https://console.example.test:8443"],
             options.Cors.AllowedOrigins);
         Assert.Equal(12, options.RateLimiting.MaxConcurrentRequests);
+        Assert.Equal(6, options.RateLimiting.MaxConcurrentRequestsPerUser);
         Assert.Equal(40, options.RateLimiting.TokenCapacity);
         Assert.Equal(10, options.RateLimiting.TokensPerReplenishmentPeriod);
         Assert.Equal(TimeSpan.FromSeconds(30), options.RateLimiting.ReplenishmentPeriod);
@@ -80,7 +82,7 @@ public sealed class McpEndpointOptionsBindingTests
         var configuration = ConfigurationFrom(new Dictionary<string, string?>
         {
             ["McpEndpoint:Enabled"] = "true",
-            ["McpEndpoint:RateLimiting:MaxConcurrentRequests"] = "5",
+            ["McpEndpoint:RateLimiting:MaxConcurrentRequests"] = "30",
         });
 
         // Act
@@ -88,7 +90,8 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         var defaults = new TransportRateLimitingOptions();
-        Assert.Equal(5, options.RateLimiting.MaxConcurrentRequests);
+        Assert.Equal(30, options.RateLimiting.MaxConcurrentRequests);
+        Assert.Equal(defaults.MaxConcurrentRequestsPerUser, options.RateLimiting.MaxConcurrentRequestsPerUser);
         Assert.Equal(defaults.TokenCapacity, options.RateLimiting.TokenCapacity);
         Assert.Equal(defaults.TokensPerReplenishmentPeriod, options.RateLimiting.TokensPerReplenishmentPeriod);
         Assert.Equal(defaults.ReplenishmentPeriod, options.RateLimiting.ReplenishmentPeriod);

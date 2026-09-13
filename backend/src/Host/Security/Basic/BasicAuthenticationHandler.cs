@@ -99,6 +99,7 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
             this.Request.Headers.Authorization.ToString(),
             this.SourceToBoundBy(),
             this.Options.AttemptsPerMinute,
+            this.Options.MaxConcurrentVerifications,
             this.Context.RequestAborted);
 
         if (result.Admitted is not { } admitted)

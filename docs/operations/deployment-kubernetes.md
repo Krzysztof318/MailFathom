@@ -447,8 +447,9 @@ is the table.
 
 **The endpoint rate limiters are the exception, and they are a bound rather than a guarantee.**
 `McpEndpoint:RateLimiting`, `AdminEndpoint:RateLimiting`, and `ClientEndpoint:RateLimiting` each count in one process,
-so a deployment of *n* replicas admits up to *n* times what one of them declares. What `TokenCapacity` is the burst of
-differs by surface: one caller's, at one replica, on the MCP and client surfaces, and **the whole endpoint's** on the
+so a deployment of *n* replicas admits up to *n* times what one of them declares. Whose `TokenCapacity` and
+`MaxConcurrentRequestsPerUser` they are differs by surface: one user's, at one replica, on the MCP and client surfaces,
+and **the whole endpoint's** on the
 administrative one, where the credential is judged behind the limiter so an administrative request is still anonymous
 when it is counted and every caller shares one bucket. That is the surface where this matters most, because the limiter
 is what stands between an API key and unbounded guessing — so divide the figure when the replica count is raised rather

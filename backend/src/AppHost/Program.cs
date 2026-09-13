@@ -458,6 +458,9 @@ if (runsIntegrationTests)
         .WithEnvironment(
             "McpEndpoint__RateLimiting__MaxConcurrentRequests",
             OrchestrationContract.McpRateLimitMaxConcurrentRequests.ToString(CultureInfo.InvariantCulture))
+        .WithEnvironment(
+            "McpEndpoint__RateLimiting__MaxConcurrentRequestsPerUser",
+            OrchestrationContract.McpRateLimitMaxConcurrentRequestsPerUser.ToString(CultureInfo.InvariantCulture))
         // The two bounds an authored send meets that nothing below the transport can prove: one organization this
         // deployment may never write to, and a ceiling on the people one caller may reach in a period. Both are stated
         // here rather than defaulted, because a suite that configured neither would pass whether or not either was

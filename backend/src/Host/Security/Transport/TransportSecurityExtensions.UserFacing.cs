@@ -105,6 +105,9 @@ internal static partial class TransportSecurityExtensions
                     schemeOptions.Surface = surface;
                     schemeOptions.AttemptsPerMinute =
                         basicMethod.Basic?.AttemptsPerMinute ?? BasicAuthenticationOptions.DefaultAttemptsPerMinute;
+                    schemeOptions.MaxConcurrentVerifications =
+                        basicMethod.Basic?.MaxConcurrentVerifications
+                        ?? BasicAuthenticationOptions.DefaultMaxConcurrentVerifications;
                 });
         }
 

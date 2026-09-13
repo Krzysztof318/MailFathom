@@ -220,6 +220,10 @@ public static class OrchestrationContract
     /// </remarks>
     public const int McpRateLimitMaxConcurrentRequests = 200;
 
+    /// <summary>How many MCP requests the integration-test topology's host serves at once for any one caller.</summary>
+    /// <remarks>Raised with <see cref="McpRateLimitMaxConcurrentRequests" /> and for the same reason: a burst the suite sends with one key must be refused by that key's bucket and never by its concurrency, and the per-caller ceiling has to stay below the process's.</remarks>
+    public const int McpRateLimitMaxConcurrentRequestsPerUser = McpRateLimitMaxConcurrentRequests - 1;
+
     /// <summary>The one browser origin the integration-test topology's MCP endpoint serves.</summary>
     /// <remarks>
     /// The topology narrows the origins deliberately rather than leaving the permissive default, because a suite that

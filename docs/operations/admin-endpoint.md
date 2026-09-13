@@ -1437,8 +1437,9 @@ Two things differ here, and both follow from where the credential is judged:
   middleware in front of the pipeline deliberately leaves an administrative request anonymous, and the credential is
   judged by the authorization middleware, which runs *behind* the limiter so that a request about to be refused for a
   wrong key has still spent capacity. There is therefore no identity to partition on when the limiter counts, and every
-  administrative caller shares one bucket. Size `TokenCapacity` as what the whole endpoint may burst to rather than what
-  one operator may.
+  administrative caller shares one bucket and one per-user concurrency allowance. Size `TokenCapacity` as what the whole
+  endpoint may burst to, and `MaxConcurrentRequestsPerUser` as what it may serve at once, rather than what one operator
+  may.
 - **No endpoint's traffic reaches another's limits.** The partitions are keyed per surface, so a key spelled the
   same way under two sections is two independent buckets, and an agent that exhausted the MCP endpoint's capacity has
   taken nothing from the surface you would use to stop it.

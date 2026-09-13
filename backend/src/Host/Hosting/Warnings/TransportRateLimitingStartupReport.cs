@@ -125,6 +125,7 @@ internal sealed partial class TransportRateLimitingStartupReport : IHostedServic
             endpointName,
             endpointPath,
             rateLimitingSettings.MaxConcurrentRequests,
+            rateLimitingSettings.MaxConcurrentRequestsPerUser,
             rateLimitingSettings.ConcurrencyQueueLimit,
             rateLimitingSettings.TokenCapacity,
             rateLimitingSettings.TokensPerReplenishmentPeriod,
@@ -146,14 +147,16 @@ internal sealed partial class TransportRateLimitingStartupReport : IHostedServic
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The {EndpointName} endpoint on {EndpointPath} serves at most {MaxConcurrentRequests} requests at once "
-            + "across every caller, queueing {ConcurrencyQueueLimit} beyond that, and allows each caller a burst of "
-            + "{TokenCapacity} requests restored at {TokensPerReplenishmentPeriod} every {ReplenishmentPeriod}, queueing "
-            + "{RequestQueueLimit} of its requests beyond that. The limits are counted in this process alone, so a "
-            + "deployment running several enforces them once per process rather than once in total.")]
+            + "across every user and {MaxConcurrentRequestsPerUser} for any one user, queueing {ConcurrencyQueueLimit} "
+            + "beyond the first, and allows each user a burst of {TokenCapacity} requests restored at "
+            + "{TokensPerReplenishmentPeriod} every {ReplenishmentPeriod}, queueing {RequestQueueLimit} of their requests "
+            + "beyond that; every unauthenticated request counts as one user. The limits are counted in this process "
+            + "alone, so a deployment running several enforces them once per process rather than once in total.")]
     private partial void LogEndpointRateLimits(
         string endpointName,
         string endpointPath,
         int maxConcurrentRequests,
+        int maxConcurrentRequestsPerUser,
         int concurrencyQueueLimit,
         int tokenCapacity,
         int tokensPerReplenishmentPeriod,

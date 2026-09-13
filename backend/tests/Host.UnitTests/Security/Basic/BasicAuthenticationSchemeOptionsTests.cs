@@ -50,9 +50,23 @@ public sealed class BasicAuthenticationSchemeOptionsTests
         Assert.Throws<InvalidOperationException>(options.Validate);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Validate_ARegistrationStatingNoPositiveVerificationCeiling_IsRefused(int maxConcurrentVerifications)
+    {
+        // Arrange
+        var options = Registered();
+        options.MaxConcurrentVerifications = maxConcurrentVerifications;
+
+        // Act, Assert
+        Assert.Throws<InvalidOperationException>(options.Validate);
+    }
+
     private static BasicAuthenticationSchemeOptions Registered() => new()
     {
         Surface = TransportSurface.Client,
         AttemptsPerMinute = 10,
+        MaxConcurrentVerifications = 128,
     };
 }

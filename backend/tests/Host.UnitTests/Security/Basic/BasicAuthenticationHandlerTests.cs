@@ -386,6 +386,7 @@ public sealed class BasicAuthenticationHandlerTests
                 {
                     Surface = TransportSurface.Client,
                     AttemptsPerMinute = attemptsPerMinute,
+                    MaxConcurrentVerifications = 128,
                 }),
                 NullLoggerFactory.Instance,
                 UrlEncoder.Default,
