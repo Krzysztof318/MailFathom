@@ -71,6 +71,26 @@ public sealed class ClientApplicationFilesTests
         Assert.Equal(EntryDocumentContent, Encoding.UTF8.GetString(((MemoryStream)context.Response.Body).ToArray()));
     }
 
+    /// <summary>The bare path is redirected rather than answered, because the bundle's relative references resolve only beneath the trailing slash.</summary>
+    [Fact]
+    public async Task UseClientApplication_TheBareApplicationPathOnAClientListener_RedirectsToItsTrailingSlashForm()
+    {
+        // Arrange
+        var context = RequestOnTheClientListener(ClientApplicationOptions.RequestPath);
+
+        context.Request.Scheme = "https";
+        context.Request.Host = new HostString("mail.example.test");
+
+        // Act
+        await ServeAsync(context);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status301MovedPermanently, context.Response.StatusCode);
+        Assert.Equal(
+            $"https://mail.example.test{ClientApplicationOptions.RequestPath}/",
+            context.Response.Headers.Location.ToString());
+    }
+
     /// <summary>The root belongs to no static file, so a request there passes on to whatever the pipeline serves next.</summary>
     [Theory]
     [InlineData("/")]

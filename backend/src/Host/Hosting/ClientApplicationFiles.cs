@@ -68,7 +68,9 @@ internal static class ClientApplicationFiles
     /// <remarks>
     /// <para>
     /// Everything is served beneath <see cref="ClientApplicationOptions.RequestPath" />: the entry document answers
-    /// that path, with the bare path redirected to its trailing-slash form so the bundle's relative references resolve,
+    /// that path, with the bare path redirected to its trailing-slash form so the bundle's relative references resolve —
+    /// which the default-files middleware does itself, answering a directory request that lacks the slash with a
+    /// <c>301</c> once it finds the entry document there —
     /// and every other file answers its own path beneath it. There is no
     /// fallback mapping an unmatched path onto the entry document: the head navigates inside one document rather than
     /// by address, so a fallback would only turn a mistyped route on a shared socket into a page that loads and reports
