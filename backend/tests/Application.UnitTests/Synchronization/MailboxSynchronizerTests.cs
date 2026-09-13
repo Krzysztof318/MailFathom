@@ -309,6 +309,63 @@ public sealed class MailboxSynchronizerTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// Two provider copies of one send in a batch — a deferred send offered again under the same Message-ID — carry the
+    /// filed copy onto the first and store the second as an arrival, rather than moving the filed copy off the first.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_TwoProviderCopiesOfOneFiledSendInABatch_CarriesTheFiledCopyOntoTheFirstAndStoresTheSecond()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, accountId);
+        var first = EmailOccurrenceId.Create(accountId, HeldSentFolder.Id, uidValidity, ImapUid.Create(10));
+        var second = EmailOccurrenceId.Create(accountId, HeldSentFolder.Id, uidValidity, ImapUid.Create(11));
+        const string internetMessageId = "send-1@example.test";
+        var sent = ArrangeContentRun(
+            options,
+            uidValidity,
+            [
+                MetadataOf(first, 600) with { InternetMessageId = internetMessageId },
+                MetadataOf(second, 600) with { InternetMessageId = internetMessageId },
+            ],
+            second.Uid,
+            runFolder: HeldSentFolder,
+            localFolderArrivals: new LocalMailFolderArrivals(
+                new InMemoryLocalMailFolderStore(account, MailAccountCustodyPhase.Held),
+                ClientSignalPublishers.ReachingNobody,
+                new FakeTimeProvider()));
+        StubRetrievedContent(sent.Session, options, first, 600);
+        StubRetrievedContent(sent.Session, options, second, 600);
+        var filedCopy = StoredEmailId.Create(Guid.CreateVersion7(new DateTimeOffset(2026, 7, 24, 11, 0, 0, TimeSpan.Zero)));
+        sent.MetadataRepository
+            .FindFiledSentCopiesAsync(account, Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, StoredEmailId> { [internetMessageId] = filedCopy });
+        sent.MetadataRepository
+            .TryCarryToOccurrenceAsync(Arg.Any<IPersistenceSession>(), account.User, filedCopy, Arg.Any<EmailOccurrenceId>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        // Act
+        var result = await sent.Synchronizer.SynchronizeAsync(account, HeldSentMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        await sent.MetadataRepository.Received(1).TryCarryToOccurrenceAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailUserId>(),
+            Arg.Any<StoredEmailId>(),
+            Arg.Any<EmailOccurrenceId>(),
+            Arg.Any<CancellationToken>());
+        await sent.MetadataRepository.Received(1).TryCarryToOccurrenceAsync(
+            Arg.Any<IPersistenceSession>(),
+            account.User,
+            filedCopy,
+            first,
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A message in a held account's sent folder that matches no locally filed copy is stored as any other.</summary>
     [Fact]
     public async Task SynchronizeAsync_ASentMessageMatchingNoFiledCopy_IsStoredAsAnyOther()

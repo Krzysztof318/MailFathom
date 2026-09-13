@@ -19,14 +19,19 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// <summary>Brings the drafts folder of one mailbox into step with one draft this deployment holds.</summary>
 /// <remarks>
 /// <para>
-/// It is the same filing mechanism a sent copy goes through, specialized to the one message whose copy has to change.
-/// The role and the flags are <see cref="OutgoingMailFiling.Draft" />'s, the folder is found by that role and never by
-/// name, and the append and the withdrawal are the two operations the write session opens for exactly this. What is not
-/// shared is the record: a filed copy is written once and kept, and a draft's copy is written, replaced, and taken back
-/// out, so the durable account of it hangs off the draft rather than off an outgoing record.
+/// On a mirrored account it is the same filing mechanism a sent copy goes through, specialized to the one message whose
+/// copy has to change. The role and the flags are <see cref="OutgoingMailFiling.Draft" />'s, the folder is found by that
+/// role and never by name, and the append and the withdrawal are the two operations the write session opens for exactly
+/// this. What is not shared is the record: a filed copy is written once and kept, and a draft's copy is written, replaced,
+/// and taken back out, so the durable account of it hangs off the draft rather than off an outgoing record.
 /// </para>
 /// <para>
-/// <b>Replacing a draft is an append followed by a removal, in that order, and the order is the safety.</b> IMAP has no
+/// On an account MailFathom holds alone nothing below reaches a server: the revision is filed into the local drafts folder
+/// and the message it replaced is erased in one commit, with no append and no removal, as <see cref="FileLocallyAsync" />
+/// describes.
+/// </para>
+/// <para>
+/// <b>Replacing a mirrored draft is an append followed by a removal, in that order, and the order is the safety.</b> IMAP has no
 /// command that changes a stored message. Removing first and then failing to append leaves the user with no draft at
 /// all — the version they were working on, gone — while appending first and then failing to remove leaves them with two,
 /// which is untidy and loses nothing. The revision is durable before either command goes out, so a process that dies
@@ -100,9 +105,10 @@ public sealed class MailDraftFiler
     /// <returns>What the attempt did, which is already durable by the time it is returned.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="draft" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// A whole replacement is one call: the current revision is appended, and the copy it replaced is removed once the
-    /// server has confirmed the new one is there. That is what leaves a user who edited a draft looking at one draft
-    /// rather than at two for as long as it takes a pass to come round.
+    /// On a mirrored account a whole replacement is one call: the current revision is appended, and the copy it replaced
+    /// is removed once the server has confirmed the new one is there. That is what leaves a user who edited a draft
+    /// looking at one draft rather than at two for as long as it takes a pass to come round. On a held account the current
+    /// revision is filed locally and the message it replaced erased in the same commit, and no server is reached.
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A draft whose copy could not be settled is a draft that still exists and is still editable; raising would end the pass that was settling the drafts beside it, and every failure is classified into a recorded code and returned as an outcome instead.")]
     public async Task<MailDraftFilingResult> SettleAsync(

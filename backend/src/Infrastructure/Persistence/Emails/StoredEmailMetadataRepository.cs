@@ -185,7 +185,7 @@ internal sealed class StoredEmailMetadataRepository(
     }
 
     /// <inheritdoc />
-    public async Task<StoredEmailId> StoreFiledEmailAsync(
+    public async Task<StoredEmailId?> StoreFiledEmailAsync(
         IPersistenceSession session,
         MailAccountIdentity account,
         MailFolderResolutionId binding,
@@ -196,7 +196,12 @@ internal sealed class StoredEmailMetadataRepository(
         CancellationToken cancellationToken)
     {
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var folder = await MailFolderEntityResolver.GetRequiredAsync(sessionContext, account, binding, cancellationToken);
+
+        if (await MailFolderEntityResolver.FindAsync(sessionContext, account, binding, cancellationToken) is not { } folder)
+        {
+            return null;
+        }
+
         var storedAt = timeProvider.GetUtcNow();
 
         var entity = new StoredEmailEntity

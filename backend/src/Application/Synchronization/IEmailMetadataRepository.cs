@@ -120,9 +120,13 @@ public interface IEmailMetadataRepository
     /// <param name="flags">The flags the message is filed with.</param>
     /// <param name="filedFrom">The outgoing record a sent copy is filed from, or <see langword="null" /> for a draft.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>The new stored email's identity.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when <paramref name="binding" /> names a folder binding that is not stored.</exception>
+    /// <returns>The new stored email's identity, or <see langword="null" /> where <paramref name="binding" /> names a folder binding that is no longer stored.</returns>
     /// <remarks>
+    /// <para>
+    /// A binding that is gone is answered rather than raised, because it was read before the transaction and the drain
+    /// removes exactly those source folders: the caller files nothing and says so, and the state the message was a copy of
+    /// still commits.
+    /// </para>
     /// <para>
     /// The row is written as a synchronized one is — the search document and the conversation are placed in the same
     /// session — so a draft or a sent message is found and threaded exactly as the copy a server would have returned.
@@ -133,7 +137,7 @@ public interface IEmailMetadataRepository
     /// later drained from.
     /// </para>
     /// </remarks>
-    Task<StoredEmailId> StoreFiledEmailAsync(
+    Task<StoredEmailId?> StoreFiledEmailAsync(
         IPersistenceSession session,
         MailAccountIdentity account,
         MailFolderResolutionId binding,

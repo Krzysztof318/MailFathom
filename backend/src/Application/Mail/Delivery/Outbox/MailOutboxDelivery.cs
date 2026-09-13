@@ -277,6 +277,8 @@ public sealed class MailOutboxDelivery
     /// the two and the copy is filed exactly as often as the send reaches <see cref="OutgoingEmailStage.Sent" />, which the
     /// lease makes once. Preparing that copy stops with the host rather than with the attempt's budget: the server has
     /// already taken the message, and a budget the transmission used up would otherwise cost the account its sent copy.
+    /// A copy the transaction found nowhere to put — the binding it was prepared against is gone — commits the delivery
+    /// without it and records the filing failure beside it.
     /// </remarks>
     private async Task<MailOutboxDeliveryResult> CompleteAsync(
         ClaimedOutgoingEmail claimed,
@@ -314,6 +316,10 @@ public sealed class MailOutboxDelivery
         if (filed is not null)
         {
             this.localFiler.Announce(filed);
+        }
+        else if (sentCopy is not null)
+        {
+            await this.localFiler.RecordSentCopyUnfiledAsync(claimed.Record.Id);
         }
 
         return Result(claimed, MailOutboxDeliveryOutcome.Sent, failure: null, replyCode);

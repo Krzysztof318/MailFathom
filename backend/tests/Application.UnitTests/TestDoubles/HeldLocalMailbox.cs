@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Signals;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
@@ -66,6 +67,11 @@ internal sealed class HeldLocalMailbox
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
+                if (this.BindingGoneAtFiling)
+                {
+                    return (StoredEmailId?)null;
+                }
+
                 var stored = StoredEmailId.Create(Guid.CreateVersion7(this.clock.GetUtcNow()));
                 this.Stored.Add((stored, call.ArgAt<AppendedMailFlags>(5), call.ArgAt<OutgoingEmailId?>(6)));
 
@@ -89,6 +95,12 @@ internal sealed class HeldLocalMailbox
 
     /// <summary>Gets or sets whether the account files a copy of what it sends, which defaults to yes.</summary>
     internal bool FilesSentCopy { get; set; } = true;
+
+    /// <summary>Gets or sets whether the binding a copy was prepared against is gone by the time it is filed, which is a folder the drain removed in between.</summary>
+    internal bool BindingGoneAtFiling { get; set; }
+
+    /// <summary>Gets or sets the publisher a filing announces through, which reaches nobody unless a test registers a channel.</summary>
+    internal ClientSignals Publisher { get; set; } = ClientSignalPublishers.ReachingNobody;
 
     /// <summary>Maps and binds a source folder playing one role, which is what gives a filing somewhere to go.</summary>
     /// <param name="role">The role the folder plays.</param>
@@ -124,6 +136,6 @@ internal sealed class HeldLocalMailbox
         this.folderResolutions,
         this.filingPolicies,
         this.Filings,
-        ClientSignalPublishers.ReachingNobody,
+        this.Publisher,
         this.clock);
 }

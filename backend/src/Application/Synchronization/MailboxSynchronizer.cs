@@ -801,9 +801,10 @@ public sealed class MailboxSynchronizer
     /// <remarks>
     /// Read once for the whole batch, for the reason the filings above are. A message whose <c>Message-ID</c> is absent
     /// or empty is left out rather than compared: no identity this deployment mints is empty, and a server reporting one
-    /// as an empty string must not stop the folder's run at that message.
+    /// as an empty string must not stop the folder's run at that message. The answer is a mutable copy because each
+    /// entry is taken out once it has been carried.
     /// </remarks>
-    private async Task<IReadOnlyDictionary<string, StoredEmailId>> ReadFiledSentCopiesInBatchAsync(
+    private async Task<Dictionary<string, StoredEmailId>> ReadFiledSentCopiesInBatchAsync(
         MailAccountIdentity account,
         bool recognizesFiledSentCopies,
         RemoteEmailMetadataBatch batch,
@@ -819,7 +820,9 @@ public sealed class MailboxSynchronizer
 
         return internetMessageIds.Length == 0
             ? new Dictionary<string, StoredEmailId>(StringComparer.Ordinal)
-            : await this.metadataRepository.FindFiledSentCopiesAsync(account, internetMessageIds, cancellationToken);
+            : new Dictionary<string, StoredEmailId>(
+                await this.metadataRepository.FindFiledSentCopiesAsync(account, internetMessageIds, cancellationToken),
+                StringComparer.Ordinal);
     }
 
     /// <summary>Finds the copy this discovery is, if it is one MailFathom filed.</summary>
@@ -901,11 +904,16 @@ public sealed class MailboxSynchronizer
     /// It runs before the payload is fetched, for the reason a relocation is recognized there. The filed message keeps its
     /// identity and its payload and gains the occurrence, which is what the drain then acts on.
     /// </para>
+    /// <para>
+    /// A filed copy is carried onto one occurrence only. A send deferred after a partial acceptance is offered again under
+    /// the same <c>Message-ID</c>, so the provider can file two copies of it into one batch; the entry is taken out once
+    /// carried, and the second copy is stored as an arrival of its own rather than moving the filed message off the first.
+    /// </para>
     /// </remarks>
     private async Task<bool> TryCarryFiledSentCopyAsync(
         MailAccountIdentity account,
         RemoteEmailMetadata metadata,
-        IReadOnlyDictionary<string, StoredEmailId> filedSentCopies,
+        Dictionary<string, StoredEmailId> filedSentCopies,
         CancellationToken cancellationToken)
     {
         if (metadata.InternetMessageId is not { Length: > 0 } internetMessageId
@@ -927,6 +935,11 @@ public sealed class MailboxSynchronizer
                     attemptCancellationToken);
             },
             cancellationToken);
+
+        if (carried)
+        {
+            filedSentCopies.Remove(internetMessageId);
+        }
 
         return carried;
     }

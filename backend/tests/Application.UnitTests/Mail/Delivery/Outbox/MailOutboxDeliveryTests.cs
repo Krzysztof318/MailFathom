@@ -145,6 +145,35 @@ public sealed class MailOutboxDeliveryTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>A held account whose sent folder's binding is gone by the time the delivery commits records the delivery without the copy, and the filing failure beside it.</summary>
+    [Fact]
+    public async Task DeliverAsync_HeldAccountWhoseSentBindingIsGoneAtTheCommit_RecordsTheDeliveryAndTheFilingFailure()
+    {
+        // Arrange
+        var held = new HeldLocalMailbox(Account, new FakeTimeProvider(ClaimedAt)) { BindingGoneAtFiling = true };
+        held.MapRole(MailFolderSpecialUse.Sent, "sent");
+        var context = new DeliveryContext(localFiler: held.FilerOver);
+        var claimed = await context.ClaimAsync("anna@example.test");
+        context.Transmit = (request, envelope, _) =>
+        {
+            AcceptEveryRecipient(request, envelope);
+
+            return Task.FromResult(new MailTransmission(MailTransmissionOutcome.Accepted, 250));
+        };
+
+        // Act
+        var result = await context.DeliverAsync(claimed, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailOutboxDeliveryOutcome.Sent, result.Outcome);
+        Assert.Equal(OutgoingEmailStage.Sent, context.Store.Read(claimed.Record.Id).Stage);
+        Assert.Empty(held.Folders.Placements);
+        await held.Filings.Received(1).RecordFilingFailureAsync(
+            claimed.Record.Id,
+            MailFathomErrorCode.OutgoingEmailFilingDestinationUnavailable,
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A permanent refusal ends the send at the server's first answer, with nothing left to attempt.</summary>
     [Fact]
     public async Task DeliverAsync_ServerRefusesTheMessagePermanently_EndsTheSendWithoutAnotherAttempt()

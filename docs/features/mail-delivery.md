@@ -1067,7 +1067,8 @@ already has one home. Where `Delivery:FileSentCopy` holds, the sent copy is writ
 account's local sent folder, in the same transaction that records the delivery — so a crash between the two is not a
 state the account can be in, and a delivery recorded once files once. The message is placed from the stored bytes and
 searched, threaded, and listed like any other; it is bound to the source folder mapped to the sent role, and an account
-that maps none records the delivery and files nothing, with the reason on the filing. Such an account has no outbox
+that maps none, or whose binding of it is gone by the time the delivery commits, records the delivery and files
+nothing, with the reason on the filing. Such an account has no outbox
 mirror either, because its outgoing record is its outbox.
 
 **A copy the provider files on its own is recognised rather than stored a second time.** When synchronization meets a
@@ -1095,7 +1096,7 @@ is a message somebody is writing and is the message the user's own client shows 
 here: a draft is a message the user is meant to find in the mail client they already open, and one this deployment
 kept to itself would be a message prepared where its user never looks — with two places to look for the same thing,
 which is the divergence the arrangement exists to avoid. What that costs is a round trip to a mail server per revision,
-so a revision is what an author asks for rather than what a keystroke produces: a client saves when somebody says to
+on a mirrored account, so a revision is what an author asks for rather than what a keystroke produces: a client saves when somebody says to
 save, and the writing between those moments is the client's own.
 
 **Files are staged against the draft rather than sent with each edit.** An upload is taken in once and the draft keeps
@@ -1134,8 +1135,9 @@ deployment's — the role now resolves to another folder, the folder was recreat
 placement, an append was never answered — the message is left exactly where it is and the divergence is written onto
 the draft, which is what an operator reads instead of a message that quietly went missing.
 
-**A held account's draft is a stored message in its local drafts folder rather than a copy on a server.** The
-revision and that message are written in one transaction, so saving is one commit and issues no IMAP command; saving
+**A held account's draft is a stored message in its local drafts folder rather than a copy on a server, and none of
+the appending and withdrawing this section describes reaches its server.** The revision and that message are written
+in one transaction, so saving is one commit and issues no IMAP command; saving
 again writes the new message and erases the one it replaces in that same commit, with no `APPEND` and no withdrawal;
 and giving the draft up erases the message with the record. The message is bound to the source folder mapped to the
 drafts role, so an account that maps none keeps the draft with the destination reported as unavailable, and the pass

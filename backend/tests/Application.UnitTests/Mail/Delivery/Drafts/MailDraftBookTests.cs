@@ -10,6 +10,7 @@ using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent;
+using MailFathom.Application.Signals;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -157,6 +158,43 @@ public sealed class MailDraftBookTests
         Assert.Equal([held.Stored[1].Email], held.Folders.Placements.Keys);
         Assert.Equal(0, harness.AppendCount);
         Assert.Empty(harness.Withdrawn);
+    }
+
+    /// <summary>Saving a held account's draft again tells its clients, once the commit lands, of the new message and of the one it replaced.</summary>
+    [Fact]
+    public async Task SaveAsync_RevisionOnAHeldAccount_AnnouncesTheNewMessageAndTheOneItReplaced()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider(Moment);
+        var harness = HarnessOn(clock);
+        harness.MapDraftsFolder(Account.Id);
+        var held = harness.HoldAccount(Account);
+        var channel = new RecordingClientSignalChannel();
+        await using var signals = new ClientSignals([channel], clock);
+        held.Publisher = signals;
+        harness.BeginNewScope();
+        var draft = await SaveAsync(harness, "first version");
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+        var announcedBefore = channel.Published.Count;
+
+        // Act
+        await harness.Book.SaveAsync(
+            Account,
+            OutgoingEmailRequester.Command("mfctl-4f2a"),
+            Composed("second version"),
+            draft.Id,
+            CancellationToken.None);
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var changed = Assert.Single(channel.Published.Skip(announcedBefore));
+
+        Assert.Equal(ClientSignalKind.MailChanged, changed.Kind);
+        Assert.Equal(2, changed.Emails.Count);
+        Assert.Contains(held.Stored[1].Email, changed.Emails);
+        Assert.Contains(held.Stored[0].Email, changed.Emails);
     }
 
     /// <summary>Giving up a held account's draft erases the filed message and the record, and reaches no mail server.</summary>

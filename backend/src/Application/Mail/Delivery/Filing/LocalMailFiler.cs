@@ -203,12 +203,18 @@ public sealed class LocalMailFiler
     /// <param name="copy">The prepared copy.</param>
     /// <param name="filedFrom">The outgoing record a sent copy is filed from, or <see langword="null" /> for a draft.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>What was filed, or <see langword="null" /> where the account is no longer held.</returns>
+    /// <returns>What was filed, or <see langword="null" /> where the account is no longer held or the binding the copy was prepared against is gone.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="copy" /> is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// The protected folders are supplied where the account is missing them, for the reason an arrival supplies them. The
     /// hierarchy is saved only then: a protected folder cannot be erased, so a filing that supplied nothing has no edit to
     /// conflict with, and saving anyway would make every draft save conflict with every arrival.
+    /// </para>
+    /// <para>
+    /// Nothing here raises for a binding the drain removed after the copy was prepared: the transaction commits what the
+    /// copy belongs to without it, which a delivery the submission server already took depends on.
+    /// </para>
     /// </remarks>
     public async Task<FiledLocalEmail?> FileAsync(
         IPersistenceSession session,
@@ -224,6 +230,19 @@ public sealed class LocalMailFiler
             return null;
         }
 
+        if (await this.emails.StoreFiledEmailAsync(
+                session,
+                copy.Account,
+                copy.Binding,
+                copy.Metadata,
+                copy.Content.ByteLength,
+                copy.Filing.Flags,
+                filedFrom,
+                cancellationToken) is not { } email)
+        {
+            return null;
+        }
+
         var found = holding.ToTree();
         var missing = found.MissingProtectedFolders(this.MintId);
         var folder = found.With(missing).PlaceArrival(copy.Binding.Alias, copy.Filing.Role, sourceFolderName: null, this.MintId);
@@ -233,21 +252,21 @@ public sealed class LocalMailFiler
             await this.folders.SaveAsync(session, copy.Account, missing, [], cancellationToken);
         }
 
-        var email = await this.emails.StoreFiledEmailAsync(
-            session,
-            copy.Account,
-            copy.Binding,
-            copy.Metadata,
-            copy.Content.ByteLength,
-            copy.Filing.Flags,
-            filedFrom,
-            cancellationToken);
-
         await this.contents.SaveContentAsync(session, email, occurrenceId: null, copy.Content, cancellationToken);
         await this.folders.PlaceAsync(session, copy.Account, email, folder.Folder, cancellationToken);
 
         return new FiledLocalEmail(copy.Account, copy.Binding.Alias, email, missing.Count > 0);
     }
+
+    /// <summary>Records that a prepared sent copy was not filed, because the transaction found nowhere to put it.</summary>
+    /// <param name="send">The send whose copy was owed.</param>
+    /// <returns>A task that completes when the code is on the record.</returns>
+    /// <remarks>Written after the delivery commits, beside it, for the reason <see cref="PrepareSentCopyAsync" /> records a copy it could not prepare.</remarks>
+    public Task RecordSentCopyUnfiledAsync(OutgoingEmailId send) =>
+        this.filings.RecordFilingFailureAsync(
+            send,
+            MailFathomErrorCode.OutgoingEmailFilingDestinationUnavailable,
+            CancellationToken.None);
 
     /// <summary>Erases a message filed earlier, inside the transaction that replaces or gives up what it showed.</summary>
     /// <param name="session">The transaction.</param>
