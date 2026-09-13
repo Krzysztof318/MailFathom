@@ -34,6 +34,9 @@ public enum MailRelocationOutcome
     /// <summary>The destination is a folder this deployment does not mirror, and the account no longer declares what it keeps of mail that leaves.</summary>
     /// <remarks>A message moved out of the mirror is one MailFathom will not see again, so what becomes of the local copy is the account's own answer; an account a reload has stopped declaring has none, and none invented here would be it.</remarks>
     AccountNoLongerConfigured = 4,
+
+    /// <summary>The account is held, and the move was committed to stored state without any record to carry.</summary>
+    Applied = 5,
 }
 
 /// <summary>What one authored move became: the durable record that now carries it, or the reason there is none.</summary>
@@ -64,15 +67,21 @@ public sealed record AuthoredMailRelocationResult(
         MailboxMutationLifecycle lifecycle) =>
         new(MailRelocationOutcome.Recorded, destination, recordId, lifecycle);
 
+    /// <summary>Reports a move committed to a held account's stored state.</summary>
+    /// <param name="destination">The folder the move named.</param>
+    /// <returns>The result, which carries no record because none was written.</returns>
+    public static AuthoredMailRelocationResult Applied(MailFolderAlias destination) =>
+        new(MailRelocationOutcome.Applied, destination, RecordId: null, Lifecycle: null);
+
     /// <summary>Reports a move that produced no record, and why.</summary>
     /// <param name="outcome">The reason nothing was written down.</param>
     /// <returns>The result.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="outcome" /> names a recorded move rather than a refusal.</exception>
     public static AuthoredMailRelocationResult NotRecorded(MailRelocationOutcome outcome) =>
-        outcome is MailRelocationOutcome.Recorded
+        outcome is MailRelocationOutcome.Recorded or MailRelocationOutcome.Applied
             ? throw new ArgumentOutOfRangeException(
                 nameof(outcome),
                 outcome,
-                "A move that was written down is reported with the record that carries it.")
+                "A move that was written down is reported with the folder it named.")
             : new(outcome, Destination: null, RecordId: null, Lifecycle: null);
 }

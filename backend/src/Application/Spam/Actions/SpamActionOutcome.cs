@@ -83,4 +83,7 @@ public enum SpamActionOutcome
     /// taken rather than a guess at it. What is absent is the pair of record identifiers, because no record was opened.
     /// </remarks>
     WouldRequest = 9,
+
+    /// <summary>The account is held, and the changes were applied to the mail MailFathom keeps with no record to carry.</summary>
+    Applied = 10,
 }

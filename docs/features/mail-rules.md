@@ -428,6 +428,11 @@ Each is recorded against the rule that asked, and the actions beside it are stil
 | `AccountNoLongerConfigured` | The account was withdrawn from the configuration between the rule set being read and the change being written |
 | `ActionNoLongerPermitted` | The account has stopped permitting this action since the rule set that declares it was read |
 | `EmailNotOnMailServer` | The stored email carries no occurrence, because no mail server holds it any longer, so there is nowhere a change could be carried to |
+| `ActionNotAvailableOnHeldAccount` | The account's mailbox is one MailFathom holds itself, and the action is a copy, which a held account does not offer |
+
+On a held account every other action is made to the stored email as the pass commits, in the transaction that records
+the rule's decision, rather than written down for a server: a move files into the local folder the destination's role
+or source folder corresponds to, and a delete moves the message into the local trash.
 
 Nothing is written down in any of these cases: filing into whichever folder looked closest to the name is precisely
 what a stale destination must not do. The account run reports how many changes it asked for, how many it withheld because

@@ -2,9 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Convergence;
+using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Application.UnitTests.TestDoubles;
@@ -65,6 +67,57 @@ public sealed class MailboxMutationConvergerTests
             request.Occurrence,
             ArchivePath,
             Arg.Any<IMailboxMutationJournal>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A held account's erasure is taken in hand once its window has passed, and removes the message without a word to a mail server.</summary>
+    [Fact]
+    public async Task ConvergeAsync_AHeldAccountsDueErasure_ErasesTheMessageWithoutOpeningAWriteSession()
+    {
+        // Arrange
+        var states = new InMemoryLocalEmailStateStore(Account);
+        var context = new ConvergerContext(
+            localFolders: new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held),
+            states: states);
+        var request = await context.LeaveOutstandingAsync(DeleteRequest(uid: 43U), record => record);
+        states.Store(
+            request.StoredEmailId,
+            new LocalEmailState(InboxFolder, Folder: null, IsSeen: false, IsFlagged: false, RemoteEmailKeywords.Create([])));
+
+        // Act
+        var report = await context.Converger.ConvergeAsync(Account, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, report.CompletedCount);
+        Assert.Equal(request.StoredEmailId, Assert.Single(states.Erased));
+        await context.WriteSessionFactory.DidNotReceive().OpenForWritingAsync(
+            Arg.Any<MailAccountId>(),
+            Arg.Any<MailFolderResolution>(),
+            Arg.Any<MailTransportSecurityPolicy>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A record a held account inherited from before it was held is left where it is rather than carried to a source that is no longer the truth.</summary>
+    [Fact]
+    public async Task ConvergeAsync_AHeldAccountsInheritedMove_IsDeferredAndReachesNoServer()
+    {
+        // Arrange
+        var states = new InMemoryLocalEmailStateStore(Account);
+        var context = new ConvergerContext(
+            localFolders: new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held),
+            states: states);
+        await context.LeaveOutstandingAsync(RelocationRequest(), record => record);
+
+        // Act
+        var report = await context.Converger.ConvergeAsync(Account, CancellationToken.None);
+
+        // Assert
+        Assert.Equal((0, 1), (report.CompletedCount, report.DeferredCount));
+        Assert.Empty(states.Erased);
+        await context.WriteSessionFactory.DidNotReceive().OpenForWritingAsync(
+            Arg.Any<MailAccountId>(),
+            Arg.Any<MailFolderResolution>(),
+            Arg.Any<MailTransportSecurityPolicy>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -405,7 +458,9 @@ public sealed class MailboxMutationConvergerTests
         internal ConvergerContext(
             int maxMutationsPerPass = 50,
             TimeSpan? unknownOutcomeGrace = null,
-            int maximumAttempts = 5)
+            int maximumAttempts = 5,
+            ILocalMailFolderStore? localFolders = null,
+            ILocalEmailStateStore? states = null)
         {
             var persistenceSession = Substitute.For<IPersistenceSession>();
             persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
@@ -461,7 +516,9 @@ public sealed class MailboxMutationConvergerTests
                     MaxMutationsPerPass = maxMutationsPerPass,
                     UnknownOutcomeGrace = unknownOutcomeGrace ?? TimeSpan.FromHours(6),
                 },
-                this.Clock);
+                this.Clock,
+                localFolders ?? Substitute.For<ILocalMailFolderStore>(),
+                MailboxChangeSubmissions.Over(this.Store, localFolders, states));
         }
 
         internal InMemoryMailboxMutationRecordStore Store { get; } = new();

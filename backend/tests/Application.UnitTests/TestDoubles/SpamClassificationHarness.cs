@@ -7,6 +7,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
@@ -151,6 +152,7 @@ internal sealed class SpamClassificationHarness
             settingsReader,
             occurrences,
             this.Mutations,
+            MailboxChangeSubmissions.Over(this.Mutations),
             this.CreateDestinationResolver(sessionFactory),
             dispositions,
             commitPolicy);
@@ -183,7 +185,8 @@ internal sealed class SpamClassificationHarness
                 sessionFactory,
                 ClientSignalPublishers.ReachingNobody,
                 this.Clock),
-            transportSecurityPolicies);
+            transportSecurityPolicies,
+            Substitute.For<ILocalMailFolderStore>());
     }
 
     /// <summary>Opens the sessions a classification writes under, every one of which commits.</summary>

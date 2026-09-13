@@ -332,7 +332,7 @@ public sealed class MailDeletionRecorderTests
                 StubMailFolderMappings.ResolvingNothing),
             targets,
             this.dispositions,
-            this.records,
+            MailboxChangeSubmissions.Over(this.records),
             new OptimisticConcurrencyRetryPolicy(
                 sessions,
                 new PersistenceConcurrencyOptions(),

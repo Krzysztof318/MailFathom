@@ -1086,6 +1086,7 @@ touch only what they name.
 | `storedEmailId` | The email the change was recorded against, which is the one the call named |
 | `accountId` | The account whose next synchronization run issues the change |
 | `folderAlias` | The folder the email is in, as MailFathom's configuration names it |
+| `applied` | `true` when the account's mailbox is one MailFathom holds itself, so the change was made to the stored email as the call committed and nothing is left to converge; `recordedChanges` is then empty |
 | `recordedChanges[]` | One entry per value asked for, in the order `seen`, `flagged`, keywords |
 | `recordedChanges[].change` | `set-seen`, `set-flagged`, `add-keywords`, `remove-keywords`, or `set-keywords` |
 | `recordedChanges[].changeRecordId` | The durable record's identifier, which is the name a log line and an audit entry give the same change |

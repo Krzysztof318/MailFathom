@@ -5,10 +5,13 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Authoring;
 using MailFathom.Application.Mail.Mutations.Destinations;
+using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Preferences;
 using MailFathom.Application.Synchronization;
@@ -639,6 +642,16 @@ public sealed class ClientMailMutationsEndpointTests
         this.records,
         CommitPolicy());
 
+    /// <summary>Builds the submission every use case here writes through, for an account whose source is the truth.</summary>
+    private MailboxChangeSubmission Submission() => new(
+        Substitute.For<ILocalMailFolderStore>(),
+        this.records,
+        Substitute.For<ILocalEmailStateStore>(),
+        Substitute.For<IMailboxMutationAuditSettingsReader>(),
+        Substitute.For<IMailboxMutationAuditEntryStore>(),
+        ClientSignalPublishers.ReachingNobody,
+        new FakeTimeProvider(RecordedAt));
+
     /// <summary>Builds the flag-change use case the routes are given.</summary>
     /// <param name="target">The message the caller names, defaulting to none, which is the absence the recorder reports as a message that has gone.</param>
     private MailFlagChangeRecorder FlagRecorder(AuthoredMailboxTarget? target = null)
@@ -653,7 +666,7 @@ public sealed class ClientMailMutationsEndpointTests
                     ? null
                     : StubMailFolderParticipation.Mapping(new MailFolderIdentity(ServedAccount, Inbox))),
             targets,
-            this.records,
+            this.Submission(),
             CommitPolicy(),
             new MailAccountRunSignal());
     }
@@ -664,7 +677,7 @@ public sealed class ClientMailMutationsEndpointTests
         Substitute.For<IAuthoredMailboxTargetReader>(),
         DestinationResolver(),
         Substitute.For<IAuthoredDeleteEmailDispositionReader>(),
-        this.records,
+        this.Submission(),
         CommitPolicy(),
         new MailAccountRunSignal());
 
@@ -688,7 +701,7 @@ public sealed class ClientMailMutationsEndpointTests
                     : StubMailFolderParticipation.Mapping(new MailFolderIdentity(ServedAccount, Inbox))),
             targets,
             dispositions,
-            this.records,
+            this.Submission(),
             CommitPolicy(),
             new MailAccountRunSignal(),
             new FakeTimeProvider(RecordedAt));
@@ -721,5 +734,6 @@ public sealed class ClientMailMutationsEndpointTests
             Substitute.For<IPersistenceSessionFactory>(),
             ClientSignalPublishers.ReachingNobody,
             new FakeTimeProvider(RecordedAt)),
-        Substitute.For<IMailTransportSecurityPolicyReader>());
+        Substitute.For<IMailTransportSecurityPolicyReader>(),
+        Substitute.For<ILocalMailFolderStore>());
 }

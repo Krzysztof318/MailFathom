@@ -9,6 +9,7 @@ namespace MailFathom.Application.Mail.Mutations.Destinations;
 /// <summary>The folder a mutation files into, as the account's server currently holds it.</summary>
 /// <param name="Binding">The alias binding the folder is currently resolved under.</param>
 /// <param name="IsMirrored">Whether the account mirrors the folder's mail.</param>
+/// <param name="Role">The special use the folder's mapping declares, which is what a held account finds its own folder for a protected role by.</param>
 /// <remarks>
 /// <para>
 /// The binding rather than the path alone, because the three things that need a destination need different parts of it
@@ -23,7 +24,7 @@ namespace MailFathom.Application.Mail.Mutations.Destinations;
 /// MailFathom keeps no copy of has left the mirrored mailbox for good.
 /// </para>
 /// </remarks>
-public sealed record MailboxDestination(MailFolderResolution Binding, bool IsMirrored)
+public sealed record MailboxDestination(MailFolderResolution Binding, bool IsMirrored, MailFolderSpecialUse? Role = null)
 {
     /// <summary>Gets MailFathom's own name for the folder, which is what a history line and a refusal name it by.</summary>
     public MailFolderAlias Alias => this.Binding.Alias;

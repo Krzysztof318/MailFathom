@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -261,7 +262,9 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
             commitPolicy,
             scope.GetRequiredService<IMailboxMutationAuditTrail>(),
             new MailboxConvergenceOptions { UnknownOutcomeGrace = TimeSpan.Zero },
-            TimeProvider.System);
+            TimeProvider.System,
+            scope.GetRequiredService<ILocalMailFolderStore>(),
+            scope.GetRequiredService<MailboxChangeSubmission>());
 
         return await converger.ConvergeAsync(SyntheticMailAccount.Account, cancellationToken);
     }
@@ -338,7 +341,9 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
             commitPolicy,
             scope.GetRequiredService<IMailboxMutationAuditTrail>(),
             new MailboxConvergenceOptions(),
-            TimeProvider.System);
+            TimeProvider.System,
+            scope.GetRequiredService<ILocalMailFolderStore>(),
+            scope.GetRequiredService<MailboxChangeSubmission>());
 
         return await converger.ConvergeAsync(SyntheticMailAccount.Account, cancellationToken);
     }

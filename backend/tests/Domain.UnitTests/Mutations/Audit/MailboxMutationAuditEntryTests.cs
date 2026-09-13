@@ -77,6 +77,71 @@ public sealed class MailboxMutationAuditEntryTests
                 entry.Failure));
     }
 
+    /// <summary>A change a held account committed leaves the entry a performed remote change leaves, asked and ended at the one instant it committed.</summary>
+    [Fact]
+    public void OfLocalAct_ACommittedSeenChange_StatesAPerformedActPlacedNowhere()
+    {
+        // Arrange
+        var actId = MailboxMutationRecordId.Create(Guid.CreateVersion7(CompletedAt));
+        var request = MailboxMutationRequest.SetSeen(
+            LocalEmail,
+            SyntheticMailUser.Deployment,
+            SourceOccurrence(),
+            Requester,
+            isSeen: true);
+
+        // Act
+        var entry = MailboxMutationAuditEntry.OfLocalAct(EntryId, actId, request, SourceFolder, CompletedAt);
+
+        // Assert
+        Assert.Equal(
+            (actId,
+                MailboxMutation.SetSeen,
+                LocalEmail,
+                Inbox,
+                (bool?)true,
+                CompletedAt,
+                CompletedAt,
+                MailboxMutationAuditOutcome.Performed,
+                (MailFathomErrorCode?)null,
+                (ImapUid?)null),
+            (entry.MutationRecordId,
+                entry.Mutation,
+                entry.StoredEmailId,
+                entry.SourceFolderPath,
+                entry.DesiredSeenState,
+                entry.RequestedAt,
+                entry.CompletedAt,
+                entry.Outcome,
+                entry.Failure,
+                entry.Placement.Uid));
+    }
+
+    /// <summary>The folder a local act names has to be the one its occurrence was read under, exactly as a remote change's has.</summary>
+    [Fact]
+    public void OfLocalAct_AFolderTheOccurrenceDoesNotName_IsRefused()
+    {
+        // Arrange
+        var request = MailboxMutationRequest.SetSeen(
+            LocalEmail,
+            SyntheticMailUser.Deployment,
+            SourceOccurrence(),
+            Requester,
+            isSeen: false);
+        var elsewhere = MailFolderResolution.FirstBindingOf(MailFolderAlias.Create("archive"), Archive);
+
+        // Act
+        var refusal = Record.Exception(() => MailboxMutationAuditEntry.OfLocalAct(
+            EntryId,
+            MailboxMutationRecordId.Create(Guid.CreateVersion7(CompletedAt)),
+            request,
+            elsewhere,
+            CompletedAt));
+
+        // Assert
+        Assert.IsType<ArgumentException>(refusal);
+    }
+
     /// <summary>A delete names no destination and no flag direction, and still names the folder the mail was taken out of.</summary>
     [Fact]
     public void Of_CompletedDelete_NamesTheSourceAndNoDestination()

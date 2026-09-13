@@ -50,18 +50,18 @@ public sealed class MailRelocationRecorder
     private readonly IAuthoredMailboxTargetReader targets;
     private readonly MailboxDestinationResolver destinations;
     private readonly IAuthoredDeleteEmailDispositionReader deleteDispositions;
-    private readonly IMailboxMutationRecordStore records;
+    private readonly MailboxChangeSubmission submission;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly MailAccountRunSignal runSignal;
 
-    /// <summary>Initializes the use case over the grant it asks first, the folder it files into, and the record it writes.</summary>
+    /// <summary>Initializes the use case over the grant it asks first, the folder it files into, and the submission it writes through.</summary>
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <param name="scopeResolver">Answers whether a caller may reach the folder an email is in and the folder it is going to.</param>
     /// <param name="targets">Answers where the named email currently is.</param>
     /// <param name="destinations">Turns the folder a caller named into the folder on the server it currently means.</param>
     /// <param name="deleteDispositions">Answers what the account keeps locally of mail that leaves the mirror for good.</param>
-    /// <param name="records">Opens the durable record the move is carried by.</param>
-    /// <param name="commitPolicy">Commits the record, retrying an optimistic conflict.</param>
+    /// <param name="submission">Records the move, or commits it where the account is held.</param>
+    /// <param name="commitPolicy">Commits the change, retrying an optimistic conflict.</param>
     /// <param name="runSignal">Brings the account's next synchronization run forward, which is what carries the move to the mail server.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     public MailRelocationRecorder(
@@ -70,7 +70,7 @@ public sealed class MailRelocationRecorder
         IAuthoredMailboxTargetReader targets,
         MailboxDestinationResolver destinations,
         IAuthoredDeleteEmailDispositionReader deleteDispositions,
-        IMailboxMutationRecordStore records,
+        MailboxChangeSubmission submission,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         MailAccountRunSignal runSignal)
     {
@@ -79,7 +79,7 @@ public sealed class MailRelocationRecorder
         ArgumentNullException.ThrowIfNull(targets);
         ArgumentNullException.ThrowIfNull(destinations);
         ArgumentNullException.ThrowIfNull(deleteDispositions);
-        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(submission);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(runSignal);
 
@@ -88,7 +88,7 @@ public sealed class MailRelocationRecorder
         this.targets = targets;
         this.destinations = destinations;
         this.deleteDispositions = deleteDispositions;
-        this.records = records;
+        this.submission = submission;
         this.commitPolicy = commitPolicy;
         this.runSignal = runSignal;
     }
@@ -148,13 +148,6 @@ public sealed class MailRelocationRecorder
             return AuthoredMailRelocationResult.NotRecorded(MailRelocationOutcome.DestinationNotFound);
         }
 
-        // Asked after the folder is known, because the alias a caller wrote and the folder it currently names are two
-        // different things: a caller may name the alias the message is already filed under by another spelling of it.
-        if (folder.Alias == target.Folder.Alias)
-        {
-            return AuthoredMailRelocationResult.NotRecorded(MailRelocationOutcome.AlreadyInDestination);
-        }
-
         AuthoredDeleteEmailDisposition? localDisposition;
 
         try
@@ -176,14 +169,35 @@ public sealed class MailRelocationRecorder
             folder.Path,
             localDisposition);
 
-        var record = await this.commitPolicy.CommitAsync(
-            (session, attemptCancellationToken) => this.records.OpenAsync(session, request, heldUntil: null, attemptCancellationToken),
+        // Whether the message is already there is the submission's to answer, because it is a different question on a
+        // held account: the alias a message was stored under is its source folder, and the folder it is in is local.
+        var submitted = await this.commitPolicy.CommitAsync(
+            (session, attemptCancellationToken) => this.submission.SubmitAsync(
+                session,
+                request,
+                folder,
+                heldUntil: null,
+                attemptCancellationToken),
             cancellationToken);
 
-        // Raised once the record is durable, for the reason MailFlagChangeRecorder gives: the run reads the records
-        // rather than the raise.
-        this.runSignal.BringForward(target.Occurrence.AccountId);
+        switch (submitted.Outcome)
+        {
+            case MailboxChangeSubmissionOutcome.Recorded when submitted.Record is { } record:
+                // Raised once the record is durable, for the reason MailFlagChangeRecorder gives: the run reads the
+                // records rather than the raise.
+                this.runSignal.BringForward(target.Occurrence.AccountId);
 
-        return AuthoredMailRelocationResult.Recorded(folder.Alias, record.Id, record.Lifecycle);
+                return AuthoredMailRelocationResult.Recorded(folder.Alias, record.Id, record.Lifecycle);
+            case MailboxChangeSubmissionOutcome.Applied when submitted.Change is { } change:
+                this.submission.Announce(change);
+
+                return AuthoredMailRelocationResult.Applied(folder.Alias);
+            case MailboxChangeSubmissionOutcome.AlreadyInDestination:
+                return AuthoredMailRelocationResult.NotRecorded(MailRelocationOutcome.AlreadyInDestination);
+            case MailboxChangeSubmissionOutcome.DestinationMissing:
+                return AuthoredMailRelocationResult.NotRecorded(MailRelocationOutcome.DestinationNotFound);
+            default:
+                return AuthoredMailRelocationResult.NotRecorded(MailRelocationOutcome.MessageNotFound);
+        }
     }
 }

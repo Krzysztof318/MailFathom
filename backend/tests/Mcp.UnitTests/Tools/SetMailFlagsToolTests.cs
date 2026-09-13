@@ -5,10 +5,13 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Authoring;
 using MailFathom.Application.Mail.Mutations.Authoring.Failures;
 using MailFathom.Application.Mail.Mutations.Convergence;
+using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Access;
@@ -351,7 +354,14 @@ public sealed class SetMailFlagsToolTests
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             targets,
-            records,
+            new MailboxChangeSubmission(
+                Substitute.For<ILocalMailFolderStore>(),
+                records,
+                Substitute.For<ILocalEmailStateStore>(),
+                Substitute.For<IMailboxMutationAuditSettingsReader>(),
+                Substitute.For<IMailboxMutationAuditEntryStore>(),
+                ClientSignalPublishers.ReachingNobody,
+                new FakeTimeProvider()),
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),

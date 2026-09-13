@@ -8,7 +8,6 @@ using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
-using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Spam;
 
@@ -58,22 +57,25 @@ public sealed class SpamActionRecorder
     private readonly ISpamActionSettingsReader settingsReader;
     private readonly ISpamActionOccurrenceReader occurrences;
     private readonly IMailboxMutationRecordStore records;
+    private readonly MailboxChangeSubmission submission;
     private readonly MailboxDestinationResolver destinations;
     private readonly IAuthoredDeleteEmailDispositionReader deleteDispositions;
     private readonly OptimisticConcurrencyRetryPolicy retryPolicy;
 
-    /// <summary>Initializes the use case from the decisions it has to read and the record it writes.</summary>
+    /// <summary>Initializes the use case from the decisions it has to read and the submission it writes through.</summary>
     /// <param name="settingsReader">Answers what the message's user asked to happen to their own junk.</param>
     /// <param name="occurrences">Reads where the classified email is and whether it is already read.</param>
-    /// <param name="records">Opens the durable record each change is carried by.</param>
+    /// <param name="records">Answers whether this feature has already asked for a message to be filed.</param>
+    /// <param name="submission">Records each change, or commits it where the account is held.</param>
     /// <param name="destinations">Turns the configured junk folder into the folder on the server it currently names.</param>
     /// <param name="deleteDispositions">Answers what the account keeps locally of mail that leaves the mirror for good.</param>
-    /// <param name="retryPolicy">Commits the records from a fresh read when a concurrent write conflicts.</param>
+    /// <param name="retryPolicy">Commits the changes from a fresh read when a concurrent write conflicts.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public SpamActionRecorder(
         ISpamActionSettingsReader settingsReader,
         ISpamActionOccurrenceReader occurrences,
         IMailboxMutationRecordStore records,
+        MailboxChangeSubmission submission,
         MailboxDestinationResolver destinations,
         IAuthoredDeleteEmailDispositionReader deleteDispositions,
         OptimisticConcurrencyRetryPolicy retryPolicy)
@@ -81,6 +83,7 @@ public sealed class SpamActionRecorder
         ArgumentNullException.ThrowIfNull(settingsReader);
         ArgumentNullException.ThrowIfNull(occurrences);
         ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(submission);
         ArgumentNullException.ThrowIfNull(destinations);
         ArgumentNullException.ThrowIfNull(deleteDispositions);
         ArgumentNullException.ThrowIfNull(retryPolicy);
@@ -88,6 +91,7 @@ public sealed class SpamActionRecorder
         this.settingsReader = settingsReader;
         this.occurrences = occurrences;
         this.records = records;
+        this.submission = submission;
         this.destinations = destinations;
         this.deleteDispositions = deleteDispositions;
         this.retryPolicy = retryPolicy;
@@ -255,13 +259,13 @@ public sealed class SpamActionRecorder
     {
         if (destination.IsMirrored)
         {
-            return FilingDecision.Owed(new FilingPlan(destination.Path, LocalDisposition: null));
+            return FilingDecision.Owed(new FilingPlan(destination, LocalDisposition: null));
         }
 
         try
         {
             return FilingDecision.Owed(new FilingPlan(
-                destination.Path,
+                destination,
                 this.deleteDispositions.GetAuthoredDeleteDisposition(accountId)));
         }
         catch (InvalidOperationException)
@@ -271,21 +275,27 @@ public sealed class SpamActionRecorder
     }
 
     /// <summary>Opens the records, in the order the changes have to be applied, inside one commit.</summary>
-    private Task<SpamActionResult> OpenRecordsAsync(
+    /// <remarks>On a held account the same submissions commit the changes instead, and clients are told only once the commit is durable.</remarks>
+    private async Task<SpamActionResult> OpenRecordsAsync(
         SpamActionOccurrence occurrence,
         MailboxMutationRequester requester,
         bool marksRead,
         FilingPlan? filing,
-        CancellationToken cancellationToken) =>
-        this.retryPolicy.CommitAsync(
+        CancellationToken cancellationToken)
+    {
+        var applied = new List<AppliedMailboxChange>();
+
+        var result = await this.retryPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
+                applied.Clear();
+
                 MailboxMutationRecordId? markedReadRecordId = null;
                 MailboxMutationRecordId? filedRecordId = null;
 
                 if (marksRead)
                 {
-                    var seenRecord = await this.records.OpenAsync(
+                    var seen = await this.submission.SubmitAsync(
                         session,
                         MailboxMutationRequest.SetSeen(
                             occurrence.Id,
@@ -293,35 +303,63 @@ public sealed class SpamActionRecorder
                             occurrence.Occurrence,
                             requester,
                             isSeen: true),
+                        destination: null,
                         heldUntil: null,
                         attemptCancellationToken);
 
-                    markedReadRecordId = seenRecord.Id;
+                    markedReadRecordId = RecordIdOf(seen, applied);
                 }
 
                 if (filing is { } plan)
                 {
-                    var relocationRecord = await this.records.OpenAsync(
+                    var filed = await this.submission.SubmitAsync(
                         session,
                         MailboxMutationRequest.Relocate(
                             occurrence.Id,
                             occurrence.User,
                             occurrence.Occurrence,
                             requester,
-                            plan.Path,
+                            plan.Destination.Path,
                             plan.LocalDisposition),
+                        plan.Destination,
                         heldUntil: null,
                         attemptCancellationToken);
 
-                    filedRecordId = relocationRecord.Id;
+                    filedRecordId = RecordIdOf(filed, applied);
                 }
 
-                return SpamActionResult.Requested(markedReadRecordId, filedRecordId);
+                if (markedReadRecordId is not null || filedRecordId is not null)
+                {
+                    return SpamActionResult.Requested(markedReadRecordId, filedRecordId);
+                }
+
+                return applied.Count > 0
+                    ? SpamActionResult.Applied()
+                    : SpamActionResult.NotActedOn(SpamActionOutcome.NothingToChange);
             },
             cancellationToken);
 
+        foreach (var change in applied)
+        {
+            this.submission.Announce(change);
+        }
+
+        return result;
+    }
+
+    /// <summary>Reads the record one submission opened, keeping what it committed instead for the announcement.</summary>
+    private static MailboxMutationRecordId? RecordIdOf(SubmittedMailboxChange submitted, List<AppliedMailboxChange> applied)
+    {
+        if (submitted.Change is { } change)
+        {
+            applied.Add(change);
+        }
+
+        return submitted.Record?.Id;
+    }
+
     /// <summary>Where a filing would put the message, and what the account keeps of it locally afterwards.</summary>
-    private sealed record FilingPlan(RemoteFolderPath Path, AuthoredDeleteEmailDisposition? LocalDisposition);
+    private sealed record FilingPlan(MailboxDestination Destination, AuthoredDeleteEmailDisposition? LocalDisposition);
 
     /// <summary>What was decided about filing: a plan to carry out, nothing to do, or a reason to leave the message alone.</summary>
     /// <remarks>

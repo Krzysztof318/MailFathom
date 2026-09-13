@@ -75,6 +75,7 @@ using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Authoring;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Mail.Mutations.Destinations;
+using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Notifications;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
@@ -1205,6 +1206,8 @@ public static class ServiceCollectionExtensions
         // cannot answer for itself: where that email currently is. It reads the local copy and reaches no mail server,
         // so a protocol request resolves nothing over the network before it has been decided whether it may write.
         services.AddScoped<IAuthoredMailboxTargetReader, AuthoredMailboxTargetReader>();
+        services.AddScoped<ILocalEmailStateStore, LocalEmailStateStore>();
+        services.AddScoped<MailboxChangeSubmission>();
         services.AddScoped<MailFlagChangeRecorder>();
 
         // The relocation half of what a caller may author, beside the flag half and registered the same way: it writes

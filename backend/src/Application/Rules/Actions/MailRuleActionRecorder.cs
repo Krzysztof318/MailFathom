@@ -41,25 +41,25 @@ namespace MailFathom.Application.Rules.Actions;
 /// </remarks>
 public sealed class MailRuleActionRecorder
 {
-    private readonly IMailboxMutationRecordStore records;
+    private readonly MailboxChangeSubmission submission;
     private readonly IAuthoredDeleteEmailDispositionReader deleteDispositions;
     private readonly IMailRuleActionPermissionReader permissions;
 
-    /// <summary>Initializes the recorder from the record it writes and the decisions it has to read.</summary>
-    /// <param name="records">Opens the durable record one action is carried by.</param>
+    /// <summary>Initializes the recorder from the submission it writes through and the decisions it has to read.</summary>
+    /// <param name="submission">Records one action, or commits it where the account is held.</param>
     /// <param name="deleteDispositions">Answers what the account keeps locally of an email a rule deletes or files away.</param>
     /// <param name="permissions">Answers which changes the account currently permits a rule to make.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public MailRuleActionRecorder(
-        IMailboxMutationRecordStore records,
+        MailboxChangeSubmission submission,
         IAuthoredDeleteEmailDispositionReader deleteDispositions,
         IMailRuleActionPermissionReader permissions)
     {
-        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(submission);
         ArgumentNullException.ThrowIfNull(deleteDispositions);
         ArgumentNullException.ThrowIfNull(permissions);
 
-        this.records = records;
+        this.submission = submission;
         this.deleteDispositions = deleteDispositions;
         this.permissions = permissions;
     }
@@ -115,6 +115,7 @@ public sealed class MailRuleActionRecorder
 
         var failures = new List<MailRuleActionFailure>();
         var recorded = new List<RecordedMailRuleAction>();
+        var applied = new List<AppliedMailboxChange>();
 
         foreach (var planned in plan.Actions)
         {
@@ -140,18 +141,63 @@ public sealed class MailRuleActionRecorder
                 continue;
             }
 
-            var record = await this.records.OpenAsync(session, request, heldUntil: null, cancellationToken);
+            var submitted = await this.submission.SubmitAsync(
+                session,
+                request,
+                planned.Action.Destination is { } named ? destinations.Find(named).Destination : null,
+                heldUntil: null,
+                cancellationToken);
 
-            recorded.Add(new RecordedMailRuleAction(
+            if (submitted.Change is { } change)
+            {
+                applied.Add(change);
+            }
+
+            if (submitted.Outcome is MailboxChangeSubmissionOutcome.Recorded
+                or MailboxChangeSubmissionOutcome.Applied
+                or MailboxChangeSubmissionOutcome.AlreadyInDestination)
+            {
+                recorded.Add(new RecordedMailRuleAction(
+                    planned.RuleName,
+                    planned.Position,
+                    planned.Action.Mutation,
+                    submitted.Record?.Id,
+                    RecordedDestinationAlias(destinations, planned.Action.Destination)));
+
+                continue;
+            }
+
+            failures.Add(new MailRuleActionFailure(
                 planned.RuleName,
                 planned.Position,
                 planned.Action.Mutation,
-                record.Id,
-                RecordedDestinationAlias(destinations, planned.Action.Destination)));
+                RefusalOf(submitted.Outcome),
+                planned.Action.Destination));
         }
 
-        return new MailRuleActionRecording(recorded, failures);
+        return new MailRuleActionRecording(recorded, failures) { Applied = applied };
     }
+
+    /// <summary>Tells the clients watching each account about the changes a held account committed.</summary>
+    /// <param name="applied">What the batch committed, once its transaction has.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="applied" /> is <see langword="null" />.</exception>
+    public void Announce(IEnumerable<AppliedMailboxChange> applied)
+    {
+        ArgumentNullException.ThrowIfNull(applied);
+
+        foreach (var change in applied)
+        {
+            this.submission.Announce(change);
+        }
+    }
+
+    /// <summary>Names the refusal a submission that wrote nothing is reported to the operator as.</summary>
+    private static MailRuleActionFailureReason RefusalOf(MailboxChangeSubmissionOutcome outcome) => outcome switch
+    {
+        MailboxChangeSubmissionOutcome.DestinationMissing => MailRuleActionFailureReason.DestinationFolderUnresolved,
+        MailboxChangeSubmissionOutcome.NotAvailableLocally => MailRuleActionFailureReason.ActionNotAvailableOnHeldAccount,
+        _ => MailRuleActionFailureReason.EmailNotOnMailServer,
+    };
 
     /// <summary>Reads what the account permits, or nothing when the configuration no longer declares it.</summary>
     private MailRuleActionPermissions? TryReadPermissions(MailAccountId accountId)

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
@@ -37,6 +38,7 @@ public sealed class MailboxDestinationResolver
     private readonly IMailFolderResolutionStore folderResolutions;
     private readonly MailFolderResolver folderResolver;
     private readonly IMailTransportSecurityPolicyReader transportSecurityPolicies;
+    private readonly ILocalMailFolderStore localFolders;
 
     private readonly Dictionary<(MailAccountIdentity Account, MailFolderReference Destination), MailboxDestinationResolution> answers = [];
 
@@ -45,22 +47,26 @@ public sealed class MailboxDestinationResolver
     /// <param name="folderResolutions">Reads the binding a mirrored folder's run has already recorded.</param>
     /// <param name="folderResolver">Resolves a mapped folder against what its server advertises, and records the binding.</param>
     /// <param name="transportSecurityPolicies">Supplies the connection and authentication policy an on-demand resolution obeys.</param>
+    /// <param name="localFolders">Answers whether the account is held, where no destination is resolved against its server.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public MailboxDestinationResolver(
         MailFolderReferenceResolver folderReferences,
         IMailFolderResolutionStore folderResolutions,
         MailFolderResolver folderResolver,
-        IMailTransportSecurityPolicyReader transportSecurityPolicies)
+        IMailTransportSecurityPolicyReader transportSecurityPolicies,
+        ILocalMailFolderStore localFolders)
     {
         ArgumentNullException.ThrowIfNull(folderReferences);
         ArgumentNullException.ThrowIfNull(folderResolutions);
         ArgumentNullException.ThrowIfNull(folderResolver);
         ArgumentNullException.ThrowIfNull(transportSecurityPolicies);
+        ArgumentNullException.ThrowIfNull(localFolders);
 
         this.folderReferences = folderReferences;
         this.folderResolutions = folderResolutions;
         this.folderResolver = folderResolver;
         this.transportSecurityPolicies = transportSecurityPolicies;
+        this.localFolders = localFolders;
     }
 
     /// <summary>Resolves every destination one batch of authored changes names.</summary>
@@ -141,8 +147,16 @@ public sealed class MailboxDestinationResolver
             return MailboxDestinationResolution.Unmapped();
         }
 
-        return mapping.Participation.IsSynchronized
-            ? await this.ReadMirroredBindingAsync(account, mapping, cancellationToken)
+        if (mapping.Participation.IsSynchronized)
+        {
+            return await this.ReadMirroredBindingAsync(account, mapping, cancellationToken);
+        }
+
+        // A held account's truth is local and a folder it does not synchronize has no local folder, so there is nothing
+        // to file into — and resolving one on demand would put an IMAP listing in front of a request that must not wait
+        // on one.
+        return await this.localFolders.ReadAsync(account, cancellationToken) is { Phase: MailAccountCustodyPhase.Held }
+            ? MailboxDestinationResolution.Unmapped()
             : await this.ResolveOnDemandAsync(account, mapping, cancellationToken);
     }
 
@@ -158,7 +172,7 @@ public sealed class MailboxDestinationResolver
             cancellationToken);
 
         return binding is not null
-            ? MailboxDestinationResolution.Resolved(new MailboxDestination(binding, IsMirrored: true))
+            ? MailboxDestinationResolution.Resolved(new MailboxDestination(binding, IsMirrored: true, mapping.SpecialUse))
             : MailboxDestinationResolution.Unbound();
     }
 
@@ -193,7 +207,7 @@ public sealed class MailboxDestinationResolver
         return result switch
         {
             { Outcome: MailFolderResolutionOutcome.Resolved, Resolution: { } binding } =>
-                MailboxDestinationResolution.Resolved(new MailboxDestination(binding, IsMirrored: false)),
+                MailboxDestinationResolution.Resolved(new MailboxDestination(binding, IsMirrored: false, mapping.SpecialUse)),
             { Outcome: MailFolderResolutionOutcome.AdvertisedFoldersAreAmbiguous } =>
                 MailboxDestinationResolution.Ambiguous(),
             _ => MailboxDestinationResolution.NotAdvertised(),

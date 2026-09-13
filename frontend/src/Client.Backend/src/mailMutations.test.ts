@@ -116,6 +116,22 @@ describe('markMailRead', () => {
         });
     });
 
+    it('answers a change an account held on its own already applied, which leaves no record to follow', async () => {
+        const answer = await markMailRead(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({ results: [{ storedEmailId, outcome: 'applied', changes: [] }] }),
+            }),
+            [storedEmailId],
+        );
+
+        expect(answer).toStrictEqual({
+            outcome: 'read',
+            value: [{ storedEmailId, outcome: 'applied', changes: [] }],
+        });
+    });
+
     it('refuses a record standing somewhere this client does not know, rather than following it blind', async () => {
         const answer = await markMailRead(
             session,

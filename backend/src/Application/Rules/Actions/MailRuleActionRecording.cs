@@ -2,10 +2,12 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Mail.Mutations;
+
 namespace MailFathom.Application.Rules.Actions;
 
 /// <summary>What recording one email's planned actions produced.</summary>
-/// <param name="Recorded">The actions a mutation record was opened for, each naming the record that carries it.</param>
+/// <param name="Recorded">The actions a mutation record was opened for, each naming the record that carries it, and the actions a held account committed, which name none.</param>
 /// <param name="Failures">The actions nothing was recorded for, each with the reason.</param>
 /// <remarks>
 /// A record already open is reported as recorded rather than as a second request, because that is what it is: the
@@ -18,6 +20,9 @@ public sealed record MailRuleActionRecording(
 {
     /// <summary>Gets the recording of an email whose rules asked for nothing.</summary>
     public static MailRuleActionRecording Nothing { get; } = new([], []);
+
+    /// <summary>Gets the changes a held account committed, which clients are told about once the batch's transaction has.</summary>
+    public IReadOnlyList<AppliedMailboxChange> Applied { get; init; } = [];
 
     /// <summary>Gets how many mutation records the plan opened, counting one already open as recorded.</summary>
     public int RecordedCount => this.Recorded.Count;

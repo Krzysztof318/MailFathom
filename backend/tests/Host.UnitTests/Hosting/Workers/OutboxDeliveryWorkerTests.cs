@@ -234,6 +234,7 @@ public sealed class OutboxDeliveryWorkerTests
             collection.AddSingleton(Substitute.For<IOutgoingMailFilingPolicyReader>());
             collection.AddScoped<MailFolderReferenceResolver>();
             collection.AddScoped<MailFolderResolver>();
+            collection.AddSingleton(Substitute.For<ILocalMailFolderStore>());
             collection.AddScoped<MailboxDestinationResolver>();
             collection.AddScoped<MailboxCopyAppender>();
 

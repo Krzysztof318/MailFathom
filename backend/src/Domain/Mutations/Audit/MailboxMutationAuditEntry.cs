@@ -169,4 +169,60 @@ public sealed record MailboxMutationAuditEntry
             Failure = wasPerformed ? null : record.LastFailure,
         };
     }
+
+    /// <summary>Writes the entry a change committed to stored state on a held account leaves behind.</summary>
+    /// <param name="id">The identity the entry is addressed by.</param>
+    /// <param name="actId">The identity of the act itself, which no mutation record carries because none was written.</param>
+    /// <param name="request">The change that was committed.</param>
+    /// <param name="sourceFolder">The binding the message's occurrence names, which supplies the source path.</param>
+    /// <param name="committedAt">When the change committed, which is both when it was asked for and when it ended.</param>
+    /// <returns>The entry to append in the same transaction as the change.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> or <paramref name="sourceFolder" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="sourceFolder" /> is not the binding the request's occurrence names.</exception>
+    /// <remarks>
+    /// A local act has no stage to end in and cannot be abandoned: the transaction either committed it or did not, so the
+    /// entry is always a performed change placed nowhere a server reported. It is the same entry a remote change leaves,
+    /// which is what keeps the trail free of a hole where a change stopped reaching a server.
+    /// </remarks>
+    public static MailboxMutationAuditEntry OfLocalAct(
+        MailboxMutationAuditEntryId id,
+        MailboxMutationRecordId actId,
+        MailboxMutationRequest request,
+        MailFolderResolution sourceFolder,
+        DateTimeOffset committedAt)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(sourceFolder);
+
+        if (sourceFolder.Id != request.Occurrence.FolderResolutionId)
+        {
+            throw new ArgumentException(
+                "The folder binding does not carry the occurrence the change was requested for.",
+                nameof(sourceFolder));
+        }
+
+        // ponytail: a local act still names the occurrence and the source path, because every message this path reaches
+        // still has one — the target readers refuse a row without it. Once the drain clears occurrences, the entry's
+        // occurrence columns become nullable and name the local folders instead, as ADR 0034 states.
+        return new MailboxMutationAuditEntry
+        {
+            Id = id,
+            MutationRecordId = actId,
+            AccountId = request.Occurrence.AccountId,
+            User = request.User,
+            StoredEmailId = request.StoredEmailId,
+            Mutation = request.Mutation,
+            SourceFolderPath = sourceFolder.RemotePath,
+            SourceUidValidity = request.Occurrence.UidValidity,
+            SourceUid = request.Occurrence.Uid,
+            DestinationFolderPath = request.DestinationPath,
+            Placement = RemoteEmailPlacement.NotReported(),
+            DesiredSeenState = request.DesiredSeenState,
+            Requester = request.Requester,
+            RequestedAt = committedAt,
+            CompletedAt = committedAt,
+            Outcome = MailboxMutationAuditOutcome.Performed,
+            Failure = null,
+        };
+    }
 }

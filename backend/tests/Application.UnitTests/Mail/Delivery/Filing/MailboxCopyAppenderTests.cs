@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Mutations;
@@ -440,7 +441,8 @@ public sealed class MailboxCopyAppenderTests
                 persistenceSessions,
                 ClientSignalPublishers.ReachingNobody,
                 this.clock),
-            this.transportSecurityPolicies);
+            this.transportSecurityPolicies,
+            Substitute.For<ILocalMailFolderStore>());
 
         return new MailboxCopyAppender(
             this.writeSessions,

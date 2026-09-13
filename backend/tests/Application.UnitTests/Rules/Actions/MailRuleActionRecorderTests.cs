@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
@@ -617,8 +618,10 @@ public sealed class MailRuleActionRecorderTests
                 persistenceSessionFactory,
                 ClientSignalPublishers.ReachingNobody,
                 new FakeTimeProvider(new DateTimeOffset(2026, 8, 12, 9, 0, 0, TimeSpan.Zero))),
-            transportSecurityPolicies);
+            transportSecurityPolicies,
+            Substitute.For<ILocalMailFolderStore>());
     }
 
-    private MailRuleActionRecorder CreateRecorder() => new(this.records, this.dispositions, this.permissions);
+    private MailRuleActionRecorder CreateRecorder() =>
+        new(MailboxChangeSubmissions.Over(this.records), this.dispositions, this.permissions);
 }

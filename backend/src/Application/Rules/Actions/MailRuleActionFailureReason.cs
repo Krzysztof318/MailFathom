@@ -67,4 +67,8 @@ public enum MailRuleActionFailureReason
     /// command reaches.
     /// </remarks>
     EmailNotOnMailServer = 6,
+
+    /// <summary>The account is held, and the change is one a held account cannot commit to stored state yet.</summary>
+    /// <remarks>A copy is the one such change: a held account's copy is a second stored message with a payload of its own, which cannot be placed inside the transaction a rule's batch commits in.</remarks>
+    ActionNotAvailableOnHeldAccount = 7,
 }

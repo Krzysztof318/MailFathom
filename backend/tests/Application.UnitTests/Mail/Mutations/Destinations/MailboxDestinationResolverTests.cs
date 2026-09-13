@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
@@ -201,6 +202,25 @@ public sealed class MailboxDestinationResolverTests
             destinations.Find(MailFolderReference.ToAlias(Archive)).Outcome);
     }
 
+    /// <summary>A held account keeps no local folder for a source folder it never mirrored, and must not wait on a server listing to learn that.</summary>
+    [Fact]
+    public async Task ResolveAsync_AnUnmirroredDestinationOnAHeldAccount_ReportsItAsUnmappedWithoutListingTheServer()
+    {
+        // Arrange
+        var context = new DestinationContext(new RemoteFolder(RemoteFolderPath.Create("INBOX.Spam", '.'), []));
+        context.Mappings.With(Account.Id, MappedOnlyPathTo(Junk, "INBOX.Spam"));
+        context.LocalFolders
+            .ReadAsync(Account, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<LocalMailFolderHolding?>(new LocalMailFolderHolding(MailAccountCustodyPhase.Held, [], [])));
+
+        // Act
+        var resolution = await context.ResolveAsync(MailFolderReference.ToAlias(Junk));
+
+        // Assert
+        Assert.Equal(MailboxDestinationOutcome.Unmapped, resolution.Outcome);
+        Assert.Equal(0, context.ListedFolderCount);
+    }
+
     /// <summary>A folder MailFathom knows by name and mirrors nothing of, which is what this issue's destination is.</summary>
     private static MailFolderMapping MappedOnlyPathTo(MailFolderAlias alias, string remotePath) =>
         MailFolderMapping.ToRemotePath(
@@ -261,8 +281,11 @@ public sealed class MailboxDestinationResolverTests
                     persistenceSessionFactory,
                     ClientSignalPublishers.ReachingNobody,
                     new FakeTimeProvider(new DateTimeOffset(2026, 8, 12, 9, 0, 0, TimeSpan.Zero))),
-                transportSecurityPolicies);
+                transportSecurityPolicies,
+                this.LocalFolders);
         }
+
+        internal ILocalMailFolderStore LocalFolders { get; } = Substitute.For<ILocalMailFolderStore>();
 
         internal StubMailFolderMappings Mappings { get; } = StubMailFolderMappings.Nothing;
 

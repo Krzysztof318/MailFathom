@@ -663,6 +663,9 @@ internal static class ClientMailChangeOutcomes
     /// <summary>The change was written down, and the account's next convergence pass will issue it.</summary>
     internal const string Recorded = "recorded";
 
+    /// <summary>The account is held and the change has already been applied to the mail MailFathom keeps, so there is no record to follow.</summary>
+    internal const string Applied = "applied";
+
     /// <summary>This deployment serves no readable message under that identity, so there was nothing to change.</summary>
     internal const string MessageNotFound = "message-not-found";
 
@@ -757,7 +760,7 @@ internal sealed record ClientMailFlagChangeResultResponse(
 
         return new ClientMailFlagChangeResultResponse(
             recorded.StoredEmailId.Value,
-            ClientMailChangeOutcomes.Recorded,
+            recorded.IsApplied ? ClientMailChangeOutcomes.Applied : ClientMailChangeOutcomes.Recorded,
             Detail: null,
             [.. recorded.Recorded.Select(ClientMailRecordedChangeResponse.For)]);
     }
@@ -835,6 +838,7 @@ internal sealed record ClientMailMoveResultResponse(
         MailRelocationOutcome.DestinationNotFound => ClientMailChangeOutcomes.DestinationNotFound,
         MailRelocationOutcome.AlreadyInDestination => ClientMailChangeOutcomes.AlreadyInDestination,
         MailRelocationOutcome.AccountNoLongerConfigured => ClientMailChangeOutcomes.AccountNoLongerConfigured,
+        MailRelocationOutcome.Applied => ClientMailChangeOutcomes.Applied,
         _ => throw new ArgumentOutOfRangeException(
             nameof(outcome),
             outcome,
@@ -898,6 +902,7 @@ internal sealed record ClientMailDeleteResultResponse(
         MailDeletionOutcome.Recorded => ClientMailChangeOutcomes.Recorded,
         MailDeletionOutcome.MessageNotFound => ClientMailChangeOutcomes.MessageNotFound,
         MailDeletionOutcome.AccountNoLongerConfigured => ClientMailChangeOutcomes.AccountNoLongerConfigured,
+        MailDeletionOutcome.Applied => ClientMailChangeOutcomes.Applied,
         _ => throw new ArgumentOutOfRangeException(
             nameof(outcome),
             outcome,

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
@@ -657,6 +658,7 @@ public sealed class SpamActionRecorderTests
             settingsReader,
             occurrences ?? ReaderOf(OccurrenceIn(Inbox, isRemotelySeen: false)),
             this.records,
+            MailboxChangeSubmissions.Over(this.records),
             this.DestinationResolver(sessionFactory),
             this.dispositions,
             new OptimisticConcurrencyRetryPolicy(
@@ -690,7 +692,8 @@ public sealed class SpamActionRecorderTests
                 sessionFactory,
                 ClientSignalPublishers.ReachingNobody,
                 new FakeTimeProvider(EvaluatedAt)),
-            transportSecurityPolicies);
+            transportSecurityPolicies,
+            Substitute.For<ILocalMailFolderStore>());
     }
 
     private static ISpamActionOccurrenceReader ReaderOf(SpamActionOccurrence occurrence)

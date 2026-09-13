@@ -13,18 +13,21 @@ namespace MailFathom.Application.Mail.Mutations.Authoring;
 /// <param name="StoredEmailId">The email the change was asked for.</param>
 /// <param name="AccountId">The account that email belongs to, which is the account whose run will carry the change.</param>
 /// <param name="FolderAlias">The operator's own name for the folder the email is in.</param>
-/// <param name="Recorded">One entry per value the request named, in the order the request states them.</param>
+/// <param name="Recorded">One entry per value the request named, in the order the request states them, and empty where the change was applied.</param>
+/// <param name="IsApplied">Whether the account is held and every value was committed to stored state, with no record to carry.</param>
 /// <remarks>
-/// It reports what was written down rather than what a mail server has done, because at the moment this is produced no
-/// command has gone out. That is the honest answer and it is also the useful one: the record is what survives a crash,
-/// what convergence resumes, and what an operator reads when a change has not arrived, so its identity is what a caller
-/// needs in hand.
+/// On an account whose source is the truth it reports what was written down rather than what a mail server has done,
+/// because at the moment this is produced no command has gone out. That is the honest answer and it is also the useful
+/// one: the record is what survives a crash, what convergence resumes, and what an operator reads when a change has not
+/// arrived, so its identity is what a caller needs in hand. On a held account the change has already happened when this
+/// is produced, and there is no record to name.
 /// </remarks>
 public sealed record AuthoredMailFlagChangeResult(
     StoredEmailId StoredEmailId,
     MailAccountId AccountId,
     MailFolderAlias FolderAlias,
-    IReadOnlyList<RecordedMailFlagMutation> Recorded);
+    IReadOnlyList<RecordedMailFlagMutation> Recorded,
+    bool IsApplied = false);
 
 /// <summary>One value a change asked for, and the durable record that now carries it.</summary>
 /// <param name="Mutation">The change that was written down, under the name every log line and counter uses for it.</param>
