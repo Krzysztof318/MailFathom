@@ -35,7 +35,7 @@ public sealed class ComposedSettingsWithdrawnUserAndMailboxSectionTests
         Assert.Equal("Accounts", refusal.SectionName);
         var error = Assert.Single(refusal.Errors);
         Assert.Contains("mfctl user add", error, StringComparison.Ordinal);
-        Assert.Contains("mfctl user account add", error, StringComparison.Ordinal);
+        Assert.Contains("mfctl account add", error, StringComparison.Ordinal);
         Assert.Contains("nothing imports what the collection declared", error, StringComparison.Ordinal);
     }
 
@@ -57,7 +57,7 @@ public sealed class ComposedSettingsWithdrawnUserAndMailboxSectionTests
         Assert.Equal("MailSynchronization:Accounts", refusal.SectionName);
         var error = Assert.Single(refusal.Errors);
         Assert.Contains("mfctl user add", error, StringComparison.Ordinal);
-        Assert.Contains("mfctl user account add", error, StringComparison.Ordinal);
+        Assert.Contains("mfctl account add", error, StringComparison.Ordinal);
         Assert.Contains("Nothing imports what the section declared", error, StringComparison.Ordinal);
     }
 

@@ -281,14 +281,14 @@ kubectl --namespace mailfathom port-forward service/mailfathom 8080:8080 &
 
 mfctl login --endpoint http://127.0.0.1:8080
 mfctl user add --display-name Alex
-mfctl user account add --from-file mailbox.json
+mfctl account add --from-file mailbox.json
 ```
 
 `mailbox.json` is the JSON object one mail account is declared as, and its `Secrets.Password` reference names the same
 mounted path every other credential here does — `file:/etc/mailfathom/secrets/imap-primary-password`, one of the keys
-of the Secret above. The mailbox is served from the moment the write commits, without a rollout. `mfctl user account add`
+of the Secret above. The mailbox is served from the moment the write commits, without a rollout. `mfctl account add`
 names no user, because the deployment then holds exactly one; once `mfctl user add` records a second person, `--user`
-says whose record a command writes.
+says whom the account is created for.
 [Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes in the
 file.
 

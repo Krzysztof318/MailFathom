@@ -61,8 +61,8 @@ says about mail:
 }
 ```
 
-**The mailbox itself is not configuration.** Every mail account belongs to the record of the person whose mail it is,
-and a record is written while the deployment runs rather than read from a file — so a fresh deployment holds nobody,
+**The mailbox itself is not configuration.** Every mail account is a record the deployment holds and assigns to the
+people it serves, written while the deployment runs rather than read from a file — so a fresh deployment holds nobody,
 reads no mail, and says so at startup.
 [Step 6](#6-record-the-mailbox) is where this mailbox is recorded, and it is served from that moment
 without a restart. What to write now is the account's own JSON object, saved as `mailbox.json` on the machine you
@@ -70,7 +70,7 @@ administer the deployment from:
 
 ```json
 {
-  "AccountId": "primary",
+  "EmailAddress": "you@example.test",
   "DisplayName": "Personal mail",
   "Host": "imap.example.test",
   "Port": 993,
@@ -98,13 +98,16 @@ one does differently once synchronization is running.
 
 Points worth knowing before you adapt it:
 
-- **`AccountId` and `Alias` are your names**, not the server's. They are what every tool argument, log line, and error
-  message uses, so pick names you are happy to see in a diagnostic.
-- **`DisplayName` is the name an assistant reads back to you.** It is required and has no default: the identifier above
-  is a key, and a person hearing "the email came from `acct-2`" learns nothing. It travels beside the identifier in
-  every tool result, and either spelling narrows a listing, a search, or a question to that mailbox. No two of your accounts may
-  share one, and none may take another of your accounts' identifiers, so a name always names one mailbox. Both names
-  belong to you rather than to the deployment: they are compared against your own accounts and against nobody else's.
+- **`EmailAddress` is the mailbox's own address.** It is what tells this account apart from every other one the
+  deployment holds: one address is one account, however many people it is assigned to. There is no `AccountId` to
+  write — the deployment generates one when the account is created and reports it.
+- **`Alias` is your name** for a folder, not the server's. It is what every tool argument, log line, and error message
+  uses, so pick names you are happy to see in a diagnostic.
+- **`DisplayName` is the name an assistant reads back to you.** It is required and has no default: the generated
+  identifier is a key, and a person hearing "the email came from `5b0c…`" learns nothing. It travels beside the
+  identifier in every tool result, and either spelling narrows a listing, a search, or a question to that mailbox. No
+  two of your accounts may share one, so a name always names one mailbox; it is compared against your own accounts and
+  against nobody else's.
 - **Folders are best named by role.** `SpecialUse` lets discovery find the folder whatever the server calls it —
   a German server's `Gesendet` is still `Sent` — and configuring no folder at all synchronizes the inbox. Naming an
   exact server path is the alternative for folders with no role, and you may name both: the path finds the folder and
@@ -253,7 +256,7 @@ first pass; later runs move only what changed, every five minutes by default.
 ## 6. Record the mailbox
 
 A fresh deployment holds no user. So the deployment started above serves nobody and reads no mail yet, and said so at
-startup — in a line naming `mfctl user add` and `mfctl user account add`. Who a deployment serves and which mailboxes it reads are its own to keep, and the
+startup — in a line naming `mfctl user add` and `mfctl account add`. Who a deployment serves and which mailboxes it reads are its own to keep, and the
 [administrative endpoint](administering.md) is where both are written;
 [a deployment that records no user](../operations/configuration-sources.md#a-deployment-that-records-no-user) is the
 rest of that story.
@@ -262,12 +265,12 @@ rest of that story.
 
 ```console
 $ mfctl user add --display-name "Alex"
-$ mfctl user account add --from-file mailbox.json
+$ mfctl account add --from-file mailbox.json
 ```
 
 The first records the person this deployment serves, under the label they are told apart by; `mfctl user rename`
-changes it later. The second reads the file written in [step 2](#2-write-down-the-mailbox) and declares that mailbox in
-their record. It names no user, because this deployment now holds exactly one: `--user` is how a deployment serving
+changes it later. The second reads the file written in [step 2](#2-write-down-the-mailbox), creates that mail account,
+assigns it to them, and prints the identifier it was generated under. It names no user, because this deployment now holds exactly one: `--user` is how a deployment serving
 several says which of them — `mfctl user add` records each further person — and an invocation that omits it where there
 are several is refused rather than guessed at.
 

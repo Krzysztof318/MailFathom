@@ -56,11 +56,11 @@ internal sealed partial class DevelopmentCredentialProvisioningWorker(
 
         if (declared)
         {
-            MailAccountDeclared(logger, OrchestrationContract.DevelopmentMailAccountId);
+            MailAccountDeclared(logger, OrchestrationContract.DevelopmentMailAccountDisplayName);
         }
         else
         {
-            MailAccountAlreadyDeclared(logger, OrchestrationContract.DevelopmentMailAccountId);
+            MailAccountAlreadyDeclared(logger, OrchestrationContract.DevelopmentMailAccountDisplayName);
         }
 
         var created = await provisioner.EnsureCredentialAsync(
@@ -103,9 +103,9 @@ internal sealed partial class DevelopmentCredentialProvisioningWorker(
     [LoggerMessage(2, LogLevel.Information, "The local Basic credential named {Username} already exists and was left unchanged.")]
     private static partial void CredentialAlreadyExists(ILogger logger, string username);
 
-    [LoggerMessage(3, LogLevel.Information, "Declared the mail account {AccountId} in the local user's record.")]
-    private static partial void MailAccountDeclared(ILogger logger, string accountId);
+    [LoggerMessage(3, LogLevel.Information, "Created the mail account {MailAccountDisplayName} for the local user.")]
+    private static partial void MailAccountDeclared(ILogger logger, string mailAccountDisplayName);
 
-    [LoggerMessage(4, LogLevel.Information, "The local user's record already declares the mail account {AccountId} and was left unchanged.")]
-    private static partial void MailAccountAlreadyDeclared(ILogger logger, string accountId);
+    [LoggerMessage(4, LogLevel.Information, "The local user is already assigned an account for the local mailbox, {MailAccountDisplayName}, and it was left unchanged.")]
+    private static partial void MailAccountAlreadyDeclared(ILogger logger, string mailAccountDisplayName);
 }

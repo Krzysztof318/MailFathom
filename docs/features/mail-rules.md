@@ -66,12 +66,11 @@ matches it.
   that declined to match. It follows that a scoped rule cannot end another account's pass whatever `StopWhenMatched`
   says.
 
-An account is named exactly as `MailAccounts:<m>:AccountId` states it within the record of the user whose mailbox it is,
-and the comparison is case-sensitive, because two identifiers differing only in case are two accounts. **An account
-nobody records is refused by a configuration write and by a reload**, naming the rule and the identifier: a rule scoped
-to a mistyped account would otherwise reach no mail and say nothing about why. The judgement is made against the users
-this deployment serves rather than against a configuration key, so a rule naming a mailbox somebody records later is
-refused until they record it, and a reload that refuses keeps the rule set it last accepted.
+An account is named exactly by the identifier the deployment generated for it, which `mfctl account list` reports,
+and the comparison is case-sensitive. **An account no served user is assigned is refused by a configuration write and
+by a reload**, naming the rule and the identifier: a rule scoped to a mistyped account would otherwise reach no mail and
+say nothing about why. The judgement is made against the users this deployment serves rather than against a
+configuration key, so a rule naming a mailbox nobody is assigned yet is refused until somebody is, and a reload that refuses keeps the rule set it last accepted.
 
 **A start reports it instead of refusing.** A mailbox can stop being recorded after the rule naming it was accepted —
 its user is erased, or their record stops declaring it — and a start refusing then could be undone only through the
@@ -247,8 +246,7 @@ element whose value it cannot read — which would leave a rule quietly doing le
 **A rule that declares no action is not a defect.** It selects mail and changes nothing, which is what a rule ending the
 pass with `StopWhenMatched` does to keep the mail it names away from the rules below it.
 
-A destination is a **folder alias** — one an account states under `MailAccounts:<m>:Folders` within the record whose
-mailbox it is — and never a path on the server. What that alias is bound to is resolved when the change is written down, so a rule goes on
+A destination is a **folder alias** — one an account states under `Folders` in its own declaration — and never a path on the server. What that alias is bound to is resolved when the change is written down, so a rule goes on
 working across a server that renames the folder underneath it, and a rule may name any folder the account maps —
 including one it deliberately does not mirror, which is how mail is filed somewhere MailFathom keeps no copy of.
 [Folder aliases and discovery](imap-synchronization.md#folder-aliases-and-discovery) states what a binding is
@@ -384,7 +382,7 @@ states the three answers.
 
 ### What an account permits a rule to do
 
-Each account states, under `MailAccounts:<m>:RuleActions` within the record whose mailbox it is, which changes a rule
+Each account states, under `RuleActions` in its own declaration, which changes a rule
 may make to its mailbox:
 
 | Key | Default | What it permits |
@@ -997,7 +995,7 @@ Taking a label off once the thing it stood for is over, and stating the whole se
 }
 ```
 
-Deleting mail nobody needs — which the account has to permit under `MailAccounts:<m>:RuleActions:Delete`, and which is
+Deleting mail nobody needs — which the account has to permit under `RuleActions:Delete`, and which is
 refused at startup if it does not:
 
 ```json

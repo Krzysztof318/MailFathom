@@ -49,12 +49,13 @@ budget or the coordinator loop itself are marked *restart* below.
 
 ### One account — a mailbox in a user's record
 
-This deployment declares no mail account of its own. Every account belongs to the user whose record holds it, so the
-keys below are read from one entry of that record's `MailAccounts` collection rather than from a configuration source —
-`mfctl user account add --from-file` carries exactly this object, and
-[the users a deployment serves](configuration-sources.md#the-users-a-deployment-serves) is where a record is read from
-and written. *Change* below therefore means what the next run adopts once the record commits, which is what a committed
-record does without a restart.
+This deployment declares no mail account of its own. Every account is a record the deployment holds and assigns to the
+users it serves, so the keys below are read from that account's declaration rather than from a configuration source —
+`mfctl account add --from-file` carries exactly this object, and
+[mail accounts and who they are assigned to](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) is where one
+is created, edited, and assigned. A user is served each assigned account as one entry of a `MailAccounts` collection
+composed into their record, which is why a path below reads `MailAccounts:<m>:…`. *Change* below therefore means what
+the next run adopts once the account write commits, which it does without a restart.
 
 A recorded mailbox is judged as one that will be synchronized, whatever `MailSynchronization:Enabled` says: the server,
 the login, and the credential are required, and an account that names none is refused when the record is written rather
@@ -62,7 +63,7 @@ than met later by a run.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `…:AccountId` | string | — | Required; unique within the user declaring it, after normalization and without regard to case | reload |
+| `…:EmailAddress` | string | — | Required; one `@` between a local part and a domain, no white space, at most 320 characters; unique across the deployment, compared without regard to case or surrounding white space. An account's identifier is generated rather than stated, and a declaration stating `AccountId` is refused | reload |
 | `…:DisplayName` | string | — | Required, with no default; at most 128 characters, no control characters, and it may not be another account's identifier or display name compared without regard to case | reload |
 | `…:Host` | string | — | Required | reload |
 | `…:Port` | int | `993` | 1 – 65535 | reload |
@@ -163,25 +164,21 @@ question reached, so the record grows with how much an instance is asked rather 
 states what an entry holds, what it deliberately does not, and the one way it differs from the trail above — an erased
 message is erased from the runs that read it.
 
-`AccountId` and `DisplayName` are both names for the account and they answer different questions. The identifier is the
-stable key everything else is expressed in — every stored row, every continuation cursor, every log line — and it is
-what you keep unchanged. The display name is what a caller reads: it appears beside the identifier in every MCP result
+An account's identifier and its `DisplayName` are both names for it and they answer different questions. The
+identifier is a UUID the deployment generates when the account is created — the stable key everything else is expressed
+in, every stored row, every continuation cursor, every log line — and nothing changes it. The display name is what a
+caller reads: it appears beside the identifier in every MCP result
 that names an account, and either spelling may be used to narrow a listing, a search, or a question to that mailbox.
 There is deliberately no default, because a name MailFathom invented would be published to callers as though you had
 chosen it. The two share one naming space so that a name can never select two mailboxes, which is why startup refuses a
 display name that another account's identifier or display name already carries; a display name equal to the account's
-*own* identifier is fine, since both spellings then reach the same mailbox. The identifier is also reported back inside
-a Discover result, which names every account the run read, so startup refuses one that carries a control character, is
-written as markup, or runs past four thousand characters — a name a result cannot carry would otherwise start and
-synchronize, and then refuse every question.
+*own* identifier is fine, since both spellings then reach the same mailbox.
 
-**That naming space belongs to the user, not to the deployment.** An account identifier names one mailbox within the
-user who declared it, and MailFathom stores it that way — the account row is keyed by the user and the identifier
-together — so two people served by one deployment may each call an account `work` and neither reaches the other's mail.
-Startup refuses a *repeat* within one user, comparing after normalization and without regard to case, by the same rule
-that governs the display names beside it; it has nothing to refuse across two users. What follows for you is that an
-identifier is only ever quoted with the user it belongs to: a support question, a log line, or an ad-hoc SQL statement
-that names the identifier alone names a mailbox per user rather than a mailbox.
+**The display-name space belongs to each user's assigned set, and the address space to the deployment.** Two of one
+person's accounts may not share a display name, and two people's accounts may; an account assigned to several people
+has to fit each of their sets. The address is the opposite: one mailbox is held by one account in the whole deployment,
+so two people reading one mailbox are two assignments of one account rather than two accounts. Stored mail is keyed by
+the user and the account identifier together, so an ad-hoc SQL statement still names both.
 
 A folder entry names `Alias` (required — your stable name for the folder) and **at least one** of `RemotePath` (the
 server's own path) or `SpecialUse` (`Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`,
@@ -613,7 +610,7 @@ use — every fact, every function, every operator — and this section document
 | `MailRules:HistoryRetention` | TimeSpan | `30.00:00:00` | At most 3650 days; how long a recorded rule execution is kept. Zero or less keeps one for exactly as long as the message it names. A pass records one execution per rule it reached per message, so this is the bound on a record that would otherwise grow with the mailbox | reload; the next account run erases against the new window |
 | `MailRules:Rules` | list | empty | At most 200 rules, evaluated in the order they are written | reload |
 | `MailRules:Rules:0:Name` | string | required | 1 – 64 characters of letters, digits, spaces, and `.`, `_`, `-`; unique across the section, ignoring case | reload |
-| `MailRules:Rules:0:Accounts` | list | empty | The accounts the rule applies to, each naming exactly an `AccountId` some served user's record declares; empty applies the rule to every account | reload |
+| `MailRules:Rules:0:Accounts` | list | empty | The accounts the rule applies to, each naming exactly the identifier of an account some served user is assigned; empty applies the rule to every account | reload |
 | `MailRules:Rules:0:Condition` | string | required | One expression producing a boolean, within the two limits above | reload |
 | `MailRules:Rules:0:StopWhenMatched` | bool | `false` | A match ends the pass and the rules below it are not reached | reload |
 | `MailRules:Rules:0:Enabled` | bool | `true` | A rule switched off is left out of the set entirely | reload |

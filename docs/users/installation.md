@@ -128,10 +128,10 @@ and [its Quadlet unit](../operations/deployment-quadlet.md#the-signal-backplane)
   [Choosing where message content lives](#choosing-where-message-content-lives) is the rest of it.
 - **An IMAP account to synchronize** and its password or app password, provisioned as a
   [secret reference](../operations/secret-provisioning.md) rather than written into configuration. The account itself
-  is not configuration either: it is declared in the record of the user whose mailbox it is, which is the bullet below.
+  is not configuration either: it is a record the deployment holds and assigns to a user, which is the bullet below.
 - **The administrative endpoint, and `mfctl` to reach it.** No configuration source declares a mailbox: a fresh
   deployment holds no user and reads nothing, in every shape here, until `mfctl user add` records the person it serves
-  and `mfctl user account add` declares a mailbox in that user's record.
+  and `mfctl account add` creates a mailbox assigned to them.
   That makes the endpoint part of an installation rather than an extra: [the administrative
   endpoint](../operations/admin-endpoint.md) is what to enable and how the credential it takes is provisioned, and
   [getting the command](../operations/admin-endpoint.md#getting-the-command) is where `mfctl` comes from.

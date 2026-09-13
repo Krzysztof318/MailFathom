@@ -44,4 +44,8 @@ public sealed record UserSettingsDocument(
     /// </para>
     /// </remarks>
     public const int MaximumOctets = 1024 * 1024;
+
+    /// <summary>Gets the mail accounts assigned to the user, in the order they were created in.</summary>
+    /// <remarks>Read beside the record rather than inside it, because an account is a record of its own; the configuration layer composes the two into the record a user is served from.</remarks>
+    public IReadOnlyList<MailAccountRecord> MailAccounts { get; init; } = [];
 }

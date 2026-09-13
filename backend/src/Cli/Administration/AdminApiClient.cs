@@ -7,6 +7,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
+using MailFathom.Cli.Administration.Accounts;
 using MailFathom.Cli.Administration.Configuration;
 using MailFathom.Cli.Administration.Contacts;
 using MailFathom.Cli.Administration.Content;
@@ -1170,6 +1171,9 @@ internal sealed class AdminApiClient
     private const string NoSuchUser =
         "This deployment holds no user under that identifier. Run 'mfctl user list' and name one it holds.";
 
+    private const string NoSuchMailAccount =
+        "This deployment holds no mail account under that identifier. Run 'mfctl account list' and name one it holds.";
+
     /// <summary>Reads the users a deployment holds records for.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
@@ -1319,56 +1323,150 @@ internal sealed class AdminApiClient
             NoSuchUser);
     }
 
-    /// <summary>Declares one more mail account in a user's record.</summary>
+    /// <summary>Reads the mail accounts a deployment holds.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="userId">The user the mailbox belongs to.</param>
-    /// <param name="request">The declaration and the version the record was read at.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>What the write did.</returns>
+    /// <returns>The accounts, redacted.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a listing.</exception>
+    internal Task<MailAccountList> ReadMailAccountsAsync(string token, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.MailAccountsPath,
+            token,
+            CliJsonContext.Default.MailAccountList,
+            cancellationToken);
+
+    /// <summary>Reads one mail account, as the redacted declaration an editing session opens.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="accountId">The account asked about.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The account and the version it was read at.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, holds no such account, or answered with something that is not an account.</exception>
+    internal Task<MailAccountEntry> ReadMailAccountAsync(string token, Guid accountId, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.MailAccountPath(accountId),
+            token,
+            CliJsonContext.Default.MailAccountEntry,
+            cancellationToken,
+            absenceMessage: NoSuchMailAccount);
+
+    /// <summary>Creates a mail account and assigns it to one user.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="request">The user and the declaration.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the write did, carrying the identifier a created account was generated under.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
-    internal Task<UserRecordWriteAnswer> AddUserMailAccountAsync(
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, holds no such user, or answered with something that is not an outcome.</exception>
+    internal Task<MailAccountWriteAnswer> CreateMailAccountAsync(
         string token,
-        Guid userId,
-        UserMailAccountRequest request,
+        MailAccountCreationRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         return this.RequestAsync(
             HttpMethod.Post,
-            AdminEndpointRoutes.UserMailAccountsPath(userId),
+            AdminEndpointRoutes.MailAccountsPath,
             token,
-            CliJsonContext.Default.UserRecordWriteAnswer,
+            CliJsonContext.Default.MailAccountWriteAnswer,
             cancellationToken,
-            JsonContent.Create(request, CliJsonContext.Default.UserMailAccountRequest),
+            JsonContent.Create(request, CliJsonContext.Default.MailAccountCreationRequest),
             NoSuchUser);
     }
 
-    /// <summary>Withdraws one mail account from a user's record.</summary>
+    /// <summary>Commits one mail account's declaration as an editing session saved it.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="userId">The user the mailbox belongs to.</param>
-    /// <param name="request">The identifier and the version the record was read at.</param>
+    /// <param name="accountId">The account.</param>
+    /// <param name="request">The declaration and the version the buffer was opened over.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>What the write did.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
-    internal Task<UserRecordWriteAnswer> RemoveUserMailAccountAsync(
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, holds no such account, or answered with something that is not an outcome.</exception>
+    internal Task<MailAccountWriteAnswer> SaveMailAccountAsync(
         string token,
-        Guid userId,
-        UserMailAccountRemovalRequest request,
+        Guid accountId,
+        MailAccountSaveRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         return this.RequestAsync(
             HttpMethod.Post,
-            AdminEndpointRoutes.UserMailAccountRemovalPath(userId),
+            AdminEndpointRoutes.MailAccountPath(accountId),
             token,
-            CliJsonContext.Default.UserRecordWriteAnswer,
+            CliJsonContext.Default.MailAccountWriteAnswer,
             cancellationToken,
-            JsonContent.Create(request, CliJsonContext.Default.UserMailAccountRemovalRequest),
-            NoSuchUser);
+            JsonContent.Create(request, CliJsonContext.Default.MailAccountSaveRequest),
+            NoSuchMailAccount);
+    }
+
+    /// <summary>Erases one mail account and everything the deployment stored for it.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="accountId">The account.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>Whether the deployment held the account at all.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<MailAccountErasure> EraseMailAccountAsync(string token, Guid accountId, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Delete,
+            AdminEndpointRoutes.MailAccountPath(accountId),
+            token,
+            CliJsonContext.Default.MailAccountErasure,
+            cancellationToken);
+
+    /// <summary>Assigns one mail account to one more user.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="accountId">The account.</param>
+    /// <param name="request">The user.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the write did.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, holds no such account or user, or answered with something that is not an outcome.</exception>
+    internal Task<MailAccountWriteAnswer> AssignMailAccountAsync(
+        string token,
+        Guid accountId,
+        MailAccountAssignmentRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.MailAccountAssignmentsPath(accountId),
+            token,
+            CliJsonContext.Default.MailAccountWriteAnswer,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.MailAccountAssignmentRequest),
+            "This deployment holds no mail account or no user under those identifiers. Run 'mfctl account list' and 'mfctl user list' and name ones it holds.");
+    }
+
+    /// <summary>Ends one user's assignment to a mail account, which erases the account and its mail when nobody else is assigned it.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="accountId">The account.</param>
+    /// <param name="request">The user.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the write did.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<MailAccountUnassignment> UnassignMailAccountAsync(
+        string token,
+        Guid accountId,
+        MailAccountAssignmentRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.MailAccountAssignmentRemovalPath(accountId),
+            token,
+            CliJsonContext.Default.MailAccountUnassignment,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.MailAccountAssignmentRequest));
     }
 
     /// <summary>Reads the credentials one user's clients present.</summary>

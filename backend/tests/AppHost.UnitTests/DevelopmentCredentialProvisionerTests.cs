@@ -131,12 +131,12 @@ public sealed class DevelopmentCredentialProvisionerTests
     }
 
     [Fact]
-    public async Task EnsureMailAccountAsync_ARecordDeclaringNoMailbox_DeclaresTheOneTheRunCollected()
+    public async Task EnsureMailAccountAsync_NoAccountAssignedForTheMailbox_CreatesTheOneTheRunCollected()
     {
         // Arrange
         using var responses = new RecordingHandler(
-            RecordResponse(version: 4, document: "{}"),
-            JsonResponse("""{"committed":true,"version":5,"code":null,"messages":[]}"""));
+            AccountsResponse(),
+            JsonResponse("""{"committed":true,"version":5,"code":null,"messages":[],"accountId":"5b0c2f7e-8d1a-4c3b-9e6f-1a2b3c4d5e6f"}"""));
         using var client = new HttpClient(responses);
         var provisioner = new DevelopmentCredentialProvisioner(client, TimeProvider.System);
 
@@ -153,18 +153,17 @@ public sealed class DevelopmentCredentialProvisionerTests
         Assert.True(declared);
         Assert.Equal(
             [
-                $"GET http://127.0.0.1:5200/api/admin/users/{UserId:D}/record",
-                $"POST http://127.0.0.1:5200/api/admin/users/{UserId:D}/record/mail-accounts",
+                "GET http://127.0.0.1:5200/api/admin/mail-accounts",
+                "POST http://127.0.0.1:5200/api/admin/mail-accounts",
             ],
             responses.Requests.Select(static request => $"{request.Method} {request.Address}"));
 
         using var body = JsonDocument.Parse(responses.Requests[^1].Body!);
-        Assert.Equal(4, body.RootElement.GetProperty("version").GetInt64());
+        Assert.Equal(UserId, body.RootElement.GetProperty("userId").GetGuid());
 
         using var account = JsonDocument.Parse(body.RootElement.GetProperty("account").GetString()!);
-        Assert.Equal(
-            OrchestrationContract.DevelopmentMailAccountId,
-            account.RootElement.GetProperty("AccountId").GetString());
+        Assert.False(account.RootElement.TryGetProperty("AccountId", out _));
+        Assert.Equal("someone@example.test", account.RootElement.GetProperty("EmailAddress").GetString());
         Assert.Equal(
             OrchestrationContract.DevelopmentMailAccountDisplayName,
             account.RootElement.GetProperty("DisplayName").GetString());
@@ -179,13 +178,36 @@ public sealed class DevelopmentCredentialProvisionerTests
     }
 
     [Fact]
-    public async Task EnsureMailAccountAsync_ARecordAlreadyDeclaringThatMailbox_LeavesItUnchanged()
+    public async Task EnsureMailAccountAsync_BareLogin_ComposesTheAddressFromTheLoginAndTheServer()
     {
         // Arrange
         using var responses = new RecordingHandler(
-            RecordResponse(
-                version: 7,
-                document: $$"""{"MailAccounts":[{"AccountId":"{{OrchestrationContract.DevelopmentMailAccountId}}"}]}"""));
+            AccountsResponse(),
+            JsonResponse("""{"committed":true,"version":1,"code":null,"messages":[],"accountId":null}"""));
+        using var client = new HttpClient(responses);
+        var provisioner = new DevelopmentCredentialProvisioner(client, TimeProvider.System);
+
+        // Act
+        await provisioner.EnsureMailAccountAsync(
+            AdminEndpoint,
+            UserId,
+            "localhost",
+            "someone",
+            "mailbox-password",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        using var body = JsonDocument.Parse(responses.Requests[^1].Body!);
+        using var account = JsonDocument.Parse(body.RootElement.GetProperty("account").GetString()!);
+        Assert.Equal("someone@localhost", account.RootElement.GetProperty("EmailAddress").GetString());
+    }
+
+    [Fact]
+    public async Task EnsureMailAccountAsync_AnAccountForThatAddressAlreadyAssigned_LeavesItUnchanged()
+    {
+        // Arrange
+        using var responses = new RecordingHandler(
+            AccountsResponse((UserId, """{"EmailAddress":"SOMEONE@example.test","DisplayName":"Local mailbox"}""")));
         using var client = new HttpClient(responses);
         var provisioner = new DevelopmentCredentialProvisioner(client, TimeProvider.System);
 
@@ -208,9 +230,9 @@ public sealed class DevelopmentCredentialProvisionerTests
     {
         // Arrange
         using var responses = new RecordingHandler(
-            RecordResponse(version: 4, document: "{}"),
+            AccountsResponse((Guid.NewGuid(), """{"EmailAddress":"someone@example.test","DisplayName":"Theirs"}""")),
             JsonResponse(
-                """{"committed":false,"version":4,"code":12040,"messages":["The mailbox names no host."]}"""));
+                """{"committed":false,"version":0,"code":12040,"messages":["The mailbox names no host."],"accountId":null}"""));
         using var client = new HttpClient(responses);
         var provisioner = new DevelopmentCredentialProvisioner(client, TimeProvider.System);
 
@@ -234,10 +256,11 @@ public sealed class DevelopmentCredentialProvisionerTests
         Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json"),
     };
 
-    /// <summary>Answers a record reading, whose document travels as a JSON string rather than as an object.</summary>
-    private static HttpResponseMessage RecordResponse(long version, string document) => JsonResponse(
+    /// <summary>Answers the account listing, whose declarations travel as JSON strings rather than as objects.</summary>
+    private static HttpResponseMessage AccountsResponse(params (Guid User, string Declaration)[] accounts) => JsonResponse(
         $$"""
-        {"user":"{{UserId}}","displayName":"Local","version":{{version}},"document":{{JsonSerializer.Serialize(document)}}}
+        {"accounts":[{{string.Join(",", accounts.Select(static account =>
+            $$"""{"id":"{{Guid.NewGuid()}}","version":1,"users":["{{account.User}}"],"declaration":{{JsonSerializer.Serialize(account.Declaration)}}}"""))}}]}
         """);
 
     private sealed class RecordingHandler(params HttpResponseMessage[] responses) : HttpMessageHandler

@@ -4806,6 +4806,95 @@
         ],
         "type": "object"
       },
+      "MailAccountAssignmentRequest": {
+        "properties": {
+          "userId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId"
+        ],
+        "type": "object"
+      },
+      "MailAccountCreationRequest": {
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "userId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "account"
+        ],
+        "type": "object"
+      },
+      "MailAccountErasureResponse": {
+        "properties": {
+          "erased": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "erased"
+        ],
+        "type": "object"
+      },
+      "MailAccountListResponse": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/MailAccountResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "accounts"
+        ],
+        "type": "object"
+      },
+      "MailAccountResponse": {
+        "properties": {
+          "declaration": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "users": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "users",
+          "declaration"
+        ],
+        "type": "object"
+      },
       "MailAccountRunResponse": {
         "properties": {
           "endedAt": {
@@ -4841,6 +4930,29 @@
           "scheduledFolderCount",
           "failedFolderCount",
           "mutationConvergenceFailed"
+        ],
+        "type": "object"
+      },
+      "MailAccountSaveRequest": {
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "version": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "version",
+          "account"
         ],
         "type": "object"
       },
@@ -4910,6 +5022,66 @@
           "lastRun",
           "folders",
           "attachmentText"
+        ],
+        "type": "object"
+      },
+      "MailAccountUnassignmentResponse": {
+        "properties": {
+          "accountErased": {
+            "type": "boolean"
+          },
+          "unassigned": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "unassigned",
+          "accountErased"
+        ],
+        "type": "object"
+      },
+      "MailAccountWriteResponse": {
+        "properties": {
+          "accountId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "code": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "messages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "committed",
+          "version",
+          "code",
+          "messages",
+          "accountId"
         ],
         "type": "object"
       },
@@ -9808,6 +9980,303 @@
         ]
       }
     },
+    "/api/admin/mail-accounts": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailAccountListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailAccountCreationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailAccountWriteResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/mail-accounts/{accountId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailAccountErasureResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailAccountResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailAccountSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailAccountWriteResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/mail-accounts/{accountId}/assignments": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailAccountAssignmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailAccountWriteResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/mail-accounts/{accountId}/assignments/removal": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailAccountAssignmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailAccountUnassignmentResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
     "/api/admin/mailbox/mutations/audit": {
       "get": {
         "parameters": [
@@ -11413,116 +11882,6 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UserRecordSaveRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserRecordWriteResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Not Found"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      }
-    },
-    "/api/admin/users/{userId}/record/mail-accounts": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "userId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UserMailAccountRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserRecordWriteResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Not Found"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      }
-    },
-    "/api/admin/users/{userId}/record/mail-accounts/removal": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "userId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UserMailAccountRemovalRequest"
               }
             }
           },

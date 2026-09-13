@@ -133,8 +133,8 @@ and its result would read as an answer about the mailbox.
 
 ### Naming an account
 
-An account may be named two ways, and a caller is not required to know which it is holding. The configured `AccountId`
-is matched exactly, because it is a key everything else compares exactly; the `DisplayName` it is published under is
+An account may be named two ways, and a caller is not required to know which it is holding. The identifier the
+deployment generated for it is matched exactly, because it is a key everything else compares exactly; the `DisplayName` it is published under is
 matched without regard to case, because it is prose an operator wrote for a person to retype. Neither is ever matched as
 a fragment, so naming one account can never select another whose name contains it.
 

@@ -839,10 +839,6 @@ public static class OrchestrationContract
             ["ClientEndpoint__Authentication__0__Method"] = "password",
         }.ToFrozenDictionary(StringComparer.Ordinal);
 
-    /// <summary>The identifier the normal local run declares its one mail account under.</summary>
-    /// <remarks>Declared here rather than beside the write, because it is what a developer names the account by afterwards — in a rule's scope, in a tool argument, and in <c>mfctl user account</c>.</remarks>
-    public const string DevelopmentMailAccountId = "local";
-
     /// <summary>The label the normal local run records that account under.</summary>
     public const string DevelopmentMailAccountDisplayName = "Local mailbox";
 

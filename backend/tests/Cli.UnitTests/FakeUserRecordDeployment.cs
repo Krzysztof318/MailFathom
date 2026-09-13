@@ -172,11 +172,6 @@ internal static class FakeUserRecordDeployment
             return FakeAdminEndpoint.Json(HttpStatusCode.OK, """{"mcpEndpoint":false,"clientEndpoint":true}""");
         }
 
-        if (path.Contains("/record/mail-accounts", StringComparison.Ordinal))
-        {
-            return FakeAdminEndpoint.Json(HttpStatusCode.OK, writeAnswer);
-        }
-
         if (path.EndsWith("/record", StringComparison.Ordinal))
         {
             return request.Method == HttpMethod.Get

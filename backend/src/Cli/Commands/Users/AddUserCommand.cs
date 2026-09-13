@@ -16,9 +16,8 @@ namespace MailFathom.Cli.Commands.Users;
 /// what it typed.
 /// </para>
 /// <para>
-/// A new user's mail accounts are their own record's from the first moment, so nothing about them is in a
-/// configuration file and <c>user account add</c> is what puts a mailbox there. Nothing here moves a decision out of
-/// a file: a user a configuration source declares goes on being read from it.
+/// A new user is served no mailbox until one is created or assigned to them, and nothing about it is in a
+/// configuration file: <c>account add</c> is what gives them one.
 /// </para>
 /// </remarks>
 internal static class AddUserCommand
@@ -73,8 +72,8 @@ internal static class AddUserCommand
 
         context.Console.WriteLine($"Recorded {displayName} as {recorded.Id:D}.");
         context.Console.WriteNotice(
-            "Their mail accounts are read from their own record; no configuration source reaches them. Declare one with "
-            + "'mfctl user account add', and provision a way for them to sign in with 'mfctl credential create'. The "
+            "Their mail accounts are records this deployment holds; no configuration source reaches them. Create one with "
+            + "'mfctl account add', and provision a way for them to sign in with 'mfctl credential create'. The "
             + "replica this request reached serves this user now; other replicas pick up the change after their next "
             + "user write or restart.");
 

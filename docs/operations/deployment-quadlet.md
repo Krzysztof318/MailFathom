@@ -274,14 +274,14 @@ the key encrypted beside the other credentials:
 systemd-creds --user decrypt ~/.config/credstore.encrypted/admin-api-key - \
   | mfctl login --endpoint http://127.0.0.1:8090
 mfctl user add --display-name Alex
-mfctl user account add --from-file mailbox.json
+mfctl account add --from-file mailbox.json
 ```
 
 `mailbox.json` is the JSON object one mail account is declared as — the object the example configuration's comments
 show, `systemd-credential:` reference and all, so the mailbox password encrypted into the store above is what it names.
-The mailbox is served from the moment the write commits, without restarting the unit. `mfctl user account add` names
+The mailbox is served from the moment the write commits, without restarting the unit. `mfctl account add` names
 no user, because the deployment then holds exactly one; once `mfctl user add` records a second person, `--user` says
-whose record a command writes.
+whom the account is created for.
 [Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes in the
 file.
 

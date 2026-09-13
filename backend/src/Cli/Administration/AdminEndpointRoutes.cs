@@ -236,17 +236,24 @@ internal static class AdminEndpointRoutes
     /// <returns>The path.</returns>
     internal static string UserRecordPath(Guid userId) => $"{UserPath(userId)}/record";
 
-    /// <summary>Where one mail account is declared into a user's record.</summary>
-    /// <param name="userId">The user the mailbox belongs to.</param>
-    /// <returns>The path.</returns>
-    internal static string UserMailAccountsPath(Guid userId) => $"{UserRecordPath(userId)}/mail-accounts";
+    /// <summary>Where the mail accounts a deployment holds are listed, and where one is created.</summary>
+    internal const string MailAccountsPath = $"{Prefix}/mail-accounts";
 
-    /// <summary>Where one mail account is withdrawn from a user's record.</summary>
-    /// <param name="userId">The user the mailbox belongs to.</param>
+    /// <summary>Where one mail account is read, saved, and erased.</summary>
+    /// <param name="accountId">The account the path names.</param>
     /// <returns>The path.</returns>
-    /// <remarks>A path of its own carrying the identifier in the body, because an account is named by something its user chose: a dot or a space in one would decide whether the route matched at all.</remarks>
-    internal static string UserMailAccountRemovalPath(Guid userId) =>
-        $"{UserMailAccountsPath(userId)}/removal";
+    internal static string MailAccountPath(Guid accountId) => $"{MailAccountsPath}/{accountId:D}";
+
+    /// <summary>Where one mail account is assigned to one more user.</summary>
+    /// <param name="accountId">The account the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string MailAccountAssignmentsPath(Guid accountId) => $"{MailAccountPath(accountId)}/assignments";
+
+    /// <summary>Where one user's assignment to a mail account is ended.</summary>
+    /// <param name="accountId">The account the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string MailAccountAssignmentRemovalPath(Guid accountId) =>
+        $"{MailAccountAssignmentsPath(accountId)}/removal";
 
     /// <summary>Where one user's credentials are listed and provisioned, whichever method each is presented by.</summary>
     /// <param name="userId">The user the path names.</param>

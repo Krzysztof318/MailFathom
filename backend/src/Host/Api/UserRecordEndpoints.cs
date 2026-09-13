@@ -22,8 +22,8 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// Two things are administered here and they are deliberately different sizes. The roster is the deployment's — who it
 /// holds at all — and every act on it is one call: record somebody, list them, erase somebody. One user's record is
-/// theirs, and the acts on it are the ones an operator performs repeatedly: read it, save it edited, declare one more
-/// mailbox, and withdraw one.
+/// theirs, and the acts on it are the ones an operator performs repeatedly: read it and save it edited. The mailboxes a
+/// user is served are records of their own, administered through <see cref="MailAccountEndpoints" />.
 /// </para>
 /// <para>
 /// The whole of it is administrative and none of it is anywhere else. A deployment-wide catalog of the people it serves
@@ -65,17 +65,6 @@ internal static class UserRecordEndpoints
 
     /// <summary>The route one user's record is read at and saved back to.</summary>
     internal const string UserRecordRoute = $"{UserRoute}/record";
-
-    /// <summary>The route one mail account is declared at.</summary>
-    internal const string UserMailAccountsRoute = $"{UserRecordRoute}/mail-accounts";
-
-    /// <summary>The route one mail account is withdrawn at.</summary>
-    /// <remarks>
-    /// The identifier travels in the body rather than in the path, because it is a name an operator chose rather than a
-    /// generated handle: a dot, a slash, or a space in one would decide whether the route matched at all, and a removal
-    /// that silently addressed nothing is the one outcome this act must not have.
-    /// </remarks>
-    internal const string UserMailAccountRemovalRoute = $"{UserMailAccountsRoute}/removal";
 
     /// <summary>The route material for one user's record is stored or rotated at.</summary>
     internal const string UserSecretsRoute = $"{UserRoute}/secrets";
@@ -119,14 +108,6 @@ internal static class UserRecordEndpoints
             .RequirePermission(MailFathomPermission.AdminRead);
 
         api.MapPost(UserRecordRoute, SaveRecordAsync)
-            .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
-
-        api.MapPost(UserMailAccountsRoute, AddMailAccountAsync)
-            .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
-
-        api.MapPost(UserMailAccountRemovalRoute, RemoveMailAccountAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
             .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
 
@@ -364,73 +345,6 @@ internal static class UserRecordEndpoints
         }
 
         return Answered(await records.ApplyRecordAsync(user, document, request.Version, cancellationToken));
-    }
-
-    /// <summary>Declares one more mail account in a user's record.</summary>
-    /// <param name="userId">The user the mailbox belongs to.</param>
-    /// <param name="records">The record administration.</param>
-    /// <param name="request">The declaration and the version the record was read at.</param>
-    /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns><c>200</c> with what the write did, <c>404</c> when this deployment holds no such user, or <c>400</c> when the request carries no declaration.</returns>
-    internal static async Task<Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> AddMailAccountAsync(
-        Guid userId,
-        [FromServices] UserRecordAdministration records,
-        [FromBody] UserMailAccountRequest request,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(records);
-        ArgumentNullException.ThrowIfNull(request);
-
-        if (!TryReadUser(userId, out var user))
-        {
-            return EmptyUser();
-        }
-
-        if (StatedVersion(request.Version) is { } refused)
-        {
-            return refused;
-        }
-
-        if (request.Account is not { Length: > 0 } account)
-        {
-            return Refusal("A declared mail account carries the settings the account is read with.");
-        }
-
-        return Answered(await records.AddMailAccountAsync(user, account, request.Version, cancellationToken));
-    }
-
-    /// <summary>Withdraws one mail account from a user's record.</summary>
-    /// <param name="userId">The user the mailbox belongs to.</param>
-    /// <param name="records">The record administration.</param>
-    /// <param name="request">The identifier and the version the record was read at.</param>
-    /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns><c>200</c> with what the write did, <c>404</c> when this deployment holds no such user, or <c>400</c> when the request names no account.</returns>
-    /// <remarks>The mail this deployment already stored for that account is deliberately untouched, exactly as it is when a file stops declaring one: erasing it is a separate act somebody means.</remarks>
-    internal static async Task<Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> RemoveMailAccountAsync(
-        Guid userId,
-        [FromServices] UserRecordAdministration records,
-        [FromBody] UserMailAccountRemovalRequest request,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(records);
-        ArgumentNullException.ThrowIfNull(request);
-
-        if (!TryReadUser(userId, out var user))
-        {
-            return EmptyUser();
-        }
-
-        if (StatedVersion(request.Version) is { } refused)
-        {
-            return refused;
-        }
-
-        if (request.AccountId is not { Length: > 0 } accountId || string.IsNullOrWhiteSpace(accountId))
-        {
-            return Refusal("A withdrawn mail account names the identifier it was declared under.");
-        }
-
-        return Answered(await records.RemoveMailAccountAsync(user, accountId, request.Version, cancellationToken));
     }
 
     /// <summary>Stores or rotates material one user's record reaches through a database reference.</summary>

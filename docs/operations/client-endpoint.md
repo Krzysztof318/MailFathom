@@ -1827,8 +1827,8 @@ somebody's mail is not deciding which mailboxes are read for them.
 | --- | --- |
 | `GET /api/client/record` | Hands over the signed-in user's record as redacted JSON, with the version it was read at |
 | `POST /api/client/record` | Commits that record back edited, as one change against the version it was opened over |
-| `POST /api/client/record/mail-accounts` | Declares one more mailbox in it |
-| `POST /api/client/record/mail-accounts/removal` | Stops it declaring one mailbox, named by the identifier it was declared under |
+| `POST /api/client/record/mail-accounts` | Creates one more mailbox, assigned to the signed-in user alone |
+| `POST /api/client/record/mail-accounts/removal` | Ends the signed-in user's assignment to one mailbox, named by its identifier, erasing it when nobody else is assigned it |
 | `POST /api/client/record/mail-accounts/folders` | Declares one more folder in one of those mailboxes |
 | `POST /api/client/record/mail-accounts/folders/replacement` | States one folder afresh, in place of the one carrying an alias |
 | `POST /api/client/record/mail-accounts/folders/removal` | Stops the mailbox declaring one folder, named by its alias |
@@ -1848,8 +1848,10 @@ stops the deployment reading a folder rather than removing one — the mail alre
 withdrawing a whole mailbox leaves its mail, and so does the folder on the server. A removal withdraws only the alias
 it names: a folder nested under it by alias stays declared and is read as a folder of its own from then on.
 
-Each of the three takes the account by the identifier it was declared under, the folder as the JSON a configuration
-file would state it in, and the `version` the record was read at. The declaration is bound and validated exactly as a
+Each of the three takes the account by the identifier the deployment generated for it — the one the account list the
+client is served names — the folder as the JSON a configuration file would state it in, and the `version` the record
+was read at. Every account write answers with the version of the signed-in user's record, which every such write
+moves. The declaration is bound and validated exactly as a
 configuration file's is, so an alias that is not a valid one, a remote path that is not a path, and a record another
 writer moved on in the meantime are each refused with the sentence saying what to correct — as is a replacement or a
 removal naming an alias the account does not declare.
@@ -1862,10 +1864,19 @@ no route through which any of them learns that the others exist. [The administra
 surface](admin-endpoint.md#users-and-their-records) is where a roster is read, and it is not reachable with a
 credential issued for this one.
 
-**A withdrawal withdraws no mail.** Stopping the record declaring a mailbox stops this deployment synchronizing it;
-every message, folder, and attachment already stored for that account stays exactly where it is and stays readable
-through the routes above. Disposing of stored mail is administrative and irreversible, and it is deliberately not
-something a client can reach.
+**A mailbox added here is the user's own, and an address somebody holds is refused without saying so.** The account
+is created assigned to the signed-in user and nobody else; only an administrator assigns an account to somebody else.
+One address is held by one account in the whole deployment, and an address already held — by anybody — is refused with
+a sentence that reveals neither whether nor by whom:
+
+```
+This mail account cannot be added for you. Ask whoever administers this deployment to add it.
+```
+
+**Removing a mailbox nobody else is assigned erases its mail.** A removal ends the signed-in user's assignment. Where
+somebody else is still assigned the account, that is all it does, and the mail stays theirs. Where nobody else is, the
+account and every message, folder, and attachment this deployment holds for it are erased, because an account nobody is
+assigned to serves nobody.
 
 **Nothing here reports a secret, and nothing here can overwrite one blindly.** A record is handed over with every
 password, token, and client secret replaced by the redaction marker; a save is read as the difference from what the row
@@ -1875,8 +1886,8 @@ refused rather than committed over somebody's password. Material supplied here i
 reference to it.
 
 **A candidate is validated before it is committed, and committed whole or not at all.** It is bound strictly against
-the same rules a configuration file is, checked for two mail accounts declared under one identifier, checked that every
-account in it belongs to this user, and put through the same mail-synchronization validators a start applies —
+the same rules a configuration file is, composed with every account assigned to this user, and put through the same
+mail-synchronization validators a start applies —
 including the walk that resolves every credential the record names, so a reference that reaches nothing is refused here
 rather than committed and then refusing the whole deployment's next start. What the record asks about [scanning this
 user's mail](configuration-sources.md#what-a-user-may-say-about-scanning-their-own-mail) is judged here too: a user
@@ -1900,8 +1911,8 @@ target begins with `user-<user identifier>-`**. So `file:/run/secrets/user-3f1d�
 `systemd-credential:user-3f1d…-work-password` are the user's to name, and `file:/run/secrets/database-password` is
 not — whatever path is written in front of it, because the bound is the name of the material rather than the way to it.
 An operator provisioning a mailbox credential for somebody to declare themselves names it that way; one who would
-rather not writes the mail account through [`mfctl user account
-add`](admin-endpoint.md#users-and-their-records) instead, which is bounded by nothing here. A refusal names both
+rather not creates the mail account with [`mfctl account
+add`](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) instead, which is bounded by nothing here. A refusal names both
 routes out.
 
 **A user whose mail accounts are still read from this deployment's configuration cannot write here.** The write is

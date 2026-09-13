@@ -674,9 +674,9 @@ $ mfctl user list
 
 $ mfctl user add --display-name Morgan
 Recorded Morgan as 9b41....
-Their mail accounts are read from their own record; no configuration source reaches them. Declare one with
-'mfctl user account add', and provision a way for them to sign in with 'mfctl credential create'. The replica this
-request reached serves this user now; other replicas pick up the change after their next user write or restart.
+Their mail accounts are records this deployment holds; no configuration source reaches them. Create one with
+'mfctl account add', and provision a way for them to sign in with 'mfctl credential create'. The replica this request
+reached serves this user now; other replicas pick up the change after their next user write or restart.
 ```
 
 Every command but `list` and `add` takes `--user` and does not need it while the deployment holds one person: it acts
@@ -692,13 +692,22 @@ The switches live in that person's record, so `mfctl user edit` shows and change
 cannot change them from their own client. An endpoint you left requiring no credential has no idea who is calling, so
 it has nobody to keep off: give it a credential first.
 
-**Changing more than one thing about somebody at once is `mfctl user edit`.** `mfctl user account add` and
-`mfctl user account remove` each name one mailbox, so two changes are two commands and the deployment briefly reads what
-is between them. `mfctl user edit` opens that person's whole record in your `$VISUAL` or `$EDITOR` and commits what you
+**Mailboxes are `mfctl account`, and they are records of their own.** `mfctl account add` creates one from a file and
+assigns it to a person, `mfctl account assign` gives the same mailbox to somebody else as well, and `mfctl account edit`
+changes its settings for everyone it is assigned to. One address is one account in the whole deployment, so adding a
+mailbox somebody already has is refused with the `assign` command to run instead.
+
+```console
+$ mfctl account add --user 7c02... --from-file work.json
+Created mail account 5b0c....
+$ mfctl account assign --account 5b0c... --user 3f1d...
+```
+
+**Changing more than one thing about somebody at once is `mfctl user edit`.** It opens that person's whole record in your `$VISUAL` or `$EDITOR` and commits what you
 saved as one change — set it up as `VISUAL="code --wait"` if your editor is a graphical one, since the command reads the
 file back when the editor exits. Empty the buffer to abandon the session, or save it unchanged, and nothing is written
 either way. Passwords read back as `(redacted)`, and a marker saved back leaves the credential beneath it alone. A
-password reference that had already stopped resolving does not block an edit that leaves the mail accounts alone: the change
+password reference in one of their accounts that had already stopped resolving does not block the edit: the change
 commits and the command prints that problem after it, so you can correct it before the deployment next restarts —
 [the endpoint reference](../operations/admin-endpoint.md#users-and-their-records) holds the rule.
 
@@ -720,24 +729,26 @@ there is no second person for an unauthenticated caller to be handed.
 **A deployment upgrading from a release that declared its own mailboxes does not start until the section is cleared.**
 `MailSynchronization:Accounts` is no longer read, and nothing imports what it declared, so a start that ignored it would
 leave you believing mail was being read that nothing was reading. The refusal names the section and the two commands
-that replace it: record the person with `mfctl user add`, state each of their mailboxes with `mfctl user account add`,
+that replace it: record the person with `mfctl user add`, create each of their mailboxes with `mfctl account add`,
 credentials included, and remove the section. Whatever else that section decided about them is stated again the same
 way — the spam classification posture, and the
 [`SensitiveContent`](../features/sensitive-content-scanning.md) block if it stated one, both of which a record carries
 in blocks of its own.
 
-**Withdrawing a mailbox is not deleting mail, and removing a user is.** `mfctl user account remove` stops MailFathom
-synchronizing one mailbox without a restart and leaves everything already stored for it exactly where it is. A run
-already in flight drains against the document version it began with. `mfctl user remove` erases the person and every
+**Taking a mailbox from its last person deletes its mail.** `mfctl account unassign` ends one person's assignment
+without a restart; while somebody else is still assigned the mailbox, its mail stays theirs. Ending the last assignment
+erases the account and everything stored for it, exactly as `mfctl account delete` does, so both show what they are
+about to do and ask. A run already in flight drains against the document version it began with. `mfctl user remove` erases the person and every
 message, folder, attachment, and derived index the deployment holds for them; it shows what it is about to do and asks,
 and nothing puts it back.
 
-**A mailbox somebody declares from the client names a credential you provisioned for them.** A record carries a
-reference rather than a password, and a reference is a path into what the deployment can read, so a person declaring
+**A mailbox somebody adds from the client names a credential you provisioned for them.** An account carries a
+reference rather than a password, and a reference is a path into what the deployment can read, so a person adding
 their own mailbox may name material provisioned for them and nothing else: its name begins with `user-<their
 identifier>-`. Provision one that way — a file or a systemd credential called `user-3f1d…-work-password` — and they
-declare the mailbox themselves; provision it under any other name and `mfctl user account add` is what declares it, on
-this side. [The client endpoint](../operations/client-endpoint.md#the-record-routes) states the rule in full.
+add the mailbox themselves; provision it under any other name and `mfctl account add` is what creates it, on this side.
+A person adding a mailbox whose address another account already holds is refused without being told why, and only you
+can assign that account to them. [The client endpoint](../operations/client-endpoint.md#the-record-routes) states the rule in full.
 
 **Several companies on one deployment sign in under an organization.** `mfctl organization add --short-name TESTFIRMA
 --display-name "Test Firma"` records one, and `mfctl user set-organization --user 7c02... --organization <id>` moves a

@@ -111,7 +111,9 @@ internal sealed partial class ServedMailUsersConvergence(
             return;
         }
 
-        var binding = binder.Bind(record.Json, UserRecordArrival.AlreadyHeld);
+        var binding = binder.Bind(
+            MailAccountRecordComposition.Compose(record.Json, record.MailAccounts),
+            UserRecordArrival.AlreadyHeld);
 
         if (binding.User is not { } bound)
         {
