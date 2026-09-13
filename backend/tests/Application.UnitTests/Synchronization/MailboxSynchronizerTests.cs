@@ -9,6 +9,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Mail;
@@ -2887,6 +2888,7 @@ public sealed class MailboxSynchronizerTests
                     classificationSettings ?? SpamClassificationSettings.Disabled,
                     ClassifiedAccount)),
             contactCollector ?? CreateCollectorThatCollectsNothing(persistenceSessionFactory, timeProvider),
+            new LocalMailFolderArrivals(Substitute.For<ILocalMailFolderStore>(), timeProvider),
             concurrencyRetryPolicy,
             timeProvider,
             options);

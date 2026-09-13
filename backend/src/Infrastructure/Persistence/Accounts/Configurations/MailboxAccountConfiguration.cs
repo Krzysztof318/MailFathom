@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -40,6 +41,14 @@ internal sealed class MailboxAccountConfiguration : IEntityTypeConfiguration<Mai
         entity.HasKey(account => new { account.UserId, account.Id })
             .HasName(PersistenceConstraintNames.MailboxAccountPrimaryKeyConstraintName);
         entity.Property(account => account.Id).HasMaxLength(128);
+
+        // Stored by name like every other stage and phase, and defaulted in the database so every account that existed
+        // before the column is mirrored, which is exactly what it was.
+        entity.Property(account => account.CustodyPhase)
+            .HasConversion<string>()
+            .HasMaxLength(64)
+            .HasDefaultValueSql($"'{nameof(MailAccountCustodyPhase.Mirrored)}'");
+        entity.Property(account => account.LocalMailFoldersRevision).IsConcurrencyToken();
 
         // The user is required, so a mailbox belongs to somebody from the moment its row exists rather than from the
         // moment something remembers to say so. The cascade is what makes erasing a user one statement: the mail

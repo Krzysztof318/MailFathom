@@ -1190,6 +1190,16 @@ unmapped one alike — instead of having to remember either. What it attaches is
 a list of what may not, which is what makes an account with no mapped folder read as nothing rather than as everything.
 [Mailbox queries](mailbox-queries.md#folders-withheld-from-tools) states what a caller sees.
 
+### Where an arrival lands on a held account
+
+On an account whose mailbox MailFathom holds, the transaction that stores a message also places it in one of the
+account's [local folders](../operations/client-endpoint.md#the-local-folder-routes). A message from a folder whose
+mapping carries the `Inbox`, `Drafts`, `Sent`, `Junk`, or `Trash` role lands in that protected local folder. A message
+from any other folder lands in the local folder corresponding to it, matched by the folder's alias and created, named
+after the last level of the source folder's path, the first time one arrives; it lands in the inbox instead where that
+folder is in the trash or was erased, or where the account is at its folder limit. On a mirrored account nothing is
+placed and the run is what it was.
+
 ## Session resilience
 
 Two dependency classes cover an IMAP session, and each one is resolved for the account it belongs to, so one

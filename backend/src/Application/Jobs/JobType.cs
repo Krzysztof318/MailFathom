@@ -97,6 +97,15 @@ public readonly record struct JobType
     /// </remarks>
     public static JobType ReclaimContentObjects { get; } = new("reclaim-content-objects");
 
+    /// <summary>Gets the type whose work is one bounded pass over the mail of a held account's erased folders.</summary>
+    /// <remarks>
+    /// Its payload contract is <see cref="EraseLocalMailFolderMailJobPayload" />, which names the account and the folder
+    /// whose erasure asked for it. The folders leave every listing when the erasure commits; their mail is erased
+    /// afterwards through the cascade one stored message's erasure runs, a pass at a time, each pass handing the rest to
+    /// the next.
+    /// </remarks>
+    public static JobType EraseLocalMailFolderMail { get; } = new("erase-local-mail-folder-mail");
+
     /// <summary>Gets every declared job type.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
     public static IReadOnlyList<JobType> All { get; } =
@@ -108,6 +117,7 @@ public readonly record struct JobType
         DispatchHeldSend,
         SendRecurringOccurrence,
         ReclaimContentObjects,
+        EraseLocalMailFolderMail,
     ];
 
     /// <summary>Gets whether this value names a declared job type rather than the unusable struct default.</summary>

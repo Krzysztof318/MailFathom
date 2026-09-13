@@ -149,6 +149,11 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailFoldersEndpoint.MailFoldersRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientLocalMailFoldersEndpoint.LocalFoldersRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientLocalMailFoldersEndpoint.LocalFoldersRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientLocalMailFoldersEndpoint.DeletionsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientLocalMailFoldersEndpoint.MovesRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientLocalMailFoldersEndpoint.RenamesRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailMessageEndpoint.MailMessageRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAttachmentEndpoint.MailAttachmentRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailBodyEndpoint.MailBodyRoute}",
@@ -248,6 +253,7 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientMailSearchEndpoint.MailSearchRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"GET {prefix}{ClientMailFoldersEndpoint.MailFoldersRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientLocalMailFoldersEndpoint.LocalFoldersRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailMessageEndpoint.MailMessageRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailAttachmentEndpoint.MailAttachmentRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailBodyEndpoint.MailBodyRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -271,6 +277,10 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientDraftEndpoints.DraftAttachmentsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"POST {prefix}{ClientDraftEndpoints.DraftSendRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"POST {prefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute} -> {MailFathomPermission.MailAsk.Name}",
+                $"POST {prefix}{ClientLocalMailFoldersEndpoint.LocalFoldersRoute} -> {MailFathomPermission.MailFoldersWrite.Name}",
+                $"POST {prefix}{ClientLocalMailFoldersEndpoint.DeletionsRoute} -> {MailFathomPermission.MailFoldersWrite.Name}",
+                $"POST {prefix}{ClientLocalMailFoldersEndpoint.MovesRoute} -> {MailFathomPermission.MailFoldersWrite.Name}",
+                $"POST {prefix}{ClientLocalMailFoldersEndpoint.RenamesRoute} -> {MailFathomPermission.MailFoldersWrite.Name}",
                 $"POST {prefix}{ClientMailMutationsEndpoint.DeleteMutationsRoute} -> {MailFathomPermission.MailDelete.Name}",
                 $"POST {prefix}{ClientMailMutationsEndpoint.DeleteReleasesRoute} -> {MailFathomPermission.MailDelete.Name}",
                 $"POST {prefix}{ClientMailMutationsEndpoint.DeleteWithdrawalsRoute} -> {MailFathomPermission.MailDelete.Name}",
@@ -382,7 +392,8 @@ public sealed class ClientApiEndpointsTests
                 || published.Permission == MailFathomPermission.MailSend
                 || published.Permission == MailFathomPermission.MailFlagsWrite
                 || published.Permission == MailFathomPermission.MailMove
-                || published.Permission == MailFathomPermission.MailDelete);
+                || published.Permission == MailFathomPermission.MailDelete
+                || published.Permission == MailFathomPermission.MailFoldersWrite);
 
     /// <summary>Reports whether a route is the write of the caller's own client preferences, by the route it is served at.</summary>
     /// <remarks>

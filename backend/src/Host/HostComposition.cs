@@ -20,6 +20,7 @@ using MailFathom.Application.EmailContent.Storage.Reclamation;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail;
@@ -746,6 +747,9 @@ internal static class HostComposition
         // where no endpoint is configured: the sweep it drives is what AddContentStorage registers, and its absence is
         // the deployment saying its payloads leave with the rows they are a column of.
         builder.Services.AddScoped<IJobHandler, ContentObjectReclamationHandler>();
+        // Registered on every deployment for the reason the reclamation is: a pass handed on before a restart has to
+        // find its handler, and it erases nothing on an account that holds no erased folder.
+        builder.Services.AddScoped<IJobHandler, LocalMailFolderMailErasureHandler>();
     }
 
     /// <summary>Declares the gates the startup probe waits on, and the validators that report before the workers run.</summary>

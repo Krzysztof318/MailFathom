@@ -27,6 +27,7 @@ public sealed class JobTypeTests
             JobType.DispatchHeldSend,
             JobType.SendRecurringOccurrence,
             JobType.ReclaimContentObjects,
+            JobType.EraseLocalMailFolderMail,
         ];
 
         // Act

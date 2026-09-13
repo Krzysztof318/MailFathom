@@ -239,6 +239,16 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
         entity.HasIndex(email => new { email.UserId, email.MailboxAccountId, email.Id })
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailAccountIdentityIndexName);
 
+        // No action for the reason the hierarchy's own parent reference takes none: an account's erasure removes its
+        // folders and its mail in one statement, and nothing else removes a local folder that still holds a message.
+        // Filtered, because only a held account's mail carries the column and every other row would be dead weight.
+        entity.HasOne<LocalMailFolderEntity>()
+            .WithMany()
+            .HasForeignKey(email => email.LocalMailFolderId)
+            .OnDelete(DeleteBehavior.NoAction);
+        entity.HasIndex(email => email.LocalMailFolderId)
+            .HasFilter($"\"{nameof(StoredEmailEntity.LocalMailFolderId)}\" IS NOT NULL");
+
         // The arrival queue, and the filter is the whole point of it. In steady state almost every row of an account
         // has been evaluated, so without the filter this read would walk the account's entire index once per run to
         // find the handful of rows that qualify — and it runs for every account on every synchronization run.

@@ -50,6 +50,16 @@ internal sealed class StoredEmailEntity
 
     public long MailFolderId { get; set; }
 
+    /// <summary>
+    /// Gets or sets the local folder the message is in on an account whose mailbox MailFathom holds, or
+    /// <see langword="null" /> on an account whose folders are its source server's.
+    /// </summary>
+    /// <remarks>
+    /// A reference to the folder's identity rather than a copy of its path, so renaming, moving, or deleting a folder
+    /// into the trash is one row update however much mail sits beneath it.
+    /// </remarks>
+    public Guid? LocalMailFolderId { get; set; }
+
     public required MailFolderEntity MailFolder { get; set; }
 
     /// <summary>

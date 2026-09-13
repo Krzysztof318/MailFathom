@@ -35,6 +35,12 @@ internal static class PersistenceConstraintNames
 
     internal const string MailFolderBindingUniqueIndexName = "ix_mail_folders_user_account_alias_generation";
 
+    /// <summary>The rule that no two live siblings of a held account's hierarchy share a name.</summary>
+    internal const string LocalMailFolderSiblingNameUniqueIndexName = "ix_local_mail_folders_user_account_parent_name";
+
+    /// <summary>The rule that a held account has one live folder per protected role.</summary>
+    internal const string LocalMailFolderRoleUniqueIndexName = "ix_local_mail_folders_user_account_role";
+
     internal const string StoredEmailOccurrenceUniqueIndexName = "ix_stored_emails_folder_uidvalidity_uid";
 
     internal const string StoredEmailOccurrenceCompleteCheckConstraintName = "ck_stored_emails_occurrence_complete";

@@ -1064,6 +1064,64 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("job_schedules", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.LocalMailFolderEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ErasedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MailboxAccountId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("NameKey")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<Guid?>("ParentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceFolderAlias")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentId");
+
+                    b.HasIndex("UserId", "MailboxAccountId", "ErasedAt");
+
+                    b.HasIndex("UserId", "MailboxAccountId", "Role")
+                        .IsUnique()
+                        .HasDatabaseName("ix_local_mail_folders_user_account_role")
+                        .HasFilter("\"Role\" IS NOT NULL AND \"ErasedAt\" IS NULL");
+
+                    b.HasIndex("UserId", "MailboxAccountId", "ParentId", "NameKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_local_mail_folders_user_account_parent_name")
+                        .HasFilter("\"ErasedAt\" IS NULL");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("UserId", "MailboxAccountId", "ParentId", "NameKey"), false);
+
+                    b.ToTable("local_mail_folders", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailAnsweringAuditEntryEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1690,6 +1748,17 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<string>("Id")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
+
+                    b.Property<string>("CustodyPhase")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValueSql("'Mirrored'");
+
+                    b.Property<int>("LocalMailFoldersRevision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
 
                     b.HasKey("UserId", "Id")
                         .HasName("PK_mailbox_accounts");
@@ -2683,6 +2752,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsRetainedAfterAuthoredDelete")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid?>("LocalMailFolderId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("MachineAuthorshipBand")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2824,6 +2896,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_stored_emails_cc_addresses");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("CcAddresses"), "GIN");
+
+                    b.HasIndex("LocalMailFolderId")
+                        .HasFilter("\"LocalMailFolderId\" IS NOT NULL");
 
                     b.HasIndex("ParentStoredEmailId");
 
@@ -3384,6 +3459,20 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("MailboxAccount");
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.LocalMailFolderEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.LocalMailFolderEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailboxAccountEntity", null)
+                        .WithMany()
+                        .HasForeignKey("UserId", "MailboxAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailAnsweringAuditedEmailEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailAnsweringAuditEntryEntity", null)
@@ -3598,6 +3687,11 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("EmailThreadId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.LocalMailFolderEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LocalMailFolderId")
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", "MailFolder")
                         .WithMany("StoredEmails")

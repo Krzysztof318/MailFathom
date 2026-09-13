@@ -74,6 +74,7 @@ public sealed class MailFathomPermissionTests
                 "mailfathom.mail.drafts.write",
                 "mailfathom.mail.send",
                 "mailfathom.mail.accounts.write",
+                "mailfathom.mail.folders.write",
                 "mailfathom.admin.read",
                 "mailfathom.admin.audit.read",
                 "mailfathom.admin.operate",
@@ -131,6 +132,7 @@ public sealed class MailFathomPermissionTests
                 MailFathomPermission.MailDraftsWrite,
                 MailFathomPermission.MailSend,
                 MailFathomPermission.MailAccountsWrite,
+                MailFathomPermission.MailFoldersWrite,
             ],
             mail);
         Assert.Equal(MailFathomPermission.All.Count, mail.Count + administration.Count);
