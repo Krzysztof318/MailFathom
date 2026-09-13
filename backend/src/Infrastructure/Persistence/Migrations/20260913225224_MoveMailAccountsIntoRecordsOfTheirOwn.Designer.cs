@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260913210244_MoveMailAccountsIntoRecordsOfTheirOwn")]
+    [Migration("20260913225224_MoveMailAccountsIntoRecordsOfTheirOwn")]
     partial class MoveMailAccountsIntoRecordsOfTheirOwn
     {
         /// <inheritdoc />
@@ -1447,6 +1447,12 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<string>("DivergenceReason")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<int?>("FiledRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("FiledStoredEmailId")
+                        .HasColumnType("uuid");
 
                     b.Property<int?>("LastFailureCode")
                         .HasColumnType("integer");
@@ -3049,6 +3055,10 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UserId", "MailboxAccountId", "Id" }, "ix_stored_emails_awaiting_rule_evaluation")
                         .HasDatabaseName("ix_stored_emails_awaiting_rule_evaluation")
                         .HasFilter("\"RulesEvaluatedAt\" IS NULL AND \"FiledFromOutgoingEmailId\" IS NULL");
+
+                    b.HasIndex(new[] { "UserId", "MailboxAccountId", "InternetMessageId" }, "ix_stored_emails_filed_sent_copy")
+                        .HasDatabaseName("ix_stored_emails_filed_sent_copy")
+                        .HasFilter("\"FiledFromOutgoingEmailId\" IS NOT NULL AND \"UidValidity\" IS NULL");
 
                     b.ToTable("stored_emails", null, t =>
                         {

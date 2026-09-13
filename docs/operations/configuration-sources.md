@@ -281,10 +281,10 @@ One bound holds while several users are served. Only one user may be served when
 The user labelled alex is assigned 1 mail accounts that hold no email address, so those mailboxes are not served. State each address with 'mfctl account edit'; 'mfctl account list' names the accounts.
 ```
 
-**A mail rule naming a mailbox nobody records does not stop a start either.** A configuration write and a reload refuse one, but a mailbox can stop being served after the rule naming it was accepted — its last assignment ends, or it is erased — and a start that refused then could be undone only through the host it refused. A start reports each such claim at `Warning` instead, and the rule does nothing there until a record provides what it names or the rule is changed; [Mail rules](../features/mail-rules.md#which-accounts-a-rule-applies-to) has the rule itself:
+**A mail rule naming a mailbox nobody records does not stop a start either.** A configuration write and a reload refuse one, but a mailbox can stop being served after the rule naming it was accepted — its last assignment ends, or it is erased — and a start that refused then could be undone only through the host it refused. A start reports each such claim at `Warning` instead, and the rule does nothing there until the account is assigned again or the rule is changed; [Mail rules](../features/mail-rules.md#which-accounts-a-rule-applies-to) has the rule itself:
 
 ```
-A declared mail rule names something no record of a user this deployment serves provides, so the rule does nothing there until a record provides it or the rule is changed: MailRules:Rules:0:Accounts — no user this deployment serves records a mail account named 'work', so this rule would reach no mail.
+A declared mail rule names something no record of a user this deployment serves provides, so the rule does nothing there until a record provides it or the rule is changed: MailRules:Rules:0:Accounts — no user this deployment serves records a mail account named '5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10', so this rule would reach no mail.
 ```
 
 ### What a start reports

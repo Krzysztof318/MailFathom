@@ -645,8 +645,8 @@ reaches a tool at all, a token having to name a subject the deployment authorize
 
 A name no served account answers to is refused with `53001` rather than answered with an empty page; "no such account"
 and "not yours" are deliberately one answer, and so is "that is not a name of anything". A request that names no account
-is narrowed to the served accounts rather than left unrestricted, because removing an account from configuration leaves
-its stored rows in place.
+is narrowed to the served accounts rather than left unrestricted, because the stored rows of every other user's accounts
+are in the same table.
 
 That refusal is about a name a caller *guessed*. Which accounts exist is published deliberately and in one place —
 [`list_accounts`](#list_accounts) — because a caller that cannot see the accounts cannot fill in the filter above, and a

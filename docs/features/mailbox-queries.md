@@ -154,9 +154,8 @@ be comparing two values that were never in one naming space.
 ### Which accounts an unscoped request reads
 
 Naming no account means every account the caller's user owns, and the request is narrowed to that set before anything
-is read rather than left without an account predicate. The two are not the same: removing an account from configuration
-leaves its stored rows in place, so an absent predicate would keep publishing mail from an account MailFathom no longer
-serves — and the rows of every other user are in the same table. Switching `MailSynchronization:Enabled` off is a
+is read rather than left without an account predicate. The two are not the same: the rows of every other user's accounts are
+in the same table, so an absent predicate would publish mail the caller's user is not served. Switching `MailSynchronization:Enabled` off is a
 different matter and hides nothing — it stops runs from fetching mail, and the copy already stored stays readable.
 Switching a single folder's `Synchronize` off is a third thing again: that folder's stored mail is kept and withheld
 from every reader rather than erased, which
