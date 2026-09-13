@@ -157,7 +157,7 @@ public sealed class EmailAttachmentDownloadReaderTests
     /// <remarks>
     /// Which user a redemption names is the route's decision rather than the ticket's, and today it is the
     /// deployment's own: <c>AttachmentDownloadTicket</c> records no user, and
-    /// <c>EmailAttachmentDownloadEndpoint</c> states the one user a deployment declaring its accounts in
+    /// <c>McpAttachmentDownloadEndpoint</c> states the one user a deployment declaring its accounts in
     /// configuration holds. ADR 0014's ticket-borne ownership is what replaces that once an account can belong to a
     /// second user. So this holds the use case to the user it is handed rather than asserting that a redemption can
     /// hand it somebody else's.

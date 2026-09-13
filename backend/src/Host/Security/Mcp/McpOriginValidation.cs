@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Host.Api;
+using MailFathom.Host.Mcp;
 using MailFathom.Infrastructure.Security.Transport;
 using MailFathom.Mcp;
 using Microsoft.Net.Http.Headers;
@@ -37,7 +37,7 @@ internal static class McpOriginValidation
         // this allow-list names, and the signed capability is the whole of what admits it.
         app.UseWhen(
             context => context.Request.Path.StartsWithSegments(McpEndpointRoute.Path)
-                && !context.Request.Path.StartsWithSegments(EmailAttachmentDownloadEndpoint.RoutePrefix),
+                && !context.Request.Path.StartsWithSegments(McpAttachmentDownloadEndpoint.RoutePrefix),
             mcpEndpoint => mcpEndpoint.Use(async (context, next) =>
             {
                 if (originPolicy.Permits(context.Request.Headers[HeaderNames.Origin]))

@@ -44,6 +44,10 @@ internal static class AttachmentContentResponse
     /// <remarks>The sender chose the media type, so it is parsed rather than trusted; a value that is not a media type at all is served as opaque bytes instead of being repaired into something plausible.</remarks>
     internal const string FallbackMediaType = "application/octet-stream";
 
+    /// <summary>The one thing a request for a file this deployment's screen stopped is told, on either route.</summary>
+    internal const string ScreenedDetail =
+        "This deployment screens the files it serves, and this one is not served.";
+
     /// <summary>Writes the headers that describe one attachment, before any octet of it is written.</summary>
     /// <param name="response">The response the attachment is written to.</param>
     /// <param name="description">What the parse measured about the part being served.</param>

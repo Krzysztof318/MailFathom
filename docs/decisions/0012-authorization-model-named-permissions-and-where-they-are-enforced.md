@@ -9,7 +9,7 @@ informed:
 
 # Make a permission a named capability MailFathom publishes, grant it on the credential's own configuration entry or from a token's scopes, and enforce it in the use case as well as at the transport
 
-<!-- describes: backend/src/Domain/Access/**, backend/src/Application/Access/**, backend/src/Host/Security/**, backend/src/Host/Configuration/Access/**, backend/src/Host/Api/**, backend/src/Mcp/Tools/** -->
+<!-- describes: backend/src/Domain/Access/**, backend/src/Application/Access/**, backend/src/Host/Security/**, backend/src/Host/Configuration/Access/**, backend/src/Host/Api/**, backend/src/Host/Mcp/McpAttachmentDownloadEndpoint.cs, backend/src/Mcp/Tools/** -->
 
 ## Context and Problem Statement
 

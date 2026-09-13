@@ -7,6 +7,7 @@ using MailFathom.Host.Api.Documentation;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
+using MailFathom.Host.Mcp;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Mcp;
 using MailFathom.Host.Security.Transport;
@@ -307,7 +308,7 @@ internal static class HostPipeline
         // carries no authorization either, since the signed capability in the URL is what admits a request and the
         // things that fetch files cannot attach an MCP credential, which is why it is mapped outside the group the
         // access policy is applied to below.
-        var attachmentDownload = app.MapEmailAttachmentDownload();
+        var attachmentDownload = app.MapMcpAttachmentDownload();
 
         if (composition.McpRateLimits is not null)
         {

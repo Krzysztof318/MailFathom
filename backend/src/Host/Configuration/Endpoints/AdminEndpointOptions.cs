@@ -7,6 +7,7 @@ using System.Net.Quic;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Mcp;
 
 namespace MailFathom.Host.Configuration.Endpoints;
 
@@ -55,7 +56,7 @@ internal sealed class AdminEndpointOptions
 
     /// <summary>The path every administrative route is served beneath.</summary>
     /// <remarks>
-    /// A constant rather than a setting, for the reason <see cref="Mcp.McpEndpointRoute.Path" /> is one: a client is
+    /// A constant rather than a setting, for the reason <see cref="McpEndpointRoute.Path" /> is one: a client is
     /// configured with a host and a port and appends the rest, so a deployment that could move the prefix would only be
     /// able to move it in step with every client pointed at it. Publishing it here keeps the surface's address with the
     /// surface and leaves mapping it a decision the host still makes.
