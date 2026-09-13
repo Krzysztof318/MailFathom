@@ -76,6 +76,24 @@ public sealed class OccurrenceSpamClassificationHandlerTests
         Assert.Equal(0, this.harness.Mutations.OpenedRecordCount);
     }
 
+    /// <summary>An occurrence resolves only within the user the payload names, so another user's mail is never classified under it.</summary>
+    [Fact]
+    public async Task RunAsync_AnOccurrenceOfMailThePayloadsUserDoesNotHold_EndsTheJobWithoutClassifyingOrActing()
+    {
+        // Arrange
+        this.StoreEmailAtTheOccurrence();
+        var anotherUser = MailUserId.Create(Guid.Parse("22222222-2222-2222-2222-222222222222"));
+
+        // Act
+        await this.CreateHandler(MarksJunkRead).RunAsync(
+            ClassifyEmailSpamJobPayload.For(anotherUser, Occurrence),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(this.harness.Classifications.Saved);
+        Assert.Equal(0, this.harness.Mutations.OpenedRecordCount);
+    }
+
     [Fact]
     public async Task RunAsync_APayloadOfAnotherContract_IsRefusedAsTheWrongWork()
     {

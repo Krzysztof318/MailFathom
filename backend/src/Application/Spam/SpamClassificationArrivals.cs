@@ -70,9 +70,9 @@ public sealed class SpamClassificationArrivals
     /// <returns>A task that completes once the queue has answered, or at once where no classification is wanted.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrenceId" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// Asking twice for one message is asking once. Both identities name the same message — the local row is keyed by
-    /// the occurrence — so a run that stored it again, whether a folder walked afresh or a run resumed after a crash, is
-    /// answered with the job that is already there rather than adding a second one.
+    /// Asking twice for one message is asking once. Both enqueues compose the key from the same stored identity, so a run
+    /// that stored it again, whether a folder walked afresh or a run resumed after a crash, is answered with the job that
+    /// is already there rather than adding a second one.
     /// </remarks>
     public async Task ScheduleAsync(
         StoredEmailId emailId,

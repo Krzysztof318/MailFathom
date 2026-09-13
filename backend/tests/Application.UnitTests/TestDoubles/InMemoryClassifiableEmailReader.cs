@@ -15,7 +15,7 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 /// <remarks>
 /// The walk is a keyset read ordered by the stored identity, which is what a resumed run depends on, so the double
 /// implements exactly that rather than handing back whatever order it was arranged in. Each email belongs to one user,
-/// and both single reads answer only for that user, as the real reader's predicates do.
+/// and every read answers only for that user, as the real reader's predicates do.
 /// </remarks>
 internal sealed class InMemoryClassifiableEmailReader : IClassifiableEmailReader
 {
@@ -80,7 +80,7 @@ internal sealed class InMemoryClassifiableEmailReader : IClassifiableEmailReader
         IReadOnlyList<ClassifiableEmail> batch =
         [
             .. this.emails
-                .Where(email => email.AccountId == account.Id)
+                .Where(email => email.AccountId == account.Id && this.IsHeldBy(email.Id, account.User))
                 .Where(email => folderAliases.Contains(email.FolderAlias))
                 .Where(email => resumeAfter is not { } position || email.Id.Value.CompareTo(position.Value) > 0)
                 .OrderBy(email => email.Id.Value)

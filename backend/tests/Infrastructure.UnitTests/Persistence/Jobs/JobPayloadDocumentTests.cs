@@ -30,11 +30,11 @@ public sealed class JobPayloadDocumentTests
             ImapUidValidity.Create(12345),
             ImapUid.Create(4711)));
 
-    /// <summary>One payload of every declared job type, which is what the closed-set assertion below is stated over.</summary>
     private static ClassifyStoredEmailSpamJobPayload StoredEmailPayload => ClassifyStoredEmailSpamJobPayload.For(
         Account,
         StoredEmailId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000001")));
 
+    /// <summary>One payload of every declared job type, which is what the closed-set assertion below is stated over.</summary>
     private static IJobPayload[] DeclaredPayloads =>
     [
         Payload,
@@ -76,6 +76,21 @@ public sealed class JobPayloadDocumentTests
         Assert.Equal(
             """{"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","folderAlias":"INBOX","folderResolutionGeneration":2,"uidValidity":12345,"uid":4711}""",
             document);
+    }
+
+    /// <summary>A stored-email classification names the email's own identity, and that is all an operator reads of it.</summary>
+    [Fact]
+    public void Serialize_AStoredEmailPayload_WritesTheReferencesAndReadsThemBack()
+    {
+        // Act
+        var document = JobPayloadDocument.Serialize(StoredEmailPayload);
+        var restored = JobPayloadDocument.Deserialize(JobType.ClassifyStoredEmailSpam, document);
+
+        // Assert
+        Assert.Equal(
+            """{"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","storedEmailId":"0199a0c0-0000-7000-8000-000000000001"}""",
+            document);
+        Assert.Equal(StoredEmailPayload, restored);
     }
 
     /// <summary>A recurring dispatch stores an account and nothing about the mail in it, and reads it back the same way.</summary>
