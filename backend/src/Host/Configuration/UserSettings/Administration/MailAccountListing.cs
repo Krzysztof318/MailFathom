@@ -7,6 +7,6 @@ using MailFathom.Infrastructure.Persistence.Users;
 namespace MailFathom.Host.Configuration.UserSettings.Administration;
 
 /// <summary>The mail accounts one listing read, and whether the deployment holds more than it could list.</summary>
-/// <param name="Accounts">The accounts and the users each is assigned to, in the order they were created in.</param>
+/// <param name="Accounts">The accounts and the users each is assigned to, without their settings, in the order they were created in.</param>
 /// <param name="Truncated">Whether the deployment holds more accounts than one listing reads.</param>
-internal sealed record MailAccountListing(IReadOnlyList<MailAccountHolding> Accounts, bool Truncated);
+internal sealed record MailAccountListing(IReadOnlyList<MailAccountSummary> Accounts, bool Truncated);

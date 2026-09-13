@@ -26,19 +26,19 @@ internal sealed record MailAccountSummaryResponse(
     string? DisplayName)
 {
     /// <summary>Describes one account a listing read.</summary>
-    /// <param name="holding">The account and the users it is assigned to.</param>
+    /// <param name="summary">The account and the users it is assigned to.</param>
     /// <returns>The response body.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="holding" /> is <see langword="null" />.</exception>
-    internal static MailAccountSummaryResponse For(MailAccountHolding holding)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="summary" /> is <see langword="null" />.</exception>
+    internal static MailAccountSummaryResponse For(MailAccountSummary summary)
     {
-        ArgumentNullException.ThrowIfNull(holding);
+        ArgumentNullException.ThrowIfNull(summary);
 
         return new MailAccountSummaryResponse(
-            holding.Account.Id,
-            holding.Account.Version,
-            [.. holding.Users.Select(user => user.Value)],
-            holding.Account.EmailAddress,
-            holding.Account.DisplayName);
+            summary.Id,
+            summary.Version,
+            [.. summary.Users.Select(user => user.Value)],
+            summary.EmailAddress,
+            summary.DisplayName);
     }
 }
 

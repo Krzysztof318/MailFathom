@@ -18,8 +18,9 @@ public interface IMailAccountRecordStore
     /// <summary>Reads every account the deployment holds, with the users each is assigned to.</summary>
     /// <param name="limit">The greatest number of accounts to read.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The accounts, in the order they were created in.</returns>
-    Task<IReadOnlyList<MailAccountHolding>> ReadAllAsync(int limit, CancellationToken cancellationToken);
+    /// <returns>The accounts without their settings, in the order they were created in.</returns>
+    /// <remarks>The settings are left behind because a declaration may be as large as a user's whole record, and a listing reads a thousand accounts to name them.</remarks>
+    Task<IReadOnlyList<MailAccountSummary>> ReadAllAsync(int limit, CancellationToken cancellationToken);
 
     /// <summary>Reads one account and the users it is assigned to.</summary>
     /// <param name="accountId">The account asked about.</param>
@@ -75,6 +76,19 @@ public interface IMailAccountRecordStore
 /// <param name="Account">The account.</param>
 /// <param name="Users">Every user it is assigned to, which may be none only while an erasure is under way.</param>
 public sealed record MailAccountHolding(MailAccountRecord Account, IReadOnlyList<MailUserId> Users);
+
+/// <summary>One account as a listing names it: by its record's columns and the users it is assigned to, without its settings.</summary>
+/// <param name="Id">The identifier the deployment generated for the account.</param>
+/// <param name="EmailAddress">The address of the mailbox, or <see langword="null" /> for an account that holds none and is not served.</param>
+/// <param name="DisplayName">The name the account is told apart by among the accounts one user is assigned.</param>
+/// <param name="Version">The version a writer states when it changes the record.</param>
+/// <param name="Users">Every user it is assigned to.</param>
+public sealed record MailAccountSummary(
+    Guid Id,
+    string? EmailAddress,
+    string DisplayName,
+    long Version,
+    IReadOnlyList<MailUserId> Users);
 
 /// <summary>What one write to an account did.</summary>
 /// <param name="Result">How the write ended.</param>

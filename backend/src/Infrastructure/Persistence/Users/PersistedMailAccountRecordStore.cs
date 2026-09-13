@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
+using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -34,7 +35,7 @@ internal sealed class PersistedMailAccountRecordStore(
     : IMailAccountRecordStore
 {
     /// <inheritdoc />
-    public async Task<IReadOnlyList<MailAccountHolding>> ReadAllAsync(int limit, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<MailAccountSummary>> ReadAllAsync(int limit, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
@@ -43,6 +44,7 @@ internal sealed class PersistedMailAccountRecordStore(
             .OrderBy(account => account.CreatedAt)
             .ThenBy(account => account.Id)
             .Take(limit)
+            .Select(account => new { account.Id, account.EmailAddress, account.DisplayName, account.Version })
             .ToListAsync(cancellationToken);
 
         var ids = accounts.Select(account => account.Id).ToArray();
@@ -55,8 +57,11 @@ internal sealed class PersistedMailAccountRecordStore(
 
         return
         [
-            .. accounts.Select(account => new MailAccountHolding(
-                ToRecord(account),
+            .. accounts.Select(account => new MailAccountSummary(
+                account.Id,
+                account.EmailAddress,
+                account.DisplayName,
+                account.Version,
                 [
                     .. assignments
                         .Where(assignment => assignment.MailAccountId == account.Id)
@@ -392,7 +397,7 @@ internal sealed class PersistedMailAccountRecordStore(
         return false;
     }
 
-    private static MailAccountRecord ToRecord(Entities.MailAccountRecordEntity account) =>
+    private static MailAccountRecord ToRecord(MailAccountRecordEntity account) =>
         new(account.Id, account.EmailAddress, account.DisplayName, account.Document, account.Version);
 
     private static Guid RequireNamed(MailUserId user) =>

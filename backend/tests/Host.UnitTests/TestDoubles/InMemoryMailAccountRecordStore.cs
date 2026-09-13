@@ -73,8 +73,16 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
         [.. this.users.Select(held => new UserSettingsDocumentVersion(held.Key, held.Value.Version))];
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<MailAccountHolding>> ReadAllAsync(int limit, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<MailAccountHolding>>([.. this.accounts.Take(limit).Select(this.HoldingOf)]);
+    public Task<IReadOnlyList<MailAccountSummary>> ReadAllAsync(int limit, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<MailAccountSummary>>(
+        [
+            .. this.accounts.Take(limit).Select(account => new MailAccountSummary(
+                account.Id,
+                account.EmailAddress,
+                account.DisplayName,
+                account.Version,
+                [.. this.assignments[account.Id]])),
+        ]);
 
     /// <inheritdoc />
     public Task<MailAccountHolding?> ReadAsync(Guid accountId, CancellationToken cancellationToken) =>

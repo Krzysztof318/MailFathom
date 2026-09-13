@@ -114,6 +114,28 @@ public sealed class MailAccountAdministrationTests
         Assert.Single(deployment.MailAccountRecords.Accounts);
     }
 
+    /// <summary>An unusable address reads exactly as a held one does, so a user cannot tell which addresses the deployment serves by trying ones that might be malformed.</summary>
+    [Fact]
+    public async Task AddOwnAsync_AnAddressThatIsNotAnAddress_IsRefusedWithTheSentenceAHeldAddressGets()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 2);
+
+        // Act
+        var outcome = await deployment.MailAccounts.AddOwnAsync(
+            Declaration("not-an-address", "mine", ProvisionedFor(Alex, "mine")),
+            expectedVersion: 2,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            "This mail account cannot be added for you. Ask whoever administers this deployment to add it.",
+            Assert.Single(outcome!.Messages));
+        Assert.Equal(2, outcome.Version);
+        Assert.Empty(deployment.MailAccountRecords.Accounts);
+    }
+
     /// <summary>The identifier is this deployment's to generate, so a declaration deciding one is refused before anything is judged.</summary>
     [Fact]
     public async Task CreateAsync_ADeclarationStatingAnIdentifier_IsRefusedAndCreatesNothing()
@@ -614,6 +636,118 @@ public sealed class MailAccountAdministrationTests
         Assert.Equal(MailFathomErrorCode.ConfigurationVersionSuperseded, outcome!.Refusal);
         Assert.Equal(7, outcome.Version);
     }
+
+    /// <summary>One address is held by one account in the whole deployment, so an edit taking another account's address is refused as a creation would be.</summary>
+    [Fact]
+    public async Task SaveAsync_AnAddressAnotherAccountHolds_IsRefusedNamingTheAddress()
+    {
+        // Arrange
+        var work = Mailbox("work@example.test", "work");
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Sam, LanguageOnlyRecord, version: 1, Mailbox("archive@example.test", "archive"));
+
+        // Act
+        var outcome = await deployment.MailAccounts.SaveAsync(
+            work.Id,
+            MailAccountDeclaration.Of(work).Replace("work@example.test", "archive@example.test", StringComparison.Ordinal),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains("'archive@example.test'", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        Assert.Equal(work, deployment.MailAccountRecords.Accounts.Single(account => account.Id == work.Id));
+    }
+
+    /// <summary>The address an account already holds is not another account's, so saving it back beside another change commits.</summary>
+    [Fact]
+    public async Task SaveAsync_AnAccountsOwnAddressSavedBackUnchanged_Commits()
+    {
+        // Arrange
+        var work = Mailbox("work@example.test", "work");
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+
+        // Act
+        var outcome = await deployment.MailAccounts.SaveAsync(
+            work.Id,
+            MailAccountDeclaration.Of(work).Replace("imap.example.test", "imap2.example.test", StringComparison.Ordinal),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+        Assert.Equal("work@example.test", Assert.Single(deployment.MailAccountRecords.Accounts).EmailAddress);
+    }
+
+    /// <summary>A user is read with a bounded number of accounts, so a creation past that bound is refused naming it.</summary>
+    [Fact]
+    public async Task CreateAsync_AUserAlreadyAssignedTheMostAccounts_IsRefusedNamingTheCeiling()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, Mailboxes(MailAccountRecord.MaximumAssignedPerUser));
+
+        // Act
+        var created = await deployment.MailAccounts.CreateAsync(
+            Alex,
+            Declaration("archive@example.test", "archive"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, created!.Outcome.Refusal);
+        Assert.Contains(
+            $"at most {MailAccountRecord.MaximumAssignedPerUser} mail accounts",
+            Assert.Single(created.Outcome.Messages),
+            StringComparison.Ordinal);
+        Assert.Equal(MailAccountRecord.MaximumAssignedPerUser, deployment.MailAccountRecords.Accounts.Count);
+    }
+
+    [Fact]
+    public async Task AssignAsync_AUserAlreadyAssignedTheMostAccounts_IsRefusedNamingTheCeiling()
+    {
+        // Arrange
+        var spare = Mailbox("spare@example.test", "spare");
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, Mailboxes(MailAccountRecord.MaximumAssignedPerUser));
+        deployment.MailAccountRecords.HoldAccount(spare);
+
+        // Act
+        var outcome = await deployment.MailAccounts.AssignAsync(spare.Id, Alex, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains(
+            $"at most {MailAccountRecord.MaximumAssignedPerUser} mail accounts",
+            Assert.Single(outcome.Messages),
+            StringComparison.Ordinal);
+        Assert.Equal(MailAccountRecord.MaximumAssignedPerUser, deployment.MailAccountRecords.DocumentOf(Alex)!.MailAccounts.Count);
+    }
+
+    /// <summary>The bound refuses one account more, never an edit to an account the user already holds, so a user at the bound can still correct one.</summary>
+    [Fact]
+    public async Task SaveAsync_AnAccountAUserAtTheCeilingAlreadyHolds_Commits()
+    {
+        // Arrange
+        var held = Mailboxes(MailAccountRecord.MaximumAssignedPerUser);
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, held);
+
+        // Act
+        var outcome = await deployment.MailAccounts.SaveAsync(
+            held[0].Id,
+            MailAccountDeclaration.Of(held[0]).Replace("imap.example.test", "imap2.example.test", StringComparison.Ordinal),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+    }
+
+    /// <summary>As many distinct mailboxes as a test needs, each under its own address and name.</summary>
+    private static MailAccountRecord[] Mailboxes(int count) =>
+        [.. Enumerable.Range(0, count).Select(index => Mailbox($"box{index}@example.test", $"box{index}"))];
 
     /// <summary>The address and the name a declaration states; its credential is read from where the secret name says unless a test names another reference.</summary>
     private static string Declaration(string emailAddress, string displayName, string? secretReference = null)

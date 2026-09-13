@@ -34,8 +34,9 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// </para>
 /// <para>
 /// An address is held by one account in the whole deployment. An administrator told the address is held is told so by
-/// name. A user is refused with one sentence whoever holds the address, so the refusal never says whose mailbox it is;
-/// it does tell them that the address is held, because a free address commits.
+/// name. A user is refused with one sentence whether the address is held, whoever holds it, or is not an address at all,
+/// so the refusal never says whose mailbox it is nor tells a held address from an unusable one; a free, usable address
+/// commits.
 /// </para>
 /// <para>
 /// A committed write is served by converging this replica's roster on the rows, which republishes every user whose record
@@ -547,9 +548,9 @@ internal sealed class MailAccountAdministration(
             version,
             ["This mail account is already assigned to another user, and an account is served to one user at a time, so nothing was written."]);
 
-    /// <summary>The refusal a user receives for an address somebody's account already holds.</summary>
-    /// <remarks>The same sentence whoever holds it, so the answer never names whose mailbox the address is; that the address is held is what a refusal of an otherwise acceptable account tells them.</remarks>
-    private static UserRecordWriteOutcome AddressHeldForUser(long version) =>
+    /// <summary>The refusal a user receives for an address somebody's account already holds, or one that is not an address at all.</summary>
+    /// <remarks>The same sentence for both, so the answer never tells a held address from an unusable one, and never names whose mailbox a held address is.</remarks>
+    private static UserRecordWriteOutcome AddressRefusedForUser(long version) =>
         UserRecordWriteOutcome.Refused(
             MailFathomErrorCode.ConfigurationCandidateInvalid,
             version,
@@ -579,11 +580,18 @@ internal sealed class MailAccountAdministration(
 
         try
         {
-            declaration = MailAccountDeclaration.Read(declarationJson);
+            declaration = authority == UserRecordAuthority.User
+                ? MailAccountDeclaration.ReadWithAnyAddress(declarationJson)
+                : MailAccountDeclaration.Read(declarationJson);
         }
         catch (Exception refused) when (refused is FormatException or JsonException)
         {
             return (null, NotADeclaration(record.Version, refused));
+        }
+
+        if (!MailAccountDeclaration.IsAnAddress(declaration.EmailAddress))
+        {
+            return (null, AddressRefusedForUser(record.Version));
         }
 
         var candidate = new MailAccountRecord(
@@ -613,7 +621,7 @@ internal sealed class MailAccountAdministration(
 
             return (null, write.Result switch
             {
-                MailAccountWriteResult.AddressHeld when authority == UserRecordAuthority.User => AddressHeldForUser(current),
+                MailAccountWriteResult.AddressHeld when authority == UserRecordAuthority.User => AddressRefusedForUser(current),
                 MailAccountWriteResult.AddressHeld => AddressHeldForAdministrator(current, candidate.EmailAddress),
                 _ => Superseded(record.Version, current, "user record"),
             });

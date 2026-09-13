@@ -28,6 +28,29 @@ internal sealed record MailAccountDeclaration(string EmailAddress, string Displa
     /// <exception cref="JsonException">Thrown when the declaration is not JSON at all.</exception>
     public static MailAccountDeclaration Read(string declarationJson)
     {
+        var declaration = ReadWithAnyAddress(declarationJson);
+
+        if (!IsAnAddress(declaration.EmailAddress))
+        {
+            throw new FormatException(
+                $"A mail-account declaration states the mailbox's {MailAccountRecordComposition.EmailAddressProperty}: one '@' between a local part and a domain, no white space, and at most {MailAccountRecord.MaximumEmailAddressLength} characters.");
+        }
+
+        return declaration;
+    }
+
+    /// <summary>Reads a declaration without judging whether its address is shaped like one.</summary>
+    /// <param name="declarationJson">The declaration as it was written.</param>
+    /// <returns>The declaration, its address trimmed and empty where none was stated.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="declarationJson" /> is <see langword="null" />.</exception>
+    /// <exception cref="FormatException">Thrown when the declaration is not a JSON object, states an identifier, or states no display name.</exception>
+    /// <exception cref="JsonException">Thrown when the declaration is not JSON at all.</exception>
+    /// <remarks>
+    /// A user's own addition judges the address itself, with <see cref="IsAnAddress" />, so that an unusable address is
+    /// refused with the sentence a held one is; every other refusal is this read's, whichever caller made it.
+    /// </remarks>
+    internal static MailAccountDeclaration ReadWithAnyAddress(string declarationJson)
+    {
         ArgumentNullException.ThrowIfNull(declarationJson);
 
         var declaration = JsonNode.Parse(declarationJson) as JsonObject
@@ -39,14 +62,8 @@ internal sealed record MailAccountDeclaration(string EmailAddress, string Displa
                 $"A mail-account declaration states no {MailAccountRecordComposition.AccountIdProperty}: this deployment generates the identifier, and an account is changed by naming the one it was given.");
         }
 
-        var emailAddress = TextOf(declaration, MailAccountRecordComposition.EmailAddressProperty)?.Trim();
+        var emailAddress = TextOf(declaration, MailAccountRecordComposition.EmailAddressProperty)?.Trim() ?? string.Empty;
         var displayName = TextOf(declaration, MailAccountRecordComposition.DisplayNameProperty);
-
-        if (!IsAnAddress(emailAddress))
-        {
-            throw new FormatException(
-                $"A mail-account declaration states the mailbox's {MailAccountRecordComposition.EmailAddressProperty}: one '@' between a local part and a domain, no white space, and at most {MailAccountRecord.MaximumEmailAddressLength} characters.");
-        }
 
         if (string.IsNullOrWhiteSpace(displayName))
         {
@@ -57,8 +74,23 @@ internal sealed record MailAccountDeclaration(string EmailAddress, string Displa
         MailAccountRecordComposition.RemoveEverySpelling(declaration, MailAccountRecordComposition.EmailAddressProperty);
         MailAccountRecordComposition.RemoveEverySpelling(declaration, MailAccountRecordComposition.DisplayNameProperty);
 
-        return new MailAccountDeclaration(emailAddress!, displayName, declaration.ToJsonString());
+        return new MailAccountDeclaration(emailAddress, displayName, declaration.ToJsonString());
     }
+
+    /// <summary>Reports whether a value is shaped like a mailbox address.</summary>
+    /// <param name="value">The address as a declaration stated it.</param>
+    /// <returns>Whether the value is one this deployment holds an account under.</returns>
+    /// <remarks>
+    /// Shape rather than deliverability: the address is what one account in the deployment is told apart by, and the
+    /// server it names is what proves it. One '@' is the whole rule because a quoted local part carrying a second one
+    /// is an address no mail provider hands out.
+    /// </remarks>
+    internal static bool IsAnAddress(string? value) =>
+        value is { Length: > 0 and <= MailAccountRecord.MaximumEmailAddressLength }
+        && !value.Any(char.IsWhiteSpace)
+        && value.Count(character => character == '@') == 1
+        && value[0] != '@'
+        && value[^1] != '@';
 
     /// <summary>Writes the declaration an account's record holds, unredacted.</summary>
     /// <param name="account">The account.</param>
@@ -99,19 +131,6 @@ internal sealed record MailAccountDeclaration(string EmailAddress, string Displa
         name.Equals(MailAccountRecordComposition.AccountIdProperty, StringComparison.OrdinalIgnoreCase)
         || name.Equals(MailAccountRecordComposition.EmailAddressProperty, StringComparison.OrdinalIgnoreCase)
         || name.Equals(MailAccountRecordComposition.DisplayNameProperty, StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>Reports whether a value is shaped like a mailbox address.</summary>
-    /// <remarks>
-    /// Shape rather than deliverability: the address is what one account in the deployment is told apart by, and the
-    /// server it names is what proves it. One '@' is the whole rule because a quoted local part carrying a second one
-    /// is an address no mail provider hands out.
-    /// </remarks>
-    private static bool IsAnAddress(string? value) =>
-        value is { Length: > 0 and <= MailAccountRecord.MaximumEmailAddressLength }
-        && !value.Any(char.IsWhiteSpace)
-        && value.Count(character => character == '@') == 1
-        && value[0] != '@'
-        && value[^1] != '@';
 
     private static string? TextOf(JsonObject declaration, string property) =>
         SpellingsOf(declaration, property) is [var spelling]
