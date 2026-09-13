@@ -4,8 +4,8 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
-using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Mcp;
 using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Security.Transport;
@@ -212,7 +212,7 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     /// transport answers nothing for it on either posture and the ticket remains the only thing that authorizes it.
     /// </remarks>
     private static bool ReachedOnlyUnderACapability(PathString path) =>
-        path.StartsWithSegments(EmailAttachmentDownloadEndpoint.RoutePrefix);
+        path.StartsWithSegments(McpAttachmentDownloadEndpoint.RoutePrefix);
 
     /// <summary>Describes the caller a surface configuring no credential admits, acting for whoever that surface serves.</summary>
     /// <remarks>

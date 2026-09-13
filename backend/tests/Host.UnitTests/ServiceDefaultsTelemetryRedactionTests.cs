@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics;
-using MailFathom.Host.Api;
+using MailFathom.Host.Mcp;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using OpenTelemetry.Logs;
@@ -154,16 +154,16 @@ public sealed class ServiceDefaultsTelemetryRedactionTests
     {
         // Arrange
         using var activity = new Activity("GET /mcp/attachments/{capability}");
-        activity.SetTag("url.path", $"{EmailAttachmentDownloadEndpoint.RoutePrefix}/AQIDBAUGBwgJ.CgsMDQ4PEBES");
+        activity.SetTag("url.path", $"{McpAttachmentDownloadEndpoint.RoutePrefix}/AQIDBAUGBwgJ.CgsMDQ4PEBES");
         var request = new DefaultHttpContext().Request;
-        request.Path = $"{EmailAttachmentDownloadEndpoint.RoutePrefix}/AQIDBAUGBwgJ.CgsMDQ4PEBES";
+        request.Path = $"{McpAttachmentDownloadEndpoint.RoutePrefix}/AQIDBAUGBwgJ.CgsMDQ4PEBES";
 
         // Act
         ServiceDefaultsExtensions.RedactAttachmentCapability(activity, request);
 
         // Assert — read through TagObjects rather than Tags, which drops anything that is not a string.
         var recordedPath = Assert.Single(activity.TagObjects, tag => tag.Key == "url.path");
-        Assert.Equal($"{EmailAttachmentDownloadEndpoint.RoutePrefix}/{{capability}}", recordedPath.Value);
+        Assert.Equal($"{McpAttachmentDownloadEndpoint.RoutePrefix}/{{capability}}", recordedPath.Value);
     }
 
     /// <summary>Every other route keeps the path it was served under, because none of them carries a secret in it.</summary>

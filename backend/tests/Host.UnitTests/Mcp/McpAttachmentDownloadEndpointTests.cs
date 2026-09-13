@@ -22,6 +22,7 @@ using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Mcp;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
 using MailFathom.TestSupport;
@@ -32,7 +33,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
 
-namespace MailFathom.Host.UnitTests.Api;
+namespace MailFathom.Host.UnitTests.Mcp;
 
 /// <summary>Covers the one route this process answers without a credential.</summary>
 /// <remarks>
@@ -45,7 +46,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// wrote.
 /// </remarks>
 [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The endpoint under test takes ownership of the opened attachment and disposes it, which is the contract these tests exercise.")]
-public sealed class EmailAttachmentDownloadEndpointTests
+public sealed class McpAttachmentDownloadEndpointTests
 {
     /// <summary>The literal a screened deployment in this suite stops at, which never reaches a response.</summary>
     private const string ScreenedMarker = "sk-live-000111222333";
@@ -63,7 +64,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
         using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
 
         // Act
-        var result = await EmailAttachmentDownloadEndpoint.DownloadAsync(
+        var result = await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(
@@ -78,7 +79,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
         // Assert
         var refused = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status409Conflict, refused.StatusCode);
-        Assert.Equal(EmailAttachmentDownloadEndpoint.ScreenedDetail, refused.ProblemDetails.Detail);
+        Assert.Equal(AttachmentContentResponse.ScreenedDetail, refused.ProblemDetails.Detail);
         Assert.Equal(
             MailFathomErrorCode.AttachmentDownloadScreened.Value,
             refused.ProblemDetails.Extensions[RouteAuthorization.ErrorCodeExtension]);
@@ -96,7 +97,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
         context.Response.Body = body;
 
         // Act
-        var result = await EmailAttachmentDownloadEndpoint.DownloadAsync(
+        var result = await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
@@ -127,7 +128,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
         context.Response.Body = body;
 
         // Act
-        await EmailAttachmentDownloadEndpoint.DownloadAsync(
+        await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment(
@@ -160,7 +161,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
         context.Response.Body = body;
 
         // Act
-        await EmailAttachmentDownloadEndpoint.DownloadAsync(
+        await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
@@ -187,7 +188,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
         context.Response.Body = body;
 
         // Act
-        await EmailAttachmentDownloadEndpoint.DownloadAsync(
+        await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment(
@@ -222,7 +223,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
         context.Response.Body = body;
 
         // Act
-        await EmailAttachmentDownloadEndpoint.DownloadAsync(
+        await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment("file.bin", declared, "bytes"u8.ToArray())),
@@ -246,7 +247,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
         context.Response.Body = body;
 
         // Act
-        await EmailAttachmentDownloadEndpoint.DownloadAsync(
+        await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment(fileName: null, "image/png", "png"u8.ToArray())),
@@ -275,7 +276,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
         context.Response.Body = body;
 
         // Act
-        var refusedCapability = await EmailAttachmentDownloadEndpoint.DownloadAsync(
+        var refusedCapability = await McpAttachmentDownloadEndpoint.DownloadAsync(
             "forged",
             TicketReaderRedeeming(null),
             AttachmentOpening(principals, null),
@@ -284,7 +285,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             context,
             TestContext.Current.CancellationToken);
 
-        var refusedMail = await EmailAttachmentDownloadEndpoint.DownloadAsync(
+        var refusedMail = await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(ticket),
             AttachmentOpening(principals, null),
@@ -296,7 +297,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
         // Assert
         var forgery = Assert.IsType<NotFound<ProblemDetails>>(refusedCapability.Result);
         var missingMail = Assert.IsType<NotFound<ProblemDetails>>(refusedMail.Result);
-        Assert.Equal(EmailAttachmentDownloadEndpoint.RefusalDetail, forgery.Value?.Detail);
+        Assert.Equal(McpAttachmentDownloadEndpoint.RefusalDetail, forgery.Value?.Detail);
         Assert.Equal(forgery.Value?.Detail, missingMail.Value?.Detail);
         Assert.Equal(forgery.Value?.Title, missingMail.Value?.Title);
         Assert.Equal(StatusCodes.Status404NotFound, missingMail.Value?.Status);
@@ -313,7 +314,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
         var principals = PrincipalsFor(context);
 
         // Act
-        var result = await EmailAttachmentDownloadEndpoint.DownloadAsync(
+        var result = await McpAttachmentDownloadEndpoint.DownloadAsync(
             "a-capability-somebody-presented",
             TicketReaderRedeeming(new AttachmentDownloadTicket(storedEmailId, 3)),
             AttachmentOpening(principals, null),
@@ -346,7 +347,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
         deploymentUser.User.Returns(_ => throw DeploymentMailUserUnresolvedException.NoSoleUserToActFor());
 
         // Act
-        var result = await EmailAttachmentDownloadEndpoint.DownloadAsync(
+        var result = await McpAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
@@ -367,7 +368,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
     /// <summary>Composes a request to this route's own path, which is what decides the principal the scope reports.</summary>
     /// <remarks>An empty path would leave the arrangement below deciding nothing, because a path neither surface serves is refused for that reason instead of for being this route's.</remarks>
     private static DefaultHttpContext RequestToTheRoute() =>
-        new() { Request = { Path = EmailAttachmentDownloadEndpoint.RoutePrefix + "/a-capability-somebody-presented" } };
+        new() { Request = { Path = McpAttachmentDownloadEndpoint.RoutePrefix + "/a-capability-somebody-presented" } };
 
     /// <summary>The one scope a request is served in, which the route states its own principal onto.</summary>
     /// <remarks>

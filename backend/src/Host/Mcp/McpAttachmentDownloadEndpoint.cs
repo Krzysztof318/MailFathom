@@ -8,13 +8,14 @@ using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.Emails.DownloadAttachment;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
+using MailFathom.Host.Api;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Mcp;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
-namespace MailFathom.Host.Api;
+namespace MailFathom.Host.Mcp;
 
 /// <summary>Serves one attachment to whoever presents a valid capability for it.</summary>
 /// <remarks>
@@ -45,7 +46,7 @@ namespace MailFathom.Host.Api;
 /// they can see described has quietly vanished. It never says why the screen stopped it.
 /// </para>
 /// </remarks>
-internal static class EmailAttachmentDownloadEndpoint
+internal static class McpAttachmentDownloadEndpoint
 {
     /// <summary>The path prefix the route is served beneath, which is also what a minted link is built from.</summary>
     /// <remarks>Beneath the MCP route rather than at the root, so every path the MCP surface answers shares one prefix and a proxy forwarding that prefix forwards the links as well.</remarks>
@@ -54,15 +55,11 @@ internal static class EmailAttachmentDownloadEndpoint
     /// <summary>The one thing a refused request is told, whatever the reason was.</summary>
     internal const string RefusalDetail = "This attachment link is not valid.";
 
-    /// <summary>The one thing a request stopped by this deployment's screen is told.</summary>
-    internal const string ScreenedDetail =
-        "This deployment screens the files it serves, and this one is not served.";
-
     /// <summary>Maps the download route.</summary>
     /// <param name="endpoints">The application's route builder.</param>
     /// <returns>The mapped route, so the caller can attach the surface's own metadata to it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoints" /> is <see langword="null" />.</exception>
-    internal static RouteHandlerBuilder MapEmailAttachmentDownload(this IEndpointRouteBuilder endpoints)
+    internal static RouteHandlerBuilder MapMcpAttachmentDownload(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
@@ -173,7 +170,7 @@ internal static class EmailAttachmentDownloadEndpoint
     /// description did not. What it never says is why — a category would tell them the file carries a credential.
     /// </remarks>
     private static ProblemHttpResult ScreenedOut() => TypedResults.Problem(
-        ScreenedDetail,
+        AttachmentContentResponse.ScreenedDetail,
         statusCode: StatusCodes.Status409Conflict,
         extensions: new Dictionary<string, object?>(StringComparer.Ordinal)
         {

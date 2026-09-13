@@ -5,9 +5,9 @@
 using System.Security.Claims;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
-using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Mcp;
 using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Mcp;
@@ -105,7 +105,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     {
         // Arrange
         var source = SourceOver(
-            RequestTo(EmailAttachmentDownloadEndpoint.RoutePrefix + "/a-capability-somebody-presented"),
+            RequestTo(McpAttachmentDownloadEndpoint.RoutePrefix + "/a-capability-somebody-presented"),
             mcpConfiguresACredential);
 
         // Act & Assert

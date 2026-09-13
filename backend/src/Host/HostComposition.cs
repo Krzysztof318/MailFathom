@@ -72,6 +72,7 @@ using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Hosting.Warnings;
 using MailFathom.Host.Hosting.Workers;
+using MailFathom.Host.Mcp;
 using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Mcp;
@@ -655,7 +656,7 @@ internal static class HostComposition
         // decision written once.
         builder.Services.AddSingleton(provider => new AttachmentDownloadSettings(
             provider.GetRequiredService<IOptions<DeploymentOptions>>().Value
-                .ComposeAddressFor(EmailAttachmentDownloadEndpoint.RoutePrefix),
+                .ComposeAddressFor(McpAttachmentDownloadEndpoint.RoutePrefix),
             provider.GetRequiredService<IOptions<EmailContentOptions>>().Value.AttachmentDownloads.LinkLifetime));
         builder.Services.AddScoped(provider =>
             provider.GetRequiredService<IOptions<MailExtractionBackfillOptions>>().Value.ToBackfillOptions(

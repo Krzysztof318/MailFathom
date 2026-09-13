@@ -4,12 +4,12 @@
 
 using System.Text.Json.Nodes;
 using MailFathom.Host;
-using MailFathom.Host.Api;
 using MailFathom.Host.Api.Documentation;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.Hosting;
+using MailFathom.Host.Mcp;
 using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.Mcp;
 using Microsoft.AspNetCore.Builder;
@@ -193,7 +193,7 @@ internal static class HttpApiContractSurface
         // an operation with a published HTTP contract, so each has to be absent from the record for the allow-list's
         // reason rather than because nothing mapped it.
         routes.MapMcp(McpEndpointRoute.Path);
-        routes.MapEmailAttachmentDownload();
+        routes.MapMcpAttachmentDownload();
         routes.MapHealthProbes();
         routes.MapApiDocumentation(environment);
     }

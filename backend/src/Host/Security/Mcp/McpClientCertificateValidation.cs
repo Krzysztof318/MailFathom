@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Host.Api;
+using MailFathom.Host.Mcp;
 using MailFathom.Infrastructure.Security.ClientCertificates;
 using MailFathom.Mcp;
 
@@ -46,7 +46,7 @@ internal static class McpClientCertificateValidation
         // presents no client certificate, and the signed capability is the whole of what admits it.
         app.UseWhen(
             context => context.Request.Path.StartsWithSegments(McpEndpointRoute.Path)
-                && !context.Request.Path.StartsWithSegments(EmailAttachmentDownloadEndpoint.RoutePrefix),
+                && !context.Request.Path.StartsWithSegments(McpAttachmentDownloadEndpoint.RoutePrefix),
             mcpEndpoint => mcpEndpoint.Use((context, next) =>
                 ServeWhenTheConnectionCertificateIsAcceptedAsync(context, next, authenticator, trustProfiles)));
 

@@ -120,7 +120,7 @@ internal static class ClientMailAttachmentEndpoint
     /// credential.
     /// </remarks>
     private static ProblemHttpResult ScreenedOut() => TypedResults.Problem(
-        EmailAttachmentDownloadEndpoint.ScreenedDetail,
+        AttachmentContentResponse.ScreenedDetail,
         statusCode: StatusCodes.Status409Conflict,
         extensions: new Dictionary<string, object?>(StringComparer.Ordinal)
         {

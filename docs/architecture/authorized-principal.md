@@ -1,6 +1,6 @@
 # Who a use case is running for
 
-<!-- describes: backend/src/Application/Access/**, backend/src/Host/Security/Transport/TransportAuthorizedPrincipalSource.cs, backend/src/Host/Security/Transport/TransportCallerIdentity.cs, backend/src/Host/Security/Transport/TransportCallerUser.cs, backend/src/Host/Api/EmailAttachmentDownloadEndpoint.cs, backend/src/Application/Emails/DownloadAttachment/** -->
+<!-- describes: backend/src/Application/Access/**, backend/src/Host/Security/Transport/TransportAuthorizedPrincipalSource.cs, backend/src/Host/Security/Transport/TransportCallerIdentity.cs, backend/src/Host/Security/Transport/TransportCallerUser.cs, backend/src/Host/Mcp/McpAttachmentDownloadEndpoint.cs, backend/src/Application/Emails/DownloadAttachment/** -->
 
 A use case can be reached by more than one thing. Today an MCP tool, an administrative route, a background worker, and
 the attachment download link all end at application-layer code, and each of them arrives by a different path with

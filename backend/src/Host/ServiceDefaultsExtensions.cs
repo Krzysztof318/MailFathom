@@ -6,6 +6,7 @@ using System.Diagnostics;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting;
+using MailFathom.Host.Mcp;
 using MailFathom.Host.Observability;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using OpenTelemetry;
@@ -208,14 +209,14 @@ internal static class ServiceDefaultsExtensions
         ArgumentNullException.ThrowIfNull(activity);
         ArgumentNullException.ThrowIfNull(request);
 
-        if (!request.Path.StartsWithSegments(EmailAttachmentDownloadEndpoint.RoutePrefix))
+        if (!request.Path.StartsWithSegments(McpAttachmentDownloadEndpoint.RoutePrefix))
         {
             return;
         }
 
         // Setting a tag that already exists replaces it, which is what makes enrichment able to remove a value the
         // instrumentation recorded rather than only add beside it.
-        activity.SetTag("url.path", $"{EmailAttachmentDownloadEndpoint.RoutePrefix}/{{capability}}");
+        activity.SetTag("url.path", $"{McpAttachmentDownloadEndpoint.RoutePrefix}/{{capability}}");
     }
 
     /// <summary>
