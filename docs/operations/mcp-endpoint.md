@@ -715,7 +715,7 @@ refuses the arrangement rather than protecting it. What the deployment owes an o
 above, which names the hop and the port every time the process starts.
 
 `AttemptsPerMinute` bounds guessing and defaults to 10, which is a person correcting a mistyped password. It is applied
-**per source and per username** rather than per endpoint, because those are the two shapes an attack takes: one host
+**per source and per login** rather than per endpoint, because those are the two shapes an attack takes: one host
 trying many passwords, and many hosts trying one account's. **Only a wrong password spends any of it.** Basic
 re-presents the credential on every request and this deployment keeps no session, so an allowance a working password
 spent would bound a user's request rate rather than anybody's guessing — at the default, the eleventh call of a
@@ -723,21 +723,21 @@ working session would be refused with the answer a wrong password gets. What a w
 minute later, so a caller that has spent its allowance waits that minute out rather than being locked out; the point is
 to make guessing expensive rather than to give anybody a way to lock a user out. It is separate from
 [`RateLimiting`](#rate-limiting), which bounds requests to the surface rather than guesses at a credential. The ceiling
-is 600; a number above it is refused, because a thousand verifications a minute against one username is an offline
+is 600; a number above it is refused, because a thousand verifications a minute against one login is an offline
 guessing rate rather than a bound.
 
 **What bounds a burst is a second and much larger limit**, on how many password verifications may be in flight at once.
-It applies twice: 32 for one axis — one source, or one username — and `Basic.MaxConcurrentVerifications`, `128` unless
+It applies twice: 32 for one axis — one source, or one login — and `Basic.MaxConcurrentVerifications`, `128` unless
 set, for the whole surface whatever a caller names. The surface figure is configurable from `32` to `512` and is one
 replica's, so a deployment serving a large roster raises it with the cores a replica has rather than with the roster.
-The username axis is the whole login a user signs in with, so two users of different organizations who share a local
-name never spend one allowance. Both are sized for a browser opening several connections to one origin and an agent issuing calls in parallel,
+The login axis is the whole login a user signs in with, organization included, so two users of different organizations
+who share a username never spend one allowance. Both are sized for a browser opening several connections to one origin and an agent issuing calls in parallel,
 and both are deliberately unrelated to the allowance an operator lowers to make guessing expensive: a single limit
 serving both purposes would refuse a user's eleventh simultaneous call at the default, however right their password
 was.
 
 The surface figure is the one that stops a client opening five hundred connections from making this process perform
-five hundred concurrent derivations, because every distinct username is a fresh partition with a fresh per-axis
+five hundred concurrent derivations, because every distinct login is a fresh partition with a fresh per-axis
 ceiling and a caller varying the name would meet no per-axis limit at all. The per-axis figure is what bounds the
 overshoot in the allowance: the allowance is read before a verification and spent only after a wrong one, so a burst
 arriving together can exceed `AttemptsPerMinute` by at most 32 attempts in the first minute and by nothing after it.

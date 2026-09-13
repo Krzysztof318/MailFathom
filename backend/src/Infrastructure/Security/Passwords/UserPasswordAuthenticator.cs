@@ -81,9 +81,9 @@ public sealed partial class UserPasswordAuthenticator
     /// <summary>Judges the credential an <c>Authorization</c> header carried.</summary>
     /// <param name="surfaceName">The transport surface the request arrived on, which keeps two surfaces' attempt buckets apart.</param>
     /// <param name="authorizationHeaderValue">The raw header value, or <see langword="null" /> when the request carried none.</param>
-    /// <param name="source">The address to bound this attempt by, or <see langword="null" /> where the caller cannot supply one that tells two callers apart — behind a reverse proxy above all, where every request reports the proxy. The username is then the whole bound, which is deliberate: a partition every caller shares is one a single guesser could empty for everybody.</param>
-    /// <param name="attemptsPerMinute">How many attempts the surface allows one source and one username each minute.</param>
-    /// <param name="maxConcurrentVerifications">How many password verifications the surface may have in flight at once, whatever usernames they name.</param>
+    /// <param name="source">The address to bound this attempt by, or <see langword="null" /> where the caller cannot supply one that tells two callers apart — behind a reverse proxy above all, where every request reports the proxy. The login is then the whole bound, which is deliberate: a partition every caller shares is one a single guesser could empty for everybody. The login is the organization's short name in front of the username where it names one, so <c>ACME/jan</c> and <c>BETA/jan</c> are bounded apart.</param>
+    /// <param name="attemptsPerMinute">How many attempts the surface allows one source and one login each minute.</param>
+    /// <param name="maxConcurrentVerifications">How many password verifications the surface may have in flight at once, whatever logins they name.</param>
     /// <param name="cancellationToken">Cancels the credential read and the rehash that may follow a success.</param>
     /// <returns>The credential and user that matched, or the reason the credential was refused.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="surfaceName" /> is <see langword="null" />.</exception>
@@ -222,8 +222,8 @@ public sealed partial class UserPasswordAuthenticator
     [LoggerMessage(
         Level = LogLevel.Warning,
         Message = "A password attempt on the {TransportSurface} surface was refused without the password being checked, "
-            + "because its source or the username it named has spent its attempts for the current period. Neither the "
-            + "username nor the address is recorded; the bound is the endpoint's own Basic setting.")]
+            + "because its source or the login it named has spent its attempts for the current period. Neither the "
+            + "login nor the address is recorded; the bound is the endpoint's own Basic setting.")]
     private partial void LogAttemptsExhausted(string transportSurface);
 
     [LoggerMessage(
