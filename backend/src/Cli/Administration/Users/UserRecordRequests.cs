@@ -72,7 +72,7 @@ internal sealed record UserMailAccountRemovalRequest(
 /// <param name="Committed">Whether the record moved to a new version.</param>
 /// <param name="Version">The version now in force, whether the write committed, was refused, or changed nothing.</param>
 /// <param name="Code">The five-digit code naming why the write was refused, and nothing where nothing refused it.</param>
-/// <param name="Messages">One sentence per reason the write was refused or changed nothing, and empty on a commit.</param>
+/// <param name="Messages">One sentence per reason the write was refused or changed nothing, and on a commit one per problem the record already carried before the write — empty where it carried none.</param>
 /// <remarks>A refusal arrives as a named outcome with a success status for the reason a configuration write's does: each one is something the operator acts on and continues from, and each carries the version the next attempt is composed over.</remarks>
 internal sealed record UserRecordWriteAnswer(
     [property: JsonPropertyName("committed")] bool Committed,
