@@ -7,6 +7,7 @@ import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { useLinkOpener } from '../shellOperations/linkOpener';
+import { linkScript, measuringScript } from './frameScripts';
 
 // The one file in this client that writes an `iframe`'s `srcDoc`, and the only place a message's own markup is drawn
 // as markup. Everywhere else under `src/` the lint rule refuses it outright, and the exception is written into
@@ -64,7 +65,7 @@ export function MessageMarkupFrame({ markup }: { readonly markup: string }) {
                 ref={frame}
                 title={translate('fullHtml.frame')}
                 sandbox="allow-scripts"
-                srcDoc={documentAround(markup, linkScript)}
+                srcDoc={documentAround(markup, linkScriptElement)}
                 className="min-h-0 w-full flex-1 border-0 bg-sender-markup"
             />
             {refused ? <p className="px-3 py-1.5 text-sm text-warning">{translate('link.couldNotOpen')}</p> : null}
@@ -93,41 +94,10 @@ const reportWaitedFor = 2_500;
 const mostAdjustments = 16;
 const settledWithin = 3;
 
-// The client's own script, prepended to the `srcDoc` ahead of the message markup. It measures the document at a
-// viewport height of zero — otherwise each fitting would enlarge the content it is measuring and the number would grow
-// without end — and observes the body rather than the document element, which would close the same loop. It reports by
-// `postMessage` and does nothing else, which is what makes granting the flag bounded.
-//
-// It also stops the framed document scrolling inside itself, which is the design project's `scrolling="no"` written
-// the way the platform still has: that attribute is deprecated and the lint set refuses it, and what replaces it is
-// `overflow: hidden` on the framed document. The one case the frame is meant to scroll is the one where no report ever
-// arrives, and nothing there ran this script to hide it.
-// The client's own script for reporting a followed link, prepended to both surfaces' `srcDoc`. It cancels the frame's
-// own handling of the click and reports the `href` **as the sender wrote it** — the attribute rather than the resolved
-// property, because a relative reference resolves against `about:srcdoc` and would arrive as an address that means
-// nothing. Whether the target is one a reader may be handed is the parent's decision and is taken there.
-//
-// The listener is on the document in the capture phase, so a link wrapped in whatever a template put around it is still
-// answered by the first handler to see the event. It reads the tree upwards rather than trusting the event target,
-// since a click lands on the text node's element — a `span` inside the anchor, the image inside a banner link.
-const linkScript = `<script>(function(){
-function anchor(n){while(n&&n.nodeType===1){if(n.nodeName==="A")return n;n=n.parentNode}return null}
-document.addEventListener("click",function(e){var a=anchor(e.target);if(!a)return;
-var href=a.getAttribute("href");if(!href)return;e.preventDefault();
-try{parent.postMessage({link:href},"*")}catch(err){}},true)})()</script>`;
-
-const measuringScript = `<script>(function(){var last=0,sends=0;
-function measure(){var de=document.documentElement,b=document.body;if(!de||!b)return 0;
-var held=de.style.height;de.style.height="0px";
-var h=Math.max(b.scrollHeight,b.offsetHeight,Math.ceil(b.getBoundingClientRect().height));
-de.style.height=held;return h}
-function send(){if(sends>24)return;var h=measure();
-if(h&&Math.abs(h-last)>3){last=h;sends++;try{parent.postMessage({height:h},"*")}catch(e){}}}
-function boot(){var de=document.documentElement,b=document.body;
-if(de)de.style.overflow="hidden";if(b)b.style.overflow="hidden";
-if(window.ResizeObserver&&b){try{new ResizeObserver(function(){send()}).observe(b)}catch(e){}}send()}
-if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot);else boot();
-window.addEventListener("load",send);setTimeout(send,120);setTimeout(send,600);})()</script>`;
+// The client's own scripts, prepended to the `srcDoc` ahead of the message markup. `frameScripts.ts` holds their text
+// and what each does, and says why that text has to stay exactly what the content security policy hashed.
+const linkScriptElement = `<script>${linkScript}</script>`;
+const measuringScriptElement = `<script>${measuringScript}</script>`;
 
 /** How the frame arrived at the height it is drawn at, which is the whole of what the strip beneath it says. */
 type Fitting = 'measuring' | 'measured' | 'unreported';
@@ -214,7 +184,7 @@ export function EmbeddedMessageMarkup({ markup }: { readonly markup: string }) {
                     ref={frame}
                     title={translate('fullHtml.frame')}
                     sandbox="allow-scripts"
-                    srcDoc={documentAround(markup, linkScript + measuringScript)}
+                    srcDoc={documentAround(markup, linkScriptElement + measuringScriptElement)}
                     style={{ height: `${String(fitted.height)}px` }}
                     className="block w-full border-0 bg-sender-markup"
                 />

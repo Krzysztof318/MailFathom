@@ -31,6 +31,7 @@ import { readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { resolve } from 'node:path';
 import { run } from '@tauri-apps/cli';
+import { directivesBothHeadsShare } from '../src/Client.App/contentSecurityPolicy';
 
 const desktopShell = import.meta.dirname;
 const repositoryRoot = resolve(desktopShell, '../..');
@@ -78,6 +79,31 @@ async function reserveFreePort(): Promise<number> {
 
 const forwardedArguments = process.argv.slice(2);
 const configurationPatch: Record<string, unknown> = { version: declaredVersion };
+
+// The content security policy is merged in rather than written into `tauri.conf.json`, for the same reason the version
+// is: it is computed. It admits the two scripts the reading pane's frames run by hashes of their text, which
+// `Client.App/contentSecurityPolicy.ts` derives once for both heads, and that module is where the reason each shared
+// directive admits what it does sits next to it — which a JSON file has no way to carry.
+//
+// `connect-src` is the one directive this head decides differently, and it is decided here because a difference between
+// the heads is the shell's. It stays wide on purpose: which deployment this head belongs to is decided at run time —
+// configured, or typed on the sign-in screen — while the policy is fixed when the shell is built, so no host can be
+// named. What it narrows is the scheme: `https:` and `wss:` for the requests and the signal channel, `http:` and `ws:`
+// only because a deployment may be addressed in clear text where somebody declared that permission, and `ipc:` and
+// `http://ipc.localhost`, which are how the page reaches the shell's own commands.
+//
+// Tauri adds nonces of its own to the policy it serves, and a nonce in `style-src` switches `'unsafe-inline'` off
+// beside it, which would refuse the sender's own inline styles the markup frames exist to show. So that one directive is
+// served exactly as written; `script-src` still takes Tauri's additions, which is what lets its own scripts run.
+configurationPatch['app'] = {
+    security: {
+        csp: {
+            ...directivesBothHeadsShare,
+            'connect-src': "'self' ipc: http://ipc.localhost https: wss: http: ws:",
+        },
+        dangerousDisableAssetCspModification: ['style-src'],
+    },
+};
 
 // RPM's `Version` tag admits no hyphen — the hyphen is what separates its own release field — and a SemVer prerelease
 // identifier is introduced by exactly that character, so a nightly's version is not expressible as an RPM version at

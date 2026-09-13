@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientLocalMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientLocalMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src-tauri/run-tauri.ts -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -3124,6 +3124,42 @@ of 404s.
 There is no client-certificate profile here. The trust question a certificate answers is a second one this endpoint does
 not yet ask; where it is served is stated in exactly the settings the existing endpoints use, so the day it does ask,
 the answer arrives as a profile on a listener already shaped to carry one.
+
+### The content security policy it is served with
+
+Every file served beneath `/app/` carries a `Content-Security-Policy` header, on the client listeners and on no other.
+The policy is the bundle's own: the client's build writes it into the bundle as `content-security-policy.txt`, and the
+service reads that file once at startup and attaches it. A bundle carrying no such file is refused at startup exactly as
+a missing bundle is, because serving the page without its policy is the undefended page the file exists to prevent. A policy file that is
+present but empty is refused the same way, since an empty header value would remove the header from every response.
+Nothing here is configurable, and a proxy in front of this process should pass the header through rather than replace it.
+
+It is defence in depth rather than what keeps the reading pane safe — that rests on no string from a message ever
+becoming markup. What it limits is a defect somewhere else in the client: which scripts can run in the page, and so what
+could read a credential kept by *Keep me signed in*, and which origins the page can call. It does not stop a script
+that does run from sending out what it read: the wide `img-src` and `font-src` below let it name any host as a
+picture's or a font's address.
+
+| Directive | What it admits | Why |
+| --- | --- | --- |
+| `default-src` | `'self'` | Anything not named below comes from the deployment that served the page or not at all |
+| `script-src` | `'self'` and two `'sha256-…'` hashes | The bundle, and the two scripts the client writes into the frames that draw a sender's own markup — one reports a clicked link, one measures the embedded view's height. A framed `srcdoc` document inherits this policy, so each is admitted by the hash of its exact text, computed when the bundle is built; nothing a message carries runs |
+| `style-src` | `'self' 'unsafe-inline'` | A sender's own inline styles are what the full-HTML dialog and the embedded view exist to show, and a framed document inherits this directive too |
+| `img-src` | `'self' data: https: http:` | A message's pictures come from whatever server its sender named, and asking to load them re-reads that message with those addresses left in, so no host can be named. `data:` is a picture the message or an attachment carried inline |
+| `font-src` | `'self' data: https: http:` | The client's own typeface ships inside the bundle; the other sources are a sender's web font, which asking to load a message's remote content restores beside its pictures |
+| `connect-src` | `'self'` | The page calls the deployment that served it — the routes beneath `/api/client`, the signal channel, and the telemetry routes — and nothing else. A page a deployment served offers no control for naming another. This restricts fetch, `XMLHttpRequest`, and WebSocket connections only; a picture or font address is governed by the two rows above, which still admit any host |
+| `frame-src` | `'self' blob:` | An attached PDF is drawn by the browser's own viewer from an object URL the page made |
+| `object-src` | `'none'` | No plugin content |
+| `base-uri` | `'none'` | No `<base>` element can redirect the page's relative references, in the page or in a frame |
+| `form-action` | `'none'` | No form submits anywhere; the client's own forms are handled by the page |
+| `frame-ancestors` | `'none'` | No other page may frame this one |
+
+The desktop head carries the same policy with one directive wider. Its `connect-src` is
+`'self' ipc: http://ipc.localhost https: wss: http: ws:`: `ipc:` and `http://ipc.localhost` are how its page reaches the
+shell's own commands, and the four schemes admit whichever deployment its user names, because that is decided at run
+time while its policy is fixed when the application is built. `frontend/src/Client.App/contentSecurityPolicy.ts` holds
+the directives both heads share with the reason for each beside it, and `frontend/src-tauri/run-tauri.ts` holds the
+desktop head's `connect-src` and its reason.
 
 ## Publishing it
 

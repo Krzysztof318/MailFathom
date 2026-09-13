@@ -7,6 +7,9 @@ import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import { asHeaderValue, contentSecurityPolicyDocument, webHeadDirectives } from './contentSecurityPolicy';
+
+const webHeadPolicy = asHeaderValue(webHeadDirectives);
 
 // `Version.props` is the one place a version number is written, and `scripts/read-declared-version.sh` is how anything
 // that has to put it somewhere reads it. Substituting it at build time is what keeps the number out of a manifest and
@@ -38,7 +41,26 @@ export default defineConfig({
     // Relative, because the one bundle is loaded from two places: a deployment serves it beneath `/app/`, and the
     // desktop shell loads it from the root of its own scheme. An absolute base would be right for exactly one of them.
     base: './',
-    plugins: [react(), tailwindcss()],
+    plugins: [
+        react(),
+        tailwindcss(),
+        {
+            // The policy travels inside the bundle rather than being restated by the service, because the hashes it
+            // admits the frame's scripts by are computed from this tree at build time and a copy anywhere else would
+            // go stale the first time a script changed. `ClientApplicationFiles` reads it and attaches it.
+            name: 'mailfathom-content-security-policy',
+            apply: 'build',
+            generateBundle() {
+                this.emitFile({ type: 'asset', fileName: contentSecurityPolicyDocument, source: webHeadPolicy });
+            },
+        },
+    ],
+    // The preview server is what the browser suite drives, so it serves the bundle under the same policy a deployment
+    // does and a violation reaches that suite rather than a person's screen. The development server attaches none: it
+    // injects inline scripts of its own that no hash in the policy could name.
+    preview: {
+        headers: { 'Content-Security-Policy': webHeadPolicy },
+    },
     define: {
         __MAILFATHOM_VERSION__: JSON.stringify(declaredVersion),
     },

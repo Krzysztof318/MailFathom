@@ -229,11 +229,11 @@ internal static class HostPipeline
                 ClientEndpointOptions.SectionName,
                 typeof(ClientEndpointOptions),
                 [
-                    $"{ClientEndpointOptions.SectionName}:{nameof(ClientEndpointOptions.Application)}:{nameof(ClientApplicationOptions.Enabled)} is set, but this deployment carries no client to serve: '{ClientApplicationOptions.EntryDocument}' is absent from '{app.Environment.WebRootPath}'. Every published MailFathom image carries one, so this is an artifact built without the client stage; use a published image, or leave the setting off.",
+                    $"{ClientEndpointOptions.SectionName}:{nameof(ClientEndpointOptions.Application)}:{nameof(ClientApplicationOptions.Enabled)} is set, but this deployment carries no complete client to serve: '{ClientApplicationOptions.EntryDocument}' or '{ClientApplicationOptions.ContentSecurityPolicyDocument}' is absent from '{app.Environment.WebRootPath}'. Every published MailFathom image carries one, so this is an artifact built without the client stage; use a published image, or leave the setting off.",
                 ]);
         }
 
-        app.UseClientApplication(composition.Client.ListenerPorts);
+        app.UseClientApplication(app.Environment, composition.Client.ListenerPorts);
     }
 
     /// <summary>Maps the liveness and readiness routes, having proved each configured probe is answered by something.</summary>

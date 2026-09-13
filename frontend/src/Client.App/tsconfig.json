@@ -1,11 +1,18 @@
 {
   // The application half, which is the only one that may name a browser or React. `types` admits Node's declarations
-  // because `vite.config.ts` runs under Node and is checked by this project rather than by one of its own.
+  // because `vite.config.ts` and the content security policy it writes run under Node and are checked by this project
+  // rather than by one of their own.
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["node"],
     "jsx": "react-jsx"
   },
-  "include": ["src", "vite.config.ts", "vitest.setup.ts"]
+  "include": [
+    "src",
+    "vite.config.ts",
+    "vitest.setup.ts",
+    "contentSecurityPolicy.ts",
+    "contentSecurityPolicy.test.tsx"
+  ]
 }

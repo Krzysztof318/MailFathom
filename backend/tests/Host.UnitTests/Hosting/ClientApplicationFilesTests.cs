@@ -28,13 +28,17 @@ public sealed class ClientApplicationFilesTests
 {
     private const int ClientListenerPort = 8443;
 
+    private const int AnotherListenerPort = 8444;
+
     private const string EntryDocumentContent = "<!doctype html>";
 
+    private const string ContentSecurityPolicy = "default-src 'self'; frame-ancestors 'none'";
+
     [Fact]
-    public void BundleIsPresent_AnEnvironmentWhoseWebRootCarriesTheEntryDocument_ReportsTheBundle()
+    public void BundleIsPresent_AnEnvironmentWhoseWebRootCarriesTheEntryDocumentAndItsPolicy_ReportsTheBundle()
     {
         // Arrange
-        var environment = EnvironmentServing(ClientApplicationOptions.EntryDocument, present: true);
+        var environment = EnvironmentServing(entryDocumentPresent: true, contentSecurityPolicyPresent: true);
 
         // Act
         var present = ClientApplicationFiles.BundleIsPresent(environment);
@@ -48,7 +52,21 @@ public sealed class ClientApplicationFilesTests
     public void BundleIsPresent_AnEnvironmentWhoseWebRootIsEmpty_ReportsNoBundle()
     {
         // Arrange
-        var environment = EnvironmentServing(ClientApplicationOptions.EntryDocument, present: false);
+        var environment = EnvironmentServing(entryDocumentPresent: false, contentSecurityPolicyPresent: false);
+
+        // Act
+        var present = ClientApplicationFiles.BundleIsPresent(environment);
+
+        // Assert
+        Assert.False(present);
+    }
+
+    /// <summary>A bundle built without its policy would be served undefended, so it is not recognized as one.</summary>
+    [Fact]
+    public void BundleIsPresent_AWebRootCarryingNoContentSecurityPolicy_ReportsNoBundle()
+    {
+        // Arrange
+        var environment = EnvironmentServing(entryDocumentPresent: true, contentSecurityPolicyPresent: false);
 
         // Act
         var present = ClientApplicationFiles.BundleIsPresent(environment);
@@ -107,13 +125,65 @@ public sealed class ClientApplicationFilesTests
         Assert.Equal(StatusCodes.Status404NotFound, context.Response.StatusCode);
     }
 
-    private static DefaultHttpContext RequestOnTheClientListener(string path)
+    [Fact]
+    public async Task UseClientApplication_TheEntryDocumentOnAClientListener_CarriesTheBundlesContentSecurityPolicy()
+    {
+        // Arrange
+        var context = RequestOnTheClientListener("/app/");
+
+        // Act
+        await ServeAsync(context);
+
+        // Assert
+        Assert.Equal(ContentSecurityPolicy, context.Response.Headers.ContentSecurityPolicy.ToString());
+    }
+
+    /// <summary>The policy travels with the bundle, so a listener the bundle is not served on answers without either.</summary>
+    [Fact]
+    public async Task UseClientApplication_TheApplicationPathOnAnotherListener_CarriesNoContentSecurityPolicy()
+    {
+        // Arrange
+        var context = RequestOn(AnotherListenerPort, "/app/");
+
+        // Act
+        await ServeAsync(context);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status404NotFound, context.Response.StatusCode);
+        Assert.False(context.Response.Headers.ContainsKey("Content-Security-Policy"));
+    }
+
+    /// <summary>An empty file passes a check for its existence, and serving under it would drop the header on every response.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData(" \n")]
+    public async Task UseClientApplication_ABundleWhosePolicyDocumentIsBlank_RefusesToServeIt(string policyDocument)
+    {
+        // Arrange
+        await using var services = new ServiceCollection().BuildServiceProvider();
+
+        var application = new ApplicationBuilder(services);
+
+        // Act
+        var refusal = Record.Exception(() => application.UseClientApplication(
+            WebRootCarryingTheBundle(policyDocument),
+            new HashSet<int> { ClientListenerPort }));
+
+        // Assert
+        var refused = Assert.IsType<InvalidOperationException>(refusal);
+
+        Assert.Contains(ClientApplicationOptions.ContentSecurityPolicyDocument, refused.Message, StringComparison.Ordinal);
+    }
+
+    private static DefaultHttpContext RequestOnTheClientListener(string path) => RequestOn(ClientListenerPort, path);
+
+    private static DefaultHttpContext RequestOn(int localPort, string path)
     {
         var context = new DefaultHttpContext();
 
         context.Request.Method = HttpMethods.Get;
         context.Request.Path = path;
-        context.Connection.LocalPort = ClientListenerPort;
+        context.Connection.LocalPort = localPort;
         context.Response.Body = new MemoryStream();
 
         return context;
@@ -121,14 +191,17 @@ public sealed class ClientApplicationFilesTests
 
     private static async Task ServeAsync(DefaultHttpContext context)
     {
+        // Written the way the client's build writes it, one line with a trailing newline the service must not attach.
+        var environment = WebRootCarryingTheBundle($"{ContentSecurityPolicy}\n");
+
         await using var services = new ServiceCollection()
-            .AddSingleton(WebRootCarryingTheBundle())
+            .AddSingleton(environment)
             .AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance)
             .BuildServiceProvider();
 
         var application = new ApplicationBuilder(services);
 
-        application.UseClientApplication(new HashSet<int> { ClientListenerPort });
+        application.UseClientApplication(environment, new HashSet<int> { ClientListenerPort });
         application.Run(unmatched =>
         {
             unmatched.Response.StatusCode = StatusCodes.Status404NotFound;
@@ -141,8 +214,8 @@ public sealed class ClientApplicationFilesTests
         await application.Build()(context);
     }
 
-    /// <summary>A web root holding the entry document at its root, which is where the image copies the bundle.</summary>
-    private static IWebHostEnvironment WebRootCarryingTheBundle()
+    /// <summary>A web root holding the entry document and a policy document at its root, which is where the image copies the bundle.</summary>
+    private static IWebHostEnvironment WebRootCarryingTheBundle(string policyDocumentContent)
     {
         var content = Encoding.UTF8.GetBytes(EntryDocumentContent);
 
@@ -153,6 +226,13 @@ public sealed class ClientApplicationFilesTests
         entryDocument.Length.Returns(content.Length);
         entryDocument.LastModified.Returns(DateTimeOffset.UnixEpoch);
         entryDocument.CreateReadStream().Returns(_ => new MemoryStream(content));
+
+        var policy = Encoding.UTF8.GetBytes(policyDocumentContent);
+
+        var policyDocument = Substitute.For<IFileInfo>();
+
+        policyDocument.Exists.Returns(true);
+        policyDocument.CreateReadStream().Returns(_ => new MemoryStream(policy));
 
         var absent = Substitute.For<IFileInfo>();
 
@@ -170,6 +250,7 @@ public sealed class ClientApplicationFilesTests
 
         files.GetFileInfo(Arg.Any<string>()).Returns(absent);
         files.GetFileInfo($"/{ClientApplicationOptions.EntryDocument}").Returns(entryDocument);
+        files.GetFileInfo(ClientApplicationOptions.ContentSecurityPolicyDocument).Returns(policyDocument);
         files.GetDirectoryContents(Arg.Any<string>()).Returns(absentDirectory);
         files.GetDirectoryContents("/").Returns(root);
 
@@ -180,15 +261,20 @@ public sealed class ClientApplicationFilesTests
         return environment;
     }
 
-    private static IWebHostEnvironment EnvironmentServing(string entryDocument, bool present)
+    private static IWebHostEnvironment EnvironmentServing(bool entryDocumentPresent, bool contentSecurityPolicyPresent)
     {
-        var file = Substitute.For<IFileInfo>();
+        var entryDocument = Substitute.For<IFileInfo>();
 
-        file.Exists.Returns(present);
+        entryDocument.Exists.Returns(entryDocumentPresent);
+
+        var contentSecurityPolicy = Substitute.For<IFileInfo>();
+
+        contentSecurityPolicy.Exists.Returns(contentSecurityPolicyPresent);
 
         var files = Substitute.For<IFileProvider>();
 
-        files.GetFileInfo(entryDocument).Returns(file);
+        files.GetFileInfo(ClientApplicationOptions.EntryDocument).Returns(entryDocument);
+        files.GetFileInfo(ClientApplicationOptions.ContentSecurityPolicyDocument).Returns(contentSecurityPolicy);
 
         var environment = Substitute.For<IWebHostEnvironment>();
 
