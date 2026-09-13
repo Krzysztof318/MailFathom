@@ -4,6 +4,7 @@
 
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Mcp;
 using MailFathom.Host.Security.Transport;
@@ -11,6 +12,8 @@ using MailFathom.Infrastructure.Security.Transport;
 using MailFathom.Mcp;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using Xunit;
 
@@ -30,6 +33,12 @@ namespace MailFathom.Host.UnitTests.Security.Transport;
 public sealed class TransportRateLimitingTests
 {
     private const string AdminRoute = AdminEndpointOptions.RoutePrefix + "/session";
+
+    private static readonly MailUserId Colleague = MailUserId.Create(Guid.Parse("6b1f3c2e-8d4a-4c7e-9f10-2a3b4c5d6e7f"));
+
+    private static readonly MailUserId OtherUser = MailUserId.Create(Guid.Parse("0e9d8c7b-6a5f-4e3d-8c2b-1a0f9e8d7c6b"));
+
+    private static readonly MailUserId ThirdUser = MailUserId.Create(Guid.Parse("5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d"));
 
     [Fact]
     public void ProcessConcurrencyOptions_CarriesTheConfiguredConcurrency()
@@ -91,7 +100,7 @@ public sealed class TransportRateLimitingTests
     public void PartitionForProcess_ForARequestOnNoBoundedSurface_AppliesNoLimit(string unboundedPath)
     {
         // Arrange
-        var boundedSurfaces = BothSurfaces(Limits(maxConcurrentRequests: 1), Limits(maxConcurrentRequests: 1));
+        var boundedSurfaces = BothSurfaces(Limits(maxConcurrentRequests: 2), Limits(maxConcurrentRequests: 2));
         using var limiter = ProcessLimiter(boundedSurfaces);
 
         // Act
@@ -191,21 +200,21 @@ public sealed class TransportRateLimitingTests
     {
         // Arrange
         var boundedSurfaces = BothSurfaces(
-            mcpLimits: Limits(maxConcurrentRequests: 1),
-            adminLimits: Limits(maxConcurrentRequests: 1));
+            mcpLimits: Limits(maxConcurrentRequests: 2),
+            adminLimits: Limits(maxConcurrentRequests: 2));
         using var limiter = ProcessLimiter(boundedSurfaces);
 
         // Act
-        var mcpAdmitted = limiter.AttemptAcquire(McpRequest());
+        var mcpAdmitted = AcquireAll(limiter, () => McpRequest(), attempts: 2);
         var mcpRefused = limiter.AttemptAcquire(McpRequest());
         var administrative = limiter.AttemptAcquire(AdminRequest());
 
         // Assert
-        Assert.True(mcpAdmitted.IsAcquired);
+        Assert.All(mcpAdmitted, lease => Assert.True(lease.IsAcquired));
         Assert.False(mcpRefused.IsAcquired);
         Assert.True(administrative.IsAcquired);
 
-        DisposeAll([mcpAdmitted, mcpRefused, administrative]);
+        DisposeAll([.. mcpAdmitted, mcpRefused, administrative]);
     }
 
     /// <summary>An endpoint an operator left unbounded takes no capacity from the one they bounded, and is not bounded by it either.</summary>
@@ -213,7 +222,7 @@ public sealed class TransportRateLimitingTests
     public void PartitionForProcess_ForASurfaceThatIsNotBounded_AppliesNoLimit()
     {
         // Arrange
-        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 1));
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 2));
         using var limiter = ProcessLimiter(boundedSurfaces);
 
         // Act
@@ -251,9 +260,10 @@ public sealed class TransportRateLimitingTests
     public async Task PartitionForProcess_WithNoQueue_RefusesRatherThanWaiting()
     {
         // Arrange
-        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 1, concurrencyQueueLimit: 0));
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 2, concurrencyQueueLimit: 0));
         using var limiter = ProcessLimiter(boundedSurfaces);
         using var held = limiter.AttemptAcquire(McpRequest());
+        using var alsoHeld = limiter.AttemptAcquire(McpRequest());
 
         // Act
         var refusal = limiter
@@ -270,8 +280,9 @@ public sealed class TransportRateLimitingTests
     public async Task PartitionForProcess_WithABoundedQueue_LetsThatManyWaitAndRefusesTheRest()
     {
         // Arrange
-        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 1, concurrencyQueueLimit: 1));
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 2, concurrencyQueueLimit: 1));
         using var limiter = ProcessLimiter(boundedSurfaces);
+        using var stillHeld = limiter.AttemptAcquire(McpRequest());
         var held = limiter.AttemptAcquire(McpRequest());
 
         // Act
@@ -475,12 +486,110 @@ public sealed class TransportRateLimitingTests
     }
 
     [Fact]
+    public void UserConcurrencyOptions_CarriesThePerUserCeilingWithoutQueueing()
+    {
+        // Arrange
+        var limits = Limits(maxConcurrentRequests: 9, maxConcurrentRequestsPerUser: 3, concurrencyQueueLimit: 4);
+
+        // Act
+        var limiterOptions = TransportRateLimiting.UserConcurrencyOptions(limits);
+
+        // Assert
+        Assert.Equal(3, limiterOptions.PermitLimit);
+        Assert.Equal(0, limiterOptions.QueueLimit);
+    }
+
+    /// <summary>Every credential a user holds spends that user's one bucket, so holding a second credential buys no second allowance.</summary>
+    [Fact]
+    public void PartitionForCaller_TwoCredentialsOfOneUser_DrainOneBucket()
+    {
+        // Arrange
+        var limits = Limits(tokenCapacity: 2, tokensPerReplenishmentPeriod: 2);
+        using var limiter = CallerLimiter(TransportSurface.Mcp, limits);
+
+        // Act
+        var throughTheKey = limiter.AttemptAcquire(McpRequest("credential-api-key", user: Colleague));
+        var throughThePassword = limiter.AttemptAcquire(McpRequest("credential-password", user: Colleague));
+        var throughTheKeyAgain = limiter.AttemptAcquire(McpRequest("credential-api-key", user: Colleague));
+        var anotherUser = limiter.AttemptAcquire(McpRequest("credential-of-another", user: OtherUser));
+
+        // Assert
+        Assert.Equal(
+            [true, true, false, true],
+            new[] { throughTheKey, throughThePassword, throughTheKeyAgain, anotherUser }.Select(lease => lease.IsAcquired));
+
+        DisposeAll([throughTheKey, throughThePassword, throughTheKeyAgain, anotherUser]);
+    }
+
+    [Fact]
+    public void PartitionForUserConcurrency_OneUserAtTheirCeiling_LeavesAnotherUserServed()
+    {
+        // Arrange
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 8, maxConcurrentRequestsPerUser: 2));
+        using var limiter = UserConcurrencyLimiter(boundedSurfaces);
+
+        // Act
+        var busyUser = AcquireAll(limiter, () => McpRequest("credential-api-key", user: Colleague), attempts: 3);
+        var otherUser = limiter.AttemptAcquire(McpRequest("credential-of-another", user: OtherUser));
+
+        // Assert
+        Assert.Equal([true, true, false], busyUser.Select(lease => lease.IsAcquired));
+        Assert.True(otherUser.IsAcquired);
+
+        DisposeAll([.. busyUser, otherUser]);
+    }
+
+    /// <summary>The per-user concurrency is attached to the surface's routes alone, so the probes keep answering however busy a user is.</summary>
+    [Fact]
+    public void PartitionForUserConcurrency_ForARequestOnNoBoundedSurface_AppliesNoLimit()
+    {
+        // Arrange
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 2, maxConcurrentRequestsPerUser: 1));
+        using var limiter = UserConcurrencyLimiter(boundedSurfaces);
+
+        // Act
+        var leases = AcquireAll(limiter, () => RequestTo("/health"), attempts: 4);
+
+        // Assert
+        Assert.All(leases, lease => Assert.True(lease.IsAcquired));
+
+        DisposeAll(leases);
+    }
+
+    /// <summary>
+    /// The limiter the application runs is the two concurrency limits chained: one user saturating their own allowance
+    /// leaves the process serving somebody else, and the process's own ceiling still holds across every user.
+    /// </summary>
+    [Fact]
+    public void AddTransportRateLimiting_OneUserAtTheirCeiling_LeavesTheProcessServingOthersUpToItsOwn()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddTransportRateLimiting(McpOnly(Limits(maxConcurrentRequests: 3, maxConcurrentRequestsPerUser: 2)));
+        using var provider = services.BuildServiceProvider();
+        using var limiter = provider.GetRequiredService<IOptions<RateLimiterOptions>>().Value.GlobalLimiter!;
+
+        // Act
+        var busyUser = AcquireAll(limiter, () => McpRequest("credential-api-key", user: Colleague), attempts: 3);
+        var secondUser = limiter.AttemptAcquire(McpRequest("credential-of-another", user: OtherUser));
+        var thirdUser = limiter.AttemptAcquire(McpRequest("credential-of-a-third", user: ThirdUser));
+
+        // Assert
+        Assert.Equal([true, true, false], busyUser.Select(lease => lease.IsAcquired));
+        Assert.True(secondUser.IsAcquired);
+        Assert.False(thirdUser.IsAcquired);
+
+        DisposeAll([.. busyUser, secondUser, thirdUser]);
+    }
+
+    [Fact]
     public async Task RefuseAsync_ForAnyRejection_AnswersTooManyRequestsWithoutABody()
     {
         // Arrange
-        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 1));
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 2));
         using var limiter = ProcessLimiter(boundedSurfaces);
         using var held = limiter.AttemptAcquire(McpRequest());
+        using var alsoHeld = limiter.AttemptAcquire(McpRequest());
         using var refusedLease = limiter.AttemptAcquire(McpRequest());
         var httpContext = McpRequest();
 
@@ -522,9 +631,10 @@ public sealed class TransportRateLimitingTests
     public async Task RefuseAsync_WhenTheLimiterCannotSayWhenCapacityReturns_OmitsTheRetry()
     {
         // Arrange
-        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 1));
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 2));
         using var limiter = ProcessLimiter(boundedSurfaces);
         using var held = limiter.AttemptAcquire(McpRequest());
+        using var alsoHeld = limiter.AttemptAcquire(McpRequest());
         using var refusedLease = limiter.AttemptAcquire(McpRequest());
         var httpContext = McpRequest();
 
@@ -663,6 +773,7 @@ public sealed class TransportRateLimitingTests
 
     private static TransportRateLimits Limits(
         int maxConcurrentRequests = 8,
+        int? maxConcurrentRequestsPerUser = null,
         int concurrencyQueueLimit = 0,
         int tokenCapacity = 100,
         int tokensPerReplenishmentPeriod = 100,
@@ -670,6 +781,7 @@ public sealed class TransportRateLimitingTests
         int requestQueueLimit = 0) =>
         TransportRateLimits.Create(
             maxConcurrentRequests,
+            maxConcurrentRequestsPerUser ?? maxConcurrentRequests - 1,
             concurrencyQueueLimit,
             tokenCapacity,
             tokensPerReplenishmentPeriod,
@@ -694,6 +806,11 @@ public sealed class TransportRateLimitingTests
         IReadOnlyList<BoundedTransportSurface> boundedSurfaces) =>
         PartitionedRateLimiter.Create<HttpContext, string>(
             httpContext => TransportRateLimiting.PartitionForProcess(httpContext, boundedSurfaces));
+
+    private static PartitionedRateLimiter<HttpContext> UserConcurrencyLimiter(
+        IReadOnlyList<BoundedTransportSurface> boundedSurfaces) =>
+        PartitionedRateLimiter.Create<HttpContext, string>(
+            httpContext => TransportRateLimiting.PartitionForUserConcurrency(httpContext, boundedSurfaces));
 
     /// <summary>
     /// Builds one surface's own partitions, with the replenishment timer left off so a test that spends capacity is not
@@ -748,8 +865,9 @@ public sealed class TransportRateLimitingTests
 
     private static DefaultHttpContext McpRequest(
         string? authenticatedClientName = null,
-        string? certificateProfileName = null) =>
-        RequestTo(McpEndpointRoute.Path, authenticatedClientName, certificateProfileName);
+        string? certificateProfileName = null,
+        MailUserId? user = null) =>
+        RequestTo(McpEndpointRoute.Path, authenticatedClientName, certificateProfileName, user);
 
     private static DefaultHttpContext AdminRequest(string? authenticatedClientName = null) =>
         RequestTo(AdminRoute, authenticatedClientName);
@@ -757,16 +875,21 @@ public sealed class TransportRateLimitingTests
     private static DefaultHttpContext RequestTo(
         string path,
         string? authenticatedClientName = null,
-        string? certificateProfileName = null)
+        string? certificateProfileName = null,
+        MailUserId? user = null)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Path = path;
 
         if (authenticatedClientName is not null)
         {
-            httpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
-                [new Claim(ClaimTypes.Name, authenticatedClientName)],
-                authenticationType: "test"));
+            // Shaped as a user-facing handler shapes it: the credential names the identity, and the user it resolved to
+            // travels beside it as the claim the limiter reads.
+            Claim[] claims = user is { } resolvedUser
+                ? [new Claim(ClaimTypes.Name, authenticatedClientName), TransportCallerUser.ClaimFor(resolvedUser)]
+                : [new Claim(ClaimTypes.Name, authenticatedClientName)];
+
+            httpContext.User = new ClaimsPrincipal(new ClaimsIdentity(claims, authenticationType: "test"));
         }
 
         if (certificateProfileName is not null)

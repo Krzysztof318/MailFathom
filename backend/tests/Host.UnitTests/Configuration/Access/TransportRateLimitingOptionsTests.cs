@@ -31,6 +31,7 @@ public sealed class TransportRateLimitingOptionsTests
 
         // Assert
         Assert.Equal(expected.MaxConcurrentRequests, settings.MaxConcurrentRequests);
+        Assert.Equal(expected.MaxConcurrentRequestsPerUser, settings.MaxConcurrentRequestsPerUser);
         Assert.Equal(expected.ConcurrencyQueueLimit, settings.ConcurrencyQueueLimit);
         Assert.Equal(expected.TokenCapacity, settings.TokenCapacity);
         Assert.Equal(expected.TokensPerReplenishmentPeriod, settings.TokensPerReplenishmentPeriod);
@@ -74,6 +75,8 @@ public sealed class TransportRateLimitingOptionsTests
     [InlineData(nameof(TransportRateLimitingOptions.MaxConcurrentRequests), 0)]
     [InlineData(nameof(TransportRateLimitingOptions.MaxConcurrentRequests), -1)]
     [InlineData(nameof(TransportRateLimitingOptions.MaxConcurrentRequests), 1001)]
+    [InlineData(nameof(TransportRateLimitingOptions.MaxConcurrentRequestsPerUser), 0)]
+    [InlineData(nameof(TransportRateLimitingOptions.MaxConcurrentRequestsPerUser), 1000)]
     [InlineData(nameof(TransportRateLimitingOptions.ConcurrencyQueueLimit), -1)]
     [InlineData(nameof(TransportRateLimitingOptions.ConcurrencyQueueLimit), 1001)]
     [InlineData(nameof(TransportRateLimitingOptions.TokenCapacity), 0)]
@@ -128,12 +131,33 @@ public sealed class TransportRateLimitingOptionsTests
     }
 
     [Fact]
+    public void FindConfigurationErrors_WithAUserCeilingThatCouldHoldEveryPermit_ReportsTheCombination()
+    {
+        // Arrange
+        // One user allowed as many requests at once as the process serves could refuse every other user by themselves.
+        var settings = new TransportRateLimitingOptions { MaxConcurrentRequests = 4, MaxConcurrentRequestsPerUser = 4 };
+
+        // Act
+        var errors = settings.FindConfigurationErrors();
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.StartsWith(nameof(TransportRateLimitingOptions.MaxConcurrentRequestsPerUser), error, StringComparison.Ordinal);
+        Assert.Contains(nameof(TransportRateLimitingOptions.MaxConcurrentRequests), error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FindConfigurationErrors_WithAClientQueueThatCouldHoldEveryPermit_ReportsTheCombination()
     {
         // Arrange
         // The two limiters are acquired in order, so a request waiting for its client's capacity is already holding a
         // concurrency permit. A queue this size lets one client out of tokens park every permit the process has.
-        var settings = new TransportRateLimitingOptions { MaxConcurrentRequests = 4, RequestQueueLimit = 4 };
+        var settings = new TransportRateLimitingOptions
+        {
+            MaxConcurrentRequests = 4,
+            MaxConcurrentRequestsPerUser = 2,
+            RequestQueueLimit = 4,
+        };
 
         // Act
         var errors = settings.FindConfigurationErrors();
@@ -148,7 +172,12 @@ public sealed class TransportRateLimitingOptionsTests
     public void FindConfigurationErrors_WithAClientQueueBelowThePermitCount_ReportsNothing()
     {
         // Arrange
-        var settings = new TransportRateLimitingOptions { MaxConcurrentRequests = 4, RequestQueueLimit = 3 };
+        var settings = new TransportRateLimitingOptions
+        {
+            MaxConcurrentRequests = 4,
+            MaxConcurrentRequestsPerUser = 2,
+            RequestQueueLimit = 3,
+        };
 
         // Act
         var errors = settings.FindConfigurationErrors();
@@ -213,6 +242,7 @@ public sealed class TransportRateLimitingOptionsTests
         var settings = new TransportRateLimitingOptions
         {
             MaxConcurrentRequests = 9,
+            MaxConcurrentRequestsPerUser = 3,
             ConcurrencyQueueLimit = 4,
             TokenCapacity = 30,
             TokensPerReplenishmentPeriod = 5,
@@ -225,6 +255,7 @@ public sealed class TransportRateLimitingOptionsTests
 
         // Assert
         Assert.Equal(9, limits.MaxConcurrentRequests);
+        Assert.Equal(3, limits.MaxConcurrentRequestsPerUser);
         Assert.Equal(4, limits.ConcurrencyQueueLimit);
         Assert.Equal(30, limits.TokenCapacity);
         Assert.Equal(5, limits.TokensPerReplenishmentPeriod);
@@ -248,6 +279,9 @@ public sealed class TransportRateLimitingOptionsTests
         {
             case nameof(TransportRateLimitingOptions.MaxConcurrentRequests):
                 settings.MaxConcurrentRequests = configuredValue;
+                break;
+            case nameof(TransportRateLimitingOptions.MaxConcurrentRequestsPerUser):
+                settings.MaxConcurrentRequestsPerUser = configuredValue;
                 break;
             case nameof(TransportRateLimitingOptions.ConcurrencyQueueLimit):
                 settings.ConcurrencyQueueLimit = configuredValue;

@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using MailFathom.Host.Configuration.Access;
+using MailFathom.Infrastructure.Security.Passwords;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Access;
@@ -54,5 +55,49 @@ public sealed class BasicAuthenticationOptionsTests
         var reported = Assert.Single(errors);
         Assert.Contains($"{SettingPath}:{nameof(BasicAuthenticationOptions.AttemptsPerMinute)}", reported, StringComparison.Ordinal);
         Assert.Contains(BasicAuthenticationOptions.MaximumAttemptsPerMinute.ToString(CultureInfo.InvariantCulture), reported, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(PasswordAttemptLimiter.ConcurrentVerificationsPerPartition)]
+    [InlineData(BasicAuthenticationOptions.DefaultMaxConcurrentVerifications)]
+    [InlineData(BasicAuthenticationOptions.MaximumMaxConcurrentVerifications)]
+    public void FindConfigurationErrors_AVerificationCeilingInsideItsBounds_ReportsNothing(int maxConcurrentVerifications)
+    {
+        // Arrange
+        var options = new BasicAuthenticationOptions { MaxConcurrentVerifications = maxConcurrentVerifications };
+
+        // Act, Assert
+        Assert.Empty(options.FindConfigurationErrors(SettingPath));
+    }
+
+    /// <summary>Below one axis's own ceiling the surface would make that smaller bound unreachable, and past the maximum it bounds nothing a replica has.</summary>
+    [Theory]
+    [InlineData(PasswordAttemptLimiter.ConcurrentVerificationsPerPartition - 1)]
+    [InlineData(0)]
+    [InlineData(BasicAuthenticationOptions.MaximumMaxConcurrentVerifications + 1)]
+    public void FindConfigurationErrors_AVerificationCeilingOutsideItsBounds_IsRefusedNamingItsPath(int maxConcurrentVerifications)
+    {
+        // Arrange
+        var options = new BasicAuthenticationOptions { MaxConcurrentVerifications = maxConcurrentVerifications };
+
+        // Act
+        var errors = options.FindConfigurationErrors(SettingPath);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains($"{SettingPath}:{nameof(BasicAuthenticationOptions.MaxConcurrentVerifications)}", reported, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_BothSettingsOutOfRange_ReportsEach()
+    {
+        // Arrange
+        var options = new BasicAuthenticationOptions { AttemptsPerMinute = 0, MaxConcurrentVerifications = 0 };
+
+        // Act
+        var errors = options.FindConfigurationErrors(SettingPath);
+
+        // Assert
+        Assert.Equal(2, errors.Count);
     }
 }

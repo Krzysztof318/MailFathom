@@ -54,10 +54,15 @@ namespace MailFathom.Infrastructure.Security.Passwords;
 /// distinct username is a fresh partition with a fresh ceiling and a fresh allowance, and behind a declared proxy the
 /// username is the only axis there is — so a caller presenting five hundred well-formed usernames at once would meet
 /// no per-partition limit at all and have this process derive five hundred times concurrently, each derivation
-/// deliberately expensive and each occupying a thread. <see cref="ConcurrentVerificationsPerSurface" /> is the bound
-/// that does not move with what a caller names: one partition per transport surface, consulted before either of the
-/// others, so what a caller can spend of this process is decided by the surface it reached rather than by how many
-/// names it thought of.
+/// deliberately expensive and each occupying a thread. The surface's own ceiling is the bound
+/// that does not move with what a caller names: one partition per transport surface, sized by that surface's own
+/// <see cref="PasswordAttempt.MaxConcurrentVerifications" /> and consulted before either of the others, so what a
+/// caller can spend of this process is decided by the surface it reached rather than by how many names it thought of.
+/// </para>
+/// <para>
+/// <strong>The username axis partitions on the whole login a caller presented.</strong> Two logins that differ in any
+/// part are two allowances, so one login's guesses never spend another's, and the value is the canonical one the
+/// credential store resolves rather than the header's spelling of it.
 /// </para>
 /// <para>
 /// Nothing queues: a request that is out of capacity is refused immediately rather than held, because a queue in front
@@ -91,18 +96,10 @@ public sealed class PasswordAttemptLimiter : IDisposable
     /// Sized for the traffic a surface actually carries rather than for the guessing allowance: a browser opens several
     /// connections to one origin and an agent may issue calls in parallel, and every one of them re-presents the
     /// credential. It is deliberately unrelated to <c>AttemptsPerMinute</c>, which an operator lowers to make guessing
-    /// expensive and which must not become a cap on a user's own parallelism.
+    /// expensive and which must not become a cap on a user's own parallelism. Public because it is also the floor a
+    /// surface's own ceiling is validated against: a surface admitting fewer would make this bound unreachable.
     /// </remarks>
-    internal const int ConcurrentVerificationsPerPartition = 32;
-
-    /// <summary>How many password verifications one transport surface may have in flight at once, whatever they name.</summary>
-    /// <remarks>
-    /// Four times the per-partition ceiling, so several users' partitions can be busy together and the smaller bound
-    /// still means something, while the process is never asked for an unbounded number of derivations by a caller that
-    /// varies the username. It is per surface rather than per process so a flood at one endpoint does not close
-    /// password sign-in at the other, which is the same isolation the endpoint limiters keep.
-    /// </remarks>
-    internal const int ConcurrentVerificationsPerSurface = 128;
+    public const int ConcurrentVerificationsPerPartition = 32;
 
     private const int DigestLength = 32;
 
@@ -125,7 +122,9 @@ public sealed class PasswordAttemptLimiter : IDisposable
 
         // Every attempt on one surface digests the same empty value, so this axis holds exactly one partition per
         // surface — which the partition name already names in clear — and is the bound no caller can widen.
-        this.perSurfaceVerifications = this.Axis("surface", static _ => string.Empty, static _ => ConcurrentVerificationsPerSurface);
+        // The ceiling is the surface's own, read from the first attempt to reach the partition; one surface is configured
+        // once per process, so every attempt on it carries the same value.
+        this.perSurfaceVerifications = this.Axis("surface", static _ => string.Empty, static attempt => attempt.MaxConcurrentVerifications);
         this.perSourceVerifications = this.Axis("source", Source, static _ => ConcurrentVerificationsPerPartition);
         this.perUsernameVerifications = this.Axis("username", Username, static _ => ConcurrentVerificationsPerPartition);
         this.perSourceFailures = this.Axis("source-failures", Source, static attempt => attempt.AttemptsPerMinute);
@@ -379,10 +378,16 @@ public sealed class PasswordAttemptReservation : IDisposable
 /// <summary>One password attempt, as the limiter counts it.</summary>
 /// <param name="SurfaceName">The transport surface the attempt arrived on, so two surfaces' partitions stay apart.</param>
 /// <param name="Source">The remote address the attempt came from, or <see langword="null" /> where this deployment cannot tell one caller's address from another's and the username is therefore the whole bound.</param>
-/// <param name="Username">The canonical username presented, which reaches only a digest.</param>
+/// <param name="Username">The canonical login presented, whole, which reaches only a digest.</param>
 /// <param name="AttemptsPerMinute">How many wrong passwords each axis admits in a minute.</param>
+/// <param name="MaxConcurrentVerifications">How many verifications the surface the attempt arrived on may have in flight at once.</param>
 /// <remarks><see cref="ToString" /> is redacted, so no diagnostic can print a submitted username or a remote address by rendering the record the limiter was asked with.</remarks>
-public sealed record PasswordAttempt(string SurfaceName, string? Source, string Username, int AttemptsPerMinute)
+public sealed record PasswordAttempt(
+    string SurfaceName,
+    string? Source,
+    string Username,
+    int AttemptsPerMinute,
+    int MaxConcurrentVerifications)
 {
     /// <inheritdoc />
     public override string ToString() => $"{nameof(PasswordAttempt)} {{ {this.SurfaceName} }}";

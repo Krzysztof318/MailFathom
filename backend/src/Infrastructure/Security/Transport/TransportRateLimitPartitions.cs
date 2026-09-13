@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Secrets;
 
 namespace MailFathom.Infrastructure.Security.Transport;
@@ -16,6 +17,12 @@ namespace MailFathom.Infrastructure.Security.Transport;
 /// a header, a path, a query string, an <c>Origin</c>, or a user agent reaches a key, and no forwarded address does
 /// either, because a proxy header is chosen by whoever is upstream and trusting one is a separate design with its own
 /// review.
+/// </para>
+/// <para>
+/// <strong>The user decides before the credential does.</strong> A credential that resolved to a user is counted under
+/// that user, so every key, password, assertion, token, and session one user holds spends one allowance — a user holding
+/// three credentials gets one bucket, exactly as a colleague holding one does. The partitions a surface keeps therefore
+/// number no more than the roster, plus the configured names below for a credential that names no user.
 /// </para>
 /// <para>
 /// The surface leads every key, which is what keeps two endpoints' capacity independent no matter what they are
@@ -73,37 +80,47 @@ public static class TransportRateLimitPartitions
 
     /// <summary>Names the partition a request's capacity is taken from.</summary>
     /// <param name="surfaceName">The name of the transport surface the request arrived on.</param>
+    /// <param name="authenticatedUser">The user the request's credential resolved to, or <see langword="null" /> when it authenticated with none or with one that names no user.</param>
     /// <param name="authenticatedClientName">The name of the credential the request authenticated with, or <see langword="null" /> when it authenticated with none.</param>
     /// <param name="matchedCertificateProfileName">The name of the trust profile the connection certificate matched, or <see langword="null" /> when no certificate identified a client application.</param>
-    /// <returns>The surface's name, followed by the configured name of the authenticated client, a partition of the identified client application, or <see cref="AnonymousIdentity" />.</returns>
+    /// <returns>The surface's name, followed by the authenticated user, the configured name of the authenticated client, a partition of the identified client application, or <see cref="AnonymousIdentity" />.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="surfaceName" /> is <see langword="null" />, empty, or white space.</exception>
     /// <remarks>
     /// <para>
-    /// Both identity names are MailFathom's own configured identities, never a credential and never anything a
-    /// certificate carried. They are chosen by the operator who wrote the configuration, so the partitions an identified
-    /// surface keeps number no more than its key list plus its profile list. A blank name is treated as no name at all
-    /// rather than as a partition of its own.
+    /// A user is MailFathom's own generated identity and each name is one of its configured identities — never a
+    /// credential and never anything a certificate carried. The partitions an identified surface keeps therefore number
+    /// no more than its roster plus its key list plus its profile list. A blank name, and a user naming nobody, are
+    /// treated as no identity at all rather than as a partition of their own.
     /// </para>
     /// <para>
-    /// A profile's partition is bracketed and a key's is not, because the two grammars are the same — both accept
-    /// letters, digits, dots, dashes, and underscores — so a profile and a key sharing a name would otherwise share a
-    /// bucket. Under <c>ApiKey</c> both kinds occur at once, since a request whose credential was refused still reaches
-    /// this with the profile its certificate matched.
+    /// A user's and a profile's partitions are bracketed and a key's is not, because a key's grammar accepts letters,
+    /// digits, dots, dashes, and underscores and so cannot spell either bracketed form — a profile and a key sharing a
+    /// name would otherwise share a bucket. Under <c>ApiKey</c> a key and a profile occur at once, since a request whose
+    /// credential was refused still reaches this with the profile its certificate matched.
     /// </para>
     /// </remarks>
     public static string KeyFor(
         string surfaceName,
+        MailUserId? authenticatedUser,
         string? authenticatedClientName,
         string? matchedCertificateProfileName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(surfaceName);
 
-        return $"{surfaceName}{SurfaceSeparator}{IdentityFor(authenticatedClientName, matchedCertificateProfileName)}";
+        return $"{surfaceName}{SurfaceSeparator}{IdentityFor(authenticatedUser, authenticatedClientName, matchedCertificateProfileName)}";
     }
 
     /// <summary>Names the identity half of a partition key, without the surface it belongs to.</summary>
-    private static string IdentityFor(string? authenticatedClientName, string? matchedCertificateProfileName)
+    private static string IdentityFor(
+        MailUserId? authenticatedUser,
+        string? authenticatedClientName,
+        string? matchedCertificateProfileName)
     {
+        if (authenticatedUser is { IsSpecified: true } user)
+        {
+            return $"<user:{user.Value:D}>";
+        }
+
         if (!string.IsNullOrWhiteSpace(authenticatedClientName))
         {
             return authenticatedClientName;

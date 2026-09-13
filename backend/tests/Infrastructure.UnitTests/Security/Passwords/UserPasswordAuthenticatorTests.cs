@@ -493,7 +493,8 @@ public sealed class UserPasswordAuthenticatorTests
     /// A per-partition ceiling bounds a partition rather than this process: every distinct username is a fresh
     /// partition with a fresh one, and behind a declared proxy the username is the only axis there is. A caller
     /// varying the name would otherwise have this process derive once per connection it cared to open, each
-    /// derivation deliberately expensive, which is what the ceiling the whole surface shares refuses.
+    /// derivation deliberately expensive, which is what the ceiling the whole surface shares refuses. The ceiling is the
+    /// one the surface was configured with, so the test states its own rather than the product default.
     /// </summary>
     [Fact]
     public async Task AuthenticateAsync_MoreGuessesInFlightUnderDistinctUsernamesThanTheSurfaceAdmits_RefusesTheSurplus()
@@ -502,19 +503,25 @@ public sealed class UserPasswordAuthenticatorTests
         using var harness = new AuthenticatorHarness();
         var reads = harness.HoldsNothingUntilReleased();
         const int Surplus = 3;
-        var admitted = PasswordAttemptLimiter.ConcurrentVerificationsPerSurface;
+        const int Admitted = 40;
 
         // Act
         var inFlight = Enumerable
-            .Range(0, admitted)
-            .Select(ordinal => harness.AuthenticateAsync(Header($"stranger-{ordinal}", "wrongpassword"), source: null))
+            .Range(0, Admitted)
+            .Select(ordinal => harness.AuthenticateAsync(
+                Header($"stranger-{ordinal}", "wrongpassword"),
+                source: null,
+                maxConcurrentVerifications: Admitted))
             .ToArray();
 
-        await reads.WaitUntilWaitingAsync(admitted);
+        await reads.WaitUntilWaitingAsync(Admitted);
 
         var surplus = await Task.WhenAll(Enumerable
-            .Range(admitted, Surplus)
-            .Select(ordinal => harness.AuthenticateAsync(Header($"stranger-{ordinal}", "wrongpassword"), source: null)));
+            .Range(Admitted, Surplus)
+            .Select(ordinal => harness.AuthenticateAsync(
+                Header($"stranger-{ordinal}", "wrongpassword"),
+                source: null,
+                maxConcurrentVerifications: Admitted)));
 
         reads.Release();
         await Task.WhenAll(inFlight);
@@ -522,7 +529,7 @@ public sealed class UserPasswordAuthenticatorTests
         // Assert
         Assert.All(surplus, static result =>
             Assert.Equal(UserPasswordRejection.TooManyAttempts, result.Rejection));
-        Assert.Equal(admitted, harness.PasswordHasher.VerificationCount);
+        Assert.Equal(Admitted, harness.PasswordHasher.VerificationCount);
     }
 
     private static string Header(string userId, string password) =>
@@ -727,12 +734,14 @@ public sealed class UserPasswordAuthenticatorTests
             string? authorizationHeaderValue,
             int attemptsPerMinute = AttemptsPerMinute,
             string surfaceName = SurfaceName,
-            string? source = "203.0.113.7") =>
+            string? source = "203.0.113.7",
+            int maxConcurrentVerifications = 128) =>
             this.Authenticator.AuthenticateAsync(
                 surfaceName,
                 authorizationHeaderValue,
                 source,
                 attemptsPerMinute,
+                maxConcurrentVerifications,
                 TestContext.Current.CancellationToken);
     }
 }

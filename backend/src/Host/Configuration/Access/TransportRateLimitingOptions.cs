@@ -46,22 +46,26 @@ internal sealed class TransportRateLimitingOptions
     /// <remarks>On unless a deployment states otherwise, so an endpoint someone enabled is bounded by the act of enabling it.</remarks>
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Gets or sets how many requests the process serves at once on this endpoint, across every caller.</summary>
+    /// <summary>Gets or sets how many requests the process serves at once on this endpoint, across every user.</summary>
     public int MaxConcurrentRequests { get; set; } = TransportRateLimits.Default.MaxConcurrentRequests;
 
-    /// <summary>Gets or sets how many requests wait for a concurrency slot before the rest are refused.</summary>
+    /// <summary>Gets or sets how many requests one user may have served at once on this endpoint.</summary>
+    /// <remarks>Has to stay below <see cref="MaxConcurrentRequests" />, so one user's requests never hold every permit the process has.</remarks>
+    public int MaxConcurrentRequestsPerUser { get; set; } = TransportRateLimits.Default.MaxConcurrentRequestsPerUser;
+
+    /// <summary>Gets or sets how many requests wait for a process-wide concurrency slot before the rest are refused.</summary>
     public int ConcurrencyQueueLimit { get; set; } = TransportRateLimits.Default.ConcurrencyQueueLimit;
 
-    /// <summary>Gets or sets the largest burst one caller may spend at once.</summary>
+    /// <summary>Gets or sets the largest burst one user may spend at once.</summary>
     public int TokenCapacity { get; set; } = TransportRateLimits.Default.TokenCapacity;
 
-    /// <summary>Gets or sets how much of that burst one caller gets back each <see cref="ReplenishmentPeriod" />.</summary>
+    /// <summary>Gets or sets how much of that burst one user gets back each <see cref="ReplenishmentPeriod" />.</summary>
     public int TokensPerReplenishmentPeriod { get; set; } = TransportRateLimits.Default.TokensPerReplenishmentPeriod;
 
-    /// <summary>Gets or sets how often a caller's spent capacity is restored.</summary>
+    /// <summary>Gets or sets how often a user's spent capacity is restored.</summary>
     public TimeSpan ReplenishmentPeriod { get; set; } = TransportRateLimits.Default.ReplenishmentPeriod;
 
-    /// <summary>Gets or sets how many of one caller's requests wait for capacity before the rest are refused.</summary>
+    /// <summary>Gets or sets how many of one user's requests wait for capacity before the rest are refused.</summary>
     /// <remarks>Has to stay below <see cref="MaxConcurrentRequests" />, because a request waiting here is already holding a concurrency permit.</remarks>
     public int RequestQueueLimit { get; set; } = TransportRateLimits.Default.RequestQueueLimit;
 
@@ -92,6 +96,7 @@ internal sealed class TransportRateLimitingOptions
         {
             return TransportRateLimits.Create(
                 this.MaxConcurrentRequests,
+                this.MaxConcurrentRequestsPerUser,
                 this.ConcurrencyQueueLimit,
                 this.TokenCapacity,
                 this.TokensPerReplenishmentPeriod,
@@ -111,6 +116,11 @@ internal sealed class TransportRateLimitingOptions
         if (this.MaxConcurrentRequests is < 1 or > MaximumConcurrentRequests)
         {
             yield return $"{nameof(this.MaxConcurrentRequests)} — '{this.MaxConcurrentRequests}' is outside 1 to {MaximumConcurrentRequests}; the endpoint must serve at least one request at a time and cannot be told to serve an unbounded number.";
+        }
+
+        if (this.MaxConcurrentRequestsPerUser is < 1 or >= MaximumConcurrentRequests)
+        {
+            yield return $"{nameof(this.MaxConcurrentRequestsPerUser)} — '{this.MaxConcurrentRequestsPerUser}' is outside 1 to {MaximumConcurrentRequests - 1}; a user must be served at least one request at a time, and never as many as the whole process may serve.";
         }
 
         if (this.ConcurrencyQueueLimit is < 0 or > MaximumQueueLimit)
@@ -151,8 +161,16 @@ internal sealed class TransportRateLimitingOptions
             yield return $"{nameof(this.TokensPerReplenishmentPeriod)} — '{this.TokensPerReplenishmentPeriod}' restores more capacity than {nameof(this.TokenCapacity)} of '{this.TokenCapacity}' can hold, so the surplus is discarded on every replenishment and the rate written here is never the rate that applies; raise {nameof(this.TokenCapacity)} or lower this.";
         }
 
-        var bothLimitsAreUsable = this.RequestQueueLimit is >= 0 and <= MaximumQueueLimit
-            && this.MaxConcurrentRequests is >= 1 and <= MaximumConcurrentRequests;
+        var processLimitIsUsable = this.MaxConcurrentRequests is >= 1 and <= MaximumConcurrentRequests;
+
+        if (processLimitIsUsable
+            && this.MaxConcurrentRequestsPerUser is >= 1 and < MaximumConcurrentRequests
+            && this.MaxConcurrentRequestsPerUser >= this.MaxConcurrentRequests)
+        {
+            yield return $"{nameof(this.MaxConcurrentRequestsPerUser)} — '{this.MaxConcurrentRequestsPerUser}' is not below {nameof(this.MaxConcurrentRequests)} of '{this.MaxConcurrentRequests}', so one user's requests could hold every permit the process has and refuse every other user; lower this or raise {nameof(this.MaxConcurrentRequests)}.";
+        }
+
+        var bothLimitsAreUsable = this.RequestQueueLimit is >= 0 and <= MaximumQueueLimit && processLimitIsUsable;
 
         if (bothLimitsAreUsable && this.RequestQueueLimit >= this.MaxConcurrentRequests)
         {

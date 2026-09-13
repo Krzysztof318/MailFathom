@@ -185,6 +185,7 @@ its position. The MCP and client endpoints take these entries; the administrativ
 | `…:<n>:Method` | string | — | Required; one of `password`, `api-key`, `public-key`, `oauth-subject`. Compared without regard to case, because it is written by hand. A word no method publishes, and a repeat of one an earlier entry accepts, each fail startup naming the entry's index — `oauth-subject` excepted, which may be written once per authorization server | restart |
 | `…:<n>:Basic` | block | — | Written only on an entry accepting `password`. Permitted on a surface that answers its routes over clear text, and warned about at every startup instead — the warning names the surface, the port, and that a password crosses that hop readable, and a proxy named in `ReverseProxy:TrustedProxies` changes what it describes rather than silencing it | restart |
 | `…:<n>:Basic:AttemptsPerMinute` | int | `10` | Wrong passwords one source and one username each get per minute, spent only by a wrong password and returned a minute after it; the source axis is skipped for a peer `ReverseProxy:TrustedProxies` names, whose address reports the proxy rather than the client; `1` to `600` | restart |
+| `…:<n>:Basic:MaxConcurrentVerifications` | int | `128` | Password verifications the surface may have in flight at once, whatever usernames they name — what a caller varying the username can make one replica derive together; `32`, which is what one source or one username may already hold, to `512`; one replica's, so *n* replicas derive up to *n* × this | restart |
 | `…:<n>:PermissionsFromTokenScopes` | bool | `false` | Narrows each token's own credential grant by that token's scopes. Written only on an entry accepting `oauth-subject`, since no other method carries a token to read a scope from | restart |
 | `…:<n>:OAuth` | block | — | Required on an entry accepting `oauth-subject`, and refused on every other | restart |
 | `…:<n>:OAuth:Resource` | string | — | Required; the canonical `https` URL clients reach this endpoint at — behind a proxy, the proxy's public URL. Every OAuth entry names the same one, because the endpoint publishes one metadata document at an address derived from it | restart |
@@ -278,6 +279,10 @@ whose capacity a request spends, and [administering a deployment](admin-endpoint
 behavioural difference on the administrative endpoint — its burst is the endpoint's rather than one caller's, because
 that surface judges a credential behind the limiter.
 
+**The numbers are the deployment's and each user is given them.** A user's every credential spends one bucket and one
+concurrency allowance of the configured size, independently of every other user; no user, credential, or organization
+carries a limit of its own.
+
 **Every value here is one process's, and a deployment of *n* replicas admits up to *n* × it.** The limiter counts in
 this process's own memory, which is what a limiter in front of a socket can count: a caller whose requests reach two
 replicas spends a bucket on each. That is deliberate rather than a gap — the thing being protected is each process's
@@ -290,10 +295,11 @@ resources stays a process's and says so.
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `…:Enabled` | bool | `true` | Turning it off costs a startup warning | restart |
-| `…:MaxConcurrentRequests` | int | `20` | 1 – 1000; process-wide, per endpoint — *n* replicas admit *n* × this | restart |
-| `…:ConcurrencyQueueLimit` | int | `0` | 0 – 1000; `0` refuses instead of queueing | restart |
-| `…:TokenCapacity` | int | `60` | 1 – 1000000; the largest burst one caller may spend **at one replica** | restart |
-| `…:TokensPerReplenishmentPeriod` | int | `60` | 1 – 1000000, and not above `TokenCapacity` | restart |
+| `…:MaxConcurrentRequests` | int | `48` | 1 – 1000; process-wide, across every user of the endpoint — *n* replicas admit *n* × this | restart |
+| `…:MaxConcurrentRequestsPerUser` | int | `8` | 1 – 999, and below `MaxConcurrentRequests`; what one user may hold of it at once **at one replica** | restart |
+| `…:ConcurrencyQueueLimit` | int | `0` | 0 – 1000; the process-wide limit's queue, `0` refuses instead of queueing | restart |
+| `…:TokenCapacity` | int | `120` | 1 – 1000000; the largest burst one user may spend **at one replica** | restart |
+| `…:TokensPerReplenishmentPeriod` | int | `120` | 1 – 1000000, and not above `TokenCapacity` | restart |
 | `…:ReplenishmentPeriod` | TimeSpan | `00:01:00` | 1 s – 1 h | restart |
 | `…:RequestQueueLimit` | int | `0` | 0 – 1000, and below `MaxConcurrentRequests` | restart |
 

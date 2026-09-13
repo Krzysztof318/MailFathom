@@ -35,13 +35,14 @@ endpoint exposes synchronized mailboxes to whoever can reach it and satisfy what
 | `Authentication` | empty | The methods this endpoint accepts, one entry per method |
 | `Authentication[].Method` | — | Which method the entry accepts: `password`, `api-key`, `public-key`, or `oauth-subject` |
 | `Authentication[].Basic.AttemptsPerMinute` | `10` | How often one password may be tried, on the entry accepting `password` |
+| `Authentication[].Basic.MaxConcurrentVerifications` | `128` | How many password verifications the endpoint may have in flight at once, whatever usernames they name |
 | `Authentication[].OAuth.Resource` | — | The canonical public URL this deployment is known by in OAuth terms |
 | `Authentication[].OAuth.RequiredScopes` | empty | The scopes an access token from *this entry's* servers must carry |
 | `Authentication[].OAuth.AdvertisedScopes` | empty | Scopes published for a client to ask for and checked on no token — `offline_access` above all |
 | `Authentication[].OAuth.AuthorizationServers` | — | The external authorization servers whose tokens this entry accepts |
 | `Cors.AllowedOrigins` | `["*"]` | The browser origins served: `*` for every one, a list for exactly those, an empty list for none |
 | `ClientCertificateProfiles` | empty | The client applications whose certificates are accepted, each with its own authorities and expected names |
-| `RateLimiting` | bounded — see [Rate limiting](#rate-limiting) | How much traffic the endpoint accepts, per process and per client |
+| `RateLimiting` | bounded — see [Rate limiting](#rate-limiting) | How much traffic the endpoint accepts, per process and per user |
 | `RequestTimeout` | bounded — see [Request timeouts](#request-timeouts) | How long one request may run before the endpoint abandons it |
 | `BindAddress`, `Port`, `Transport` | `0.0.0.0`, `8080`, `Http` | Where the endpoint is served, and under which schemes |
 | `Https.Endpoints` | empty | The domains MailFathom terminates TLS for, read under the two `Transport` modes that terminate TLS |
@@ -718,8 +719,11 @@ is 600; a number above it is refused, because a thousand verifications a minute 
 guessing rate rather than a bound.
 
 **What bounds a burst is a second and much larger limit**, on how many password verifications may be in flight at once.
-It applies twice: 32 for one axis — one source, or one username — and 128 for the whole surface whatever a caller
-names. Both are sized for a browser opening several connections to one origin and an agent issuing calls in parallel,
+It applies twice: 32 for one axis — one source, or one username — and `Basic.MaxConcurrentVerifications`, `128` unless
+set, for the whole surface whatever a caller names. The surface figure is configurable from `32` to `512` and is one
+replica's, so a deployment serving a large roster raises it with the cores a replica has rather than with the roster.
+The username axis is the whole login a user signs in with, so two users of different organizations who share a local
+name never spend one allowance. Both are sized for a browser opening several connections to one origin and an agent issuing calls in parallel,
 and both are deliberately unrelated to the allowance an operator lowers to make guessing expensive: a single limit
 serving both purposes would refuse a user's eleventh simultaneous call at the default, however right their password
 was.
@@ -1688,16 +1692,23 @@ ones whose trust material is intact.
 
 ## Rate limiting
 
-An enabled endpoint is bounded. Two controls run in front of it, and they bound different things:
+An enabled endpoint is bounded. Three controls run in front of it, and they bound different things:
 
-- **A process-wide concurrency limit** caps how many MCP requests are being served at any instant, across every client.
+- **A process-wide concurrency limit** caps how many MCP requests are being served at any instant, across every user.
   It protects what the machine has one set of: database connections, threads, and open response streams.
-- **A per-client token bucket** caps how often one client may ask. A client that goes into a loop spends its own capacity
-  rather than everyone's.
+- **A per-user concurrency limit** caps how many of those one user may hold at once, so one user's burst leaves permits
+  for everybody else.
+- **A per-user token bucket** caps how often one user may ask. A client that goes into a loop spends its own user's
+  capacity rather than everyone's.
+
+**The numbers are the deployment's and the allowance is each user's.** Every user gets a bucket and a concurrency
+allowance of the configured size, independently of every other user, and nothing about a user, a credential, or an
+organization carries a limit of its own. Every credential one user holds spends that one allowance, so a user holding
+three credentials is bounded exactly as a colleague holding one is.
 
 Unlike the settings above, **every value here has a product default**, so an endpoint someone enabled is bounded by the
 act of enabling it. There is no correct default for who may read a mailbox, which is why `Authentication` refuses to be
-guessed; there is a sane default for how fast one client may ask, and leaving the endpoint unbounded because nobody wrote
+guessed; there is a sane default for how fast one user may ask, and leaving the endpoint unbounded because nobody wrote
 a number is not a decision anyone made.
 
 **The administrative endpoint carries the same section.** `AdminEndpoint:RateLimiting` takes the same keys, the same
@@ -1711,10 +1722,11 @@ which follows from that endpoint judging its credential behind the limiter rathe
   "McpEndpoint": {
     "RateLimiting": {
       "Enabled": true,
-      "MaxConcurrentRequests": 20,
+      "MaxConcurrentRequests": 48,
+      "MaxConcurrentRequestsPerUser": 8,
       "ConcurrencyQueueLimit": 0,
-      "TokenCapacity": 60,
-      "TokensPerReplenishmentPeriod": 60,
+      "TokenCapacity": 120,
+      "TokensPerReplenishmentPeriod": 120,
       "ReplenishmentPeriod": "00:01:00",
       "RequestQueueLimit": 0
     }
@@ -1725,26 +1737,38 @@ which follows from that endpoint judging its credential behind the limiter rathe
 | Setting | Default | Range | Meaning |
 |---|---|---|---|
 | `Enabled` | `true` | — | Whether the limits below are applied at all |
-| `MaxConcurrentRequests` | `20` | 1–1000 | MCP requests served at once, across every client |
-| `ConcurrencyQueueLimit` | `0` | 0–1000 | Requests that wait for a concurrency slot before the rest are refused |
-| `TokenCapacity` | `60` | 1–1000000 | The largest burst one client may spend at once |
-| `TokensPerReplenishmentPeriod` | `60` | 1–`TokenCapacity` | How much of that burst one client gets back each period |
-| `ReplenishmentPeriod` | `00:01:00` | 1s–1h | How often a client's spent capacity is restored |
-| `RequestQueueLimit` | `0` | 0 to `MaxConcurrentRequests` − 1 | One client's requests that wait for capacity before the rest are refused |
+| `MaxConcurrentRequests` | `48` | 1–1000 | MCP requests served at once, across every user |
+| `MaxConcurrentRequestsPerUser` | `8` | 1 to `MaxConcurrentRequests` − 1 | MCP requests one user may have served at once |
+| `ConcurrencyQueueLimit` | `0` | 0–1000 | Requests that wait for a process-wide concurrency slot before the rest are refused |
+| `TokenCapacity` | `120` | 1–1000000 | The largest burst one user may spend at once |
+| `TokensPerReplenishmentPeriod` | `120` | 1–`TokenCapacity` | How much of that burst one user gets back each period |
+| `ReplenishmentPeriod` | `00:01:00` | 1s–1h | How often a user's spent capacity is restored |
+| `RequestQueueLimit` | `0` | 0 to `MaxConcurrentRequests` − 1 | One user's requests that wait for capacity before the rest are refused |
 
-The defaults are sized for the work an MCP request actually does here. Every tool answers from the local mailbox copy
-with a bounded query, so a request is short and database-bound rather than long and compute-bound. Twenty concurrent
-requests keep the endpoint well inside the connection pool the synchronization workers share; one request per second with
-a sixty-request burst covers an agent that lists a page and then reads what it found, while still costing an unattended
-loop its capacity within a second.
+The defaults are sized for a deployment serving a team rather than one person, and for the work a request actually does
+here. Every tool answers from the local mailbox copy with a bounded query, so a request is short and database-bound
+rather than long and compute-bound. Forty-eight concurrent requests keep a replica inside the connection pool its
+synchronization workers share while leaving room for a roster whose users are not all busy in the same instant. Eight
+for one user is a browser's six connections to one origin plus an agent issuing a couple of calls in parallel, and it
+means six users at their own ceiling together still leave a seventh served. A burst of a hundred and twenty restored at
+two a second covers one user's client opening folders beside an agent listing and reading what it found — both spend
+the same bucket — while still costing an unattended loop its capacity within a minute.
+
+**Size a replica for its roster from the two concurrency numbers.** `MaxConcurrentRequestsPerUser` is what one user can
+take of a replica at once and `MaxConcurrentRequests` is what the replica serves in total, so their ratio is how many
+users can be busy at their ceiling together before anybody is refused for somebody else's load. Raise
+`MaxConcurrentRequests` with the database connections a replica has rather than with the roster alone, and read every
+figure here as one replica's: a deployment of *n* replicas serves up to *n* times it.
 
 Whatever is in force is stated once at startup, so a deployment running on defaults can read back what it is enforcing
 rather than having to know these numbers:
 
 ```text
 info: MailFathom.Host.Hosting.Warnings.TransportRateLimitingStartupReport
-      The MCP endpoint on /mcp serves at most 20 requests at once across every caller, queueing 0 beyond that, and
-      allows each caller a burst of 60 requests restored at 60 every 00:01:00, queueing 0 of its requests beyond that.
+      The MCP endpoint on /mcp serves at most 48 requests at once across every user and 8 for any one user, queueing 0
+      beyond the first, and allows each user a burst of 120 requests restored at 120 every 00:01:00, queueing 0 of their
+      requests beyond that; every unauthenticated request counts as one user. The limits are counted in this process
+      alone, so a deployment running several enforces them once per process rather than once in total.
 ```
 
 One line per enabled endpoint. A deployment serving both reads a second line naming the administrative endpoint and its
@@ -1755,39 +1779,41 @@ that is already gone, which turns an overload into a slower, larger overload; re
 back off while the server is still healthy. A deployment that would rather absorb a short burst can configure a queue,
 and a bounded queue is the only shape available.
 
-**A client queue is bounded by the concurrency limit as well as by its own range.** The two limiters are acquired in
-order — the process-wide one first, the client's bucket second — so a request waiting for its client's tokens is already
-holding a concurrency permit and keeps it until the next replenishment, which can be an hour away. A queue as large as
-`MaxConcurrentRequests` would therefore let one client that has run out of capacity park every permit the process has
-and refuse everyone else, through the very limit that exists to keep one client's behaviour to itself. `RequestQueueLimit`
-has to stay below `MaxConcurrentRequests`, and `0` — refuse immediately, and tell the client when to come back — remains
-the setting to prefer.
+**A user's queue is bounded by the concurrency limit as well as by its own range.** The limiters are acquired in
+order — the user's concurrency and the process's first, the user's bucket second — so a request waiting for its user's
+tokens is already holding a concurrency permit and keeps it until the next replenishment, which can be an hour away. A
+queue as large as `MaxConcurrentRequests` would therefore let users who have run out of capacity park every permit the
+process has and refuse everyone else, through the very limit that exists to keep one user's behaviour to themselves.
+`RequestQueueLimit` has to stay below `MaxConcurrentRequests`, and `0` — refuse immediately, and tell the client when to
+come back — remains the setting to prefer. The per-user concurrency limit never queues: a request waiting on its own
+user's other requests is told to back off instead.
 
 Configuration that could never work is refused at startup rather than applied: a limit of zero or below, an unbounded
 queue, a replenishment period below what the timer can resolve, a period that restores more than the bucket holds —
 which is not a faster limit but a different one, because the surplus is discarded every time and the rate written down is
-never the rate that applies — and a client queue that could hold every concurrency permit.
+never the rate that applies — a per-user concurrency limit as large as the process-wide one, which would let one user
+hold every permit, and a user queue that could hold every concurrency permit.
 
 ### Whose capacity a request spends
 
 Two identities can name a caller, and they are consulted in a fixed order:
 
-1. **The name of the API key the request authenticated with**, whenever there is one.
-2. **The name of the client-certificate profile the connection matched**, when no key authenticated the request.
+1. **The user the request's credential resolved to**, whenever there is one. Every key, password, public key, access
+   token, and signed-in session a user holds resolves to that user, so all of them spend one allowance.
+2. **The name of the client-certificate profile the connection matched**, when no credential authenticated the request.
 3. **One shared anonymous partition** otherwise.
 
-Both are MailFathom's own configured identities — never the credential, and never anything the certificate itself carried.
-The partitions a deployment keeps therefore number no more than its key list plus its profile list.
+A user is MailFathom's own generated identifier and a profile one of its configured names — never the credential, and
+never anything the certificate itself carried. The partitions a deployment keeps therefore number no more than its
+roster plus its profile list, however many credentials its users hold and whatever a caller writes.
 
-**The credential wins wherever both exist, and the two are never combined.** A credential names one client of one
-user, which is exactly what a deployment provisioned its clients into; a profile names a client *application*, and
-several credentials may sit behind one profile. Taking the profile instead would let one credential starve another that
-happens to share its certificate, and combining the two into a pair would hand the same credential a fresh bucket for
-every profile it could present under — capacity bought by holding one more certificate.
+**The user wins wherever both exist, and the two are never combined.** A user is who a deployment serves; a profile
+names a client *application*, and several users' credentials may sit behind one profile. Taking the profile instead
+would let one user starve another who happens to share its certificate, and combining the two into a pair would hand the
+same user a fresh bucket for every profile they could present under — capacity bought by holding one more certificate.
 
-A profile's partition is written `<profile:name>` and a credential's is its own identifier, which is what the
-provisioning reported and what an audit record correlates on. Both kinds exist at once, since a request whose credential
-was refused still arrives carrying the profile its certificate matched.
+A user's partition is written `<user:identifier>` and a profile's `<profile:name>`. Both kinds exist at once, since a
+request whose credential was refused still arrives carrying the profile its certificate matched.
 
 Everything unidentified shares **one anonymous partition**: a request under `None` presenting no certificate, and a
 request whose credential was refused. That is deliberately coarse. Every partition a request can name is a dictionary
@@ -1802,22 +1828,22 @@ something. The limiter runs **behind the certificate check and behind authentica
 before it counts, and **ahead of authorization**, so a request about to be refused for its credential has still spent
 capacity rather than being the one kind of traffic served without limit.
 
-**Every partition is keyed by the surface it belongs to**, including the anonymous one. Each endpoint's key list is
-configured separately and none consults another's, so one name spelled under two sections is two independent buckets
-rather than one shared between them — and the burst an agent spends reaching a mailbox is never the burst an operator
-needs to administer the service, nor the burst somebody's own mail client spends on the client endpoint.
+**Every partition is keyed by the surface it belongs to**, including the anonymous one. One user reaching two surfaces
+spends two independent allowances rather than one shared between them — so the burst a user's agent spends reaching a
+mailbox is never the burst an operator needs to administer the service, nor the burst that user's own mail client
+spends on the client endpoint.
 
 Readiness, liveness, and the root endpoint are outside all of this and keep answering while any endpoint is refusing,
 because the limits are attached to each surface's routes rather than applied as the process's default policy.
 
 ### What a refused request receives
 
-A request over either limit is answered `429 Too Many Requests` with `Cache-Control: no-store` and **no body**. A body
+A request over any of the limits is answered `429 Too Many Requests` with `Cache-Control: no-store` and **no body**. A body
 would have to say either nothing useful or something about the configured limits, and the second describes the deployment
 to every refused caller — including one whose credential is about to be refused, which must not learn that a named key
 exists. Refusals are identical whoever provoked them.
 
-`Retry-After` is included when the limiter can compute one, which means when the per-client bucket refused the request:
+`Retry-After` is included when the limiter can compute one, which means when the per-user bucket refused the request:
 it knows when the next replenishment lands. A refusal for concurrency carries none, because a concurrency limit has no
 scheduled moment at which a slot frees and a guess would be worse than silence. The advertised value is never below one
 second, so a client never reads it as "immediately" and retries into the same refusal.
@@ -1839,13 +1865,13 @@ stating because one other thing on this page could be read the same way and is n
 [replay refusal](#key-pairs) an assertion's `jti` buys is the deployment's, kept in the database, and it does not
 weaken by one instance whatever `replicaCount` says.
 
-**It is not DDoS protection.** It bounds what one client can take from the process it is talking to. A flood arriving
+**It is not DDoS protection.** It bounds what one user can take from the process it is talking to. A flood arriving
 from many sources is a job for a WAF, a CDN, or a hosting provider's own protection, and none of that is in MailFathom.
 
 **It bounds what the endpoint serves, not what the server spends deciding whether to serve it.** The limiter runs behind
 the origin check, the certificate check, and authentication, so the work those do — reading every configured trust anchor
 and comparing every configured key, on every request — happens before a permit is taken. The order is what makes the
-per-client limit possible at all: run ahead of authentication and there is no client to count against, and every request
+per-user limits possible at all: run ahead of authentication and there is no user to count against, and every request
 shares the anonymous bucket. What a bad credential costs the sender is therefore a partition it shares with every other
 unidentified request, not the work the server already did to refuse it. What bounds the connections underneath all of
 that — including the ones that never send a request at all — is [`ConnectionLimits`](configuration-endpoints.md#connectionlimits),

@@ -484,6 +484,7 @@ public sealed class AdminEndpointOptionsTests
         {
             ["AdminEndpoint:Enabled"] = "true",
             ["AdminEndpoint:RateLimiting:MaxConcurrentRequests"] = "4",
+            ["AdminEndpoint:RateLimiting:MaxConcurrentRequestsPerUser"] = "2",
             ["AdminEndpoint:RateLimiting:TokenCapacity"] = "30",
             ["AdminEndpoint:RateLimiting:TokensPerReplenishmentPeriod"] = "30",
             ["AdminEndpoint:RateLimiting:ReplenishmentPeriod"] = "00:00:30",
@@ -494,6 +495,7 @@ public sealed class AdminEndpointOptionsTests
 
         // Assert
         Assert.Equal(4, settings.RateLimiting.MaxConcurrentRequests);
+        Assert.Equal(2, settings.RateLimiting.MaxConcurrentRequestsPerUser);
         Assert.Equal(30, settings.RateLimiting.TokenCapacity);
         Assert.Equal(TimeSpan.FromSeconds(30), settings.RateLimiting.ReplenishmentPeriod);
         Assert.Empty(settings.FindConfigurationErrors());

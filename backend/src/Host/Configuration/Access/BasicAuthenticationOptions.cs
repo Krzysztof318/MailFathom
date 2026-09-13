@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using MailFathom.Infrastructure.Security.Passwords;
 
 namespace MailFathom.Host.Configuration.Access;
 
@@ -38,6 +39,14 @@ internal sealed class BasicAuthenticationOptions
     /// <remarks>Past this the setting stops being a bound: a thousand verifications a minute against one username is an offline guessing rate rather than a person mistyping a password, and an operator who wants that has misread what the setting is for.</remarks>
     internal const int MaximumAttemptsPerMinute = 600;
 
+    /// <summary>How many password verifications the surface may have in flight at once where a deployment states nothing.</summary>
+    /// <remarks>Four times what one source or one username may have in flight, so several users signing in together each keep that smaller bound meaningful. Readable for the reason <see cref="DefaultAttemptsPerMinute" /> is.</remarks>
+    internal const int DefaultMaxConcurrentVerifications = 128;
+
+    /// <summary>The most password verifications a deployment may let the surface have in flight at once.</summary>
+    /// <remarks>Every verification is a deliberately expensive derivation occupying a thread, so a number past this is a bound on nothing a replica has: it would let a caller varying the username queue far more derivations than any machine runs at once.</remarks>
+    internal const int MaximumMaxConcurrentVerifications = 512;
+
     /// <summary>Gets or sets how many password attempts one source and one username each get per minute.</summary>
     /// <remarks>
     /// <para>
@@ -61,6 +70,22 @@ internal sealed class BasicAuthenticationOptions
     /// </remarks>
     public int AttemptsPerMinute { get; set; } = DefaultAttemptsPerMinute;
 
+    /// <summary>Gets or sets how many password verifications the surface may have in flight at once, whatever usernames they name.</summary>
+    /// <remarks>
+    /// <para>
+    /// A bound on this replica's work rather than on guessing: every distinct username is a partition of its own, so
+    /// without it a caller varying the name would have the process derive once per connection it opened. A roster
+    /// signing in together — each browser re-presenting the credential on several connections — is what raises it, and
+    /// a replica with few cores is what lowers it.
+    /// </para>
+    /// <para>
+    /// It cannot go below what one source or one username may have in flight, because a surface ceiling under that
+    /// would make the smaller bound unreachable and refuse a single user's parallel calls with the answer a wrong
+    /// password gets.
+    /// </para>
+    /// </remarks>
+    public int MaxConcurrentVerifications { get; set; } = DefaultMaxConcurrentVerifications;
+
     /// <summary>Finds everything an operator must fix before the method can guard an endpoint.</summary>
     /// <param name="settingPath">The configuration path this block was bound from, which every message is written against.</param>
     /// <returns>One message per faulty setting, each naming its configuration path, empty when the settings are usable.</returns>
@@ -69,14 +94,11 @@ internal sealed class BasicAuthenticationOptions
     {
         ArgumentNullException.ThrowIfNull(settingPath);
 
-        if (this.AttemptsPerMinute is > 0 and <= MaximumAttemptsPerMinute)
-        {
-            return [];
-        }
+        var errors = new List<string>();
 
-        return
-        [
-            string.Format(
+        if (this.AttemptsPerMinute is <= 0 or > MaximumAttemptsPerMinute)
+        {
+            errors.Add(string.Format(
                 CultureInfo.InvariantCulture,
                 "{0}:{1} — '{2}' is not a bound this deployment will run under. Write a number between 1 and {3}; the "
                 + "default of 10 is a person correcting a mistyped password, and anything near the ceiling is a guessing "
@@ -84,7 +106,24 @@ internal sealed class BasicAuthenticationOptions
                 settingPath,
                 nameof(this.AttemptsPerMinute),
                 this.AttemptsPerMinute,
-                MaximumAttemptsPerMinute),
-        ];
+                MaximumAttemptsPerMinute));
+        }
+
+        if (this.MaxConcurrentVerifications is < PasswordAttemptLimiter.ConcurrentVerificationsPerPartition
+            or > MaximumMaxConcurrentVerifications)
+        {
+            errors.Add(string.Format(
+                CultureInfo.InvariantCulture,
+                "{0}:{1} — '{2}' is not a bound this deployment will run under. Write a number between {3}, which is "
+                + "what one source or one username may already have in flight, and {4}, past which the surface would "
+                + "queue more password derivations than a replica runs at once.",
+                settingPath,
+                nameof(this.MaxConcurrentVerifications),
+                this.MaxConcurrentVerifications,
+                PasswordAttemptLimiter.ConcurrentVerificationsPerPartition,
+                MaximumMaxConcurrentVerifications));
+        }
+
+        return errors;
     }
 }

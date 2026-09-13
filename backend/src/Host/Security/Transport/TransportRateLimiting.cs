@@ -10,23 +10,25 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace MailFathom.Host.Security.Transport;
 
-/// <summary>Bounds what a transport surface accepts, per process and per caller.</summary>
+/// <summary>Bounds what a transport surface accepts, per process and per user.</summary>
 /// <remarks>
 /// <para>
-/// The two controls are attached to different parts of the framework, and the reason is a limitation worth stating
-/// rather than a preference. A named policy resolves to exactly one limiter, so two controls cannot share one; the
-/// per-caller bucket takes the policy, because it is the one that belongs to a single surface and the one whose name a
-/// metric should carry, and the process-wide concurrency limit rides on the global limiter, which is the only other
-/// place a limiter can be attached. Being global, it is also the one part shared by both surfaces: there is one of it in
-/// the application, so it has to recognize which surface a request belongs to from the request itself, which it does on
-/// the published route prefix. Everything matching no surface is left unlimited — the same test the origin check
-/// applies, for the same reason: readiness and liveness must keep answering while an endpoint is refusing.
+/// The controls are attached to different parts of the framework, and the reason is a limitation worth stating rather
+/// than a preference. A named policy resolves to exactly one limiter, so two controls cannot share one; the per-user
+/// bucket takes the policy, because it is the one that belongs to a single surface and the one whose name a metric
+/// should carry, and the two concurrency limits ride on the global limiter, chained, which is the only other place a
+/// limiter can be attached. Being global, it is also the one part shared by every surface: there is one of it in the
+/// application, so it has to recognize which surface a request belongs to from the request itself, which it does on the
+/// published route prefix. Everything matching no surface is left unlimited — the same test the origin check applies,
+/// for the same reason: readiness and liveness must keep answering while an endpoint is refusing.
 /// </para>
 /// <para>
-/// The global limiter is acquired first and the policy second, so a request that is out of caller capacity has briefly
-/// held a concurrency slot before being refused. The slot is released on rejection and the default queue limits are
-/// zero, so nothing waits and nothing is held; a deployment that configures a concurrency queue should know that a
-/// request can wait in it and then still be refused for its own rate.
+/// The user's concurrency is acquired before the process's, so a user already at their own ceiling is refused without
+/// ever holding, or waiting in the queue for, a permit another user could have had. The global limiter as a whole is
+/// acquired before the policy, so a request that is out of tokens has briefly held both concurrency slots before being
+/// refused. The slots are released on rejection and the default queue limits are zero, so nothing waits and nothing is
+/// held; a deployment that configures a concurrency queue should know that a request can wait in it and then still be
+/// refused for its own rate.
 /// </para>
 /// <para>
 /// That order is also why a caller queue cannot be as large as the concurrency limit, which
@@ -36,8 +38,8 @@ namespace MailFathom.Host.Security.Transport;
 /// </para>
 /// <para>
 /// Which identity a request is counted under depends on what the pipeline has established by the time the limiter runs,
-/// and the two surfaces differ there. The MCP endpoint authenticates ahead of the limiter, so its callers are counted
-/// per configured key or per client-certificate profile. The administrative endpoint carries no authentication
+/// and the surfaces differ there. The two mail-serving endpoints authenticate ahead of the limiter, so their callers are
+/// counted per user, whichever of that user's credentials a request carried. The administrative endpoint carries no authentication
 /// middleware of its own — its credential is judged by the authorization middleware, which runs behind the limiter so
 /// that a request about to be refused for its credential has still spent capacity — so every administrative caller
 /// shares that surface's anonymous partition. That is the stronger bound for the threat the limit exists against, an
@@ -77,8 +79,11 @@ internal static class TransportRateLimiting
 
         services.AddRateLimiter(rateLimiterOptions =>
         {
-            rateLimiterOptions.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(
-                httpContext => PartitionForProcess(httpContext, boundedSurfaces));
+            rateLimiterOptions.GlobalLimiter = PartitionedRateLimiter.CreateChained(
+                PartitionedRateLimiter.Create<HttpContext, string>(
+                    httpContext => PartitionForUserConcurrency(httpContext, boundedSurfaces)),
+                PartitionedRateLimiter.Create<HttpContext, string>(
+                    httpContext => PartitionForProcess(httpContext, boundedSurfaces)));
 
             foreach (var boundedSurface in boundedSurfaces)
             {
@@ -112,14 +117,59 @@ internal static class TransportRateLimiting
         ArgumentNullException.ThrowIfNull(httpContext);
         ArgumentNullException.ThrowIfNull(boundedSurfaces);
 
-        var boundedSurface = boundedSurfaces.FirstOrDefault(
-            candidate => candidate.Surface.Serves(httpContext.Request.Path));
+        var boundedSurface = SurfaceServing(httpContext, boundedSurfaces);
 
         return boundedSurface is null
             ? RateLimitPartition.GetNoLimiter(UnlimitedPartitionKey)
             : RateLimitPartition.GetConcurrencyLimiter(
                 boundedSurface.Surface.Name,
                 _ => ProcessConcurrencyOptions(boundedSurface.Limits));
+    }
+
+    /// <summary>Names the concurrency partition of the user a request is served for.</summary>
+    /// <param name="httpContext">The request being admitted, after whatever authentication the surface runs ahead of the limiter.</param>
+    /// <param name="boundedSurfaces">The surfaces being bounded and the limits each one runs under.</param>
+    /// <returns>The concurrency allowance kept for the request's user on the surface it arrived on, and an unlimited partition for anything no surface serves.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="httpContext" /> or <paramref name="boundedSurfaces" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Keyed exactly as the user's token bucket is, so the caller whose rate is counted is the caller whose concurrency
+    /// is, and every unauthenticated request shares one allowance for the same reason it shares one bucket.
+    /// </remarks>
+    internal static RateLimitPartition<string> PartitionForUserConcurrency(
+        HttpContext httpContext,
+        IReadOnlyList<BoundedTransportSurface> boundedSurfaces)
+    {
+        ArgumentNullException.ThrowIfNull(httpContext);
+        ArgumentNullException.ThrowIfNull(boundedSurfaces);
+
+        var boundedSurface = SurfaceServing(httpContext, boundedSurfaces);
+
+        return boundedSurface is null
+            ? RateLimitPartition.GetNoLimiter(UnlimitedPartitionKey)
+            : RateLimitPartition.GetConcurrencyLimiter(
+                CallerPartitionKey(httpContext, boundedSurface),
+                _ => UserConcurrencyOptions(boundedSurface.Limits));
+    }
+
+    /// <summary>Describes the concurrency limiter kept for one user.</summary>
+    /// <param name="limits">The limits the surface runs under.</param>
+    /// <returns>The limiter description.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="limits" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Nothing queues here. A request waiting on its own user's ceiling would wait for that user's other requests to
+    /// finish, which is a slower way of telling the client to back off than a refusal, and the process-wide queue is
+    /// where a deployment that wants to absorb a burst already says so.
+    /// </remarks>
+    internal static ConcurrencyLimiterOptions UserConcurrencyOptions(TransportRateLimits limits)
+    {
+        ArgumentNullException.ThrowIfNull(limits);
+
+        return new ConcurrencyLimiterOptions
+        {
+            PermitLimit = limits.MaxConcurrentRequestsPerUser,
+            QueueLimit = 0,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+        };
     }
 
     /// <summary>Describes the process-wide concurrency limiter a surface runs under.</summary>
@@ -139,10 +189,10 @@ internal static class TransportRateLimiting
         };
     }
 
-    /// <summary>Names the per-caller partition a request spends capacity from.</summary>
+    /// <summary>Names the per-user partition a request spends capacity from.</summary>
     /// <param name="httpContext">The request being admitted, after whatever authentication the surface runs ahead of the limiter.</param>
     /// <param name="boundedSurface">The surface being bounded and the limits it runs under.</param>
-    /// <returns>The token bucket kept for the caller this request authenticated as, or the surface's shared anonymous one.</returns>
+    /// <returns>The token bucket kept for the user this request authenticated as, for a credential naming no user, or the surface's shared anonymous one.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="httpContext" /> or <paramref name="boundedSurface" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
@@ -167,10 +217,7 @@ internal static class TransportRateLimiting
         ArgumentNullException.ThrowIfNull(boundedSurface);
 
         return RateLimitPartition.GetTokenBucketLimiter(
-            TransportRateLimitPartitions.KeyFor(
-                boundedSurface.Surface.Name,
-                AuthenticatedClientName(httpContext),
-                httpContext.Features.Get<McpClientCertificateIdentity>()?.ProfileName),
+            CallerPartitionKey(httpContext, boundedSurface),
             _ => CallerBucketOptions(boundedSurface.Limits));
     }
 
@@ -240,12 +287,26 @@ internal static class TransportRateLimiting
         return ValueTask.CompletedTask;
     }
 
-    /// <summary>Reads the name of the credential a request authenticated with.</summary>
+    /// <summary>Finds the bounded surface a request arrived on, if any.</summary>
+    private static BoundedTransportSurface? SurfaceServing(
+        HttpContext httpContext,
+        IReadOnlyList<BoundedTransportSurface> boundedSurfaces) =>
+        boundedSurfaces.FirstOrDefault(candidate => candidate.Surface.Serves(httpContext.Request.Path));
+
+    /// <summary>Names whose allowance a request spends, which the bucket and the per-user concurrency limit share.</summary>
     /// <remarks>
     /// An unauthenticated principal is what a surface running without authentication, a surface that authenticates
     /// behind the limiter, and a request whose credential was refused all leave behind, and they are deliberately
     /// indistinguishable here: the partition is a question about capacity, not about why the identity is absent.
     /// </remarks>
-    private static string? AuthenticatedClientName(HttpContext httpContext) =>
-        httpContext.User.Identity is { IsAuthenticated: true } identity ? identity.Name : null;
+    private static string CallerPartitionKey(HttpContext httpContext, BoundedTransportSurface boundedSurface)
+    {
+        var authenticatedIdentity = httpContext.User.Identity is { IsAuthenticated: true } identity ? identity : null;
+
+        return TransportRateLimitPartitions.KeyFor(
+            boundedSurface.Surface.Name,
+            authenticatedIdentity is null ? null : TransportCallerUser.CarriedBy(httpContext.User),
+            authenticatedIdentity?.Name,
+            httpContext.Features.Get<McpClientCertificateIdentity>()?.ProfileName);
+    }
 }

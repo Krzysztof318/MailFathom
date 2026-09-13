@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Secrets;
 using MailFathom.Infrastructure.Security.Transport;
 using Xunit;
@@ -14,12 +15,17 @@ public sealed class TransportRateLimitPartitionsTests
 
     private const string AdminSurface = "Admin";
 
+    private static readonly MailUserId Colleague = MailUserId.Create(Guid.Parse("6b1f3c2e-8d4a-4c7e-9f10-2a3b4c5d6e7f"));
+
+    private static readonly MailUserId OtherUser = MailUserId.Create(Guid.Parse("0e9d8c7b-6a5f-4e3d-8c2b-1a0f9e8d7c6b"));
+
     [Fact]
     public void KeyFor_WithAnAuthenticatedName_CountsTheClientUnderIt()
     {
         // Act
         var partitionKey = TransportRateLimitPartitions.KeyFor(
             McpSurface,
+            authenticatedUser: null,
             "desktop-agent",
             matchedCertificateProfileName: null);
 
@@ -27,12 +33,58 @@ public sealed class TransportRateLimitPartitionsTests
         Assert.Contains("desktop-agent", partitionKey, StringComparison.Ordinal);
     }
 
+    /// <summary>Every credential one user holds spends that user's allowance, so a second credential is not a second bucket.</summary>
+    [Fact]
+    public void KeyFor_TwoCredentialsOfOneUser_CountsBothUnderTheUser()
+    {
+        // Act
+        var throughTheKey = TransportRateLimitPartitions.KeyFor(McpSurface, Colleague, "credential-api-key", null);
+        var throughThePassword = TransportRateLimitPartitions.KeyFor(McpSurface, Colleague, "credential-password", null);
+
+        // Assert
+        Assert.Equal(throughTheKey, throughThePassword);
+    }
+
+    [Fact]
+    public void KeyFor_TwoUsers_KeepsThemApart()
+    {
+        // Act
+        var colleague = TransportRateLimitPartitions.KeyFor(McpSurface, Colleague, "credential-api-key", null);
+        var otherUser = TransportRateLimitPartitions.KeyFor(McpSurface, OtherUser, "credential-api-key", null);
+
+        // Assert
+        Assert.NotEqual(colleague, otherUser);
+    }
+
+    /// <summary>A user's partition is bracketed, so no operator naming a configured key can claim a user's allowance.</summary>
+    [Fact]
+    public void KeyFor_AUserPartition_HoldsAnIdentityNoConfiguredNameCouldSpell()
+    {
+        // Act
+        var partitionKey = TransportRateLimitPartitions.KeyFor(McpSurface, Colleague, null, null);
+        var identity = partitionKey[(partitionKey.IndexOf('|', StringComparison.Ordinal) + 1)..];
+
+        // Assert
+        Assert.StartsWith("<user:", identity, StringComparison.Ordinal);
+        Assert.False(SecretName.TryCreate(identity, out _));
+    }
+
+    [Fact]
+    public void KeyFor_AUserNamingNobody_IsNoIdentity()
+    {
+        // Act
+        var partitionKey = TransportRateLimitPartitions.KeyFor(McpSurface, default(MailUserId), null, null);
+
+        // Assert
+        Assert.EndsWith(TransportRateLimitPartitions.AnonymousIdentity, partitionKey, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void KeyFor_WithDifferentAuthenticatedNames_KeepsThemApart()
     {
         // Act
-        var first = TransportRateLimitPartitions.KeyFor(McpSurface, "desktop-agent", null);
-        var second = TransportRateLimitPartitions.KeyFor(McpSurface, "nightly-indexer", null);
+        var first = TransportRateLimitPartitions.KeyFor(McpSurface, null, "desktop-agent", null);
+        var second = TransportRateLimitPartitions.KeyFor(McpSurface, null, "nightly-indexer", null);
 
         // Assert
         Assert.NotEqual(first, second);
@@ -47,8 +99,8 @@ public sealed class TransportRateLimitPartitionsTests
     public void KeyFor_ForOneNameOnBothSurfaces_KeepsTheirCapacityApart()
     {
         // Act
-        var onMcp = TransportRateLimitPartitions.KeyFor(McpSurface, "workstation", null);
-        var onAdmin = TransportRateLimitPartitions.KeyFor(AdminSurface, "workstation", null);
+        var onMcp = TransportRateLimitPartitions.KeyFor(McpSurface, null, "workstation", null);
+        var onAdmin = TransportRateLimitPartitions.KeyFor(AdminSurface, null, "workstation", null);
 
         // Assert
         Assert.NotEqual(onMcp, onAdmin);
@@ -59,8 +111,8 @@ public sealed class TransportRateLimitPartitionsTests
     public void KeyFor_WithoutAnyIdentityOnBothSurfaces_KeepsTheirAnonymousCapacityApart()
     {
         // Act
-        var onMcp = TransportRateLimitPartitions.KeyFor(McpSurface, null, null);
-        var onAdmin = TransportRateLimitPartitions.KeyFor(AdminSurface, null, null);
+        var onMcp = TransportRateLimitPartitions.KeyFor(McpSurface, null, null, null);
+        var onAdmin = TransportRateLimitPartitions.KeyFor(AdminSurface, null, null, null);
 
         // Assert
         Assert.NotEqual(onMcp, onAdmin);
@@ -75,8 +127,8 @@ public sealed class TransportRateLimitPartitionsTests
     public void KeyFor_WithBothIdentities_CountsTheClientUnderTheKeyAlone()
     {
         // Act
-        var withCertificate = TransportRateLimitPartitions.KeyFor(McpSurface, "desktop-agent", "chatgpt-connector");
-        var withoutCertificate = TransportRateLimitPartitions.KeyFor(McpSurface, "desktop-agent", null);
+        var withCertificate = TransportRateLimitPartitions.KeyFor(McpSurface, null, "desktop-agent", "chatgpt-connector");
+        var withoutCertificate = TransportRateLimitPartitions.KeyFor(McpSurface, null, "desktop-agent", null);
 
         // Assert
         Assert.Equal(withoutCertificate, withCertificate);
@@ -86,8 +138,8 @@ public sealed class TransportRateLimitPartitionsTests
     public void KeyFor_WithBothIdentities_GivesOneKeyNoExtraCapacityPerProfile()
     {
         // Act
-        var underOneProfile = TransportRateLimitPartitions.KeyFor(McpSurface, "desktop-agent", "chatgpt-connector");
-        var underAnother = TransportRateLimitPartitions.KeyFor(McpSurface, "desktop-agent", "workstation-connector");
+        var underOneProfile = TransportRateLimitPartitions.KeyFor(McpSurface, null, "desktop-agent", "chatgpt-connector");
+        var underAnother = TransportRateLimitPartitions.KeyFor(McpSurface, null, "desktop-agent", "workstation-connector");
 
         // Assert
         Assert.Equal(underOneProfile, underAnother);
@@ -97,9 +149,9 @@ public sealed class TransportRateLimitPartitionsTests
     public void KeyFor_WithACertificateProfileAlone_CountsTheClientApplicationUnderIt()
     {
         // Act
-        var first = TransportRateLimitPartitions.KeyFor(McpSurface, null, "chatgpt-connector");
-        var second = TransportRateLimitPartitions.KeyFor(McpSurface, null, "workstation-connector");
-        var anonymous = TransportRateLimitPartitions.KeyFor(McpSurface, null, null);
+        var first = TransportRateLimitPartitions.KeyFor(McpSurface, null, null, "chatgpt-connector");
+        var second = TransportRateLimitPartitions.KeyFor(McpSurface, null, null, "workstation-connector");
+        var anonymous = TransportRateLimitPartitions.KeyFor(McpSurface, null, null, null);
 
         // Assert
         Assert.NotEqual(first, second);
@@ -115,8 +167,8 @@ public sealed class TransportRateLimitPartitionsTests
     public void KeyFor_ForAProfileNamedAfterAKey_KeepsTheTwoApart()
     {
         // Act
-        var underTheKey = TransportRateLimitPartitions.KeyFor(McpSurface, "workstation", null);
-        var underTheProfile = TransportRateLimitPartitions.KeyFor(McpSurface, null, "workstation");
+        var underTheKey = TransportRateLimitPartitions.KeyFor(McpSurface, null, "workstation", null);
+        var underTheProfile = TransportRateLimitPartitions.KeyFor(McpSurface, null, null, "workstation");
 
         // Assert
         Assert.NotEqual(underTheKey, underTheProfile);
@@ -143,7 +195,7 @@ public sealed class TransportRateLimitPartitionsTests
     public void KeyFor_ACertificateProfilePartition_HoldsAnIdentityNoConfiguredNameCouldSpell()
     {
         // Act
-        var partitionKey = TransportRateLimitPartitions.KeyFor(McpSurface, null, "chatgpt-connector");
+        var partitionKey = TransportRateLimitPartitions.KeyFor(McpSurface, null, null, "chatgpt-connector");
 
         // Assert
         Assert.Contains("<profile:chatgpt-connector>", partitionKey, StringComparison.Ordinal);
@@ -158,10 +210,10 @@ public sealed class TransportRateLimitPartitionsTests
     public void KeyFor_WithoutAnyIdentity_SharesOneAnonymousPartition(string? absentName)
     {
         // Act
-        var partitionKey = TransportRateLimitPartitions.KeyFor(McpSurface, absentName, absentName);
+        var partitionKey = TransportRateLimitPartitions.KeyFor(McpSurface, null, absentName, absentName);
 
         // Assert
-        Assert.Equal(TransportRateLimitPartitions.KeyFor(McpSurface, null, null), partitionKey);
+        Assert.Equal(TransportRateLimitPartitions.KeyFor(McpSurface, null, null, null), partitionKey);
         Assert.EndsWith(TransportRateLimitPartitions.AnonymousIdentity, partitionKey, StringComparison.Ordinal);
     }
 
@@ -175,6 +227,6 @@ public sealed class TransportRateLimitPartitionsTests
         // A key without its surface is a key two endpoints could both produce, which is the isolation this type exists
         // to provide, silently absent.
         Assert.ThrowsAny<ArgumentException>(
-            () => TransportRateLimitPartitions.KeyFor(absentSurfaceName!, "desktop-agent", null));
+            () => TransportRateLimitPartitions.KeyFor(absentSurfaceName!, null, "desktop-agent", null));
     }
 }

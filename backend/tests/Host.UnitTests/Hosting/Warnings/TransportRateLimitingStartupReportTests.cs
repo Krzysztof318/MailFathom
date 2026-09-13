@@ -134,6 +134,7 @@ public sealed class TransportRateLimitingStartupReportTests
             EnabledMcpEndpoint(new TransportRateLimitingOptions
             {
                 MaxConcurrentRequests = 12,
+                MaxConcurrentRequestsPerUser = 5,
                 ConcurrencyQueueLimit = 3,
                 TokenCapacity = 40,
                 TokensPerReplenishmentPeriod = 10,
@@ -150,6 +151,7 @@ public sealed class TransportRateLimitingStartupReportTests
         var record = Assert.Single(logs.Records);
         Assert.Equal(LogLevel.Information, record.Level);
         Assert.Equal(12, Assert.Contains("MaxConcurrentRequests", record.Properties));
+        Assert.Equal(5, Assert.Contains("MaxConcurrentRequestsPerUser", record.Properties));
         Assert.Equal(3, Assert.Contains("ConcurrencyQueueLimit", record.Properties));
         Assert.Equal(40, Assert.Contains("TokenCapacity", record.Properties));
         Assert.Equal(10, Assert.Contains("TokensPerReplenishmentPeriod", record.Properties));

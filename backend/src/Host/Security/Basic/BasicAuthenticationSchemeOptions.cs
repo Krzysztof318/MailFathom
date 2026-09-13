@@ -24,8 +24,11 @@ internal sealed class BasicAuthenticationSchemeOptions : AuthenticationSchemeOpt
     /// <summary>Gets or sets how many attempts one source and one username each get per minute.</summary>
     internal int AttemptsPerMinute { get; set; }
 
+    /// <summary>Gets or sets how many password verifications the surface may have in flight at once.</summary>
+    internal int MaxConcurrentVerifications { get; set; }
+
     /// <inheritdoc />
-    /// <exception cref="InvalidOperationException">Thrown when the scheme was registered without a surface or without a bound, either of which would leave an admitted request carrying no identity or an unbounded number of guesses.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the scheme was registered without a surface or without a bound, either of which would leave an admitted request carrying no identity, an unbounded number of guesses, or no verification admitted at all.</exception>
     public override void Validate()
     {
         base.Validate();
@@ -41,6 +44,13 @@ internal sealed class BasicAuthenticationSchemeOptions : AuthenticationSchemeOpt
             throw new InvalidOperationException(
                 "The Basic authentication scheme was registered without a positive attempt bound, which would refuse "
                 + "every request rather than bounding any.");
+        }
+
+        if (this.MaxConcurrentVerifications <= 0)
+        {
+            throw new InvalidOperationException(
+                "The Basic authentication scheme was registered without a positive verification ceiling, which would "
+                + "refuse every request rather than bounding any.");
         }
     }
 }
