@@ -67,6 +67,9 @@ internal static class PersistenceConstraintNames
     /// <summary>The queue of mail no rule pass has evaluated, which is read once per account run and is usually empty.</summary>
     internal const string StoredEmailAwaitingRuleEvaluationIndexName = "ix_stored_emails_awaiting_rule_evaluation";
 
+    /// <summary>The sent copies a held account filed locally that no server has returned yet, found by their <c>Message-ID</c>.</summary>
+    internal const string StoredEmailFiledSentCopyIndexName = "ix_stored_emails_filed_sent_copy";
+
     /// <summary>The queue of mail whose attachments nothing has read, which is read once per account run and is usually empty.</summary>
     /// <remarks>
     /// Filtered for the same reason the rule queue above is: in steady state every row of an account carries the stamp,

@@ -260,6 +260,17 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
                 $"\"{nameof(StoredEmailEntity.RulesEvaluatedAt)}\" IS NULL AND "
                 + $"\"{nameof(StoredEmailEntity.FiledFromOutgoingEmailId)}\" IS NULL");
 
+        // What synchronization asks of every message it meets in a held account's sent folder: whether it is the copy
+        // of a send already filed locally. Filtered to the filed copies no server has returned yet, which is a handful
+        // at most, so the question costs an empty probe on every other message rather than a walk of the account.
+        entity.HasIndex(
+                email => new { email.UserId, email.MailboxAccountId, email.InternetMessageId },
+                PersistenceConstraintNames.StoredEmailFiledSentCopyIndexName)
+            .HasDatabaseName(PersistenceConstraintNames.StoredEmailFiledSentCopyIndexName)
+            .HasFilter(
+                $"\"{nameof(StoredEmailEntity.FiledFromOutgoingEmailId)}\" IS NOT NULL AND "
+                + $"\"{nameof(StoredEmailEntity.UidValidity)}\" IS NULL");
+
         // The attachment queue, filtered for exactly the reason the rule queue above is: the stamp is written once and
         // never cleared, so in steady state every row of an account carries it and an unfiltered index would be walked
         // in full, once per account run, for ever, to return nothing. The messages carrying no attachment at all are

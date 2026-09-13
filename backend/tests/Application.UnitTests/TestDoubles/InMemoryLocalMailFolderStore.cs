@@ -23,6 +23,7 @@ internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
     private readonly HashSet<LocalMailFolderId> erased = [];
     private readonly HashSet<MailFolderAlias> erasedSourceAliases = [];
     private readonly Dictionary<StoredEmailId, LocalMailFolderId> placements = [];
+    private readonly List<StoredEmailId> erasedEmails = [];
 
     internal InMemoryLocalMailFolderStore(MailAccountIdentity account, MailAccountCustodyPhase phase)
     {
@@ -39,6 +40,8 @@ internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
     internal IReadOnlyCollection<LocalMailFolderId> Erased => this.erased;
 
     internal IReadOnlyDictionary<StoredEmailId, LocalMailFolderId> Placements => this.placements;
+
+    internal IReadOnlyList<StoredEmailId> ErasedEmails => this.erasedEmails;
 
     internal int SaveCount { get; private set; }
 
@@ -100,6 +103,28 @@ internal sealed class InMemoryLocalMailFolderStore : ILocalMailFolderStore
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Erases a placed message, answering with the placed folder's source alias, or its name where it has none, because
+    /// this double keeps no stored rows to read a binding off; a test reads which message went rather than the alias.
+    /// </summary>
+    public Task<MailFolderAlias?> EraseEmailAsync(
+        IPersistenceSession session,
+        MailAccountIdentity account,
+        StoredEmailId email,
+        CancellationToken cancellationToken)
+    {
+        if (account != this.Account || !this.placements.Remove(email, out var placedIn))
+        {
+            return Task.FromResult<MailFolderAlias?>(null);
+        }
+
+        this.erasedEmails.Add(email);
+
+        var folder = this.folders[placedIn];
+
+        return Task.FromResult<MailFolderAlias?>(folder.SourceFolderAlias ?? MailFolderAlias.Create(folder.Name.Value));
     }
 
     public Task<LocalMailFolderMailErasure> EraseMailOfErasedFoldersAsync(

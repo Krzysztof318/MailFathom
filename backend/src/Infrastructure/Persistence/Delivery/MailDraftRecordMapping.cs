@@ -6,6 +6,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Entities;
 
@@ -49,6 +50,7 @@ internal static class MailDraftRecordMapping
             PromotedTo = entity.PromotedToOutgoingEmailId is { } promoted
                 ? OutgoingEmailId.Create(promoted)
                 : null,
+            FiledEmail = entity.FiledStoredEmailId is { } filed ? StoredEmailId.Create(filed) : null,
             Copies = [.. entity.Copies.Select(ToCopy).OrderByDescending(copy => copy.Revision)],
 
             // Ordered here rather than trusted from the collection, for the reason the recipients are: this is the

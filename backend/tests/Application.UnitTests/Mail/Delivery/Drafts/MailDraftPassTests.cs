@@ -12,6 +12,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -66,6 +67,37 @@ public sealed class MailDraftPassTests
         Assert.Equal(MailDraftFilingOutcome.Filed, Assert.Single(results).Outcome);
         Assert.Equal(1, harness.AppendCount);
         Assert.Equal(MailDraftStage.Filed, harness.Drafts.Peek(draft.Id)!.Stage);
+    }
+
+    /// <summary>
+    /// A held account's draft that could not be filed when it was saved is filed locally by the pass that follows, once,
+    /// and nothing is appended to the drained source for it.
+    /// </summary>
+    [Fact]
+    public async Task SettleOutstandingAsync_DraftAHeldAccountCouldNotFileYet_FilesItLocallyOnceOnTheNextPass()
+    {
+        // Arrange
+        var harness = new MailDraftHarness(
+            new FakeTimeProvider(Moment),
+            new InMemoryOutgoingEmailStore(),
+            Settings());
+
+        var held = harness.HoldAccount(Account, mapsDraftsFolder: false);
+        var draft = await SaveAsync(harness, "first version");
+        Assert.Null(harness.Drafts.Peek(draft.Id)!.FiledEmail);
+
+        held.MapRole(MailFolderSpecialUse.Drafts, "drafts");
+        harness.BeginNewScope();
+
+        // Act
+        var results = await harness.Pass.SettleOutstandingAsync(Account, CancellationToken.None);
+        var nextResults = await harness.Pass.SettleOutstandingAsync(Account, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(MailDraftFilingOutcome.Filed, Assert.Single(results).Outcome);
+        Assert.Empty(nextResults);
+        Assert.Equal(Assert.Single(held.Stored).Email, harness.Drafts.Peek(draft.Id)!.FiledEmail);
+        Assert.Equal(0, harness.AppendCount);
     }
 
     /// <summary>A draft of another account is left to that account's own pass.</summary>

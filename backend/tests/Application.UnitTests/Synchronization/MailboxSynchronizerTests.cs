@@ -67,6 +67,14 @@ public sealed class MailboxSynchronizerTests
     private static readonly MailFolderResolution ArchiveFolder =
         MailFolderResolution.FirstBindingOf(ArchiveAlias, ArchiveRemotePath);
 
+    private static readonly MailFolderAlias HeldSentAlias = MailFolderAlias.Create("sent");
+
+    private static readonly MailFolderMapping HeldSentMapping =
+        MailFolderMapping.ToSpecialUse(HeldSentAlias, MailFolderSpecialUse.Sent);
+
+    private static readonly MailFolderResolution HeldSentFolder =
+        MailFolderResolution.FirstBindingOf(HeldSentAlias, RemoteFolderPath.Create("Sent", '/'));
+
     private static readonly MailTransportSecurityPolicy RequiredTlsPolicy = MailTransportSecurityPolicy.Create(
         MailConnectionSecurity.TlsOnConnect,
         MailAuthenticationPolicy.Create(
@@ -257,6 +265,72 @@ public sealed class MailboxSynchronizerTests
         Assert.Equal(created.Id, placement.Value);
         Assert.Equal(ClientSignalKind.FoldersChanged, signal.Kind);
         Assert.Equal(accountId, signal.Account);
+    }
+
+    /// <summary>
+    /// The copy a provider files on its own of a message a held account already filed locally is recognised by the
+    /// Message-ID this deployment minted: the occurrence is carried onto the filed copy, and neither a second row nor a
+    /// second payload is stored.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_TheProviderCopyOfASentMessageFiledLocally_IsCarriedOntoTheFiledCopyRatherThanStoredAgain()
+    {
+        // Arrange
+        var sent = HeldSentRun(out var account, out var occurrence);
+        var filedCopy = StoredEmailId.Create(Guid.CreateVersion7(new DateTimeOffset(2026, 7, 24, 11, 0, 0, TimeSpan.Zero)));
+        sent.MetadataRepository
+            .FindFiledSentCopyAsync(account, $"message-{occurrence.Uid.Value}@example.test", Arg.Any<CancellationToken>())
+            .Returns(filedCopy);
+        sent.MetadataRepository
+            .TryCarryToOccurrenceAsync(Arg.Any<IPersistenceSession>(), account.User, filedCopy, occurrence, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        // Act
+        var result = await sent.Synchronizer.SynchronizeAsync(account, HeldSentMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.StoredEmailCount);
+        await sent.MetadataRepository.Received(1).TryCarryToOccurrenceAsync(
+            Arg.Any<IPersistenceSession>(),
+            account.User,
+            filedCopy,
+            occurrence,
+            Arg.Any<CancellationToken>());
+        await sent.MetadataRepository.DidNotReceive().UpsertMetadataAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailUserId>(),
+            Arg.Any<RemoteEmailMetadata>(),
+            Arg.Any<ExtractedEmailMetadata?>(),
+            Arg.Any<StoredEmailContentAvailability>(),
+            Arg.Any<CancellationToken>());
+        await sent.Session.DidNotReceive().FetchEmailContentWithoutSettingSeenAsync(
+            Arg.Any<EmailOccurrenceId>(),
+            Arg.Any<long>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A message in a held account's sent folder that matches no locally filed copy is stored as any other.</summary>
+    [Fact]
+    public async Task SynchronizeAsync_ASentMessageMatchingNoFiledCopy_IsStoredAsAnyOther()
+    {
+        // Arrange
+        var sent = HeldSentRun(out var account, out var occurrence);
+
+        // Act
+        var result = await sent.Synchronizer.SynchronizeAsync(account, HeldSentMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        await sent.MetadataRepository.Received(1).FindFiledSentCopyAsync(
+            account,
+            $"message-{occurrence.Uid.Value}@example.test",
+            Arg.Any<CancellationToken>());
+        await sent.MetadataRepository.DidNotReceive().TryCarryToOccurrenceAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailUserId>(),
+            Arg.Any<StoredEmailId>(),
+            Arg.Any<EmailOccurrenceId>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>The run records what the classification gate says about an arriving message, although it derives nothing from it.</summary>
@@ -2267,13 +2341,18 @@ public sealed class MailboxSynchronizerTests
                 [
                     new RemoteFolder(InboxRemotePath, [MailFolderSpecialUse.Inbox]),
                     new RemoteFolder(ArchiveRemotePath, [MailFolderSpecialUse.Archive]),
+                    new RemoteFolder(HeldSentFolder.RemotePath, [MailFolderSpecialUse.Sent]),
                 ]));
 
         var resolutionStore = Substitute.For<IMailFolderResolutionStore>();
         resolutionStore
             .GetCurrentResolutionAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<MailFolderAlias>(), Arg.Any<CancellationToken>())
-            .Returns(call => Task.FromResult<MailFolderResolution?>(
-                call.Arg<MailFolderAlias>() == ArchiveMapping.Alias ? ArchiveFolder : InboxFolder));
+            .Returns(call => Task.FromResult<MailFolderResolution?>(call.Arg<MailFolderAlias>() switch
+            {
+                var alias when alias == ArchiveMapping.Alias => ArchiveFolder,
+                var alias when alias == HeldSentMapping.Alias => HeldSentFolder,
+                _ => InboxFolder,
+            }));
 
         return new MailFolderResolver(
             remoteFolderCatalog,
@@ -3616,6 +3695,31 @@ public sealed class MailboxSynchronizerTests
             contentInventory,
             jobStore,
             stagedSessions);
+    }
+
+    /// <summary>Composes a run over a held account's sent folder holding one message, with its payload retrievable.</summary>
+    private static ContentRunArrangement HeldSentRun(out MailAccountIdentity account, out EmailOccurrenceId occurrence)
+    {
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+
+        account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, accountId);
+        occurrence = EmailOccurrenceId.Create(accountId, HeldSentFolder.Id, uidValidity, ImapUid.Create(10));
+
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [MetadataOf(occurrence, 600)],
+            occurrence.Uid,
+            runFolder: HeldSentFolder,
+            localFolderArrivals: new LocalMailFolderArrivals(
+                new InMemoryLocalMailFolderStore(account, MailAccountCustodyPhase.Held),
+                ClientSignalPublishers.ReachingNobody,
+                new FakeTimeProvider()));
+        StubRetrievedContent(arrangement.Session, options, occurrence, 600);
+
+        return arrangement;
     }
 
     /// <summary>The parts of a byte-budget run its assertions read back.</summary>

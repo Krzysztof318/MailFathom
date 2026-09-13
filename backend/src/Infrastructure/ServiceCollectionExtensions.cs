@@ -1284,6 +1284,7 @@ public static class ServiceCollectionExtensions
         // through the same write session and into a folder named the same way, and everything that separates the two is
         // that a draft is replaced whenever its author edits it. Scoped for the reason every other work unit is.
         services.AddScoped<IMailDraftStore, MailDraftStore>();
+        services.AddScoped<LocalMailFiler>();
         services.AddScoped<MailDraftFiler>();
         services.AddScoped<MailDraftBook>();
         services.AddScoped<MailDraftPass>();

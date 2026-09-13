@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 
 namespace MailFathom.Domain.Delivery.Drafts;
@@ -134,6 +135,14 @@ public sealed record MailDraftRecord
     /// <remarks>The code is kept and the message is not, for the reason an outgoing record keeps only the code.</remarks>
     public required MailFathomErrorCode? LastFailure { get; init; }
 
+    /// <summary>Gets the stored message that shows this draft in the local drafts folder of a held account, or <see langword="null" /> where none was filed.</summary>
+    /// <remarks>
+    /// It is the whole account of a local copy, because a local copy needs none of what a server copy does: it is written
+    /// in the transaction that writes the revision it shows and replaced in the transaction that writes the next, so no
+    /// append can go unanswered and no removal can be left owing.
+    /// </remarks>
+    public StoredEmailId? FiledEmail { get; init; }
+
     /// <summary>Gets the copy carrying the revision the stored message is.</summary>
     public MailDraftServerCopy? CurrentCopy =>
         this.Copies.FirstOrDefault(copy => copy.Revision == this.Revision);
@@ -199,13 +208,20 @@ public sealed record MailDraftRecord
     /// <summary>Reads the stage from the copies, in the order that keeps each answer the strongest true one.</summary>
     /// <remarks>
     /// A discarded draft owes a removal whatever else is true of it, and an append nobody answered stops every later
-    /// act on the mailbox — so both are read before the replacement pair, which is what is left once neither holds.
+    /// act on the mailbox — so both are read before the replacement pair, which is what is left once neither holds. A
+    /// draft filed into a local folder is filed whatever its server copies say, since those belong to a source the account
+    /// no longer writes to.
     /// </remarks>
     private MailDraftStage ReadStage()
     {
         if (this.IsDiscarded)
         {
             return MailDraftStage.Discarded;
+        }
+
+        if (this.FiledEmail is not null)
+        {
+            return MailDraftStage.Filed;
         }
 
         if (this.HasUnansweredAppend)

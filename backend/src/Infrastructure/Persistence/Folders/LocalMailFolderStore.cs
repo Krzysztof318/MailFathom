@@ -169,6 +169,40 @@ internal sealed class LocalMailFolderStore(MailFathomDbContext dbContext, TimePr
         return new LocalMailFolderMailErasure(removed.Length, emailsRemain);
     }
 
+    public async Task<MailFolderAlias?> EraseEmailAsync(
+        IPersistenceSession session,
+        MailAccountIdentity account,
+        StoredEmailId email,
+        CancellationToken cancellationToken)
+    {
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+        var userValue = account.User.Value;
+        var accountIdValue = account.Id.Value;
+        var emailValue = email.Value;
+
+        var row = await sessionContext.StoredEmails
+            .Include(static stored => stored.MailFolder)
+            .SingleOrDefaultAsync(
+                stored => stored.Id == emailValue
+                    && stored.UserId == userValue
+                    && stored.MailboxAccountId == accountIdValue,
+                cancellationToken);
+
+        if (row is null)
+        {
+            return null;
+        }
+
+        Guid[] removedIds = [row.Id];
+
+        // The same cascade an erased folder's mail runs, in the same order, for the same reason.
+        await UserStoredContentLedger.RemoveAsync(sessionContext, removedIds, cancellationToken);
+        await ReleasedContentObjects.ReleaseForStoredEmailsAsync(session, removedIds, cancellationToken);
+        sessionContext.StoredEmails.Remove(row);
+
+        return MailFolderAlias.Create(row.MailFolder.Alias);
+    }
+
     private static ValueTask<MailboxAccountEntity?> FindAccountAsync(
         MailFathomDbContext sessionContext,
         MailAccountIdentity account,

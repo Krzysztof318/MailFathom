@@ -239,6 +239,12 @@ public sealed class MailboxSynchronizer
         var collection = this.contactCollection.OpenRun(account, folderRole);
         var arrivalSource = new LocalMailFolderArrivalSource(folder.Alias, folderRole, folder.RemotePath.ToHierarchyLevels()[^1]);
 
+        // A held account files its own sent copy locally, so the copy a provider files of the same send is recognized in
+        // the source's sent folder rather than drained in as a second message. The phase is read once per run and only
+        // for that folder, which leaves every other folder's run exactly what it was.
+        var recognizesFiledSentCopies = folderRole == MailFolderSpecialUse.Sent
+            && await this.localFolderArrivals.HoldsAsync(account, cancellationToken);
+
         var storedCount = 0;
 
         // What the run reports as arrived mail, decided here rather than by a query afterwards: the folder's role and
@@ -306,6 +312,14 @@ public sealed class MailboxSynchronizer
                             relocation.Request.Mutation,
                             relocation.Request.StoredEmailId,
                             relocation.Id));
+                        processedThroughUid = metadata.OccurrenceId.Uid;
+
+                        continue;
+                    }
+
+                    if (recognizesFiledSentCopies
+                        && await this.TryCarryFiledSentCopyAsync(account, metadata, cancellationToken))
+                    {
                         processedThroughUid = metadata.OccurrenceId.Uid;
 
                         continue;
@@ -837,6 +851,50 @@ public sealed class MailboxSynchronizer
                         this.timeProvider.GetUtcNow(),
                         attemptCancellationToken);
                 }
+            },
+            cancellationToken);
+
+        return carried;
+    }
+
+    /// <summary>Carries the sent copy a held account filed onto the provider's own copy of the same send, rather than storing a second one.</summary>
+    /// <returns><see langword="true" /> when the discovery was the provider's copy of a filed send and needs nothing further; otherwise, <see langword="false" />.</returns>
+    /// <remarks>
+    /// <para>
+    /// The copy is recognized by the <c>Message-ID</c> this deployment minted for the outgoing record, and only against a
+    /// local sent message filed from such a record whose payload is stored: that identity is MailFathom's own rather than
+    /// one it is guessing at. Where no such message stands — the account files no sent copy, or the filing has not
+    /// committed — nothing is recognized and the provider's copy is stored like any other arrival, so a send is never left
+    /// with no record of it.
+    /// </para>
+    /// <para>
+    /// It runs before the payload is fetched, for the reason a relocation is recognized there. The filed message keeps its
+    /// identity and its payload and gains the occurrence, which is what the drain then acts on.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> TryCarryFiledSentCopyAsync(
+        MailAccountIdentity account,
+        RemoteEmailMetadata metadata,
+        CancellationToken cancellationToken)
+    {
+        if (metadata.InternetMessageId is not { } internetMessageId
+            || await this.metadataRepository.FindFiledSentCopyAsync(account, internetMessageId, cancellationToken)
+                is not { } filedCopy)
+        {
+            return false;
+        }
+
+        var carried = false;
+
+        await this.concurrencyRetryPolicy.CommitAsync(
+            async (persistenceSession, attemptCancellationToken) =>
+            {
+                carried = await this.metadataRepository.TryCarryToOccurrenceAsync(
+                    persistenceSession,
+                    account.User,
+                    filedCopy,
+                    metadata.OccurrenceId,
+                    attemptCancellationToken);
             },
             cancellationToken);
 

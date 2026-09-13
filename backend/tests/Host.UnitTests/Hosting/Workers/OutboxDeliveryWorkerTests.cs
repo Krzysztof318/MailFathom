@@ -3,7 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Composition;
@@ -14,6 +16,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Signals;
+using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
@@ -233,6 +236,13 @@ public sealed class OutboxDeliveryWorkerTests
             collection.AddScoped<MailFolderResolver>();
             collection.AddScoped<MailboxDestinationResolver>();
             collection.AddScoped<MailboxCopyAppender>();
+
+            // The local half of filing reads the account's phase first, and a substitute answers that no account is held,
+            // so every pass here takes the mirrored path those tests already describe.
+            collection.AddSingleton(Substitute.For<ILocalMailFolderStore>());
+            collection.AddSingleton(Substitute.For<IEmailMetadataRepository>());
+            collection.AddSingleton(Substitute.For<IEmailMimeReader>());
+            collection.AddScoped<LocalMailFiler>();
             collection.AddScoped<OutgoingMailFiler>();
             collection.AddScoped<OutgoingMailFilingPass>();
 

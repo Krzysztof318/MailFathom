@@ -4,10 +4,12 @@
 
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -207,6 +209,28 @@ public sealed class InMemoryMailDraftContentStoreTests
         Assert.Equal(1, countWhenObserved);
     }
 
+    /// <summary>A message MailFathom filed itself is kept, and arriving mail, which carries an occurrence, is still refused.</summary>
+    [Fact]
+    public async Task SaveContentAsync_AMessageFiledWithNoOccurrence_KeepsItAndStillRefusesArrivingMail()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftContentStore();
+        var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7(Moment));
+        var message = "From: writer@example.test\r\n\r\nFiled."u8.ToArray();
+        var accountId = MailAccountId.Create("work");
+        var inbox = MailFolderResolution.FirstBindingOf(MailFolderAlias.Create("inbox"), RemoteFolderPath.Create("INBOX", '/'));
+        var arriving = EmailOccurrenceId.Create(accountId, inbox.Id, ImapUidValidity.Create(1), ImapUid.Create(1));
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        // Act
+        await store.SaveContentAsync(Session, storedEmailId, occurrenceId: null, PlacedEmailContent.InDatabase(message), cancellationToken);
+
+        // Assert
+        Assert.Equal(message, store.PeekFiled(storedEmailId).ToArray());
+        await Assert.ThrowsAsync<NotSupportedException>(
+            () => store.SaveContentAsync(Session, storedEmailId, arriving, PlacedEmailContent.InDatabase(message), cancellationToken));
+    }
+
     /// <summary>Every member outside the draft half is a refusal, so a suite reaching one fails where it reached it.</summary>
     [Fact]
     public async Task EveryMemberOutsideTheDraftHalf_IsRefusedRatherThanAnsweredForSilently()
@@ -221,8 +245,6 @@ public sealed class InMemoryMailDraftContentStoreTests
         // Act, Assert
         var unusedPlacement = PlacedEmailContent.InDatabase("unreachable"u8.ToArray());
 
-        await Assert.ThrowsAsync<NotSupportedException>(
-            () => store.SaveContentAsync(Session, storedEmailId, null!, unusedPlacement, cancellationToken));
         await Assert.ThrowsAsync<NotSupportedException>(
             () => store.FindStoredContentAsync(storedEmailId, cancellationToken));
         await Assert.ThrowsAsync<NotSupportedException>(

@@ -11,6 +11,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Delivery.Filing;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Emails;
@@ -173,7 +174,8 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
                 && draft.MailboxAccountId == accountValue
                 && (draft.DiscardedAt != null
                     || draft.PromotedToOutgoingEmailId != null
-                    || (!draft.Copies.Any(copy => copy.Stage == MailDraftCopyStage.Issued)
+                    || (draft.FiledStoredEmailId == null
+                        && !draft.Copies.Any(copy => copy.Stage == MailDraftCopyStage.Issued)
                         && (!draft.Copies.Any(copy => copy.Revision == draft.Revision)
                             || draft.Copies.Any(copy => copy.Revision != draft.Revision
                                 && copy.Stage == MailDraftCopyStage.Standing)))))
@@ -437,6 +439,25 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
         var entity = await RequireAsync(session, draftId, cancellationToken);
 
         entity.PromotedToOutgoingEmailId ??= outgoingEmailId.Value;
+    }
+
+    /// <inheritdoc />
+    public async Task<StoredEmailId?> RecordFiledAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        StoredEmailId filedEmail,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        var entity = await RequireAsync(session, draftId, cancellationToken);
+        var previous = entity.FiledStoredEmailId;
+
+        entity.FiledStoredEmailId = filedEmail.Value;
+
+        return previous is { } replaced && replaced != filedEmail.Value
+            ? StoredEmailId.Create(replaced)
+            : null;
     }
 
     /// <inheritdoc />

@@ -52,7 +52,8 @@ internal sealed class OutgoingMailFilingHarness
         InMemoryOutgoingEmailStore outgoingEmails,
         IEmailContentStore contentStore,
         MailOutboxSettings settings,
-        TimeProvider clock)
+        TimeProvider clock,
+        LocalMailFiler? localFiler = null)
     {
         this.Filings = new InMemoryOutgoingMailFilingStore(outgoingEmails);
         this.filingPolicies.FilesSentCopy(Arg.Any<MailAccountId>()).Returns(false);
@@ -121,6 +122,7 @@ internal sealed class OutgoingMailFilingHarness
             this.mappings,
             this.filingPolicies,
             this.Filings,
+            localFiler ?? LocalMailFilers.HoldingNothing(clock),
             clock,
             settings);
     }

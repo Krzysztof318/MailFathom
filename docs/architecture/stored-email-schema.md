@@ -291,7 +291,17 @@ gives an account whose mailbox MailFathom holds a folder hierarchy of its own, a
 
 `stored_emails.LocalMailFolderId` is the local folder a message on a held account is in, a foreign key onto
 `local_mail_folders` with no action and an index filtered to non-null values, and `null` on every message of a mirrored
-account. It is set once, when synchronization stores the message, and a message met again is not moved back.
+account. It is set once, when synchronization stores the message or when MailFathom files one of its own, and a message
+met again is not moved back.
+
+A message MailFathom files itself on a held account — a draft revision, or the sent copy of a delivery where
+`Delivery:FileSentCopy` holds — is a `stored_emails` row with no occurrence: `UidValidity` and `Uid` are null, its
+content row is written in the same transaction, and its `MailFolderId` is the current binding of the source folder
+mapped to the role it is filed under, because a stored message always names a binding and that is where the source keeps
+the same kind of message. It is written with `rules_evaluated_at` already stamped, since nothing arrived, and a sent copy
+carries `FiledFromOutgoingEmailId`. The draft names the message it filed in `mail_drafts.FiledStoredEmailId`. When
+synchronization meets the provider's own copy of a filed send, the occurrence is carried onto that row rather than a
+second one being stored; `ix_stored_emails_filed_sent_copy` is how the question is answered.
 
 ## What a person set about their own client
 
@@ -1614,6 +1624,7 @@ twice mean something for a record that is not being sent at all.
 | `ComposedAt`, `RevisedAt` | When the draft was first written and when it last changed. The second is the order an account's drafts are read in |
 | `DiscardedAt` | When the draft was given up, null while it stands. It is written **before** anything is issued against the folder, which is what makes the removal resumable rather than a message nothing can name |
 | `PromotedToOutgoingEmailId` | The send this draft became, null until it becomes one. A plain column rather than a foreign key, deliberately: the send outlives the draft, and erasing an outgoing record must not take a draft with it |
+| `FiledStoredEmailId` | The stored message a held account filed the current revision as, in its local drafts folder, null while none is filed and on every mirrored account. A revision replaces it and a give-up erases what it names, both in the transaction that writes the change. A plain column rather than a foreign key, for the reason `PromotedToOutgoingEmailId` is one: the person may delete that message like any other, and neither erasure may refuse or take the other. A draft that names one is settled, so the pass does not read it again |
 | `DivergenceReason`, `DivergenceObservedAt` | Why the tracked copy stopped being provably this deployment's own, and when that was seen. Both null while the record and the folder still follow each other |
 | `LastFailureCode` | The code the last attempt to settle the folder ended in, null while none has. The code and not the message, for the reason an outgoing record keeps only the code |
 | `xmin` | The concurrency token, as everywhere else |
@@ -1684,6 +1695,7 @@ account reach these four tables through the same cascade every other table is re
 | `ix_stored_emails_folder_timeline` | `(mail_folder_id, received_at DESC NULLS LAST, id DESC)` | The per-folder timeline |
 | `ix_stored_emails_awaiting_content` | `(mail_folder_id, uid_validity, uid)` over the rows whose `content_availability` is `AwaitingStorageHeadroom` | The queue of occurrences stored without their payload, which every folder run reads once. The filter is what keeps the index proportionate to that queue rather than to the mailbox: on a deployment that has never reached its storage ceiling the index is empty, and the read costs nothing instead of walking a folder's whole occurrence index to discover that no row qualifies |
 | `ix_stored_emails_user_account_identity` | `(UserId, mailbox_account_id, id)` | The order a whole-mailbox rule run walks an account's mail in. The identity rather than the timeline, because a walk that has to resume needs a total order no later write disturbs and a position that is one column rather than a nullable timestamp paired with a tie-breaker |
+| `ix_stored_emails_filed_sent_copy` | `(UserId, mailbox_account_id, internet_message_id)` over the rows whose `FiledFromOutgoingEmailId` is not null and `uid_validity` is null | Whether a message synchronization meets in a held account's sent folder is the provider's copy of a send already filed locally. The filter keeps it to the filed copies no server has returned yet, which is a handful at most, so the probe made for every message in that folder costs an empty lookup rather than a walk of the account |
 | `ix_stored_emails_awaiting_rule_evaluation` | `(UserId, mailbox_account_id, id)` over the rows whose `rules_evaluated_at` **and** `FiledFromOutgoingEmailId` are both null | The queue of mail no rule pass has evaluated, read once per account run. The filter is the point: in steady state almost every row of an account has been evaluated, so without it the read would walk the account's whole index to find the handful that qualify, on every run of every account. The second clause is what keeps a copy of this deployment's own outgoing mail out of that queue permanently — such a row is never stamped as evaluated, because it never was, so excluding it anywhere else would leave it at the head of the queue for good |
 | `ix_stored_emails_awaiting_attachment_text` | `(UserId, mailbox_account_id, id)` over the rows whose `AttachmentTextDerivedAt` is null **and** whose `AttachmentCount` is above zero | The queue of mail whose attachments no pass has read, in the same identity order the rule queue walks and for the same reason. Both clauses of the filter earn their place: the timestamp is what takes a message out of the queue once its attachments have been settled, and the count is what keeps the mail carrying no attachment at all — most of a mailbox — out of an index that would otherwise be as large as the account |
 | `ix_stored_emails_thread` | `(EmailThreadId, Id)` | One conversation's messages, in the total order a read assembles them from. The identity is in the key because the order a conversation is published in is computed rather than stored, and the read needs a stable one to bound and page the raw set by |

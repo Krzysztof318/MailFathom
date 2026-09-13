@@ -9,6 +9,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Delivery.Filing;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 
@@ -259,6 +260,24 @@ public interface IMailDraftStore
         IPersistenceSession session,
         MailDraftId draftId,
         OutgoingEmailId outgoingEmailId,
+        CancellationToken cancellationToken);
+
+    /// <summary>Writes down the stored message a held account's local drafts folder shows this draft as.</summary>
+    /// <param name="session">The session the write joins, which is the one that stored the message.</param>
+    /// <param name="draftId">The draft the message shows.</param>
+    /// <param name="filedEmail">The stored message.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>The stored message the draft named before, which the caller erases in the same session, or <see langword="null" /> where it named none.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no draft is held under <paramref name="draftId" />.</exception>
+    /// <remarks>
+    /// The message replaced is answered from the row this session read rather than from the record the caller holds, so a
+    /// save and a pass filing the same draft at once conflict on the draft and the one replayed erases what the other wrote.
+    /// </remarks>
+    Task<StoredEmailId?> RecordFiledAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        StoredEmailId filedEmail,
         CancellationToken cancellationToken);
 
     /// <summary>Removes one draft and everything held under it.</summary>

@@ -63,6 +63,52 @@ public sealed class OutgoingMailFilingPassTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>A held account's sent copy is filed locally by its delivery, so settling the send appends nothing to the drained source.</summary>
+    [Fact]
+    public async Task SettleFiledCopiesAsync_AHeldAccount_AppendsNothingToTheSource()
+    {
+        // Arrange
+        var context = new FilingContext(holdsAccount: true);
+        context.Filing.Map(Account.Id, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
+        context.Filing.FileSentCopies(Account.Id);
+        var delivered = await context.DeliverAsync();
+
+        // Act
+        var results = await context.Filing.Pass.SettleFiledCopiesAsync(
+            delivered,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(results);
+        Assert.Empty(context.Filing.Filings.Read(delivered));
+        await context.Filing.WriteSession.DidNotReceive().AppendAsync(
+            Arg.Any<ReadOnlyMemory<byte>>(),
+            Arg.Any<AppendedMailFlags>(),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A held account has no outbox mirror: its outgoing record is its outbox, so a waiting send is mirrored nowhere.</summary>
+    [Fact]
+    public async Task MirrorWaitingSendsAsync_AHeldAccount_MirrorsNothing()
+    {
+        // Arrange
+        var context = new FilingContext(holdsAccount: true);
+        context.Filing.Map(Account.Id, MailFolderSpecialUse.Outbox, "outbox", "INBOX.Outbox");
+        await context.EnqueueAsync(availableIn: TimeSpan.FromHours(1));
+
+        // Act
+        var results = await context.Filing.Pass.MirrorWaitingSendsAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(results);
+        await context.Filing.WriteSession.DidNotReceive().AppendAsync(
+            Arg.Any<ReadOnlyMemory<byte>>(),
+            Arg.Any<AppendedMailFlags>(),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A delivered message the account files reaches the sent folder as read, from the stored bytes.</summary>
     [Fact]
     public async Task SettleFiledCopiesAsync_ADeliveredMessage_AppendsTheStoredMimeToTheSentFolderAsSeen()
@@ -575,7 +621,7 @@ public sealed class OutgoingMailFilingPassTests
     {
         private readonly FakeTimeProvider clock = new(RanAt);
 
-        internal FilingContext()
+        internal FilingContext(bool holdsAccount = false)
         {
             this.Store = new InMemoryOutgoingEmailStore(timeProvider: this.clock);
 
@@ -593,7 +639,12 @@ public sealed class OutgoingMailFilingPassTests
                 TimeSpan.FromHours(1),
                 TimeSpan.FromHours(8));
 
-            this.Filing = new OutgoingMailFilingHarness(this.Store, this.Content, settings, this.clock);
+            this.Filing = new OutgoingMailFilingHarness(
+                this.Store,
+                this.Content,
+                settings,
+                this.clock,
+                holdsAccount ? new HeldLocalMailbox(Account, this.clock).FilerOver(this.Content) : null);
         }
 
         internal InMemoryOutgoingEmailStore Store { get; }

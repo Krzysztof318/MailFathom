@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Transmission;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
@@ -54,6 +55,7 @@ public sealed class MailOutboxDelivery
     private readonly IEmailContentStore contentStore;
     private readonly IOutgoingSenderIdentityReader senderIdentities;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
+    private readonly LocalMailFiler localFiler;
     private readonly MailOutboxSettings settings;
     private readonly TimeProvider timeProvider;
 
@@ -63,6 +65,7 @@ public sealed class MailOutboxDelivery
     /// <param name="contentStore">Holds the stored MIME the attempt transmits.</param>
     /// <param name="senderIdentities">Resolves the address the account's mail is sent from.</param>
     /// <param name="commitPolicy">Commits each movement of the record.</param>
+    /// <param name="localFiler">Files the sent copy of a held account's delivery in the commit that records it.</param>
     /// <param name="settings">Bounds the attempt and says when the next one may happen.</param>
     /// <param name="timeProvider">Measures the attempt's budget and stamps what it records.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
@@ -72,6 +75,7 @@ public sealed class MailOutboxDelivery
         IEmailContentStore contentStore,
         IOutgoingSenderIdentityReader senderIdentities,
         OptimisticConcurrencyRetryPolicy commitPolicy,
+        LocalMailFiler localFiler,
         MailOutboxSettings settings,
         TimeProvider timeProvider)
     {
@@ -80,6 +84,7 @@ public sealed class MailOutboxDelivery
         ArgumentNullException.ThrowIfNull(contentStore);
         ArgumentNullException.ThrowIfNull(senderIdentities);
         ArgumentNullException.ThrowIfNull(commitPolicy);
+        ArgumentNullException.ThrowIfNull(localFiler);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
@@ -88,6 +93,7 @@ public sealed class MailOutboxDelivery
         this.contentStore = contentStore;
         this.senderIdentities = senderIdentities;
         this.commitPolicy = commitPolicy;
+        this.localFiler = localFiler;
         this.settings = settings;
         this.timeProvider = timeProvider;
     }
@@ -265,6 +271,11 @@ public sealed class MailOutboxDelivery
     }
 
     /// <summary>Finishes an acknowledged transmission, or leaves the addresses it did not reach for the next attempt.</summary>
+    /// <remarks>
+    /// On a held account the sent copy is filed in the commit that records the delivery, so a crash cannot fall between
+    /// the two and the copy is filed exactly as often as the send reaches <see cref="OutgoingEmailStage.Sent" />, which the
+    /// lease makes once.
+    /// </remarks>
     private async Task<MailOutboxDeliveryResult> CompleteAsync(
         ClaimedOutgoingEmail claimed,
         IReadOnlyList<OutgoingRecipientOutcome> outcomes,
@@ -277,6 +288,9 @@ public sealed class MailOutboxDelivery
             return await this.DeferOrExhaustAsync(claimed, outcomes, failure: null, replyCode);
         }
 
+        var sentCopy = await this.localFiler.PrepareSentCopyAsync(claimed.Record);
+        FiledLocalEmail? filed = null;
+
         await this.CommitAsync(async (session, token) =>
         {
             await this.WriteRecipientOutcomesAsync(session, claimed, outcomes, token);
@@ -288,7 +302,16 @@ public sealed class MailOutboxDelivery
                 OutgoingEmailStage.Sent,
                 replyCode,
                 token);
+
+            filed = sentCopy is null
+                ? null
+                : await this.localFiler.FileAsync(session, sentCopy, claimed.Record.Id, token);
         });
+
+        if (filed is not null)
+        {
+            this.localFiler.Announce(filed);
+        }
 
         return Result(claimed, MailOutboxDeliveryOutcome.Sent, failure: null, replyCode);
     }

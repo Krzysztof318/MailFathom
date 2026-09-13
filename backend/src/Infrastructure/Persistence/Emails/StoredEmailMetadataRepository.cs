@@ -11,7 +11,9 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Emails.Threads;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
@@ -23,6 +25,7 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 /// <summary>EF Core implementation for email metadata persistence.</summary>
 [RequiresIntegrationCoverage]
 internal sealed class StoredEmailMetadataRepository(
+    MailFathomDbContext readContext,
     TimeProvider timeProvider,
     SensitiveContentDerivationGuard derivationGuard,
     EmailThreadAssembly threadAssembly)
@@ -179,6 +182,101 @@ internal sealed class StoredEmailMetadataRepository(
                 $"No stored email carries the identifier {storedEmailId}, so no outgoing record can be joined to it.");
 
         entity.FiledFromOutgoingEmailId = outgoingEmailId.Value;
+    }
+
+    /// <inheritdoc />
+    public async Task<StoredEmailId> StoreFiledEmailAsync(
+        IPersistenceSession session,
+        MailAccountIdentity account,
+        MailFolderResolutionId binding,
+        ExtractedEmailMetadata? extractedMetadata,
+        long sizeOctets,
+        AppendedMailFlags flags,
+        OutgoingEmailId? filedFrom,
+        CancellationToken cancellationToken)
+    {
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+        var folder = await MailFolderEntityResolver.GetRequiredAsync(sessionContext, account, binding, cancellationToken);
+        var storedAt = timeProvider.GetUtcNow();
+
+        var entity = new StoredEmailEntity
+        {
+            Id = Guid.CreateVersion7(storedAt),
+            MailboxAccountId = folder.MailboxAccountId,
+            UserId = folder.UserId,
+            MailFolder = folder,
+            StoredAt = storedAt,
+            SizeOctets = sizeOctets,
+            ContentAvailability = StoredEmailContentAvailability.Available,
+            IsRemotelySeen = flags.IsSeen,
+            IsRemotelyDraft = flags.IsDraft,
+            RemoteFlagsObservedAt = storedAt,
+            FiledFromOutgoingEmailId = filedFrom?.Value,
+
+            // A draft is stamped as evaluated because nothing arrived: a rule conditioned on incoming mail must not fire
+            // on the person's own draft. A sent copy is left unstamped like every other copy filed from an outgoing record,
+            // which the rule queue and the derivations already recognise by that record.
+            RulesEvaluatedAt = filedFrom is null ? storedAt : null,
+        };
+
+        sessionContext.StoredEmails.Add(entity);
+
+        if (extractedMetadata is not null)
+        {
+            StoredEmailMetadataMapping.ApplyExtractedMetadata(entity, extractedMetadata);
+
+            await EmailSearchDocumentWriter.SaveAsync(
+                sessionContext,
+                entity,
+                extractedMetadata,
+                storedAt,
+                cancellationToken);
+        }
+        else
+        {
+            await EmailSearchDocumentWriter.SaveEnvelopeOnlyAsync(
+                sessionContext,
+                entity,
+                subject: null,
+                storedAt,
+                derivationGuard.StampFor(account.User),
+                cancellationToken);
+        }
+
+        await threadAssembly.AssembleAsync(
+            session,
+            account,
+            ThreadedEmails.Of(entity),
+            currentThreadId: null,
+            cancellationToken);
+
+        return StoredEmailId.Create(entity.Id);
+    }
+
+    /// <inheritdoc />
+    public async Task<StoredEmailId?> FindFiledSentCopyAsync(
+        MailAccountIdentity account,
+        string internetMessageId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(internetMessageId);
+
+        var user = account.User.Value;
+        var accountValue = account.Id.Value;
+
+        var filedCopy = await readContext.StoredEmails
+            .AsNoTracking()
+            .Where(email => email.UserId == user
+                && email.MailboxAccountId == accountValue
+                && email.InternetMessageId == internetMessageId
+                && email.FiledFromOutgoingEmailId != null
+                && email.UidValidity == null
+                && email.ContentAvailability == StoredEmailContentAvailability.Available)
+            .OrderBy(email => email.Id)
+            .Select(email => (Guid?)email.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return filedCopy is { } id ? StoredEmailId.Create(id) : null;
     }
 
     /// <summary>Reads whatever row already occupies one occurrence, including one this session has staged and not committed.</summary>

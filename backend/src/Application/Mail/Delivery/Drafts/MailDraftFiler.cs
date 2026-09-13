@@ -8,6 +8,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization.Sessions;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Failures;
@@ -46,6 +47,7 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 public sealed class MailDraftFiler
 {
     private readonly MailboxCopyAppender appends;
+    private readonly LocalMailFiler localFiler;
     private readonly IMailboxWriteSessionFactory writeSessions;
     private readonly MailboxDestinationResolver destinations;
     private readonly IMailDraftStore drafts;
@@ -55,6 +57,7 @@ public sealed class MailDraftFiler
 
     /// <summary>Initializes the filer from the append it files through and the record it writes each copy onto.</summary>
     /// <param name="appends">Puts each revision into the drafts folder, in the order that keeps it one copy.</param>
+    /// <param name="localFiler">Files each revision into the local drafts folder instead, on an account MailFathom holds alone.</param>
     /// <param name="writeSessions">Opens the one session able to change a mailbox, which a removal needs of its own.</param>
     /// <param name="destinations">Turns the drafts role into the folder of this account it means.</param>
     /// <param name="drafts">Keeps the durable account of every draft and every copy of one.</param>
@@ -64,6 +67,7 @@ public sealed class MailDraftFiler
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public MailDraftFiler(
         MailboxCopyAppender appends,
+        LocalMailFiler localFiler,
         IMailboxWriteSessionFactory writeSessions,
         MailboxDestinationResolver destinations,
         IMailDraftStore drafts,
@@ -72,6 +76,7 @@ public sealed class MailDraftFiler
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(appends);
+        ArgumentNullException.ThrowIfNull(localFiler);
         ArgumentNullException.ThrowIfNull(writeSessions);
         ArgumentNullException.ThrowIfNull(destinations);
         ArgumentNullException.ThrowIfNull(drafts);
@@ -80,6 +85,7 @@ public sealed class MailDraftFiler
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.appends = appends;
+        this.localFiler = localFiler;
         this.writeSessions = writeSessions;
         this.destinations = destinations;
         this.drafts = drafts;
@@ -125,9 +131,62 @@ public sealed class MailDraftFiler
         }
     }
 
+    /// <summary>Reads and places a revision's local copy, where the account is held, before the transaction that writes the revision.</summary>
+    /// <param name="account">The account the draft belongs to.</param>
+    /// <param name="rawMime">The revision's message.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The prepared copy, or <see langword="null" /> where the account is not held or no bound folder plays the drafts role.</returns>
+    internal async Task<LocalMailCopy?> PrepareLocalCopyAsync(
+        MailAccountIdentity account,
+        ReadOnlyMemory<byte> rawMime,
+        CancellationToken cancellationToken) =>
+        await this.localFiler.HoldsAsync(account, cancellationToken)
+            ? await this.localFiler.PrepareAsync(account, OutgoingMailFiling.Draft, rawMime, cancellationToken)
+            : null;
+
+    /// <summary>Files a revision's local copy and erases the one it replaces, inside the transaction that writes the revision.</summary>
+    /// <param name="session">The transaction.</param>
+    /// <param name="draftId">The draft.</param>
+    /// <param name="copy">The prepared copy.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>What was filed, or <see langword="null" /> where the account is no longer held.</returns>
+    /// <remarks>
+    /// A replacement is the new message stored and the previous one erased in one commit, so unlike a server copy there is
+    /// no moment at which the folder holds both or neither, and no order between the two to get right.
+    /// </remarks>
+    internal async Task<FiledLocalEmail?> FileLocallyAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        LocalMailCopy copy,
+        CancellationToken cancellationToken)
+    {
+        if (await this.localFiler.FileAsync(session, copy, filedFrom: null, cancellationToken) is not { } filed)
+        {
+            return null;
+        }
+
+        var replaced = await this.drafts.RecordFiledAsync(session, draftId, filed.Email, cancellationToken);
+
+        if (replaced is { } previous)
+        {
+            await this.localFiler.EraseAsync(session, copy.Account, previous, cancellationToken);
+        }
+
+        return filed with { Replaced = replaced };
+    }
+
+    /// <summary>Tells the account's clients what a committed local filing changed.</summary>
+    /// <param name="filed">What was filed.</param>
+    internal void Announce(FiledLocalEmail filed) => this.localFiler.Announce(filed);
+
     /// <summary>Runs whatever the stage calls for, which is at most an append followed by the removals it caused.</summary>
     private async Task<MailDraftFilingResult> RunAsync(MailDraftRecord draft, CancellationToken cancellationToken)
     {
+        if (await this.localFiler.HoldsAsync(draft.Account, cancellationToken))
+        {
+            return await this.SettleLocallyAsync(draft, cancellationToken);
+        }
+
         if (draft.IsDiscarded)
         {
             return await this.DiscardAsync(draft, cancellationToken);
@@ -400,6 +459,73 @@ public sealed class MailDraftFiler
         await this.drafts.RecordFailureAsync(draft.Id, failure, CancellationToken.None);
 
         return Result(draft, outcome, failure);
+    }
+
+    /// <summary>Settles a draft of a held account against its local drafts folder, issuing nothing to any server.</summary>
+    /// <remarks>
+    /// <para>
+    /// A given-up draft has its message erased and its record removed in one commit. A draft with no message is one whose
+    /// revision was written without it — the account became held after the revision, or its drafts folder could not be
+    /// reached then — and it is filed now from the message the revision stored. The copies a server holds of a draft
+    /// written while the account was mirrored are left to the drain, which empties the source they are in.
+    /// </para>
+    /// <para>
+    /// Filing reads the draft again inside its transaction, so a save racing this conflicts on the draft rather than
+    /// leaving two messages: whichever commits second replaces what the first filed.
+    /// </para>
+    /// </remarks>
+    private async Task<MailDraftFilingResult> SettleLocallyAsync(
+        MailDraftRecord draft,
+        CancellationToken cancellationToken)
+    {
+        if (draft.IsDiscarded)
+        {
+            MailFolderAlias? erasedFrom = null;
+
+            await this.commitPolicy.CommitAsync(
+                async (session, token) =>
+                {
+                    erasedFrom = draft.FiledEmail is { } filedEmail
+                        ? await this.localFiler.EraseAsync(session, draft.Account, filedEmail, token)
+                        : null;
+
+                    await this.drafts.RemoveAsync(session, draft.Id, token);
+                },
+                CancellationToken.None);
+
+            if (erasedFrom is { } folder && draft.FiledEmail is { } erased)
+            {
+                this.localFiler.AnnounceErased(draft.Account, folder, erased);
+            }
+
+            return Result(draft, MailDraftFilingOutcome.Discarded);
+        }
+
+        if (draft.FiledEmail is not null)
+        {
+            return Result(draft, MailDraftFilingOutcome.AlreadySettled);
+        }
+
+        if (await this.localFiler.PrepareDraftAsync(draft, cancellationToken) is not { } copy)
+        {
+            return await this.RecordFailureAsync(
+                draft,
+                MailFathomErrorCode.OutgoingEmailFilingDestinationUnavailable,
+                MailDraftFilingOutcome.DestinationUnavailable);
+        }
+
+        var filed = await this.commitPolicy.CommitAsync(
+            (session, token) => this.FileLocallyAsync(session, draft.Id, copy, token),
+            cancellationToken);
+
+        if (filed is null)
+        {
+            return Result(draft, MailDraftFilingOutcome.DestinationUnavailable);
+        }
+
+        this.localFiler.Announce(filed);
+
+        return Result(draft, MailDraftFilingOutcome.Filed);
     }
 
     /// <summary>Reads what the append reported as what it means for the draft the copy belongs to.</summary>

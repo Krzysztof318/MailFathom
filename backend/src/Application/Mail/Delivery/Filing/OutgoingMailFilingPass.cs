@@ -51,6 +51,7 @@ public sealed class OutgoingMailFilingPass
     private readonly IMailFolderMappingReader folderMappings;
     private readonly IOutgoingMailFilingPolicyReader filingPolicies;
     private readonly IOutgoingMailFilingStore filings;
+    private readonly LocalMailFiler localFiler;
     private readonly TimeProvider timeProvider;
     private readonly int maxMirroredSendsPerPass;
 
@@ -60,6 +61,7 @@ public sealed class OutgoingMailFilingPass
     /// <param name="folderMappings">Answers whether this account maps a folder to the outbox role at all.</param>
     /// <param name="filingPolicies">Answers whether this account files a copy of what it sends.</param>
     /// <param name="filings">Answers which filed sent copies the folder holds a second occurrence of.</param>
+    /// <param name="localFiler">Answers whether the account is held, whose copies are filed locally by the delivery instead.</param>
     /// <param name="timeProvider">Decides which sends are waiting rather than merely queued.</param>
     /// <param name="settings">Bounds how many waiting sends one pass mirrors.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
@@ -74,6 +76,7 @@ public sealed class OutgoingMailFilingPass
         IMailFolderMappingReader folderMappings,
         IOutgoingMailFilingPolicyReader filingPolicies,
         IOutgoingMailFilingStore filings,
+        LocalMailFiler localFiler,
         TimeProvider timeProvider,
         MailOutboxSettings settings)
     {
@@ -82,6 +85,7 @@ public sealed class OutgoingMailFilingPass
         ArgumentNullException.ThrowIfNull(folderMappings);
         ArgumentNullException.ThrowIfNull(filingPolicies);
         ArgumentNullException.ThrowIfNull(filings);
+        ArgumentNullException.ThrowIfNull(localFiler);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -90,6 +94,7 @@ public sealed class OutgoingMailFilingPass
         this.folderMappings = folderMappings;
         this.filingPolicies = filingPolicies;
         this.filings = filings;
+        this.localFiler = localFiler;
         this.timeProvider = timeProvider;
         this.maxMirroredSendsPerPass = settings.MaxDeliveriesPerPass;
     }
@@ -101,13 +106,13 @@ public sealed class OutgoingMailFilingPass
     /// <remarks>
     /// Only a send whose next attempt lies ahead is mirrored. A message the very next claim will take is gone in
     /// seconds, and appending a copy of it would put a message on somebody's mail server and take it away again for
-    /// every send this deployment makes.
+    /// every send this deployment makes. A held account has no outbox mirror at all: its outgoing record is its outbox.
     /// </remarks>
     public async Task<IReadOnlyList<OutgoingMailFilingResult>> MirrorWaitingSendsAsync(
         MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        if (!this.MapsOutboxFolder(account.Id))
+        if (!this.MapsOutboxFolder(account.Id) || await this.localFiler.HoldsAsync(account, cancellationToken))
         {
             return [];
         }
@@ -204,6 +209,10 @@ public sealed class OutgoingMailFilingPass
     /// mirror taken out of the folder and nothing appended in its place, because the only copy such a message ever
     /// earned was the one that said it was waiting.
     /// </para>
+    /// <para>
+    /// A held account's sent copy is not appended here: the delivery filed it into the local sent folder in the commit that
+    /// recorded it, and an append to a drained source would be drained straight back.
+    /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<OutgoingMailFilingResult>> SettleFiledCopiesAsync(
         OutgoingEmailId outgoingEmailId,
@@ -234,6 +243,11 @@ public sealed class OutgoingMailFilingPass
                 OutgoingMailFilingOutcome.NotRequested,
                 Failure: null));
 
+            return results;
+        }
+
+        if (await this.localFiler.HoldsAsync(record.Account, cancellationToken))
+        {
             return results;
         }
 
