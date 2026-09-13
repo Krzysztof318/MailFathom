@@ -59,6 +59,22 @@ internal static class FakeUserRecordDeployment
                 $$"""{"committed":false,"version":{{RecordVersion}},"code":{{code}},"messages":["{{message}}"]}"""),
             records.Length == 0 ? [EmptyRecord] : records);
 
+    /// <summary>Builds a deployment that commits every write to a record and reports a problem the record already carried.</summary>
+    /// <param name="user">The user the roster reports.</param>
+    /// <param name="message">The sentence naming the problem.</param>
+    /// <param name="records">What each successive read of the record answers with, the last one repeating.</param>
+    /// <returns>The deployment.</returns>
+    internal static FakeHttpMessageHandler CommittingBesideAStandingProblem(
+        Guid user,
+        string message,
+        params string[] records) =>
+        Answering(
+            [user],
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $$"""{"committed":true,"version":{{RecordVersion + 1}},"messages":["{{message}}"]}"""),
+            records.Length == 0 ? [EmptyRecord] : records);
+
     /// <summary>Builds a deployment holding no user at all.</summary>
     /// <returns>The deployment.</returns>
     internal static FakeHttpMessageHandler HoldingNobody() =>

@@ -28,11 +28,16 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// </remarks>
 internal sealed record UserRecordWriteOutcome
 {
-    private UserRecordWriteOutcome(long version, MailFathomErrorCode refusal, IReadOnlyList<string> messages)
+    private UserRecordWriteOutcome(
+        long version,
+        MailFathomErrorCode refusal,
+        IReadOnlyList<string> messages,
+        bool isCommitted = false)
     {
         this.Version = version;
         this.Refusal = refusal;
         this.Messages = messages;
+        this.IsCommitted = isCommitted;
     }
 
     /// <summary>Gets the version of the user's record now in force.</summary>
@@ -41,7 +46,7 @@ internal sealed record UserRecordWriteOutcome
     /// <summary>Gets the code naming why the write was refused, which is the unspecified default when it committed or changed nothing.</summary>
     public MailFathomErrorCode Refusal { get; }
 
-    /// <summary>Gets one sentence per reason the write was refused, or the single sentence saying nothing needed changing.</summary>
+    /// <summary>Gets one sentence per reason the write was refused, the single sentence saying nothing needed changing, or one per problem a committed record already carried before the write.</summary>
     /// <remarks>Several, because a record that fails to bind fails at every setting at once and a person fixing one at a time would learn the next only by writing again.</remarks>
     public IReadOnlyList<string> Messages { get; }
 
@@ -49,17 +54,18 @@ internal sealed record UserRecordWriteOutcome
     public bool IsSettled => !this.Refusal.IsSpecified;
 
     /// <summary>Gets whether a version was spent, which is false for a write that found the record already as asked.</summary>
-    public bool IsCommitted => this.IsSettled && this.Messages.Count == 0;
+    public bool IsCommitted { get; }
 
     /// <summary>Reports a write that committed.</summary>
     /// <param name="version">The version the commit produced.</param>
+    /// <param name="standingProblems">One sentence per problem the record carried before the write and still carries, which did not stop the commit because the write did not introduce it.</param>
     /// <returns>The committed result.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="version" /> is not a version a commit can have produced.</exception>
-    public static UserRecordWriteOutcome Committed(long version)
+    public static UserRecordWriteOutcome Committed(long version, IReadOnlyList<string>? standingProblems = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(version);
 
-        return new UserRecordWriteOutcome(version, refusal: default, messages: []);
+        return new UserRecordWriteOutcome(version, refusal: default, messages: standingProblems ?? [], isCommitted: true);
     }
 
     /// <summary>Reports a write the record already satisfied, so no version was spent.</summary>

@@ -607,14 +607,19 @@ internal sealed class UserRecordAdministration(
 
         // Resolved here rather than left to the next start, which refuses the whole deployment over it: a reference
         // that is well formed and names nothing retrievable binds cleanly, commits, and then stops the host for every
-        // user it serves until somebody corrects the row by hand.
-        if (await secrets.FindUserMailAccountErrorsAsync(RecordPath, bound.MailAccounts, cancellationToken)
-            is { Count: > 0 } unusable)
+        // user it serves until somebody corrects the row by hand. What the record already carried is not this write's
+        // to refuse, because refusing it would block every unrelated edit without making the next start any worse.
+        var unusable = await secrets.FindUserMailAccountErrorsAsync(RecordPath, bound.MailAccounts, cancellationToken);
+        IReadOnlyList<string> held = unusable.Count == 0
+            ? []
+            : await this.FindUnusableSecretsHeldAsync(inForce.Json, cancellationToken);
+
+        if (unusable.Where(problem => !held.Contains(problem)).ToArray() is { Length: > 0 } newlyUnusable)
         {
             return UserRecordWriteOutcome.Refused(
                 MailFathomErrorCode.ConfigurationCandidateInvalid,
                 inForce.Version,
-                unusable);
+                newlyUnusable);
         }
 
         await servedUsers.WaitForRosterPublicationAsync(cancellationToken);
@@ -625,7 +630,7 @@ internal sealed class UserRecordAdministration(
             {
                 servedUsers.UserDocumentPublished(user, inForce.DisplayName, bound, committed);
 
-                return UserRecordWriteOutcome.Committed(committed);
+                return UserRecordWriteOutcome.Committed(committed, [.. unusable.Select(DescribeAsAlreadyHeld)]);
             }
 
             // The record moved while this candidate was being judged, or the user was erased under it. Which of the
@@ -644,6 +649,31 @@ internal sealed class UserRecordAdministration(
             servedUsers.ReleaseRosterPublication();
         }
     }
+
+    // ponytail: a problem matches only at the same path, so withdrawing an earlier mail account moves a later account's
+    // standing problem to a new position and it is refused as introduced; key by the account identifier if that bites.
+
+    /// <summary>Resolves the secrets of the record as it stands, so a write can tell what it introduced from what was already there.</summary>
+    /// <remarks>
+    /// <para>
+    /// Asked only once the candidate has already failed the walk, so an ordinary write resolves nothing twice. A row that
+    /// no longer binds contributes nothing, which leaves every problem the candidate carries refused as it was before.
+    /// </para>
+    /// <para>
+    /// The sentences are compared rather than the secrets behind them, because they are what the walk reports and each
+    /// names the path it found the problem at.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<string>> FindUnusableSecretsHeldAsync(
+        string standingJson,
+        CancellationToken cancellationToken) =>
+        binder.Bind(standingJson, UserRecordArrival.AlreadyHeld).User is { } standing
+            ? await secrets.FindUserMailAccountErrorsAsync(RecordPath, standing.MailAccounts, cancellationToken)
+            : [];
+
+    /// <summary>Says that a problem a committed record still carries was there before the write, and what clears it.</summary>
+    private static string DescribeAsAlreadyHeld(string problem) =>
+        $"{problem} The record already carried this before the change, so the change was committed and left it as it was. A start refuses a record carrying it, so correct it before the deployment next restarts: provision what the reference names, or withdraw the mail account with 'mfctl user account remove' and declare it again with 'mfctl user account add'.";
 
     /// <summary>Names every secret-bearing value the candidate carries that this user may not point their record at.</summary>
     /// <remarks>

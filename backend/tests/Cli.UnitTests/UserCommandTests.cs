@@ -448,6 +448,28 @@ public sealed class UserCommandTests : IDisposable
         Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserRecordPath(User)));
     }
 
+    /// <summary>A commit can still carry a problem the record held before the edit, and the operator is told it rather than left to meet it at the next restart.</summary>
+    [Fact]
+    public async Task Edit_ACommitReportingAProblemTheRecordAlreadyCarried_SucceedsAndPrintsIt()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.CommittingBesideAStandingProblem(
+            User,
+            "document:MailAccounts:0:Secrets:Password — the secret reference could not be resolved.",
+            OneMailAccount);
+
+        this.harness.EditsTheBufferInto("""{"MailAccounts":[{"AccountId":"work"}],"SpamClassification":{"Enabled":true}}""");
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "edit", "--user", $"{User:D}", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.harness.Console.Errors,
+            line => line.Contains("could not be resolved", StringComparison.Ordinal));
+    }
+
     /// <summary>An emptied buffer is how every editor-driven command an operator has met is abandoned, and it is honoured as one.</summary>
     [Fact]
     public async Task Edit_AnEmptiedBuffer_LeavesTheRecordAsItWas()

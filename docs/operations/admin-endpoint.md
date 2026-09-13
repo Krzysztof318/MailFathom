@@ -1296,6 +1296,15 @@ those is refused with what to correct rather than committed and discovered at th
 names the deployment setting behind it and never quotes the record. A record another writer moved on in the meantime is refused as superseded, so nothing silently
 overwrites a change made from the client or from another terminal.
 
+**Every secret reference in the record is resolved before a commit, and only a problem the change introduced refuses
+it.** A reference that reaches nothing, or a secret name repeated within the record, is refused when the candidate
+brings it — a mailbox added with a credential the deployment cannot read, say. A problem the record already carried
+before the change does not block a change that leaves it as it was: an edit to spam classification beside a password
+reference that stopped resolving commits, and the answer names that setting, says it was already there, and says what
+clears it. It is still worth clearing before the next restart, because a start refuses a record carrying it. The
+problem is matched at the path it was found at, so withdrawing an earlier mail account moves a later account's problem
+to a new position, and that change is refused as though it introduced it.
+
 **Nothing here reports a secret.** A record is handed over with every password, token, and client secret replaced by the
 redaction marker, and a save is read as the difference from what the row holds — so a marker saved back leaves the
 credential beneath it exactly as it was, and a marker this deployment cannot place is refused rather than committed over
