@@ -50,7 +50,7 @@ internal static class MailboxMutationAuditEndpoint
     }
 
     /// <summary>Serves one page of an account's audit trail, or reports what was wrong with the request.</summary>
-    /// <param name="account">The configured identifier of the account whose trail is read.</param>
+    /// <param name="account">The identifier the deployment generated for the account whose trail is read.</param>
     /// <param name="mutation">The mutation name to narrow to, or <see langword="null" /> for every mutation.</param>
     /// <param name="from">The earliest completion instant served, inclusive, or <see langword="null" /> for none.</param>
     /// <param name="before">The completion instant to stop before, exclusive, or <see langword="null" /> for none.</param>

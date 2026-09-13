@@ -109,7 +109,7 @@ internal sealed class SendEmailTool(AuthoredMailSubmission submission)
         + "Once the message has been transmitted nothing "
         + "undoes it; while it is still waiting, cancel_outgoing_email is the one call that does.")]
     public async Task<SendEmailToolResult> SendEmailAsync(
-        [Description("The account to send as, named by the accountId or the display name list_accounts returned; both are unique within the account's user rather than across the deployment. Its configuration decides the From address, which you never supply. A name that resolves to none of the accounts you may send as refuses the call, as does one that resolves to an account carrying no sending configuration.")]
+        [Description("The account to send as, named by the accountId or the display name list_accounts returned; the accountId is unique across the deployment and the display name within your own accounts. Its configuration decides the From address, which you never supply. A name that resolves to none of the accounts you may send as refuses the call, as does one that resolves to an account carrying no sending configuration.")]
         string account,
         [Description("The addresses the message is addressed to, one entry per person, each a plain mail address such as person@example.com without a display name. At least one recipient is required across to, cc, and bcc.")]
         IReadOnlyList<string> to,

@@ -90,8 +90,8 @@ internal sealed record ClientMailAccountsResponse(
 }
 
 /// <summary>One of the user's accounts, and how current its local copy is.</summary>
-/// <param name="Id">The identifier the account was declared under, which a client may hold and name it by; it is unique within the user rather than across the deployment.</param>
-/// <param name="DisplayName">The name the account is published under, which is what a person recognizes; it is unique within the user in the same way.</param>
+/// <param name="Id">The identifier the deployment generated for the account, which a client may hold and name it by; it is unique across the deployment.</param>
+/// <param name="DisplayName">The name the account is published under, which is what a person recognizes; it is unique only within the user.</param>
 /// <param name="SynchronizationState">Whether the deployment's last attempt at the account succeeded, failed, found no mail server, or has never happened, as the state's own name.</param>
 /// <param name="LastSynchronizedAt">When the account last durably took anything in, or <see langword="null" /> where it never has.</param>
 /// <param name="Behind">Whether any of the account's folders ended its last attempt with mail it had not yet taken in.</param>

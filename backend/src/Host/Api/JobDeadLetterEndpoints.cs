@@ -75,7 +75,7 @@ internal static class JobDeadLetterEndpoints
 
     /// <summary>Serves one page of the jobs nothing will attempt again, newest first.</summary>
     /// <param name="type">The job type to narrow to, or <see langword="null" /> for every type.</param>
-    /// <param name="account">The configured identifier of the account to narrow to, or <see langword="null" /> for every account.</param>
+    /// <param name="account">The identifier the deployment generated for the account to narrow to, or <see langword="null" /> for every account.</param>
     /// <param name="pageSize">How many jobs the page may hold, or <see langword="null" /> for the default.</param>
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>

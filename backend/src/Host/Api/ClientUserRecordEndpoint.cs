@@ -286,7 +286,7 @@ internal static class ClientUserRecordEndpoint
     /// <param name="request">The account, the alias, and the version the record was read at.</param>
     /// <param name="cancellationToken">Cancels the read and the commit.</param>
     /// <returns><c>200</c> with what the write did, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the request names no account or no folder.</returns>
-    /// <remarks>The mail already stored out of that folder stays, exactly as it does when a mail account stops being declared. What this does is stop the deployment reading the folder.</remarks>
+    /// <remarks>The mail already stored out of that folder stays, unlike withdrawing the whole mail account, which erases it. What this does is stop the deployment reading the folder.</remarks>
     internal static async Task<Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> RemoveFolderAsync(
         [FromServices] MailAccountAdministration records,
         [FromBody] UserFolderRemovalRequest request,

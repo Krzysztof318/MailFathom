@@ -72,7 +72,7 @@ public sealed class MailboxScopeResolver
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="junkMail" /> is not a defined member.</exception>
     /// <remarks>
     /// <para>
-    /// An account may be named by its configured identifier or by the display name it is published under, and this is
+    /// An account may be named by the identifier the deployment generated for it or by the display name it is published under, and this is
     /// where the two become one identity. Resolution happens against the accounts the caller's user owns rather than at
     /// a protocol boundary, so text naming nothing is refused by the same rule and with the same failure as an identifier
     /// the deployment stopped serving and as one belonging to somebody else — a caller cannot learn from the refusal

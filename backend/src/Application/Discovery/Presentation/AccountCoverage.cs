@@ -19,7 +19,7 @@ namespace MailFathom.Application.Discovery.Presentation;
 /// which is itself worth drawing: an account that was read and yielded nothing is not an account that was skipped.
 /// </para>
 /// <para>
-/// The account is named by MailFathom's own configured identifier, which is what every other surface names an account
+/// The account is named by MailFathom's own generated identifier, which is what every other surface names an account
 /// by and what a client already holds a display name for. No host, no user name, and no address is here: how the
 /// deployment reaches a mailbox is the operator's business rather than a property of an answer.
 /// </para>
@@ -27,7 +27,7 @@ namespace MailFathom.Application.Discovery.Presentation;
 public sealed record AccountCoverage
 {
     /// <summary>Initializes what one run read of one account.</summary>
-    /// <param name="account">MailFathom's own configured identifier for the account.</param>
+    /// <param name="account">MailFathom's own generated identifier for the account.</param>
     /// <param name="freshness">How current the local copy of the account was when the run read it.</param>
     /// <param name="earliestReceivedAt">When the oldest mail the run drew on from this account arrived, or <see langword="null" /> where it drew on none.</param>
     /// <param name="latestReceivedAt">When the newest mail the run drew on from this account arrived, or <see langword="null" /> where it drew on none.</param>
@@ -62,7 +62,7 @@ public sealed record AccountCoverage
         this.LatestReceivedAt = latestReceivedAt;
     }
 
-    /// <summary>Gets MailFathom's own configured identifier for the account.</summary>
+    /// <summary>Gets MailFathom's own generated identifier for the account.</summary>
     public PresentationText Account { get; }
 
     /// <summary>Gets how current the local copy of the account was when the run read it.</summary>

@@ -37,7 +37,7 @@ namespace MailFathom.Application.Accounts;
 /// one this process is applying.
 /// </para>
 /// <para>
-/// It reaches no mail server and returns no mail: an account's configured identifier, its display name, its folders'
+/// It reaches no mail server and returns no mail: an account's generated identifier, its display name, its folders'
 /// aliases, one instant apiece, and one state apiece are the whole of what a caller receives.
 /// </para>
 /// </remarks>
