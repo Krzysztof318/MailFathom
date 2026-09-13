@@ -81,9 +81,9 @@ public sealed partial class UserPasswordAuthenticator
     /// <summary>Judges the credential an <c>Authorization</c> header carried.</summary>
     /// <param name="surfaceName">The transport surface the request arrived on, which keeps two surfaces' attempt buckets apart.</param>
     /// <param name="authorizationHeaderValue">The raw header value, or <see langword="null" /> when the request carried none.</param>
-    /// <param name="source">The address to bound this attempt by, or <see langword="null" /> where the caller cannot supply one that tells two callers apart — behind a reverse proxy above all, where every request reports the proxy. The username is then the whole bound, which is deliberate: a partition every caller shares is one a single guesser could empty for everybody.</param>
-    /// <param name="attemptsPerMinute">How many attempts the surface allows one source and one username each minute.</param>
-    /// <param name="maxConcurrentVerifications">How many password verifications the surface may have in flight at once, whatever usernames they name.</param>
+    /// <param name="source">The address to bound this attempt by, or <see langword="null" /> where the caller cannot supply one that tells two callers apart — behind a reverse proxy above all, where every request reports the proxy. The login is then the whole bound, which is deliberate: a partition every caller shares is one a single guesser could empty for everybody. The login is the organization's short name in front of the username where it names one, so <c>ACME/jan</c> and <c>BETA/jan</c> are bounded apart.</param>
+    /// <param name="attemptsPerMinute">How many attempts the surface allows one source and one login each minute.</param>
+    /// <param name="maxConcurrentVerifications">How many password verifications the surface may have in flight at once, whatever logins they name.</param>
     /// <param name="cancellationToken">Cancels the credential read and the rehash that may follow a success.</param>
     /// <returns>The credential and user that matched, or the reason the credential was refused.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="surfaceName" /> is <see langword="null" />.</exception>
@@ -113,7 +113,7 @@ public sealed partial class UserPasswordAuthenticator
                     : UserPasswordRejection.CredentialMalformed);
             }
 
-            if (!UserCredentialUsername.TryCreate(presented.UserId, out var username))
+            if (!UserCredentialLogin.TryRead(presented.UserId, out var login))
             {
                 return UserPasswordAuthenticationResult.Rejected(UserPasswordRejection.UsernameUnusable);
             }
@@ -121,7 +121,7 @@ public sealed partial class UserPasswordAuthenticator
             var attempt = new PasswordAttempt(
                 surfaceName,
                 string.IsNullOrWhiteSpace(source) ? null : source,
-                username.Value,
+                login.Value,
                 attemptsPerMinute,
                 maxConcurrentVerifications);
 
@@ -136,7 +136,7 @@ public sealed partial class UserPasswordAuthenticator
                 return UserPasswordAuthenticationResult.Rejected(UserPasswordRejection.TooManyAttempts);
             }
 
-            var judgement = await this.JudgeAsync(username, presented, cancellationToken);
+            var judgement = await this.JudgeAsync(login, presented, cancellationToken);
 
             // Spent on the answer rather than on the attempt, so a caller presenting a password that works costs the
             // bound nothing however often it presents it — which is what Basic makes it do, having no session.
@@ -153,19 +153,16 @@ public sealed partial class UserPasswordAuthenticator
         }
     }
 
-    /// <summary>Resolves the username and compares the password, at one cost whatever the answer is.</summary>
+    /// <summary>Resolves the login and compares the password, at one cost whatever the answer is.</summary>
     private async Task<UserPasswordAuthenticationResult> JudgeAsync(
-        UserCredentialUsername username,
+        UserCredentialLogin login,
         PresentedBasicCredential presented,
         CancellationToken cancellationToken)
     {
-        var credential = await this.credentials.FindAsync(
-            UserCredentialMethod.Password,
-            UserCredentialLookup.ForUsername(username),
-            cancellationToken);
+        var credential = await this.credentials.FindPasswordAsync(login, cancellationToken);
 
-        // The decoy is verified rather than skipped, so a username nobody holds costs what a username somebody holds
-        // costs. Its result is discarded because it can only ever be a failure. A password credential without stored
+        // The decoy is verified rather than skipped, so a username nobody holds — or an organization nobody holds —
+        // costs what a login somebody holds costs. Its result is discarded because it can only ever be a failure. A password credential without stored
         // material cannot arise — the store refuses to write one — and it is met with the decoy rather than with a
         // fault, because a row nothing can judge is a credential nobody holds.
         var verification = this.passwordHasher.Verify(
@@ -225,8 +222,8 @@ public sealed partial class UserPasswordAuthenticator
     [LoggerMessage(
         Level = LogLevel.Warning,
         Message = "A password attempt on the {TransportSurface} surface was refused without the password being checked, "
-            + "because its source or the username it named has spent its attempts for the current period. Neither the "
-            + "username nor the address is recorded; the bound is the endpoint's own Basic setting.")]
+            + "because its source or the login it named has spent its attempts for the current period. Neither the "
+            + "login nor the address is recorded; the bound is the endpoint's own Basic setting.")]
     private partial void LogAttemptsExhausted(string transportSurface);
 
     [LoggerMessage(

@@ -8,8 +8,9 @@ namespace MailFathom.Cli.Administration.Users;
 /// <param name="CredentialId">The identifier the new credential carries, which every later act on it names.</param>
 /// <param name="Lookup">What the credential will be resolved by, where the deployment publishes it.</param>
 /// <param name="Key">The key the deployment minted, where the method is one it mints — carried here and never again.</param>
+/// <param name="Login">What the person types to sign in with a password credential, where the deployment reports one.</param>
 /// <remarks><see cref="ToString" /> reports the identifier alone, so a diagnostic rendering this record cannot print the one field that is a secret.</remarks>
-internal sealed record UserCredentialProvisioned(Guid CredentialId, string? Lookup, string? Key)
+internal sealed record UserCredentialProvisioned(Guid CredentialId, string? Lookup, string? Key, string? Login)
 {
     /// <inheritdoc />
     public override string ToString() => $"{nameof(UserCredentialProvisioned)} {{ {this.CredentialId} }}";
@@ -18,8 +19,9 @@ internal sealed record UserCredentialProvisioned(Guid CredentialId, string? Look
 /// <summary>What replacing a credential's material produced.</summary>
 /// <param name="Lookup">What the credential is resolved by from now on, where the deployment publishes it.</param>
 /// <param name="Key">The key the deployment minted, where the method is one it mints — carried here and never again.</param>
+/// <param name="Login">What the person types to sign in with a password credential, where the deployment reports one.</param>
 /// <remarks><see cref="ToString" /> is redacted, for the reason <see cref="UserCredentialProvisioned" />'s is.</remarks>
-internal sealed record UserCredentialRotated(string? Lookup, string? Key)
+internal sealed record UserCredentialRotated(string? Lookup, string? Key, string? Login)
 {
     /// <inheritdoc />
     public override string ToString() => nameof(UserCredentialRotated);

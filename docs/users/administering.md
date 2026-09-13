@@ -739,6 +739,15 @@ identifier>-`. Provision one that way — a file or a systemd credential called 
 declare the mailbox themselves; provision it under any other name and `mfctl user account add` is what declares it, on
 this side. [The client endpoint](../operations/client-endpoint.md#the-record-routes) states the rule in full.
 
+**Several companies on one deployment sign in under an organization.** `mfctl organization add --short-name TESTFIRMA
+--display-name "Test Firma"` records one, and `mfctl user set-organization --user 7c02... --organization <id>` moves a
+person into it, taking the identifier `mfctl organization list` reports. From then on that person signs in with a
+password as `TESTFIRMA/username` rather than as `username`, so two companies can each have a `jan`; `--none` moves
+them back out. `mfctl organization rename`, `set-short-name`, and `remove` maintain the rest, and `mfctl credential list`
+shows each password credential's login in its "Resolved by" column, so you can read off what somebody should type.
+[Organizations](../operations/admin-endpoint.md#organizations) holds the rules — what a short name may contain, what a
+move is refused over, and when an organization cannot be removed.
+
 A person served this way maintains their own mailboxes from [the client](../operations/client-endpoint.md) without
 reaching this command at all — and sees only their own. Who else a deployment serves is administrative, and no surface
 a person signs in to publishes it.

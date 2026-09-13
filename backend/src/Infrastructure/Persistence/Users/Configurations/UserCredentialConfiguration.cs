@@ -36,14 +36,29 @@ internal sealed class UserCredentialConfiguration : IEntityTypeConfiguration<Use
             .HasMaxLength(UserCredentialLookup.MaximumLength)
             .IsRequired();
 
-        // Unique within the method and across the deployment rather than within one user, because a request presents a
-        // lookup and nothing else: a value carried by two rows would leave which user it authenticates decided by the
-        // order the database returned them. It is scoped to the method because the four vocabularies are unrelated —
-        // a username and a digest that happened to spell the same thing are two different credentials. The name is
-        // stated because a refusal an operator reads is worth naming the index it came from.
-        entity.HasIndex(credential => new { credential.Method, credential.Lookup })
+        // Unique within the method and the organization rather than within one user, because a request presents a login
+        // and nothing else: a value carried by two rows would leave which user it authenticates decided by the order the
+        // database returned them. It is scoped to the method because the four vocabularies are unrelated, and to the
+        // organization because a password's username is unique only within one. Nulls are not distinct, so the
+        // credentials scoped to no organization — every one of the other three methods, and a password of somebody in
+        // none — are still unique among themselves.
+        entity.HasIndex(credential => new { credential.Method, credential.OrganizationId, credential.Lookup })
             .IsUnique()
+            .AreNullsDistinct(false)
             .HasDatabaseName(PersistenceConstraintNames.UserCredentialLookupUniqueIndexName);
+
+        // Only a password is scoped to an organization, so a row of another method carrying one is a write the store
+        // must never make rather than a state the index should have to reason about.
+        entity.ToTable(table => table.HasCheckConstraint(
+            PersistenceConstraintNames.UserCredentialOrganizationScopesPasswordCheckConstraintName,
+            $"\"{nameof(UserCredentialEntity.OrganizationId)}\" IS NULL OR \"{nameof(UserCredentialEntity.Method)}\" = 'password'"));
+
+        // Restricted rather than cascaded: an organization is deleted only once nobody belongs to it, and a credential
+        // still naming one is a member's credential that the deletion must not take with it.
+        entity.HasOne<OrganizationEntity>()
+            .WithMany()
+            .HasForeignKey(credential => credential.OrganizationId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         entity.Property(credential => credential.Material)
             .HasMaxLength(UserCredentialEntity.MaximumMaterialLength);

@@ -187,6 +187,7 @@ internal static class AdminApiEndpoints
         api.MapContacts();
         api.MapUserRecords();
         api.MapUserCredentials();
+        api.MapOrganizations();
         api.MapConfiguration();
 
         return api;

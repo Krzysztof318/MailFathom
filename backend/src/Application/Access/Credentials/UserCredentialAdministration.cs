@@ -272,7 +272,13 @@ public sealed class UserCredentialAdministration
             UserCredentialMethod.Password,
             cancellationToken);
 
-        return new UserCredentialRotation(outcome, lookup, MintedKey: null);
+        return new UserCredentialRotation(
+            outcome,
+            lookup,
+            MintedKey: null,
+            outcome == UserCredentialWriteOutcome.Written
+                ? await this.ReadOrganizationScopeAsync(user, credentialId, cancellationToken)
+                : default);
     }
 
     /// <summary>Draws a new key for one credential, which stops the previous one working at that instant.</summary>
@@ -471,7 +477,25 @@ public sealed class UserCredentialAdministration
             outcome,
             credentialId,
             lookup,
-            outcome == UserCredentialWriteOutcome.Written ? mintedKey : null);
+            outcome == UserCredentialWriteOutcome.Written ? mintedKey : null,
+            method == UserCredentialMethod.Password && outcome == UserCredentialWriteOutcome.Written
+                ? await this.ReadOrganizationScopeAsync(user, credentialId, cancellationToken)
+                : default);
+    }
+
+    /// <summary>Reads the organization a password credential was scoped to, so an answer can state the login a person types.</summary>
+    /// <remarks>
+    /// Read back rather than predicted from the user's record: a password takes its user's organization inside the write,
+    /// and a move committing beside that write is exactly what a prediction made before it would miss.
+    /// </remarks>
+    private async Task<OrganizationShortName> ReadOrganizationScopeAsync(
+        MailUserId user,
+        Guid credentialId,
+        CancellationToken cancellationToken)
+    {
+        var held = await this.credentials.ReadForUserAsync(user, cancellationToken);
+
+        return held.FirstOrDefault(credential => credential.Id == credentialId)?.Organization ?? default;
     }
 
     /// <summary>Turns a password into the record to store, refusing one this deployment does not accept.</summary>
@@ -565,6 +589,7 @@ public sealed class UserCredentialAdministration
 /// <param name="CredentialId">The identifier the credential was minted with, which is meaningful only when the act was performed.</param>
 /// <param name="Lookup">The value the credential is resolved by, which a client has to be told for two of the four methods.</param>
 /// <param name="MintedKey">The key this deployment drew, where the method is one it draws, and <see langword="null" /> otherwise.</param>
+/// <param name="Organization">The organization a password credential was scoped to as it was written, which decides the login a person types; unspecified for every other method and for an act that wrote nothing.</param>
 /// <remarks>
 /// The identifier travels beside the outcome because it is the one thing a caller cannot have known in advance and the
 /// one thing every later act on the credential names. <see cref="MintedKey" /> travels the same way for a stronger
@@ -575,7 +600,8 @@ public sealed record UserCredentialProvisioning(
     UserCredentialWriteOutcome Outcome,
     Guid CredentialId,
     UserCredentialLookup Lookup,
-    string? MintedKey)
+    string? MintedKey,
+    OrganizationShortName Organization = default)
 {
     /// <inheritdoc />
     public override string ToString() =>
@@ -586,11 +612,13 @@ public sealed record UserCredentialProvisioning(
 /// <param name="Outcome">What the act did, or why it did nothing.</param>
 /// <param name="Lookup">The value the credential is resolved by from now on.</param>
 /// <param name="MintedKey">The key this deployment drew, where the method is one it draws, and <see langword="null" /> otherwise.</param>
+/// <param name="Organization">The organization a password credential is scoped to, which decides the login a person types; unspecified for every other method and for an act that wrote nothing.</param>
 /// <remarks><see cref="ToString" /> is redacted for the reason <see cref="UserCredentialProvisioning" />'s is.</remarks>
 public sealed record UserCredentialRotation(
     UserCredentialWriteOutcome Outcome,
     UserCredentialLookup Lookup,
-    string? MintedKey)
+    string? MintedKey,
+    OrganizationShortName Organization = default)
 {
     /// <inheritdoc />
     public override string ToString() => $"{nameof(UserCredentialRotation)} {{ {this.Outcome} }}";

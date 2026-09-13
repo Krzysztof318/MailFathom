@@ -5,6 +5,7 @@
 using MailFathom.Application.Access.Credentials;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
+using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -49,11 +50,72 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
         var storedMethod = RequireMethod(method);
         var storedLookup = RequireLookup(lookup);
 
-        // The user's two switches are joined into the same statement rather than read after it, so judging whether the
-        // surface serves this user costs a request nothing beyond resolving the credential it presented.
-        var stored = await dbContext.UserCredentials
+        return await this.ResolveAsync(
+            dbContext.UserCredentials.Where(credential => credential.Method == storedMethod
+                && credential.OrganizationId == null
+                && credential.Lookup == storedLookup),
+            method,
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<ResolvedUserCredential?> FindPasswordAsync(
+        UserCredentialLogin login,
+        CancellationToken cancellationToken)
+    {
+        if (!login.IsSpecified)
+        {
+            throw new ArgumentException("A password credential is resolved by a stated login.", nameof(login));
+        }
+
+        return this.ResolveAsync(
+            PasswordCredentialsAnswering(dbContext, login),
+            UserCredentialMethod.Password,
+            cancellationToken);
+    }
+
+    /// <summary>Composes the password credentials a login answers to, which is one row or none.</summary>
+    /// <param name="dbContext">The context the query is composed over.</param>
+    /// <param name="login">The login as a request presented it.</param>
+    /// <returns>The query naming that credential.</returns>
+    /// <remarks>
+    /// The organization is resolved by its short name inside the statement rather than by a read before it, so a login
+    /// naming an organization nobody holds is one statement matching nothing — the same work and the same answer as a
+    /// username nobody holds. Composed apart so its translation is assertable without a server.
+    /// </remarks>
+    internal static IQueryable<UserCredentialEntity> PasswordCredentialsAnswering(
+        MailFathomDbContext dbContext,
+        UserCredentialLogin login)
+    {
+        var storedMethod = UserCredentialMethod.Password.Name;
+        var storedLookup = UserCredentialLookup.ForUsername(login.Username).Value;
+
+        var credentials = dbContext.UserCredentials
+            .Where(credential => credential.Method == storedMethod && credential.Lookup == storedLookup);
+
+        if (!login.Organization.IsSpecified)
+        {
+            return credentials.Where(credential => credential.OrganizationId == null);
+        }
+
+        var shortName = login.Organization.Value;
+
+        return credentials.Where(credential => dbContext.Organizations
+            .Any(organization => organization.Id == credential.OrganizationId && organization.ShortName == shortName));
+    }
+
+    /// <summary>Reads the one credential a composed query names, with the material a request is judged against.</summary>
+    /// <remarks>
+    /// The user's two switches are joined into the same statement rather than read after it, so judging whether the
+    /// surface serves this user costs a request nothing beyond resolving the credential it presented.
+    /// </remarks>
+    private async Task<ResolvedUserCredential?> ResolveAsync(
+        IQueryable<UserCredentialEntity> credentials,
+        UserCredentialMethod method,
+        CancellationToken cancellationToken)
+    {
+        var stored = await credentials
             .AsNoTracking()
-            .Where(credential => credential.Method == storedMethod && credential.Lookup == storedLookup)
             .Join(
                 dbContext.UserAccounts,
                 credential => credential.UserId,
@@ -105,6 +167,10 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
                 credential.Version,
                 credential.CreatedAt,
                 credential.MaterialChangedAt,
+                OrganizationShortName = dbContext.Organizations
+                    .Where(organization => organization.Id == credential.OrganizationId)
+                    .Select(organization => organization.ShortName)
+                    .FirstOrDefault(),
             })
             .ToArrayAsync(cancellationToken);
 
@@ -121,7 +187,10 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
                     credential.Enabled,
                     credential.Version,
                     credential.CreatedAt,
-                    credential.MaterialChangedAt)),
+                    credential.MaterialChangedAt,
+                    credential.OrganizationShortName is null
+                        ? default
+                        : OrganizationShortName.Create(credential.OrganizationShortName))),
         ];
     }
 
@@ -163,6 +232,7 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
         var storedLookup = RequireLookup(lookup);
         var storedMaterial = RequireMaterialAgreesWithMethod(method, material);
         var storedPermissions = StoredGrant(permissions);
+        var scopedToTheUsersOrganization = method == UserCredentialMethod.Password;
         var provisionedAt = timeProvider.GetUtcNow();
 
         await using var provisioning = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -173,15 +243,20 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
             cancellationToken);
 
         // The identifiers are quoted because EF Core names the columns after the properties, which PostgreSQL would
-        // otherwise fold to lower case and fail to find.
+        // otherwise fold to lower case and fail to find. A password takes the organization from the user row the
+        // statement above locked, so a move committing beside this insert cannot leave the credential in the old scope.
+        // The conflict clause names no target: the identifier is freshly minted, so the lookup index is the one
+        // constraint a loser can meet.
         var written = await dbContext.Database.ExecuteSqlAsync(
             $"""
              INSERT INTO user_credentials
-                 ("Id", "UserId", "Method", "Lookup", "Material", "Permissions", "Enabled", "Version", "CreatedAt", "MaterialChangedAt")
-             SELECT {storedCredentialId}, {storedUserId}, {storedMethod}, {storedLookup}, {storedMaterial}, {storedPermissions}, TRUE, 1, {provisionedAt}, {provisionedAt}
+                 ("Id", "UserId", "Method", "OrganizationId", "Lookup", "Material", "Permissions", "Enabled", "Version", "CreatedAt", "MaterialChangedAt")
+             SELECT {storedCredentialId}, {storedUserId}, {storedMethod},
+                    CASE WHEN {scopedToTheUsersOrganization} THEN (SELECT "OrganizationId" FROM settings_accounts WHERE "Id" = {storedUserId}) END,
+                    {storedLookup}, {storedMaterial}, {storedPermissions}, TRUE, 1, {provisionedAt}, {provisionedAt}
              WHERE EXISTS (SELECT 1 FROM settings_accounts WHERE "Id" = {storedUserId})
                AND (SELECT COUNT(*) FROM user_credentials WHERE "UserId" = {storedUserId}) < {Ceiling}
-             ON CONFLICT ("Method", "Lookup") DO NOTHING
+             ON CONFLICT DO NOTHING
              """,
             cancellationToken);
 

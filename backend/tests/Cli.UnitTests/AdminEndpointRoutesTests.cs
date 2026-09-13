@@ -119,6 +119,31 @@ public sealed class AdminEndpointRoutesTests
     }
 
     /// <summary>
+    /// The organization paths and the one moving a user between organizations, pinned for the reason every other path
+    /// here is: a rename on either side would compile cleanly and leave the command reaching a 404 that reads exactly
+    /// like an administrative endpoint nobody enabled.
+    /// </summary>
+    [Fact]
+    public void OrganizationPaths_AreTheRoutesTheDeploymentServesOrganizationsAt()
+    {
+        var organization = new Guid("11111111-2222-3333-4444-555555555555");
+
+        Assert.Equal("/api/admin/organizations", AdminEndpointRoutes.OrganizationsPath);
+        Assert.Equal(
+            "/api/admin/organizations/11111111-2222-3333-4444-555555555555",
+            AdminEndpointRoutes.OrganizationPath(organization));
+        Assert.Equal(
+            "/api/admin/organizations/11111111-2222-3333-4444-555555555555/display-name",
+            AdminEndpointRoutes.OrganizationDisplayNamePath(organization));
+        Assert.Equal(
+            "/api/admin/organizations/11111111-2222-3333-4444-555555555555/short-name",
+            AdminEndpointRoutes.OrganizationShortNamePath(organization));
+        Assert.Equal(
+            "/api/admin/users/11111111-2222-3333-4444-555555555555/organization",
+            AdminEndpointRoutes.UserOrganizationPath(organization));
+    }
+
+    /// <summary>
     /// RFC 9728 places the document under a well-known segment with the resource's path appended, and the deployment
     /// refuses to start unless its resource path is the route prefix. Composing it here rather than reading it from a
     /// challenge is what makes a sign-in one request instead of two, and this is the assertion that keeps the

@@ -68,7 +68,7 @@ public sealed class BasicAuthenticationHandlerTests
         Assert.Equal(CredentialUser, TransportCallerUser.CarriedBy(result.Principal!));
 
         await harness.Credentials.ReceivedWithAnyArgs(1)
-            .FindAsync(default, default, TestContext.Current.CancellationToken);
+            .FindPasswordAsync(default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>The same credential over an encrypted hop reaches the store and succeeds exactly as above, which is what says the transport is read for nothing here rather than read and permitted.</summary>
@@ -87,7 +87,7 @@ public sealed class BasicAuthenticationHandlerTests
         Assert.True(result.Succeeded);
 
         await harness.Credentials.ReceivedWithAnyArgs(1)
-            .FindAsync(default, default, TestContext.Current.CancellationToken);
+            .FindPasswordAsync(default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -277,7 +277,7 @@ public sealed class BasicAuthenticationHandlerTests
 
         // Assert
         await harness.Credentials.ReceivedWithAnyArgs(1)
-            .FindAsync(default, default, TestContext.Current.CancellationToken);
+            .FindPasswordAsync(default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -298,7 +298,7 @@ public sealed class BasicAuthenticationHandlerTests
 
         // Assert
         await harness.Credentials.ReceivedWithAnyArgs(2)
-            .FindAsync(default, default, TestContext.Current.CancellationToken);
+            .FindPasswordAsync(default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -319,7 +319,7 @@ public sealed class BasicAuthenticationHandlerTests
 
         // Assert
         await harness.Credentials.ReceivedWithAnyArgs(1)
-            .FindAsync(default, default, TestContext.Current.CancellationToken);
+            .FindPasswordAsync(default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -341,7 +341,7 @@ public sealed class BasicAuthenticationHandlerTests
 
         // Assert
         await harness.Credentials.ReceivedWithAnyArgs(2)
-            .FindAsync(default, default, TestContext.Current.CancellationToken);
+            .FindPasswordAsync(default, TestContext.Current.CancellationToken);
     }
 
     private static string BasicHeader(string userId, string password) =>
@@ -358,10 +358,7 @@ public sealed class BasicAuthenticationHandlerTests
         internal HandlerHarness()
         {
             this.Credentials = Substitute.For<IUserCredentialStore>();
-            this.Credentials.FindAsync(
-                    Arg.Any<UserCredentialMethod>(),
-                    Arg.Any<UserCredentialLookup>(),
-                    Arg.Any<CancellationToken>())
+            this.Credentials.FindPasswordAsync(Arg.Any<UserCredentialLogin>(), Arg.Any<CancellationToken>())
                 .Returns((ResolvedUserCredential?)null);
 
             var passwordHasher = new UnreachablePasswordHasher();
@@ -382,9 +379,8 @@ public sealed class BasicAuthenticationHandlerTests
         /// <summary>Holds one enabled credential for <see cref="CredentialUser" />, whose password the hasher recognizes.</summary>
         /// <param name="endpointAccess">The user's endpoint switches as the store reads them beside the credential, or both on.</param>
         internal void HoldsTheUsersCredential(MailUserEndpointAccess? endpointAccess = null) =>
-            this.Credentials.FindAsync(
-                    UserCredentialMethod.Password,
-                    Arg.Is<UserCredentialLookup>(lookup => lookup.Value == "user"),
+            this.Credentials.FindPasswordAsync(
+                    Arg.Is<UserCredentialLogin>(login => login.Value == "user"),
                     Arg.Any<CancellationToken>())
                 .Returns(new ResolvedUserCredential(
                     CredentialId,

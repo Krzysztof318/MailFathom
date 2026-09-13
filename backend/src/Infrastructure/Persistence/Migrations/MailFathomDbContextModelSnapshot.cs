@@ -2017,6 +2017,33 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("notifications", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OrganizationEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ShortName")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ShortName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_organizations_short_name");
+
+                    b.ToTable("organizations", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailContentEntity", b =>
                 {
                     b.Property<Guid>("OutgoingEmailId")
@@ -3044,6 +3071,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<Guid?>("OrganizationId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -3056,6 +3086,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.HasIndex("DisplayName")
                         .IsUnique()
                         .HasDatabaseName("ix_settings_accounts_display_name");
+
+                    b.HasIndex("OrganizationId")
+                        .HasDatabaseName("ix_settings_accounts_organization");
 
                     b.ToTable("settings_accounts", (string)null);
                 });
@@ -3088,6 +3121,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<Guid?>("OrganizationId")
+                        .HasColumnType("uuid");
+
                     b.PrimitiveCollection<string[]>("Permissions")
                         .IsRequired()
                         .HasColumnType("text[]");
@@ -3101,14 +3137,21 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Method", "Lookup")
-                        .IsUnique()
-                        .HasDatabaseName("ix_user_credentials_method_lookup");
+                    b.HasIndex("OrganizationId");
 
                     b.HasIndex("UserId", "CreatedAt")
                         .HasDatabaseName("ix_user_credentials_user_created_at");
 
-                    b.ToTable("user_credentials", (string)null);
+                    b.HasIndex("Method", "OrganizationId", "Lookup")
+                        .IsUnique()
+                        .HasDatabaseName("ix_user_credentials_method_organization_lookup");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("Method", "OrganizationId", "Lookup"), false);
+
+                    b.ToTable("user_credentials", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_user_credentials_organization_scopes_password", "\"OrganizationId\" IS NULL OR \"Method\" = 'password'");
+                        });
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.UserStoredContentEntity", b =>
@@ -3646,8 +3689,21 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("MailFolder");
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.UserAccountEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.OrganizationEntity", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.UserCredentialEntity", b =>
                 {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.OrganizationEntity", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.UserAccountEntity", null)
                         .WithMany()
                         .HasForeignKey("UserId")

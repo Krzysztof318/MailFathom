@@ -14,6 +14,7 @@ using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Jobs;
 using MailFathom.Cli.Administration.Mailboxes;
+using MailFathom.Cli.Administration.Organizations;
 using MailFathom.Cli.Administration.Outbox;
 using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Administration.Spam;
@@ -1487,6 +1488,141 @@ internal sealed class AdminApiClient
             AdminEndpointRoutes.UserCredentialPath(userId, credentialId),
             token,
             cancellationToken);
+
+    /// <summary>The sentence an organization route answers with when the deployment holds no such organization.</summary>
+    /// <remarks>The organization routes answer <c>404</c> for an organization the deployment does not hold, so without this the operator would be sent after a listener and a port by a deployment that is answering perfectly well.</remarks>
+    private const string NoSuchOrganization =
+        "This deployment holds no organization under that identifier. Run 'mfctl organization list' and name one it holds.";
+
+    /// <summary>Reads the organizations a deployment holds.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The organizations, ordered by short name.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a listing.</exception>
+    internal Task<OrganizationList> ReadOrganizationsAsync(string token, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.OrganizationsPath,
+            token,
+            CliJsonContext.Default.OrganizationList,
+            cancellationToken);
+
+    /// <summary>Records an organization the deployment did not hold.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="request">The display name and the short name.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The identifier the deployment minted.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request, the short name, or the credential, could not be reached, or answered with something that is not an identifier.</exception>
+    internal Task<OrganizationProvisioned> ProvisionOrganizationAsync(
+        string token,
+        OrganizationProvisioningRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.OrganizationsPath,
+            token,
+            CliJsonContext.Default.OrganizationProvisioned,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.OrganizationProvisioningRequest));
+    }
+
+    /// <summary>Replaces the name one organization is read by.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="organizationId">The organization to rename.</param>
+    /// <param name="request">The display name it carries from now on.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once the deployment has accepted the name.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> or <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment holds no such organization, refused the request or the credential, or could not be reached.</exception>
+    internal Task RenameOrganizationAsync(
+        string token,
+        Guid organizationId,
+        OrganizationDisplayNameRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Put,
+            AdminEndpointRoutes.OrganizationDisplayNamePath(organizationId),
+            token,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.OrganizationDisplayNameRequest),
+            NoSuchOrganization);
+    }
+
+    /// <summary>Replaces the short name one organization's members sign in under.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="organizationId">The organization whose short name changes.</param>
+    /// <param name="request">The short name it carries from now on.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once the deployment has accepted the short name.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> or <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment holds no such organization, another holds the short name, the request or the credential was refused, or the deployment could not be reached.</exception>
+    internal Task ChangeOrganizationShortNameAsync(
+        string token,
+        Guid organizationId,
+        OrganizationShortNameRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Put,
+            AdminEndpointRoutes.OrganizationShortNamePath(organizationId),
+            token,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.OrganizationShortNameRequest),
+            NoSuchOrganization);
+    }
+
+    /// <summary>Removes an organization nobody belongs to.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="organizationId">The organization to remove.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once the organization is gone.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment holds no such organization, it still has members, the credential was refused, or the deployment could not be reached.</exception>
+    internal Task RemoveOrganizationAsync(
+        string token,
+        Guid organizationId,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Delete,
+            AdminEndpointRoutes.OrganizationPath(organizationId),
+            token,
+            cancellationToken,
+            absenceMessage: NoSuchOrganization);
+
+    /// <summary>Moves one user into an organization, or out of every organization.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="userId">The user being moved.</param>
+    /// <param name="request">The organization to move them into, or none.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once the move stands.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> or <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment holds no such user or organization, a username would collide, the credential was refused, or the deployment could not be reached.</exception>
+    internal Task SetUserOrganizationAsync(
+        string token,
+        Guid userId,
+        UserOrganizationRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Put,
+            AdminEndpointRoutes.UserOrganizationPath(userId),
+            token,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.UserOrganizationRequest),
+            NoSuchUser);
+    }
 
     /// <summary>Sends one credentialed request and reads the answer, or turns the refusal into a sentence.</summary>
     /// <remarks>

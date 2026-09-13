@@ -45,12 +45,25 @@ public interface IUserCredentialStore
     /// <remarks>
     /// One indexed read of the method and the canonical lookup together. A disabled credential is returned rather than
     /// filtered away, so the caller spends the same work on every outcome and the refusal it composes cannot be timed
-    /// apart from the refusal an unknown lookup produces.
+    /// apart from the refusal an unknown lookup produces. Only a credential scoped to no organization is resolved here,
+    /// which is every credential of the methods whose lookups are unique across the deployment; a password is resolved
+    /// by the login it is typed as through <see cref="FindPasswordAsync" />.
     /// </remarks>
     Task<ResolvedUserCredential?> FindAsync(
         UserCredentialMethod method,
         UserCredentialLookup lookup,
         CancellationToken cancellationToken);
+
+    /// <summary>Resolves the one password credential a login names, whether or not it is enabled.</summary>
+    /// <param name="login">The login as the credential carried it: a username, prefixed by an organization's short name for a member of one.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The credential, or <see langword="null" /> when no password credential answers to that login — including when the login names an organization that does not exist.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="login" /> is the unspecified struct default.</exception>
+    /// <remarks>
+    /// One statement: the organization is resolved by its short name inside the same read as the credential, so a login
+    /// naming an unknown organization costs what a login naming an unknown username costs and is answered the same way.
+    /// </remarks>
+    Task<ResolvedUserCredential?> FindPasswordAsync(UserCredentialLogin login, CancellationToken cancellationToken);
 
     /// <summary>Reads the credentials one user holds, of every method.</summary>
     /// <param name="user">The user whose credentials are being listed.</param>

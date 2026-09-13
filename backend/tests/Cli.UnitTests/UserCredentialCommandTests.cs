@@ -53,6 +53,22 @@ public sealed class UserCredentialCommandTests : IDisposable
         Assert.Equal("user", ReadField(provisioning.ContentAsUtf8String(), "username"));
     }
 
+    /// <summary>A member of an organization signs in with its short name in front of the username, so that login is what the operator is told to hand over.</summary>
+    [Fact]
+    public async Task Create_APasswordTheDeploymentScopedToAnOrganization_ReportsTheLoginRatherThanTheBareUsername()
+    {
+        // Arrange
+        using var deployment = FakeUserCredentialDeployment.Provisioning([User], "user", mintedKey: null, provisionedLogin: "ACME/user");
+        this.harness.Console.SecretToSupply = Password;
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "credential", "create", "--method", "password", "--username", "user", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("'ACME/user'", StringComparison.Ordinal));
+    }
+
     /// <summary>Everything a person reads is written down somewhere, so the one thing that was typed is in none of it.</summary>
     [Fact]
     public async Task Create_AProvisionedCredential_ReportsTheIdentifierWithoutRepeatingThePassword()
@@ -760,6 +776,27 @@ public sealed class UserCredentialCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("not published", StringComparison.Ordinal));
+    }
+
+    /// <summary>A member of an organization types the short name before the username, so the listing shows the login in that form rather than the bare username.</summary>
+    [Fact]
+    public async Task List_APasswordCredentialOfAnOrganizationMember_ShowsTheLoginAsItIsTyped()
+    {
+        // Arrange
+        using var deployment = FakeUserCredentialDeployment.Holding(
+            [User],
+            FakeUserCredentialDeployment.Credential(CredentialId, "jan", login: "ACME/jan"));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "credential", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var listing = DrawnListing.ReadFrom(this.harness.Console.Lines, "Credential", "Method", "Resolved by", "Grants");
+        var row = Assert.Single(listing.Rows);
+
+        Assert.Equal("ACME/jan", listing.Cell(row, "Resolved by"));
     }
 
     /// <summary>Nothing about an invocation may carry the password, which is what keeps it out of a shell history and a process table.</summary>

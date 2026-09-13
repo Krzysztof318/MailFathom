@@ -1,6 +1,6 @@
 # The MCP endpoint and what protects it
 
-<!-- describes: backend/src/Mcp/**, backend/src/Host/Security/**, backend/src/Infrastructure/Security/**, backend/src/Common/OAuth/**, backend/src/Common/ClientAssertions/**, backend/src/Host/Hosting/Warnings/McpTransportAuthenticationWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Configuration/Endpoints/TransportClearTextRedirectOptions.cs, backend/src/Host/Configuration/Endpoints/TransportListenerConfiguration.cs, backend/src/Host/Configuration/Endpoints/ExternalListenerConfiguration.cs, backend/src/Host/Configuration/Endpoints/ReverseProxyOptions.cs, backend/src/Host/Hosting/Startup/ClearTextRedirectToHttps.cs, backend/src/Host/Hosting/Warnings/TransportClearTextRedirectReport.cs, backend/src/Host/Hosting/Warnings/ReverseProxyTrustWarning.cs, backend/src/Host/Hosting/Warnings/McpTransportEncryptionWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs -->
+<!-- describes: backend/src/Mcp/**, backend/src/Host/Security/**, backend/src/Infrastructure/Security/**, backend/src/Common/OAuth/**, backend/src/Common/ClientAssertions/**, backend/src/Host/Hosting/Warnings/McpTransportAuthenticationWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Domain/Access/OrganizationShortName.cs, backend/src/Domain/Access/UserCredentialLogin.cs, backend/src/Host/Configuration/Endpoints/TransportClearTextRedirectOptions.cs, backend/src/Host/Configuration/Endpoints/TransportListenerConfiguration.cs, backend/src/Host/Configuration/Endpoints/ExternalListenerConfiguration.cs, backend/src/Host/Configuration/Endpoints/ReverseProxyOptions.cs, backend/src/Host/Hosting/Startup/ClearTextRedirectToHttps.cs, backend/src/Host/Hosting/Warnings/TransportClearTextRedirectReport.cs, backend/src/Host/Hosting/Warnings/ReverseProxyTrustWarning.cs, backend/src/Host/Hosting/Warnings/McpTransportEncryptionWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs -->
 
 The MCP endpoint is how an agent reaches MailFathom. This page records what enabling it means operationally, what a client
 has to present to reach it, which browser origins it answers, which client applications it accepts a certificate from,
@@ -642,8 +642,16 @@ Authorization: Basic dXNlcjpjb3JyZWN0aG9yc2U=YmF0dGVyeXN0YXBsZQ==
 ```
 
 The two halves are a username and a password joined by a colon and encoded as base64 — which is an encoding rather than
-a protection, and is the whole reason for the transport rule below. A username is folded to lower case, so `User` and
-`user` are one credential, and it names exactly one user across the deployment.
+a protection, and is the whole reason for the transport rule below.
+
+**The first half is a login rather than a bare username.** A member of an
+[organization](admin-endpoint.md#organizations) signs in as `SHORTNAME/username`, and somebody in no organization as
+`username`. The login is split at its first `/`: the short name is folded to upper case, so `testfirma/jan` and
+`TESTFIRMA/jan` are one login, and the username is trimmed and folded to lower case, so `User` and `user` are one
+credential. A username is at most 128 characters of letters, digits, `.`, `-`, `_`, `+`, and `@`. It names exactly one
+user within its organization, or among the users in none — so `jan` and `TESTFIRMA/jan` are two different credentials,
+and a second `jan` in either is refused when it is provisioned. A login naming an organization this deployment does not
+hold is refused exactly as a wrong password is, below, so a refusal cannot be used to find out which short names exist.
 
 **A password crossing a clear-text hop is reported at every startup and never refused.** It is the credential most
 worth protecting on this surface — typed by a person, likely typed somewhere else too, and readable for as long as it
@@ -688,7 +696,7 @@ every other method. Rotation is a second credential row rather than a second ent
 a username rather than an entry.
 
 **A refusal says nothing about which half was wrong.** No credential at all, a header that does not decode, an unknown
-username, a wrong password, a credential somebody disabled, and a caller that has spent its attempts each receive the
+username, an organization nobody holds, a wrong password, a credential somebody disabled, and a caller that has spent its attempts each receive the
 same answer, and the deployment spends the same work reaching it:
 
 ```http
@@ -707,7 +715,7 @@ refuses the arrangement rather than protecting it. What the deployment owes an o
 above, which names the hop and the port every time the process starts.
 
 `AttemptsPerMinute` bounds guessing and defaults to 10, which is a person correcting a mistyped password. It is applied
-**per source and per username** rather than per endpoint, because those are the two shapes an attack takes: one host
+**per source and per login** rather than per endpoint, because those are the two shapes an attack takes: one host
 trying many passwords, and many hosts trying one account's. **Only a wrong password spends any of it.** Basic
 re-presents the credential on every request and this deployment keeps no session, so an allowance a working password
 spent would bound a user's request rate rather than anybody's guessing — at the default, the eleventh call of a
@@ -715,21 +723,21 @@ working session would be refused with the answer a wrong password gets. What a w
 minute later, so a caller that has spent its allowance waits that minute out rather than being locked out; the point is
 to make guessing expensive rather than to give anybody a way to lock a user out. It is separate from
 [`RateLimiting`](#rate-limiting), which bounds requests to the surface rather than guesses at a credential. The ceiling
-is 600; a number above it is refused, because a thousand verifications a minute against one username is an offline
+is 600; a number above it is refused, because a thousand verifications a minute against one login is an offline
 guessing rate rather than a bound.
 
 **What bounds a burst is a second and much larger limit**, on how many password verifications may be in flight at once.
-It applies twice: 32 for one axis — one source, or one username — and `Basic.MaxConcurrentVerifications`, `128` unless
+It applies twice: 32 for one axis — one source, or one login — and `Basic.MaxConcurrentVerifications`, `128` unless
 set, for the whole surface whatever a caller names. The surface figure is configurable from `32` to `512` and is one
 replica's, so a deployment serving a large roster raises it with the cores a replica has rather than with the roster.
-The username axis is the whole login a user signs in with, so two users of different organizations who share a local
-name never spend one allowance. Both are sized for a browser opening several connections to one origin and an agent issuing calls in parallel,
+The login axis is the whole login a user signs in with, organization included, so two users of different organizations
+who share a username never spend one allowance. Both are sized for a browser opening several connections to one origin and an agent issuing calls in parallel,
 and both are deliberately unrelated to the allowance an operator lowers to make guessing expensive: a single limit
 serving both purposes would refuse a user's eleventh simultaneous call at the default, however right their password
 was.
 
 The surface figure is the one that stops a client opening five hundred connections from making this process perform
-five hundred concurrent derivations, because every distinct username is a fresh partition with a fresh per-axis
+five hundred concurrent derivations, because every distinct login is a fresh partition with a fresh per-axis
 ceiling and a caller varying the name would meet no per-axis limit at all. The per-axis figure is what bounds the
 overshoot in the allowance: the allowance is read before a verification and spent only after a wrong one, so a burst
 arriving together can exceed `AttemptsPerMinute` by at most 32 attempts in the first minute and by nothing after it.

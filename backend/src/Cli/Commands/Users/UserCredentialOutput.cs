@@ -49,7 +49,7 @@ internal static class UserCredentialOutput
             listing.AddRow(
                 $"{credential.Id:D}",
                 credential.Method ?? "unreported",
-                credential.Lookup ?? WithheldLookup,
+                credential.Login ?? credential.Lookup ?? WithheldLookup,
                 DescribeGrant(credential.Permissions),
                 credential.Enabled ? "enabled" : "disabled",
                 $"{credential.CreatedAt:u}",
@@ -77,7 +77,7 @@ internal static class UserCredentialOutput
         console.WriteLine(
             $"Provisioned {method.Name} credential {provisioned.CredentialId:D} for user {user:D}.");
 
-        WriteWhatTheClientPresents(console, method, provisioned.Lookup, provisioned.Key);
+        WriteWhatTheClientPresents(console, method, provisioned.Lookup, provisioned.Login, provisioned.Key);
     }
 
     /// <summary>Prints what a rotation produced, including the one value that exists only in this answer.</summary>
@@ -99,7 +99,7 @@ internal static class UserCredentialOutput
             $"Replaced what {method.Name} credential {credentialId:D} is presented as. Anything still presenting the "
             + "previous material is refused from now on.");
 
-        WriteWhatTheClientPresents(console, method, rotated.Lookup, rotated.Key);
+        WriteWhatTheClientPresents(console, method, rotated.Lookup, rotated.Login, rotated.Key);
     }
 
     /// <summary>Reads the password a command is about to send, refusing an empty one before a request is made.</summary>
@@ -131,6 +131,7 @@ internal static class UserCredentialOutput
         ICliConsole console,
         UserCredentialMethod method,
         string? lookup,
+        string? login,
         string? key)
     {
         if (key is { Length: > 0 })
@@ -146,7 +147,7 @@ internal static class UserCredentialOutput
         if (method == UserCredentialMethod.Password)
         {
             console.WriteLine(
-                $"The user signs in as '{lookup}' with the password you typed, which nothing here or in the "
+                $"The user signs in as '{login ?? lookup}' with the password you typed, which nothing here or in the "
                 + "deployment can report back.");
 
             return;

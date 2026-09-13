@@ -3,12 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access.Credentials;
+using MailFathom.Application.Access.Organizations;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Xunit;
 
 namespace MailFathom.IntegrationTests.Persistence;
@@ -29,9 +31,11 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// unit suite, and what is under test here is the row the statement leaves.
 /// </para>
 /// <para>
-/// Each test provisions under lookups of its own, because the lookup index is deployment-wide and this class shares a
-/// database with every other class in the collection. The index is over the method beside the lookup, which is why one
-/// test provisions the same value under two methods and expects both to land.
+/// Each test provisions under lookups of its own, because this class shares a database with every other class in the
+/// collection. The unique index is over <c>(Method, OrganizationId, Lookup)</c> with nulls not distinct: a password's
+/// username is unique within its organization, and every other method's lookup, which names no organization, is unique
+/// across the deployment. That is why one test provisions the same value under two methods and expects both to land,
+/// and another expects one API key refused for members of two different organizations.
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
@@ -393,8 +397,179 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
         Assert.Equal(Stronger, stored!.Material);
     }
 
+    /// <summary>
+    /// Only a password is scoped to an organization, so an API key is presented with no username and no organization and
+    /// has to stay unique across the whole deployment. The row carries no organization, and a null organization is equal
+    /// to another under the index's NULLS NOT DISTINCT — which is what refuses the second holder even though the two users
+    /// belong to different organizations.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_AnApiKeyAlreadyHeldByAMemberOfAnotherOrganization_IsRefusedByTheIndexRatherThanWritten()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var members = OrganizationMembers.Mint();
+        var digest = UserCredentialLookup.ForDigest($"orchestrated-key-across-organizations-{members.FirstUser:N}");
+
+        try
+        {
+            await ArrangeMembersOfTwoOrganizationsAsync(services, members, cancellationToken);
+
+            Assert.Equal(
+                UserCredentialWriteOutcome.Written,
+                await CreateForAsync(services, members.FirstUser, UserCredentialMethod.ApiKey, digest, cancellationToken));
+
+            // Act
+            var second = await CreateForAsync(
+                services,
+                members.SecondUser,
+                UserCredentialMethod.ApiKey,
+                digest,
+                cancellationToken);
+
+            // Assert
+            Assert.Equal(UserCredentialWriteOutcome.LookupTaken, second);
+            Assert.Equal(1, await CountUnderAsync(services, digest, cancellationToken));
+
+            var scope = await services.InScopeAsync(
+                (serviceScope, token) => serviceScope.GetRequiredService<MailFathomDbContext>()
+                    .UserCredentials
+                    .AsNoTracking()
+                    .Where(credential => credential.Lookup == digest.Value)
+                    .Select(credential => credential.OrganizationId)
+                    .SingleAsync(token),
+                cancellationToken);
+
+            Assert.Null(scope);
+        }
+        finally
+        {
+            await EraseMembersOfTwoOrganizationsAsync(services, members);
+        }
+    }
+
+    /// <summary>
+    /// The store never writes an organization beside a method other than a password, and the check constraint is what
+    /// holds that when a statement other than the store's does: an API key row naming an organization would sit outside
+    /// the deployment-wide scope every other key shares, where the index could no longer see it collide.
+    /// </summary>
+    [Fact]
+    public async Task UserCredentialsTable_AnApiKeyRowNamingAnOrganization_IsRefusedByTheCheckConstraint()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var members = OrganizationMembers.Mint();
+        var lookup = $"orchestrated-key-naming-an-organization-{members.FirstUser:N}";
+
+        try
+        {
+            await ArrangeMembersOfTwoOrganizationsAsync(services, members, cancellationToken);
+
+            var method = UserCredentialMethod.ApiKey.Name;
+            var permissions = WholeMailSurface.Select(permission => permission.Name).ToArray();
+            var provisionedAt = DateTimeOffset.UnixEpoch;
+
+            // Act
+            var refusal = await Record.ExceptionAsync(() => services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<MailFathomDbContext>().Database.ExecuteSqlAsync(
+                    $"""
+                     INSERT INTO user_credentials
+                         ("Id", "UserId", "Method", "Lookup", "Material", "Permissions", "Enabled", "Version", "CreatedAt", "MaterialChangedAt", "OrganizationId")
+                     VALUES (gen_random_uuid(), {members.FirstUser}, {method}, {lookup}, NULL, {permissions}, TRUE, 1, {provisionedAt}, {provisionedAt}, {members.FirstOrganization})
+                     """,
+                    token),
+                cancellationToken));
+
+            // Assert
+            var violation = Assert.IsType<PostgresException>(
+                refusal is DbUpdateException { InnerException: { } inner } ? inner : refusal);
+            Assert.Equal(PostgresErrorCodes.CheckViolation, violation.SqlState);
+            Assert.Equal(
+                PersistenceConstraintNames.UserCredentialOrganizationScopesPasswordCheckConstraintName,
+                violation.ConstraintName);
+            Assert.Equal(0, await CountUnderAsync(services, UserCredentialLookup.ForDigest(lookup), cancellationToken));
+        }
+        finally
+        {
+            await EraseMembersOfTwoOrganizationsAsync(services, members);
+        }
+    }
+
     private static IUserCredentialStore Store(IServiceProvider scope) =>
         scope.GetRequiredService<IUserCredentialStore>();
+
+    private static IOrganizationStore Organizations(IServiceProvider scope) =>
+        scope.GetRequiredService<IOrganizationStore>();
+
+    private static Task<UserCredentialWriteOutcome> CreateForAsync(
+        OrchestratedMailFathomServices services,
+        Guid userId,
+        UserCredentialMethod method,
+        UserCredentialLookup lookup,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => Store(scope).CreateAsync(
+                Guid.CreateVersion7(),
+                MailUserId.Create(userId),
+                method,
+                lookup,
+                method.StoresMaterial ? StoredHash : null,
+                WholeMailSurface,
+                token),
+            cancellationToken);
+
+    /// <summary>Provisions two users and puts each in an organization of its own.</summary>
+    /// <remarks>
+    /// Two foreign users rather than the configured one, because moving the configured user into an organization would
+    /// re-scope every password the other classes in the collection provisioned for it. Each short name is the
+    /// organization's own identifier, which is exactly <see cref="OrganizationShortName.MaximumLength" /> characters and
+    /// therefore collides with nothing another test records in the shared database.
+    /// </remarks>
+    private static async Task ArrangeMembersOfTwoOrganizationsAsync(
+        OrchestratedMailFathomServices services,
+        OrganizationMembers members,
+        CancellationToken cancellationToken)
+    {
+        foreach (var (user, organization) in members.Pairs)
+        {
+            Assert.Equal(
+                PersistenceCommitResult.Committed,
+                await OrchestratedForeignUser.ProvisionAsync(services, user, cancellationToken));
+
+            var created = await services.InScopeAsync(
+                (scope, token) => Organizations(scope).CreateAsync(
+                    organization,
+                    $"Organization {organization:N}",
+                    OrganizationShortName.Create($"{organization:N}"),
+                    DateTimeOffset.UnixEpoch,
+                    token),
+                cancellationToken);
+
+            Assert.Equal(OrganizationWriteOutcome.Written, created.Outcome);
+
+            var moved = await services.InScopeAsync(
+                (scope, token) => Organizations(scope).SetUserOrganizationAsync(MailUserId.Create(user), organization, token),
+                cancellationToken);
+
+            Assert.Equal(OrganizationWriteOutcome.Written, moved.Outcome);
+        }
+    }
+
+    /// <summary>Erases both users and then their organizations, which a member would otherwise keep from being removed.</summary>
+    /// <remarks>Uncancellable for the reason <see cref="OrchestratedForeignUser.EraseAsync" /> is: it runs in a <c>finally</c>.</remarks>
+    private static async Task EraseMembersOfTwoOrganizationsAsync(
+        OrchestratedMailFathomServices services,
+        OrganizationMembers members)
+    {
+        foreach (var (user, organization) in members.Pairs)
+        {
+            await OrchestratedForeignUser.EraseAsync(services, user);
+            await services.InScopeAsync(
+                (scope, token) => Organizations(scope).DeleteAsync(organization, token),
+                CancellationToken.None);
+        }
+    }
 
     private static async Task<Guid> ProvisionAsync(
         OrchestratedMailFathomServices services,
@@ -410,7 +585,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
                 SyntheticMailAccount.User,
                 method,
                 lookup,
-                StoredHash,
+                method.StoresMaterial ? StoredHash : null,
                 WholeMailSurface,
                 token),
             cancellationToken);
@@ -468,4 +643,18 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
                 .AsNoTracking()
                 .CountAsync(credential => credential.Lookup == lookup.Value, token),
             cancellationToken);
+
+    /// <summary>Two users of this test's own, each belonging to an organization of its own.</summary>
+    private sealed record OrganizationMembers(
+        Guid FirstUser,
+        Guid SecondUser,
+        Guid FirstOrganization,
+        Guid SecondOrganization)
+    {
+        internal IEnumerable<(Guid User, Guid Organization)> Pairs =>
+            [(this.FirstUser, this.FirstOrganization), (this.SecondUser, this.SecondOrganization)];
+
+        internal static OrganizationMembers Mint() =>
+            new(Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7());
+    }
 }

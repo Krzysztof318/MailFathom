@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Configuration/UserSettings/Administration/StoredSecretAdministration.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Configuration*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/User*.cs, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/AdminTransportSecurityExtensions.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Configuration/UserSettings/Administration/StoredSecretAdministration.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Configuration*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/User*.cs, backend/src/Host/Api/Organization*.cs, backend/src/Application/Access/Organizations/**, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/AdminTransportSecurityExtensions.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -225,8 +225,14 @@ what it was never granted is what the record exists to make visible.
 | `POST /api/admin/users/{userId}/record/mail-accounts` | `mailfathom.admin.configuration.write` | Declares one more mailbox in the record, from the mail-account block the body carries. |
 | `POST /api/admin/users/{userId}/record/mail-accounts/removal` | `mailfathom.admin.configuration.write` | Stops the record declaring one mailbox, named by the identifier it was declared under. It withdraws no mail: everything already stored for that account stays where it is. |
 | `POST /api/admin/users/{userId}/secrets` | `mailfathom.admin.configuration.write` | Seals the material carried in the body under the active data-encryption key and answers only with its `database:<uuid>` reference. Sending the same declared name for that user rotates the existing row and returns the same reference. It refuses when the user does not exist or the deployment configures no data-encryption key ring. |
-| `GET /api/admin/users/{userId}/credentials` | `mailfathom.admin.read` | Reads one user's [credentials](#user-credentials), each with its method, what it grants, whether it still authenticates, and when its material was last replaced. It publishes what each is resolved by, except where that value is derived from the secret. |
-| `POST /api/admin/users/{userId}/credentials` | `mailfathom.admin.credentials.write` | Provisions one of the four methods, from what that method needs. **This is one of the two routes that mint a way into somebody's mail**, and the one that answers with a minted key where the method mints one. It answers `409` where the value the credential resolves by is already taken across the deployment, and where the user already holds the hundred credentials one user may. |
+| `GET /api/admin/organizations` | `mailfathom.admin.read` | Reads [the organizations](#organizations) this deployment holds, ordered by short name and at most 1000, each with its display name, its short name, how many users belong to it, and when it was recorded. This is what `mfctl organization list` asks. |
+| `POST /api/admin/organizations` | `mailfathom.admin.configuration.write` | Records an organization from the display name and short name the body carries, and answers with the identifier it was minted under. It answers `409` for a short name another organization holds or for a deployment already holding 1000 organizations, and `400` naming what was wrong with either name. |
+| `PUT /api/admin/organizations/{organizationId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the name an operator reads the organization by. It answers `204`, `404` for an organization this deployment does not hold, and `400` for a name it does not accept. |
+| `PUT /api/admin/organizations/{organizationId}/short-name` | `mailfathom.admin.credentials.write` | Replaces the short name its members sign in under, which moves every member's login with it. It answers `204`, `404`, `409` for a short name another organization holds, and `400`. |
+| `DELETE /api/admin/organizations/{organizationId}` | `mailfathom.admin.configuration.write` | Removes an organization nobody belongs to. It answers `204`, `404`, and `409` naming how many members it still has. |
+| `PUT /api/admin/users/{userId}/organization` | `mailfathom.admin.credentials.write` | Moves the user into the organization the body's `organizationId` names, or out of every organization where the body says `"none": true`, re-scoping their passwords in the same transaction. A body stating neither, or both, is refused with `400` rather than read as a move out. This is what `mfctl user set-organization` sends. It answers `204`, `404` for a user this deployment does not hold, `400` for an organization it does not hold, and `409` naming the username the target already holds for another user. |
+| `GET /api/admin/users/{userId}/credentials` | `mailfathom.admin.read` | Reads one user's [credentials](#user-credentials), each with its method, what it grants, whether it still authenticates, and when its material was last replaced. It publishes what each is resolved by, except where that value is derived from the secret, and for a password the `login` a person types to sign in with it. |
+| `POST /api/admin/users/{userId}/credentials` | `mailfathom.admin.credentials.write` | Provisions one of the four methods, from what that method needs. **This is one of the two routes that mint a way into somebody's mail**, and the one that answers with a minted key where the method mints one. It answers `409` where the value the credential resolves by is already taken — for a password within the user's organization, or among users in none, and for every other method across the deployment — and where the user already holds the hundred credentials one user may. |
 | `PUT /api/admin/users/{userId}/credentials/{credentialId}/material` | `mailfathom.admin.credentials.write` | Replaces what one credential's client presents, in a single statement, which stops the previous material working at that instant. **This is the other.** It is refused for a method holding no material to replace. |
 | `PUT /api/admin/users/{userId}/credentials/{credentialId}/enablement` | `mailfathom.admin.credentials.write` | Stops one credential authenticating, or lets it authenticate again, keeping everything else about it either way. |
 | `DELETE /api/admin/users/{userId}/credentials/{credentialId}` | `mailfathom.admin.credentials.write` | Removes the record and frees the value it was resolved by. **This cannot be undone**, and it is the reason `mfctl credential delete` shows the credential and asks before sending it. What that command shows comes from the listing and what it reports comes from here, so an identifier the listing does not carry is still sent rather than answered locally. |
@@ -1224,6 +1230,7 @@ such user exists rather than editing somebody else's mailboxes.
 | `mfctl user endpoints [--mcp true\|false] [--client true\|false]` | Keeps that user off the MCP endpoint, the client endpoint, or both, or lets them back on |
 | `mfctl user account add --from-file <path>` | Declares one more mailbox in that record |
 | `mfctl user account remove --id <account>` | Stops the record declaring one mailbox, leaving its stored mail alone |
+| `mfctl user set-organization (--organization <id> \| --none)` | Moves that user into an [organization](#organizations), or out of every one, which changes the login their passwords are typed as |
 | `mfctl user remove` | Erases the user and every message this deployment holds for them, which cannot be undone |
 
 Every command but `list` and `add` takes `--user`, and none of them needs it on a deployment holding one user,
@@ -1350,6 +1357,52 @@ replaces the runtime account snapshot after the database commit. The coordinator
 account set and starts the new one without a restart. A synchronization run already in flight keeps the snapshot it
 began with and drains before its supervisor ends, so one run never reads two document versions.
 
+### Organizations
+
+An organization groups users under a short name, and the short name is what its members type in front of their
+username when they sign in with a password: a member of `TESTFIRMA` signs in as `TESTFIRMA/jan`, and somebody in no
+organization as `jan`. That is what lets two companies served by one deployment each have a `jan`. A user belongs to no
+organization or to exactly one, and a user is in none until one of these routes moves them — so every credential
+provisioned before a deployment recorded an organization signs in exactly as it did. How a presented login is read is
+[the password method's](mcp-endpoint.md#passwords) to state.
+
+| Command | What it does |
+| --- | --- |
+| `mfctl organization list` | Reads the organizations this deployment holds, with each one's short name, display name, member count, and when it was recorded |
+| `mfctl organization add --short-name <name> --display-name <name>` | Records an organization, and reports the identifier it was minted under |
+| `mfctl organization rename --organization <id> --display-name <name>` | Replaces the name an operator reads it by |
+| `mfctl organization set-short-name --organization <id> --short-name <name>` | Replaces the short name its members sign in under |
+| `mfctl organization remove --organization <id>` | Removes an organization nobody belongs to |
+| `mfctl user set-organization (--organization <id> \| --none)` | Moves one user into an organization, or out of every organization; it takes `--user` as every other user command does |
+
+**An organization is minted with an identifier that says nothing about it.** It is a version 4 UUID for the reason a
+user's is: it reaches administrative listings, and a time-ordered one would publish when each company was added and in
+what order. The display name is what an operator reads it by, trimmed and 1 to 128 characters. The short name is 1 to
+32 characters of `A`–`Z`, `0`–`9`, and `-`, folded to upper case when it is written, and unique across the deployment,
+because it is half of a login; a `/` can never appear in one, since that is what separates it from the username.
+
+**Grouping people is a configuration write, and changing how they sign in is a credential write.** Recording,
+renaming, and removing an organization take `mailfathom.admin.configuration.write`, the grant that records users,
+because they change how the deployment's people are grouped rather than how any of them signs in. Changing a short
+name and moving a user take `mailfathom.admin.credentials.write`, because each changes the login a password is typed
+as — a short name every member's at once.
+
+**A deployment holds at most 1000 organizations.** That is the most the listing reads, and recording one past it is
+refused with `409` rather than written, so every organization a deployment holds is one the listing shows and can
+therefore be renamed or removed.
+
+**Changing a short name moves every member's login with it and rewrites no credential.** A credential refers to its
+organization by identifier rather than by short name, so the new login works and the old one stops at the instant the
+change commits, and nothing is provisioned again.
+
+**Moving a user re-scopes their passwords in the same transaction.** Only a password is scoped to an organization; an
+API key, a key pair, and a mapped subject are resolved by values unique across the deployment and are unaffected by
+where their user belongs. A move is refused with `409` naming the username when the target — the organization, or the
+users in none — already holds one of that user's usernames for somebody else, and nothing about the user changes.
+
+**An organization with members is not removed.** The refusal says how many it still has, so an operator moves each of
+them out first rather than leaving users whose logins name a short name nobody holds.
+
 ### User credentials
 
 Every credential a user's client presents belongs to a person rather than to a deployment, and these are the routes
@@ -1363,7 +1416,7 @@ permissions it was provisioned with, and can be disabled, rotated, or removed th
 
 | Method | What the client presents | What it is resolved by | What a rotation replaces |
 | --- | --- | --- | --- |
-| `password` | A username and password, as HTTP Basic | The username | The password |
+| `password` | A login and password, as HTTP Basic | The username, within the user's [organization](#organizations) | The password |
 | `api-key` | A key this deployment minted, as a bearer credential | A digest of the key, which is never published | The key, minted again |
 | `public-key` | A signed client assertion | The key's fingerprint, which the client names in `kid` | The registered public key |
 | `oauth-subject` | An access token its authorization server issued | The issuer and subject together | Nothing — the mapping is deleted and written again |
@@ -1446,7 +1499,10 @@ cannot be moved in one step — provision a second credential, move the client, 
 **A listing publishes what a credential is resolved by, except where publishing it would publish the secret.** A
 username, a fingerprint, and an issuer-and-subject pair are all values somebody wrote down or a provisioning reported, so
 each is listed; an API key's digest is a verifier for the key itself, so it is withheld and the listing says so rather
-than leaving the column empty.
+than leaving the column empty. A password credential also carries `login`, the form a person types — `SHORTNAME/username`
+for a member of an organization and the username otherwise — composed from the organization the user belongs to now,
+and every other method carries `null` there. `mfctl credential list` shows that login in its "Resolved by" column
+for a password credential, since it is what the person types.
 
 Every change to who can reach a user's mail is written to the audit record: the act, the credential's identifier, its
 method, the user, the administrator who made it, and when. The value it is resolved by is not among them, and neither is

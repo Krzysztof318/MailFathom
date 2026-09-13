@@ -48,6 +48,40 @@ public sealed class UserPasswordAuthenticatorTests
         Assert.Null(result.Rejection);
     }
 
+    /// <summary>Two companies may each have a <c>jan</c>, so the login's organization decides which credential is resolved.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_AUsernameHeldOnlyWithinAnOrganization_AuthenticatesOnlyWhenTheLoginNamesThatOrganization()
+    {
+        // Arrange
+        using var harness = new AuthenticatorHarness();
+        harness.Holds("TESTFIRMA/jan", enabled: true);
+
+        // Act
+        var scoped = await harness.AuthenticateAsync(Header("testfirma/Jan", Password));
+        var unscoped = await harness.AuthenticateAsync(Header("jan", Password));
+
+        // Assert
+        Assert.True(scoped.Succeeded);
+        Assert.Equal(UserPasswordRejection.CredentialUnrecognized, unscoped.Rejection);
+    }
+
+    /// <summary>A login naming an organization nobody holds is refused the way a wrong password is, at the same cost, so a refusal cannot enumerate organizations.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_ALoginNamingAnOrganizationNobodyHolds_IsRefusedAsAnUnrecognizedCredentialAfterOneVerification()
+    {
+        // Arrange
+        using var harness = new AuthenticatorHarness();
+        harness.Holds(enabled: true);
+
+        // Act
+        var result = await harness.AuthenticateAsync(Header("NOBODY/user", Password));
+
+        // Assert
+        Assert.Equal(UserPasswordRejection.CredentialUnrecognized, result.Rejection);
+        Assert.Equal(1, harness.PasswordHasher.VerificationCount);
+        Assert.DoesNotContain(StoredHash, harness.PasswordHasher.VerifiedAgainst, StringComparer.Ordinal);
+    }
+
     /// <summary>The username is folded before it is resolved, so a person's capitalization reaches the one stored spelling.</summary>
     [Fact]
     public async Task AuthenticateAsync_AUsernameTypedWithCapitalsAndSpace_ResolvesTheCanonicalOne()
@@ -62,9 +96,8 @@ public sealed class UserPasswordAuthenticatorTests
         // Assert
         Assert.True(result.Succeeded);
 
-        await harness.Credentials.Received(1).FindAsync(
-            UserCredentialMethod.Password,
-            Arg.Is<UserCredentialLookup>(lookup => lookup.Value == "user"),
+        await harness.Credentials.Received(1).FindPasswordAsync(
+            Arg.Is<UserCredentialLogin>(login => login.Value == "user"),
             Arg.Any<CancellationToken>());
     }
 
@@ -172,7 +205,7 @@ public sealed class UserPasswordAuthenticatorTests
         Assert.Equal(0, harness.PasswordHasher.VerificationCount);
 
         await harness.Credentials.DidNotReceiveWithAnyArgs()
-            .FindAsync(default, default, TestContext.Current.CancellationToken);
+            .FindPasswordAsync(default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>A name no username can be folded from is refused before any capacity is spent and before any hash is computed.</summary>
@@ -648,10 +681,7 @@ public sealed class UserPasswordAuthenticatorTests
             this.attemptLimiter = new PasswordAttemptLimiter(this.Clock);
 
             this.Credentials = Substitute.For<IUserCredentialStore>();
-            this.Credentials.FindAsync(
-                    Arg.Any<UserCredentialMethod>(),
-                    Arg.Any<UserCredentialLookup>(),
-                    Arg.Any<CancellationToken>())
+            this.Credentials.FindPasswordAsync(Arg.Any<UserCredentialLogin>(), Arg.Any<CancellationToken>())
                 .Returns((ResolvedUserCredential?)null);
 
             this.PasswordHasher = new RecordingPasswordHasher();
@@ -678,15 +708,19 @@ public sealed class UserPasswordAuthenticatorTests
 
         public void Dispose() => this.attemptLimiter.Dispose();
 
-        internal void Holds(bool enabled) =>
-            this.Credentials.FindAsync(
-                    UserCredentialMethod.Password,
-                    Arg.Is<UserCredentialLookup>(lookup => lookup.Value == "user"),
+        internal void Holds(bool enabled) => this.Holds("user", enabled);
+
+        /// <summary>Holds one credential answering to the login given, in its canonical form.</summary>
+        /// <param name="login">The canonical login the store answers to.</param>
+        /// <param name="enabled">Whether the credential still authenticates.</param>
+        internal void Holds(string login, bool enabled) =>
+            this.Credentials.FindPasswordAsync(
+                    Arg.Is<UserCredentialLogin>(presented => presented.Value == login),
                     Arg.Any<CancellationToken>())
                 .Returns(Credential(enabled));
 
         /// <summary>Holds every credential read open until the gate is released, so callers are genuinely in flight together.</summary>
-        /// <param name="enabled">Whether the credential the store then answers with still authenticates, as <see cref="Holds" /> decides it.</param>
+        /// <param name="enabled">Whether the credential the store then answers with still authenticates, as <see cref="Holds(bool)" /> decides it.</param>
         /// <returns>The gate, which reports how many reads are waiting and releases them all.</returns>
         /// <remarks>
         /// Without it nothing on this path yields — the substitute answers from an already-completed task and the hasher
@@ -697,9 +731,8 @@ public sealed class UserPasswordAuthenticatorTests
         {
             var gate = new CredentialReadGate();
 
-            this.Credentials.FindAsync(
-                    UserCredentialMethod.Password,
-                    Arg.Is<UserCredentialLookup>(lookup => lookup.Value == "user"),
+            this.Credentials.FindPasswordAsync(
+                    Arg.Is<UserCredentialLogin>(login => login.Value == "user"),
                     Arg.Any<CancellationToken>())
                 .Returns(_ => gate.AnswerAsync(Credential(enabled)));
 
@@ -713,10 +746,7 @@ public sealed class UserPasswordAuthenticatorTests
         {
             var gate = new CredentialReadGate();
 
-            this.Credentials.FindAsync(
-                    Arg.Any<UserCredentialMethod>(),
-                    Arg.Any<UserCredentialLookup>(),
-                    Arg.Any<CancellationToken>())
+            this.Credentials.FindPasswordAsync(Arg.Any<UserCredentialLogin>(), Arg.Any<CancellationToken>())
                 .Returns(_ => gate.AnswerAsync(null));
 
             return gate;

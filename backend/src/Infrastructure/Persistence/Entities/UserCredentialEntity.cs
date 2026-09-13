@@ -27,8 +27,11 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// <para>
 /// One user may hold several of these and rotate them apart, which is what makes replacing a credential something an
 /// operator can do without an outage: provision the second, move the client, delete the first. No two rows may carry
-/// one lookup for one method, because a lookup resolves one user and a second row under it would make which user a
-/// request acts for depend on which row the database returned.
+/// one lookup for one method within one organization scope — a password's username is unique within its organization,
+/// and every other method's lookup, which names no organization, is unique across the deployment — because a lookup
+/// resolves one user in its scope and a second row under it would make which user a request acts for depend on which
+/// row the database returned. The unique index is over <c>(Method, OrganizationId, Lookup)</c> with nulls not distinct,
+/// so a credential scoped to no organization collides with every other scoped to none.
 /// </para>
 /// <para>
 /// Nothing here is a mail artifact, and the row is still personal data: it says that a particular person has a way to
@@ -81,9 +84,17 @@ internal sealed class UserCredentialEntity
     /// <remarks>The name rather than an ordinal, because it is what an operator reads in a listing and writes on a command line, and because a column holding an ordinal would tie a stored row to the order members happened to be declared in.</remarks>
     public required string Method { get; set; }
 
-    /// <summary>The value a presented credential is resolved by, unique within its method.</summary>
+    /// <summary>The value a presented credential is resolved by, unique within its method and its organization scope.</summary>
     /// <remarks>Already canonical when it is stored — a folded username, a computed digest, an issuer and subject composed in one order — so the index enforces uniqueness over the same form a request is resolved by rather than over whichever spelling reached it.</remarks>
     public required string Lookup { get; set; }
+
+    /// <summary>The organization a password credential's username is unique within, or <see langword="null" /> for one scoped to none.</summary>
+    /// <remarks>
+    /// Written from the user for a password and left null for every other method, whose lookups are unique across the
+    /// deployment already. It names the organization by identifier rather than by short name, so changing a short name
+    /// moves every login with it and rewrites no credential; moving the user rewrites it in the same transaction.
+    /// </remarks>
+    public Guid? OrganizationId { get; set; }
 
     /// <summary>The stored material the presented credential is judged against, or <see langword="null" /> for a method that keeps none.</summary>
     /// <remarks>

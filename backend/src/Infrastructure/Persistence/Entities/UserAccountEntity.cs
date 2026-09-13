@@ -62,6 +62,10 @@ internal sealed class UserAccountEntity
     /// </remarks>
     public required string DisplayName { get; set; }
 
+    /// <summary>The organization the user belongs to, or <see langword="null" /> for somebody in none.</summary>
+    /// <remarks>It groups users and scopes the login their passwords are typed as, and narrows nothing they read.</remarks>
+    public Guid? OrganizationId { get; set; }
+
     /// <summary>The user's configurable record, as one <c>jsonb</c> document.</summary>
     /// <remarks>
     /// Held as text because nothing here reads into it: what the document contains — the user's mail-account

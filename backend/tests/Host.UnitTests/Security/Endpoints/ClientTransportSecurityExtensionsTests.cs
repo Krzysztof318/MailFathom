@@ -513,10 +513,7 @@ public sealed class ClientTransportSecurityExtensionsTests
     private static ServiceProvider ComposeEndpointTakingPasswordsAndSessions(IPasswordHasher passwordHasher)
     {
         var credentials = Substitute.For<IUserCredentialStore>();
-        credentials.FindAsync(
-                Arg.Any<UserCredentialMethod>(),
-                Arg.Any<UserCredentialLookup>(),
-                Arg.Any<CancellationToken>())
+        credentials.FindPasswordAsync(Arg.Any<UserCredentialLogin>(), Arg.Any<CancellationToken>())
             .Returns((ResolvedUserCredential?)null);
 
         var services = new ServiceCollection();

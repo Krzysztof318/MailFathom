@@ -202,6 +202,12 @@ Nothing keys onto this row and nothing cascades from it. It describes the deploy
 | `McpEndpointEnabled`, `ClientEndpointEnabled` | Whether the user is served on the MCP endpoint and on the client endpoint, `boolean NOT NULL DEFAULT TRUE`. The default is what a row recorded before the columns existed reads, and what a provisioning insert naming neither writes. The user's record states them under `EndpointAccess`, and the statement committing a record writes both from it, so the row never serves a user on an endpoint their committed record keeps them off. Every credential resolution and every session read joins them in the statement it already runs, so a switch turned off refuses that user's next request on every replica with no cache to expire |
 | `Version` | The version a write is accepted against. It is a number the writer states rather than the `xmin` token the rest of this page uses, because a rejected write has to be able to report which version it was refused against, and a token the database generates behind the write cannot be quoted back |
 | `CreatedAt`, `UpdatedAt` | When the user was provisioned, and when their document last changed — which is the provisioning instant until it does |
+| `OrganizationId` | The [organization](../operations/admin-endpoint.md#organizations) the user belongs to, or null for none, as an indexed foreign key onto `organizations` that restricts deletion — so an organization is removed only once nobody belongs to it |
+
+`organizations` holds one row per organization: `Id`, a version 4 identifier minted by the administrative act that
+records it, for the reason a user's is; `DisplayName`, at most 128 characters; `ShortName`, at most 32 characters,
+stored upper-cased and unique across the deployment under its own index, because it is half of a login and what a
+sign-in resolves the organization by; and when it was recorded.
 
 **The document has a typed record to bind to, and the envelope beside it never depends on reading one.** What the
 column holds is one user's configurable record — their mail-account declarations, and the settings that are their own
@@ -385,7 +391,8 @@ these rows are administered through.
 | `Id` | The credential's identity, and the primary key. It is what an audit record, a rate-limiting partition, and a diagnostic name — so each of those names a credential without naming a way to sign in |
 | `UserId` | The user this credential authenticates, a `uuid` foreign key onto `settings_accounts` that cascades. It is what an admitted request acts for: a credential that resolves no user admits nobody, and is refused exactly as an unknown one is |
 | `Method` | Which of the four ways in this credential is — `password`, `api-key`, `public-key`, or `oauth-subject` — as the published name rather than an ordinal. It is half of what a presented credential is resolved by, so one value may be held once under each method without either shadowing the other |
-| `Lookup` | The one indexed value that method resolves a credential by, at most 512 characters: the username folded to lower case for a password, a digest of the key for an API key, the fingerprint of the registered public key for a key pair, and the issuer and subject together for a mapped subject. Unique with `Method` **across the deployment** rather than within the user, because it is what a presented credential is resolved by and nothing else in the request says whose it is. A colon cannot appear in a username, since that is where [RFC 7617](https://www.rfc-editor.org/rfc/rfc7617.html) splits the header |
+| `Lookup` | The one indexed value that method resolves a credential by, at most 512 characters: the username folded to lower case for a password, a digest of the key for an API key, the fingerprint of the registered public key for a key pair, and the issuer and subject together for a mapped subject. Unique with `Method` and `OrganizationId` rather than within the user, because it is what a presented credential is resolved by and nothing else in the request says whose it is — so a username is unique within one organization or among the credentials in none, and every other method's value is unique **across the deployment**. A colon cannot appear in a username, since that is where [RFC 7617](https://www.rfc-editor.org/rfc/rfc7617.html) splits the header, and neither can a `/`, since that is where a login separates the short name from it |
+| `OrganizationId` | The organization a password credential is scoped to, nullable, and a foreign key onto `organizations` that restricts deletion. It is null for somebody in no organization and for every other method, which a check constraint holds: only a password is scoped to one. It names the organization by identifier rather than by short name, so changing a short name moves every member's login and rewrites no credential, and moving a user between organizations rewrites it for their passwords in the same transaction |
 | `Material` | What a presented secret is verified against, and nothing a client could present. For a password that is the versioned hash record — the format version, the algorithm, the work parameters, the salt, and the derived key, as one string, so a later release moves to another algorithm without rewriting anything; for a key pair it is the registered public half. An API key has none, because the digest in `Lookup` is the whole verifier, and neither does a mapped subject, which states whose token this is rather than holding anything to check |
 | `Permissions` | What this credential may do, as published permission names. An empty set is a credential that authenticates and reaches no tool; a credential provisioned with none recorded holds everything its surface publishes |
 | `Enabled` | Whether it still authenticates requests. A disabled credential keeps everything about it, so the value it is resolved by stays claimed and the decision is one command away from being reversed |
@@ -393,8 +400,10 @@ these rows are administered through.
 | `CreatedAt` | When the credential was provisioned |
 | `MaterialChangedAt` | When what the client presents was last replaced. A rotation moves it; the rehash the deployment performs on its own when a password record falls behind the current work parameters does not, because nothing about the password changed |
 
-Two indexes and no more: the unique one on `(Method, Lookup)`, which is the read every authentication performs, and one
-on `(UserId, CreatedAt)`, which is the listing an administrator reads. That listing is bounded at 100 credentials per
+Three indexes and no more: the unique one on `(Method, OrganizationId, Lookup)`, with nulls not distinct so the
+credentials scoped to no organization stay unique among themselves, which is the read every authentication performs;
+`IX_user_credentials_OrganizationId` on `OrganizationId`, which the restricting foreign key to `organizations` reads
+when an organization is removed; and one on `(UserId, CreatedAt)`, which is the listing an administrator reads. That listing is bounded at 100 credentials per
 user, which is a ceiling rather than a number anybody reaches — and it is the same ceiling provisioning enforces, in
 the insert itself rather than in a count read beforehand. Two administrators provisioning at the same instant cannot
 leave a user above it either: the insert runs in a transaction that first takes a row lock on the user's
@@ -406,8 +415,9 @@ hundred-and-first credential is refused with `409` instead.
 within the call that reduces it and retained nowhere; a public key and a mapped subject are not secrets to begin with.
 No answer, log line, metric, audit record, command argument, or refusal carries a presented value — a refusal names the
 rule the password broke rather than the value, and a minted key is printed once by the command that minted it and never
-again. Verification is constant-time, and a request naming a username this deployment does not hold is verified against
-a decoy record so that an unknown username and a wrong password cost the same and are refused identically.
+again. Verification is constant-time, and a request naming a username or an organization this deployment does not hold
+is verified against a decoy record so that an unknown login and a wrong password cost the same and are refused
+identically.
 
 **Removing a user removes these with the rest.** The cascade from `settings_accounts` takes them, which is what the
 foreign key is for: a person erased from the deployment leaves nothing behind that could still be signed in as.

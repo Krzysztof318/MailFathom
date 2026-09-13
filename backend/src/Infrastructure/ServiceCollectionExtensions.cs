@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Access.Credentials;
+using MailFathom.Application.Access.Organizations;
 using MailFathom.Application.Access.Sessions;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
@@ -570,6 +571,9 @@ public static class ServiceCollectionExtensions
         // request's own context, and separate from the directory above because that answers which users exist and this
         // answers what one of them may present.
         services.AddScoped<IUserCredentialStore, PersistedUserCredentials>();
+        // The organizations users are grouped into and the membership that scopes a password's login. Scoped for the
+        // reason the credential store is: it writes through the request's own context.
+        services.AddScoped<IOrganizationStore, PersistedOrganizations>();
         // What a password becomes when it is stored and what a presented one is judged against. A singleton because it
         // holds no state at all: every parameter a verification needs travels inside the record it is verifying.
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
@@ -600,6 +604,7 @@ public static class ServiceCollectionExtensions
         // What an administrator does to those credentials, registered beside the ports it composes so a port added to
         // it and a port registered here stay in one place.
         services.AddScoped<UserCredentialAdministration>();
+        services.AddScoped<OrganizationAdministration>();
         // One user's own record, read by key and bounded in the statement rather than in the process. A singleton
         // over the pool for the reason the persisted configuration layer's reader is one — the command holds no state
         // between calls — and separate from the directory above because that answers for the deployment and this for

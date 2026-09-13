@@ -151,6 +151,8 @@ public sealed class AdminApiEndpointsTests
         // The users appear twice at the roster path, which is the listing and the recording, once at the user's own
         // path for the erasure, once at the label's path for the rename, twice at their record's path for the reading
         // and the saving, and once at the secret path for a sealed write.
+        // The organizations appear twice at their own path, which is the listing and the recording, and a user's
+        // membership is set at a path of its own beneath the user.
         Assert.Equal(
             [
                 $"{AdminEndpointOptions.RoutePrefix}{MailAnsweringAuditEndpoint.Route}",
@@ -184,6 +186,11 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxMaintenanceEndpoints.RewindRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxMaintenanceEndpoints.RewindRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxSynchronizationStatusEndpoint.StatusRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{OrganizationEndpoints.OrganizationsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{OrganizationEndpoints.OrganizationsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{OrganizationEndpoints.OrganizationRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{OrganizationEndpoints.OrganizationDisplayNameRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{OrganizationEndpoints.OrganizationShortNameRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.OutboxRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.CancellationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.RequeueRoute}",
@@ -207,6 +214,7 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{UserCredentialEndpoints.UserCredentialMaterialRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserDisplayNameRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserEndpointAccessRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{OrganizationEndpoints.UserOrganizationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserRecordRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserRecordRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserMailAccountsRoute}",
@@ -312,6 +320,12 @@ public sealed class AdminApiEndpointsTests
                 $"PUT {prefix}{UserCredentialEndpoints.UserCredentialMaterialRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
                 $"PUT {prefix}{UserCredentialEndpoints.UserCredentialEnablementRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
                 $"DELETE {prefix}{UserCredentialEndpoints.UserCredentialRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
+                $"GET {prefix}{OrganizationEndpoints.OrganizationsRoute} -> {MailFathomPermission.AdminRead.Name}",
+                $"POST {prefix}{OrganizationEndpoints.OrganizationsRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"PUT {prefix}{OrganizationEndpoints.OrganizationDisplayNameRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"PUT {prefix}{OrganizationEndpoints.OrganizationShortNameRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
+                $"DELETE {prefix}{OrganizationEndpoints.OrganizationRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"PUT {prefix}{OrganizationEndpoints.UserOrganizationRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
                 $"GET {prefix}{ContentReleaseEndpoints.ReleaseRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{ContentReleaseEndpoints.ReleaseRoute} -> {MailFathomPermission.AdminErase.Name}",
             }.Order(StringComparer.Ordinal),

@@ -681,6 +681,55 @@ public sealed class UserCredentialAdministrationTests
         Assert.Equal(MailFathomPermission.AdminCredentialsWrite, refusal.RequiredPermission);
     }
 
+    /// <summary>
+    /// A password takes its user's organization inside the write, so the answer reads that scope back — which is what
+    /// lets the operator be told the login a member types rather than the bare username they can no longer sign in with.
+    /// </summary>
+    [Fact]
+    public async Task ProvisionPasswordAsync_AUserWhoBelongsToAnOrganization_ReportsTheOrganizationTheCredentialWasScopedTo()
+    {
+        // Arrange
+        var harness = new AdministrationHarness(MailFathomPermission.AdminCredentialsWrite);
+        var lookup = UserCredentialLookup.ForUsername(UserCredentialUsername.Create("user"));
+        var minted = Guid.Empty;
+
+        harness.Credentials.CreateAsync(
+                Arg.Do<Guid>(id => minted = id),
+                Arg.Any<MailUserId>(),
+                Arg.Any<UserCredentialMethod>(),
+                Arg.Any<UserCredentialLookup>(),
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(UserCredentialWriteOutcome.Written);
+        harness.Credentials.ReadForUserAsync(User, Arg.Any<CancellationToken>())
+            .Returns(_ => new[]
+            {
+                new UserCredential(
+                    minted,
+                    User,
+                    UserCredentialMethod.Password,
+                    lookup,
+                    [MailFathomPermission.MailRead],
+                    Enabled: true,
+                    Version: 1,
+                    ActedAt,
+                    ActedAt,
+                    OrganizationShortName.Create("ACME")),
+            });
+
+        // Act
+        var provisioning = await harness.Administration.ProvisionPasswordAsync(
+            User,
+            UserCredentialUsername.Create("user"),
+            AcceptablePassword.AsMemory(),
+            permissions: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(OrganizationShortName.Create("ACME"), provisioning.Organization);
+    }
+
     private static async Task<PrincipalNotAuthorizedException> RefusalOf(Func<Task> act) =>
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(act);
 

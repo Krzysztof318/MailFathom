@@ -82,6 +82,7 @@ internal sealed record UserCredentialEnablementRequest(bool? Enabled);
 /// <param name="Version">How many times the record has been written, counting the act that provisioned it.</param>
 /// <param name="CreatedAt">When the credential was provisioned.</param>
 /// <param name="MaterialChangedAt">When what it is presented as was last replaced.</param>
+/// <param name="Login">What a person types to sign in with a password credential — <c>SHORTNAME/username</c> for a member of an organization, the username otherwise — or <see langword="null" /> for every other method.</param>
 /// <remarks>
 /// There is no password here, no hash, and no key digest, and the absence is what makes the listing safe to serve:
 /// every field is a fact about the record rather than about the secret. The one field that could have been both is
@@ -97,7 +98,8 @@ internal sealed record UserCredentialResponse(
     bool Enabled,
     long Version,
     DateTimeOffset CreatedAt,
-    DateTimeOffset MaterialChangedAt)
+    DateTimeOffset MaterialChangedAt,
+    string? Login)
 {
     /// <summary>Describes one credential for a caller.</summary>
     /// <param name="credential">The credential as the deployment holds it.</param>
@@ -115,8 +117,22 @@ internal sealed record UserCredentialResponse(
             credential.Enabled,
             credential.Version,
             credential.CreatedAt,
-            credential.MaterialChangedAt);
+            credential.MaterialChangedAt,
+            LoginOf(credential.Method, credential.Lookup, credential.Organization));
     }
+
+    /// <summary>Composes what a person types to sign in with a password credential.</summary>
+    /// <param name="method">The method the credential is presented by.</param>
+    /// <param name="lookup">The username the credential is resolved by.</param>
+    /// <param name="organization">The organization the credential is scoped to, or unspecified for none.</param>
+    /// <returns>The login for a password, or <see langword="null" /> for every other method.</returns>
+    internal static string? LoginOf(
+        UserCredentialMethod method,
+        UserCredentialLookup lookup,
+        OrganizationShortName organization) =>
+        method == UserCredentialMethod.Password
+            ? UserCredentialLogin.Compose(organization, UserCredentialUsername.Create(lookup.Value))
+            : null;
 
     private static string? PublishedLookupOf(UserCredential credential) =>
         credential.Method.LookupIsDerivedFromTheSecret ? null : credential.Lookup.Value;
@@ -132,12 +148,13 @@ internal sealed record UserCredentialListResponse(Guid User, IReadOnlyList<UserC
 /// <param name="CredentialId">The identifier the new credential carries, which is what every later act on it names.</param>
 /// <param name="Lookup">What the credential will be resolved by, where that is a value the administrator can act on.</param>
 /// <param name="Key">The key this deployment minted, where the method is one it mints — reported here and never again.</param>
+/// <param name="Login">What the person types to sign in with a password credential — the organization's short name in front of the username for a member of one — or <see langword="null" /> for every other method.</param>
 /// <remarks>
 /// The key is the one field that exists for a single response. It is drawn during the write, stored only as a digest,
 /// and is therefore unrecoverable the moment this body is discarded, which is what an administrator has to be told
 /// rather than left to discover. <see cref="ToString" /> is redacted for the same reason the requests' are.
 /// </remarks>
-internal sealed record UserCredentialProvisionedResponse(Guid CredentialId, string? Lookup, string? Key)
+internal sealed record UserCredentialProvisionedResponse(Guid CredentialId, string? Lookup, string? Key, string? Login)
 {
     /// <summary>Describes what a provisioning act produced.</summary>
     /// <param name="method">The method the credential was provisioned for, which decides whether its lookup is publishable.</param>
@@ -153,7 +170,8 @@ internal sealed record UserCredentialProvisionedResponse(Guid CredentialId, stri
         return new UserCredentialProvisionedResponse(
             provisioning.CredentialId,
             method.LookupIsDerivedFromTheSecret ? null : provisioning.Lookup.Value,
-            provisioning.MintedKey);
+            provisioning.MintedKey,
+            UserCredentialResponse.LoginOf(method, provisioning.Lookup, provisioning.Organization));
     }
 
     /// <inheritdoc />
@@ -163,8 +181,9 @@ internal sealed record UserCredentialProvisionedResponse(Guid CredentialId, stri
 /// <summary>What replacing a credential's material produced.</summary>
 /// <param name="Lookup">What the credential is resolved by from now on, where that is a value the administrator can act on.</param>
 /// <param name="Key">The key this deployment minted, where the method is one it mints — reported here and never again.</param>
+/// <param name="Login">What the person types to sign in with a password credential, or <see langword="null" /> for every other method.</param>
 /// <remarks>An answer with a body rather than an empty one, because rotating a key is the second moment a key exists and there is nowhere else to read it. <see cref="ToString" /> is redacted for the reason the provisioning answer's is.</remarks>
-internal sealed record UserCredentialRotatedResponse(string? Lookup, string? Key)
+internal sealed record UserCredentialRotatedResponse(string? Lookup, string? Key, string? Login)
 {
     /// <summary>Describes what a rotation produced.</summary>
     /// <param name="method">The method the credential carries, which decides whether its lookup is publishable.</param>
@@ -179,7 +198,8 @@ internal sealed record UserCredentialRotatedResponse(string? Lookup, string? Key
 
         return new UserCredentialRotatedResponse(
             method.LookupIsDerivedFromTheSecret ? null : rotation.Lookup.Value,
-            rotation.MintedKey);
+            rotation.MintedKey,
+            UserCredentialResponse.LoginOf(method, rotation.Lookup, rotation.Organization));
     }
 
     /// <inheritdoc />

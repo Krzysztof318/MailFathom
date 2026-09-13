@@ -11,6 +11,7 @@ using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Jobs;
 using MailFathom.Cli.Administration.Mailboxes;
+using MailFathom.Cli.Administration.Organizations;
 using MailFathom.Cli.Administration.Outbox;
 using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Administration.Spam;
@@ -106,6 +107,12 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(UserCredentialMaterialRequest))]
 [JsonSerializable(typeof(UserCredentialRotated))]
 [JsonSerializable(typeof(UserCredentialEnablementRequest))]
+[JsonSerializable(typeof(OrganizationList))]
+[JsonSerializable(typeof(OrganizationProvisioningRequest))]
+[JsonSerializable(typeof(OrganizationProvisioned))]
+[JsonSerializable(typeof(OrganizationDisplayNameRequest))]
+[JsonSerializable(typeof(OrganizationShortNameRequest))]
+[JsonSerializable(typeof(UserOrganizationRequest))]
 [JsonSerializable(typeof(StoredCredentials))]
 [JsonSerializable(typeof(ProtectedResourceMetadata))]
 [JsonSerializable(typeof(AuthorizationServerMetadata))]
