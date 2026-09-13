@@ -1135,7 +1135,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("UserId", "MailAccountId");
 
-                    b.HasIndex("MailAccountId");
+                    b.HasIndex("MailAccountId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_mail_account_assignments_mail_account_id");
 
                     b.ToTable("mail_account_assignments", (string)null);
                 });

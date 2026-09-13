@@ -3,13 +3,44 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Host.Configuration.UserSettings.Administration;
+using MailFathom.Infrastructure.Persistence.Users;
 
 namespace MailFathom.Host.Api;
 
 /// <summary>The mail accounts this deployment holds.</summary>
 /// <param name="Accounts">One entry per account, in the order they were created in.</param>
 /// <param name="Truncated">Whether the deployment holds more accounts than one listing carries, so the entries are only the first of them.</param>
-internal sealed record MailAccountListResponse(IReadOnlyList<MailAccountResponse> Accounts, bool Truncated);
+internal sealed record MailAccountListResponse(IReadOnlyList<MailAccountSummaryResponse> Accounts, bool Truncated);
+
+/// <summary>One mail account as a listing names it: by the address and the display name an administrator tells accounts apart by.</summary>
+/// <param name="Id">The identifier the deployment generated for the account, which every other act names it by.</param>
+/// <param name="Version">The version a save states.</param>
+/// <param name="Users">The users the account is assigned to.</param>
+/// <param name="EmailAddress">The address the account holds, or <see langword="null" /> where it holds none and is not served.</param>
+/// <param name="DisplayName">The name the account is shown under.</param>
+internal sealed record MailAccountSummaryResponse(
+    Guid Id,
+    long Version,
+    IReadOnlyList<Guid> Users,
+    string? EmailAddress,
+    string? DisplayName)
+{
+    /// <summary>Describes one account a listing read.</summary>
+    /// <param name="holding">The account and the users it is assigned to.</param>
+    /// <returns>The response body.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="holding" /> is <see langword="null" />.</exception>
+    internal static MailAccountSummaryResponse For(MailAccountHolding holding)
+    {
+        ArgumentNullException.ThrowIfNull(holding);
+
+        return new MailAccountSummaryResponse(
+            holding.Account.Id,
+            holding.Account.Version,
+            [.. holding.Users.Select(user => user.Value)],
+            holding.Account.EmailAddress,
+            holding.Account.DisplayName);
+    }
+}
 
 /// <summary>One mail account as an administrator reads it.</summary>
 /// <param name="Id">The identifier the deployment generated for the account, which every other act names it by.</param>

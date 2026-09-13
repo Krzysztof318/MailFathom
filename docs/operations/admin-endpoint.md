@@ -222,7 +222,7 @@ what it was never granted is what the record exists to make visible.
 | `DELETE /api/admin/users/{userId}` | `mailfathom.admin.erase` | Erases the user and every message, folder, attachment, and derived index this deployment holds for them. **This is the one route here that destroys mail, and it cannot be undone.** A user this deployment does not hold is reported as nothing erased rather than as a refusal. |
 | `GET /api/admin/users/{userId}/record` | `mailfathom.admin.read` | Hands over one user's record as the redacted JSON an editing session opens, with the version it was read at and where this deployment currently reads that user's mail accounts from. |
 | `POST /api/admin/users/{userId}/record` | `mailfathom.admin.configuration.write` | Takes that record back edited and commits it as one change against the version it was opened over. It is what `mfctl user edit` sends when the editor exits, and a record another writer moved past is refused as superseded rather than merged. |
-| `GET /api/admin/mail-accounts` | `mailfathom.admin.read` | Reads [the mail accounts this deployment holds](#mail-accounts-and-who-they-are-assigned-to), at most 1024 in the order they were created in, each with its identifier, its version, the users it is assigned to, and its declaration redacted, and `truncated` saying whether more were held than the answer carries. A stored declaration that is not one of settings is answered `400` naming the row to correct. |
+| `GET /api/admin/mail-accounts` | `mailfathom.admin.read` | Reads [the mail accounts this deployment holds](#mail-accounts-and-who-they-are-assigned-to), at most 1024 in the order they were created in, each with its identifier, its version, the users it is assigned to, its address, and its display name, and `truncated` saying whether more were held than the answer carries. The declaration itself is read one account at a time. |
 | `POST /api/admin/mail-accounts` | `mailfathom.admin.configuration.write` | Creates a mail account from the declaration the body carries and assigns it to the user `userId` names, answering with the identifier it was generated under. An address another account already holds is refused. |
 | `GET /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.read` | Hands over one account's declaration as the redacted JSON an editing session opens, with the version it was read at, or `400` naming the row to correct when the stored declaration is not one of settings. |
 | `POST /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.configuration.write` | Takes that declaration back edited and commits it against the version it was opened over, judged against every user the account is assigned to. |
@@ -1413,7 +1413,7 @@ over exactly that set.
 
 | Command | What it does |
 | --- | --- |
-| `mfctl account list` | Reads the accounts this deployment holds, at most 1024, with each one's address, version, and who it is assigned to, and says so when more were held than it lists |
+| `mfctl account list` | Reads the accounts this deployment holds, at most 1024, with each one's identifier, address, display name, version, and who it is assigned to, and says so when more were held than it lists |
 | `mfctl account show --account <id>` | Reads one account's declaration, secrets redacted |
 | `mfctl account add [--user <id>] --from-file <path>` | Creates an account from the declaration in the file, assigns it to that user, and reports the identifier it was generated under |
 | `mfctl account edit --account <id>` | Opens that declaration in your `$VISUAL` or `$EDITOR` and commits what you saved as one change |
@@ -1450,7 +1450,9 @@ Another mail account already holds 'alex@example.test', and one address is held 
 ```
 
 **An account is served to one user at a time.** Assigning an account somebody else is already assigned is refused, so
-`mfctl account assign` places an account nobody holds:
+`mfctl account assign` places an account nobody holds. The guarantee is a unique index over the assignment's account
+rather than a read before the write, so two writers assigning one unheld account to two users at once cannot both
+succeed, and the one that loses is refused the same way:
 
 ```
 This mail account is already assigned to another user, and an account is served to one user at a time, so nothing was written.
@@ -1480,8 +1482,10 @@ mail this deployment stored for that user under the account. An account nobody i
 the last assignment also erases the account and every message, folder, attachment, and derived index this deployment
 holds for it, exactly as `mfctl account delete` does.
 
-**A read hands over what it can, and names what it cannot.** `mfctl account list` reads at most 1024 accounts and says
-when more were held. An account whose stored declaration is not one of settings is answered `400` rather than read:
+**A read hands over what it can, and names what it cannot.** `mfctl account list` reads at most 1024 accounts, each as
+its identifier, address, display name, version, and assignments rather than its declaration, and says when more were
+held. `mfctl account show` reads one declaration, and an account whose stored declaration is not one of settings is
+answered `400` there rather than read:
 
 ```
 A mail account this deployment holds is not a declaration of settings, so it cannot be read or edited. Correct the row where it was written.

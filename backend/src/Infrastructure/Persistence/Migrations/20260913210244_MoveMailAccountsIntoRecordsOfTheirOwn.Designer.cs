@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260913191528_MoveMailAccountsIntoRecordsOfTheirOwn")]
+    [Migration("20260913210244_MoveMailAccountsIntoRecordsOfTheirOwn")]
     partial class MoveMailAccountsIntoRecordsOfTheirOwn
     {
         /// <inheritdoc />
@@ -1138,7 +1138,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("UserId", "MailAccountId");
 
-                    b.HasIndex("MailAccountId");
+                    b.HasIndex("MailAccountId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_mail_account_assignments_mail_account_id");
 
                     b.ToTable("mail_account_assignments", (string)null);
                 });

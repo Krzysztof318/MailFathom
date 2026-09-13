@@ -10,8 +10,21 @@ namespace MailFathom.Cli.Administration.Accounts;
 /// <param name="Accounts">One entry per account, in the order they were created in.</param>
 /// <param name="Truncated">Whether the deployment holds more accounts than one listing carries.</param>
 internal sealed record MailAccountList(
-    [property: JsonPropertyName("accounts")] IReadOnlyList<MailAccountEntry>? Accounts,
+    [property: JsonPropertyName("accounts")] IReadOnlyList<MailAccountSummary>? Accounts,
     [property: JsonPropertyName("truncated")] bool Truncated);
+
+/// <summary>One mail account as a listing names it.</summary>
+/// <param name="Id">The identifier the deployment generated for the account.</param>
+/// <param name="Version">The version the account was read at.</param>
+/// <param name="Users">The users the account is assigned to.</param>
+/// <param name="EmailAddress">The address the account holds, or nothing where it holds none.</param>
+/// <param name="DisplayName">The name the account is shown under.</param>
+internal sealed record MailAccountSummary(
+    [property: JsonPropertyName("id")] Guid Id,
+    [property: JsonPropertyName("version")] long Version,
+    [property: JsonPropertyName("users")] IReadOnlyList<Guid>? Users,
+    [property: JsonPropertyName("emailAddress")] string? EmailAddress,
+    [property: JsonPropertyName("displayName")] string? DisplayName);
 
 /// <summary>One mail account as the deployment holds it.</summary>
 /// <param name="Id">The identifier the deployment generated for the account.</param>

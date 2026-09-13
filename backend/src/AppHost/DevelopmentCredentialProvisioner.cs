@@ -161,14 +161,9 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
         " ",
         outcome.GetProperty("messages").EnumerateArray().Select(static message => message.GetString()));
 
-    private static bool DeclaresAddress(JsonElement account, string emailAddress)
-    {
-        using var declaration = JsonDocument.Parse(account.GetProperty("declaration").GetString() ?? "{}");
-
-        return declaration.RootElement.ValueKind == JsonValueKind.Object
-            && declaration.RootElement.TryGetProperty("EmailAddress", out var declared)
-            && string.Equals(declared.GetString()?.Trim(), emailAddress, StringComparison.OrdinalIgnoreCase);
-    }
+    private static bool HoldsAddress(JsonElement account, string emailAddress) =>
+        account.TryGetProperty("emailAddress", out var held)
+        && string.Equals(held.GetString()?.Trim(), emailAddress, StringComparison.OrdinalIgnoreCase);
 
     private async Task<bool> AssignsAccountForAsync(
         Uri adminEndpoint,
@@ -190,7 +185,7 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
             .EnumerateArray()
             .Any(account =>
                 account.GetProperty("users").EnumerateArray().Any(assigned => assigned.GetGuid() == user)
-                && DeclaresAddress(account, emailAddress));
+                && HoldsAddress(account, emailAddress));
     }
 
     private async Task WaitForStartedAsync(Uri startedEndpoint, CancellationToken cancellationToken)

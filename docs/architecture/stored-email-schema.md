@@ -242,7 +242,7 @@ inside each user's document could not be.
 | Column of `mail_account_assignments` | What it records |
 |---|---|
 | `UserId` | The user served, a foreign key onto `settings_accounts` (`fk_mail_account_assignments_settings_accounts`) with `ON DELETE CASCADE` |
-| `MailAccountId` | The account they are served, a foreign key onto `settings_mail_accounts` (`fk_mail_account_assignments_settings_mail_accounts`) with `ON DELETE CASCADE`, indexed on its own for the read that lists who an account is assigned to |
+| `MailAccountId` | The account they are served, a foreign key onto `settings_mail_accounts` (`fk_mail_account_assignments_settings_mail_accounts`) with `ON DELETE CASCADE`, under the unique index `ix_mail_account_assignments_mail_account_id`. Until the mail graph is keyed by user as well as account, an account's mail is held once however many people it would serve, so serving it to two users would synchronize one mailbox twice and apply its rules and mutations twice; the index makes one user per account a guarantee two concurrent assignments cannot race past, and it also serves the read that lists who an account is assigned to |
 | `AssignedAt` | When the assignment was made |
 
 The primary key is `(UserId, MailAccountId)`, so an account is assigned to one user once. **One address is one account,

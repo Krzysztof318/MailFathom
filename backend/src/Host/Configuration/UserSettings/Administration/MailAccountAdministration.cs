@@ -66,18 +66,19 @@ internal sealed class MailAccountAdministration(
 
     /// <summary>Lists the accounts this deployment holds.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The first <see cref="MaximumListed" /> accounts, redacted, in the order they were created in, and whether more are held.</returns>
+    /// <returns>The first <see cref="MaximumListed" /> accounts in the order they were created in, and whether more are held.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" />.</exception>
-    /// <exception cref="FormatException">Thrown when an account's stored settings are JSON but not an object of settings.</exception>
-    /// <exception cref="JsonException">Thrown when an account's stored settings are not JSON the parser accepts.</exception>
-    /// <remarks>One more than the listing holds is read, so a deployment past the bound is told so rather than handed a listing that reads as complete.</remarks>
+    /// <remarks>
+    /// One more than the listing holds is read, so a deployment past the bound is told so rather than handed a listing that
+    /// reads as complete. The settings are not parsed, so one unreadable row never hides every other account.
+    /// </remarks>
     internal async Task<MailAccountListing> ReadAllAsync(CancellationToken cancellationToken)
     {
         authorization.RequirePermission(MailFathomPermission.AdminRead);
 
         var held = await accounts.ReadAllAsync(MaximumListed + 1, cancellationToken);
 
-        return new MailAccountListing([.. held.Take(MaximumListed).Select(ReadingOf)], held.Count > MaximumListed);
+        return new MailAccountListing([.. held.Take(MaximumListed)], held.Count > MaximumListed);
     }
 
     /// <summary>Reads one account.</summary>
@@ -245,10 +246,7 @@ internal sealed class MailAccountAdministration(
         // ponytail: one user per account until issue 1325 keys the mail graph by the account alone; lift this refusal there.
         if (holding.Users.Count > 0)
         {
-            return UserRecordWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationCandidateInvalid,
-                account.Version,
-                ["This mail account is already assigned to another user, and an account is served to one user at a time, so nothing was written."]);
+            return AssignedElsewhere(account.Version);
         }
 
         var judgement = await this.JudgeAsync(account, account.Document, [user], actingUser: null, cancellationToken);
@@ -269,7 +267,8 @@ internal sealed class MailAccountAdministration(
             MailAccountWriteResult.NothingToChange => UserRecordWriteOutcome.NothingToChange(
                 account.Version,
                 "The account is already assigned to this user, so nothing was written."),
-            _ => Superseded(record.Version, write.Version, "user record"),
+            MailAccountWriteResult.AssignedElsewhere => AssignedElsewhere(account.Version),
+            _ => Superseded(record.Version, await this.VersionOfAsync(record, cancellationToken), "user record"),
         };
     }
 
@@ -352,7 +351,13 @@ internal sealed class MailAccountAdministration(
     /// <returns>What the write did, its version the user's record's, or <see langword="null" /> when this deployment holds no record for the acting user.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> is <see langword="null" />, empty, or white space.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailAccountsWrite" />.</exception>
-    /// <remarks>An account nobody else is assigned is erased with its mail, which is the same outcome an administrator's unassignment has.</remarks>
+    /// <remarks>
+    /// Every removal ends the caller's assignment and, because an account is served to one user at a time, erases the
+    /// account and every message, folder, and attachment stored for it. It stays under
+    /// <see cref="MailFathomPermission.MailAccountsWrite" /> rather than <see cref="MailFathomPermission.AdminErase" />
+    /// because a person removing their own mailbox disposes of their own data, unlike an administrator unassigning
+    /// somebody else's.
+    /// </remarks>
     internal async Task<UserRecordWriteOutcome?> RemoveOwnAsync(
         string accountId,
         long expectedVersion,
@@ -535,6 +540,12 @@ internal sealed class MailAccountAdministration(
             [
                 $"Another mail account already holds '{emailAddress}', and one address is held by one account in this deployment, so nothing was written.",
             ]);
+
+    private static UserRecordWriteOutcome AssignedElsewhere(long version) =>
+        UserRecordWriteOutcome.Refused(
+            MailFathomErrorCode.ConfigurationCandidateInvalid,
+            version,
+            ["This mail account is already assigned to another user, and an account is served to one user at a time, so nothing was written."]);
 
     /// <summary>The refusal a user receives for an address somebody's account already holds.</summary>
     /// <remarks>The same sentence whoever holds it, so the answer never names whose mailbox the address is; that the address is held is what a refusal of an otherwise acceptable account tells them.</remarks>

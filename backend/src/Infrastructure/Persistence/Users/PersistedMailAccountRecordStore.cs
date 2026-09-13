@@ -220,13 +220,19 @@ internal sealed class PersistedMailAccountRecordStore(
                      """,
                     token);
 
+                // Nothing inserted: the account or the user is gone, or the conflict clause met an assignment already
+                // standing — this user's, or another user's under the index that keeps an account to one user.
                 if (assigned == 0)
                 {
-                    var standing = await context.MailAccountAssignments
-                        .AnyAsync(row => row.MailAccountId == accountId && row.UserId == userId, token);
+                    var holders = await context.MailAccountAssignments
+                        .Where(row => row.MailAccountId == accountId)
+                        .Select(row => row.UserId)
+                        .ToListAsync(token);
 
                     return new MailAccountWrite(
-                        standing ? MailAccountWriteResult.NothingToChange : MailAccountWriteResult.NotFound,
+                        holders.Contains(userId) ? MailAccountWriteResult.NothingToChange
+                        : holders.Count > 0 ? MailAccountWriteResult.AssignedElsewhere
+                        : MailAccountWriteResult.NotFound,
                         0);
                 }
 

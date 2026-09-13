@@ -79,28 +79,17 @@ internal static class MailAccountEndpoints
     /// <summary>Lists the accounts this deployment holds.</summary>
     /// <param name="administration">The account administration.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the accounts, or <c>400</c> when an account's stored row is not a declaration of settings.</returns>
-    internal static async Task<Results<Ok<MailAccountListResponse>, ProblemHttpResult>> ReadAllAsync(
+    /// <returns><c>200</c> with each account's identifier, version, users, address, and display name.</returns>
+    internal static async Task<Ok<MailAccountListResponse>> ReadAllAsync(
         [FromServices] MailAccountAdministration administration,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(administration);
 
-        MailAccountListing listing;
-
-        try
-        {
-            listing = await administration.ReadAllAsync(cancellationToken);
-        }
-        catch (Exception refusal) when (refusal is FormatException or JsonException)
-        {
-            // The parser's own message names the offending token, the JSON path it stopped at, and a byte position,
-            // and the path is composed from the row's own key names — which for an account are its settings.
-            return Refusal(UnreadableAccount);
-        }
+        var listing = await administration.ReadAllAsync(cancellationToken);
 
         return TypedResults.Ok(new MailAccountListResponse(
-            [.. listing.Accounts.Select(MailAccountResponse.For)],
+            [.. listing.Accounts.Select(MailAccountSummaryResponse.For)],
             listing.Truncated));
     }
 

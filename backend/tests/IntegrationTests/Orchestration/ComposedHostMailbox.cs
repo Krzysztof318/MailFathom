@@ -102,20 +102,12 @@ internal static class ComposedHostMailbox
             .GetProperty("accounts")
             .EnumerateArray()
             .Where(account => account.GetProperty("users").EnumerateArray().Any(assigned => assigned.GetGuid() == user)
-                && DeclaresTheSendingAddress(account.GetProperty("declaration").GetString()))
+                && string.Equals(
+                    account.GetProperty("emailAddress").GetString(),
+                    OrchestrationContract.ComposedHostSendingAddress,
+                    StringComparison.OrdinalIgnoreCase))
             .Select(static account => (MailAccountId?)MailAccountId.Create(account.GetProperty("id").GetGuid().ToString("D")))
             .FirstOrDefault();
-    }
-
-    private static bool DeclaresTheSendingAddress(string? declaration)
-    {
-        using var document = JsonDocument.Parse(declaration ?? "{}");
-
-        return document.RootElement.TryGetProperty("EmailAddress", out var address)
-            && string.Equals(
-                address.GetString(),
-                OrchestrationContract.ComposedHostSendingAddress,
-                StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Composes the account exactly as a configuration file once stated it, with the address that tells it apart.</summary>

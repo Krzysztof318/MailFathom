@@ -48,6 +48,14 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
         }
     }
 
+    /// <summary>States an account nobody is assigned.</summary>
+    /// <param name="account">The account.</param>
+    internal void HoldAccount(MailAccountRecord account)
+    {
+        this.accounts.Add(account);
+        this.assignments[account.Id] = [];
+    }
+
     /// <summary>Composes the record a reader answers for one user, carrying the accounts assigned to them.</summary>
     /// <param name="user">The user.</param>
     /// <returns>The record, or <see langword="null" /> when the store holds no such user.</returns>
@@ -142,6 +150,11 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
         if (this.assignments[accountId].Contains(user))
         {
             return Written(MailAccountWriteResult.NothingToChange, account.Version);
+        }
+
+        if (this.assignments[accountId].Count > 0)
+        {
+            return Written(MailAccountWriteResult.AssignedElsewhere, 0);
         }
 
         if (held.Version != expectedUserVersion)

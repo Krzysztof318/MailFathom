@@ -96,7 +96,7 @@ internal static class FakeMailAccountDeployment
                 HttpStatusCode.OK,
                 $$"""{"users":[{"id":"{{User:D}}","displayName":"alex","served":true,"mcpEndpoint":true,"clientEndpoint":true}]}"""),
             AdminEndpointRoutes.MailAccountsPath => request.Method == HttpMethod.Get
-                ? FakeAdminEndpoint.Json(HttpStatusCode.OK, $$"""{"accounts":[{{Entry()}}],"truncated":{{(truncated ? "true" : "false")}}}""")
+                ? FakeAdminEndpoint.Json(HttpStatusCode.OK, $$"""{"accounts":[{{Summary()}}],"truncated":{{(truncated ? "true" : "false")}}}""")
                 : FakeAdminEndpoint.Json(HttpStatusCode.OK, creationAnswer),
             _ when path == AdminEndpointRoutes.MailAccountPath(Account) => AnswerAccount(request, writeAnswer),
             _ when path == AdminEndpointRoutes.MailAccountAssignmentsPath(Account) =>
@@ -111,6 +111,10 @@ internal static class FakeMailAccountDeployment
         request.Method == HttpMethod.Get ? FakeAdminEndpoint.Json(HttpStatusCode.OK, Entry())
         : request.Method == HttpMethod.Delete ? FakeAdminEndpoint.Json(HttpStatusCode.OK, """{"erased":true}""")
         : FakeAdminEndpoint.Json(HttpStatusCode.OK, writeAnswer);
+
+    private static string Summary() => string.Create(
+        CultureInfo.InvariantCulture,
+        $$"""{"id":"{{Account:D}}","version":{{AccountVersion}},"users":["{{User:D}}"],"emailAddress":"alex@example.test","displayName":"Work"}""");
 
     private static string Entry() => string.Create(
         CultureInfo.InvariantCulture,

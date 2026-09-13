@@ -397,6 +397,47 @@ public sealed class MailAccountAdministrationTests
             Assert.Single(deployment.ServedUsers.Users).MailAccounts.Select(account => account.AccountId));
     }
 
+    [Fact]
+    public async Task AssignAsync_AnAccountNobodyHolds_AssignsItAndConvergesTheRosterBeforeAnnouncingIt()
+    {
+        // Arrange
+        var archive = Mailbox("archive@example.test", "archive");
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 4);
+        deployment.MailAccountRecords.HoldAccount(archive);
+        var heard = await RosterAnnouncementListener.ListenAsync(deployment.Backplane, deployment.ServedUsers);
+
+        // Act
+        var outcome = await deployment.MailAccounts.AssignAsync(archive.Id, Alex, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+        Assert.Equal([true], heard);
+        Assert.Equal(5, deployment.ServedUsers.PublishedVersionOf(Alex));
+        Assert.Equal(
+            [archive.Id.ToString("D")],
+            Assert.Single(deployment.ServedUsers.Users).MailAccounts.Select(account => account.AccountId));
+    }
+
+    [Fact]
+    public async Task EraseAsync_AnAccountThisDeploymentHolds_ErasesItAndConvergesTheRosterBeforeAnnouncingIt()
+    {
+        // Arrange
+        var work = Mailbox("work@example.test", "work");
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        var heard = await RosterAnnouncementListener.ListenAsync(deployment.Backplane, deployment.ServedUsers);
+
+        // Act
+        var erased = await deployment.MailAccounts.EraseAsync(work.Id, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(erased);
+        Assert.Equal([true], heard);
+        Assert.Equal(2, deployment.ServedUsers.PublishedVersionOf(Alex));
+        Assert.Empty(Assert.Single(deployment.ServedUsers.Users).MailAccounts);
+    }
+
     /// <summary>The rows are committed whether or not this replica can read them back, so a reading that failed after the commit does not turn the write into a reported failure.</summary>
     [Fact]
     public async Task CreateAsync_TheRosterUnreadableAfterTheCommit_AnswersTheCommittedWrite()

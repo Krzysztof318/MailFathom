@@ -59,9 +59,10 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_mail_account_assignments_MailAccountId",
+                name: "ix_mail_account_assignments_mail_account_id",
                 table: "mail_account_assignments",
-                column: "MailAccountId");
+                column: "MailAccountId",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "ix_settings_mail_accounts_normalized_email_address",

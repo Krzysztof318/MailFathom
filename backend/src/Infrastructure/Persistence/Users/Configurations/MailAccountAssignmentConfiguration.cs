@@ -31,6 +31,9 @@ internal sealed class MailAccountAssignmentConfiguration : IEntityTypeConfigurat
             .HasConstraintName(PersistenceConstraintNames.MailAccountAssignmentAccountForeignKeyName)
             .OnDelete(DeleteBehavior.Cascade);
 
-        entity.HasIndex(assignment => assignment.MailAccountId);
+        // ponytail: one user per account until issue 1325 keys the mail graph by the account alone; drop the uniqueness there.
+        entity.HasIndex(assignment => assignment.MailAccountId)
+            .IsUnique()
+            .HasDatabaseName(PersistenceConstraintNames.MailAccountAssignmentAccountUniqueIndexName);
     }
 }

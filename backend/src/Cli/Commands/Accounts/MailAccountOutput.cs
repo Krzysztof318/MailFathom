@@ -17,6 +17,18 @@ namespace MailFathom.Cli.Commands.Accounts;
 /// </remarks>
 internal static class MailAccountOutput
 {
+    /// <summary>Writes one listed account as a heading line and the users it is assigned to.</summary>
+    /// <param name="console">Where the account is written.</param>
+    /// <param name="account">The account.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    internal static void WriteHeading(ICliConsole console, MailAccountSummary account)
+    {
+        ArgumentNullException.ThrowIfNull(console);
+        ArgumentNullException.ThrowIfNull(account);
+
+        WriteHeading(console, account.Id, account.Version, account.Users, account.EmailAddress, account.DisplayName);
+    }
+
     /// <summary>Writes one account as a heading line and the users it is assigned to.</summary>
     /// <param name="console">Where the account is written.</param>
     /// <param name="account">The account.</param>
@@ -27,12 +39,24 @@ internal static class MailAccountOutput
         ArgumentNullException.ThrowIfNull(account);
 
         var (emailAddress, displayName) = NamesIn(account.Declaration);
-        var users = account.Users is { Count: > 0 } assigned
+
+        WriteHeading(console, account.Id, account.Version, account.Users, emailAddress, displayName);
+    }
+
+    private static void WriteHeading(
+        ICliConsole console,
+        Guid id,
+        long version,
+        IReadOnlyList<Guid>? users,
+        string? emailAddress,
+        string? displayName)
+    {
+        var assignedTo = users is { Count: > 0 } assigned
             ? string.Join(", ", assigned.Select(user => user.ToString("D")))
             : "nobody";
 
-        console.WriteLine($"{account.Id:D}  {displayName ?? "(no display name)"} <{emailAddress ?? "no address"}>");
-        console.WriteLine($"    version {account.Version.ToString(CultureInfo.InvariantCulture)}; assigned to: {users}");
+        console.WriteLine($"{id:D}  {displayName ?? "(no display name)"} <{emailAddress ?? "no address"}>");
+        console.WriteLine($"    version {version.ToString(CultureInfo.InvariantCulture)}; assigned to: {assignedTo}");
 
         if (emailAddress is null)
         {

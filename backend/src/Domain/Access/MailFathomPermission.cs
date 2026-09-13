@@ -171,9 +171,11 @@ public readonly record struct MailFathomPermission
     /// <summary>Gets the permission covering a user maintaining the mail accounts their own record declares.</summary>
     /// <remarks>
     /// <para>
-    /// The one grant on this surface that changes what the deployment does rather than what it holds: withdrawing a
-    /// mail account stops a mailbox being synchronized, and declaring one points this deployment at a mail server and
-    /// gives it a credential reference to authenticate with. That is why it follows from nothing —
+    /// The one grant on this surface that decides which mailboxes the deployment serves a person at all: declaring one
+    /// points this deployment at a mail server and gives it a credential reference to authenticate with, and withdrawing
+    /// one erases the account and every message, folder, and attachment this deployment stored for it, because an account
+    /// is served to one user at a time and nobody is left to serve it. That erasure is the person disposing of their own
+    /// mailbox, which is why it is not the administrative <see cref="AdminErase" />. It follows from nothing —
     /// <see cref="MailRead" /> is a person reading their own mail, and nothing about reading implies deciding which
     /// mailboxes are read at all.
     /// </para>

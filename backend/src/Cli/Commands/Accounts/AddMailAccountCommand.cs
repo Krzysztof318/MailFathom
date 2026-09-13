@@ -19,7 +19,7 @@ namespace MailFathom.Cli.Commands.Accounts;
 /// <para>
 /// The file carries a reference to a credential rather than a credential, and no identifier: the deployment generates
 /// one and this command prints it. An address another account already holds is refused, and the answer names the
-/// command that assigns that account instead.
+/// address.
 /// </para>
 /// </remarks>
 internal static class AddMailAccountCommand

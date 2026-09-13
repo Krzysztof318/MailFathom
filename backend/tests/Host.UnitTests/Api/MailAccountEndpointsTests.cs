@@ -136,19 +136,21 @@ public sealed class MailAccountEndpointsTests
         AssertRefusal(result.Result);
     }
 
-    /// <summary>An unreadable row refuses the listing with what to correct rather than faulting it.</summary>
+    /// <summary>A listing names an account by what its record holds rather than by its settings, so an unreadable row is still listed and reachable to repair.</summary>
     [Fact]
-    public async Task ReadAllAsync_AnAccountWhoseStoredSettingsAreNotADeclaration_IsRefused()
+    public async Task ReadAllAsync_AnAccountWhoseStoredSettingsAreNotADeclaration_ListsItByAddressAndName()
     {
         // Arrange
+        var unreadable = UnreadableAccount();
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
-        deployment.Holding(SyntheticMailUser.Deployment, """{"Language":"English"}""", version: 1, UnreadableAccount());
+        deployment.Holding(SyntheticMailUser.Deployment, """{"Language":"English"}""", version: 1, unreadable);
 
         // Act
         var result = await MailAccountEndpoints.ReadAllAsync(deployment.MailAccounts, TestContext.Current.CancellationToken);
 
         // Assert
-        AssertRefusal(result.Result);
+        var account = Assert.Single(result.Value!.Accounts);
+        Assert.Equal((unreadable.Id, "broken@example.test", "broken"), (account.Id, account.EmailAddress, account.DisplayName));
     }
 
     [Theory]

@@ -207,7 +207,7 @@ public sealed class DevelopmentCredentialProvisionerTests
     {
         // Arrange
         using var responses = new RecordingHandler(
-            AccountsResponse((UserId, """{"EmailAddress":"SOMEONE@example.test","DisplayName":"Local mailbox"}""")));
+            AccountsResponse((UserId, "SOMEONE@example.test")));
         using var client = new HttpClient(responses);
         var provisioner = new DevelopmentCredentialProvisioner(client, TimeProvider.System);
 
@@ -230,7 +230,7 @@ public sealed class DevelopmentCredentialProvisionerTests
     {
         // Arrange
         using var responses = new RecordingHandler(
-            AccountsResponse((Guid.NewGuid(), """{"EmailAddress":"someone@example.test","DisplayName":"Theirs"}""")),
+            AccountsResponse((Guid.NewGuid(), "someone@example.test")),
             JsonResponse(
                 """{"committed":false,"version":0,"code":12040,"messages":["The mailbox names no host."],"accountId":null}"""));
         using var client = new HttpClient(responses);
@@ -256,11 +256,11 @@ public sealed class DevelopmentCredentialProvisionerTests
         Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json"),
     };
 
-    /// <summary>Answers the account listing, whose declarations travel as JSON strings rather than as objects.</summary>
-    private static HttpResponseMessage AccountsResponse(params (Guid User, string Declaration)[] accounts) => JsonResponse(
+    /// <summary>Answers the account listing, which names each account by the address and the display name its record holds.</summary>
+    private static HttpResponseMessage AccountsResponse(params (Guid User, string EmailAddress)[] accounts) => JsonResponse(
         $$"""
         {"accounts":[{{string.Join(",", accounts.Select(static account =>
-            $$"""{"id":"{{Guid.NewGuid()}}","version":1,"users":["{{account.User}}"],"declaration":{{JsonSerializer.Serialize(account.Declaration)}}}"""))}}]}
+            $$"""{"id":"{{Guid.NewGuid()}}","version":1,"users":["{{account.User}}"],"emailAddress":{{JsonSerializer.Serialize(account.EmailAddress)}},"displayName":"Local mailbox"}"""))}}],"truncated":false}
         """);
 
     private sealed class RecordingHandler(params HttpResponseMessage[] responses) : HttpMessageHandler

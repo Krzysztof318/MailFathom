@@ -4852,7 +4852,7 @@
         "properties": {
           "accounts": {
             "items": {
-              "$ref": "#/components/schemas/MailAccountResponse"
+              "$ref": "#/components/schemas/MailAccountSummaryResponse"
             },
             "type": "array"
           },
@@ -4957,6 +4957,49 @@
         "required": [
           "version",
           "account"
+        ],
+        "type": "object"
+      },
+      "MailAccountSummaryResponse": {
+        "properties": {
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "emailAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "users": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "users",
+          "emailAddress",
+          "displayName"
         ],
         "type": "object"
       },
