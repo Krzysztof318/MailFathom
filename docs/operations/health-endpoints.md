@@ -155,7 +155,7 @@ the response carries no reason and the message names the configuration key rathe
 backend, stored messages through it, and then lost the configuration keeps every one of those rows intact and
 unreadable — and nothing else notices, because the mailbox, the timeline, and the metadata all answer from the database.
 So where `ContentStorage` names no endpoint at all, an `object-backed-content` check joins the readiness probe instead,
-asks the four content tables on each scrape whether any row names the object backend, and reports **unhealthy** when one
+asks the four content tables and the stored files on each scrape whether any row names the object backend, and reports **unhealthy** when one
 does. The two are never both registered: where an endpoint is named, the check above already asks the sharper question,
 about the endpoint rather than about the configuration.
 

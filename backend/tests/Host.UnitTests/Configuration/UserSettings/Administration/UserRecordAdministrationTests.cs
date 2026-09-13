@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.StoredFiles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Failures;
@@ -75,6 +76,124 @@ public sealed class UserRecordAdministrationTests
 
         // Assert
         Assert.DoesNotContain("/run/secrets/primary-password", reading!.Json, StringComparison.Ordinal);
+    }
+
+    /// <summary>A link to somebody else's file would serve their octets as this user's picture, and only the database can say whose a file is.</summary>
+    [Fact]
+    public async Task ApplyOwnRecordAsync_ARecordLinkingAFileThatIsNotTheUsers_IsRefusedAndNothingIsCommitted()
+    {
+        // Arrange
+        var foreign = Guid.Parse("0197a3c0-0000-7000-8000-00000000f00d");
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 3);
+        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, StoredFileId.Create(foreign), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        // Act
+        var outcome = await harness.Records.ApplyOwnRecordAsync(
+            $$"""{"Language":"English","Portrait":"{{foreign:D}}"}""",
+            expectedVersion: 3,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains("Portrait", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        await harness.Store.DidNotReceive().CommitAsync(
+            Arg.Any<MailUserId>(),
+            Arg.Any<string>(),
+            Arg.Any<long>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ApplyOwnRecordAsync_ARecordLinkingAFileTheUserHolds_IsCommitted()
+    {
+        // Arrange
+        var own = Guid.Parse("0197a3c0-0000-7000-8000-000000000001");
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 3);
+        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, StoredFileId.Create(own), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        // Act
+        var outcome = await harness.Records.ApplyOwnRecordAsync(
+            $$"""{"Language":"English","Portrait":"{{own:D}}"}""",
+            expectedVersion: 3,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+    }
+
+    /// <summary>What the use case removes afterwards is the file the link displaced, so the relink has to name it.</summary>
+    [Fact]
+    public async Task RelinkOwnPortraitAsync_ARecordLinkingAnEarlierPortrait_LinksTheNewFileAndNamesTheOneItDisplaced()
+    {
+        // Arrange
+        var earlier = StoredFileId.Create(Guid.Parse("0197a3c0-0000-7000-8000-000000000001"));
+        var written = StoredFileId.Create(Guid.Parse("0197a3c0-0000-7000-8000-000000000002"));
+        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(SyntheticMailUser.Deployment, $$"""{"Language":"English","Portrait":"{{earlier}}"}""", version: 5);
+        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, written, Arg.Any<CancellationToken>()).Returns(true);
+
+        // Act
+        var relinked = await harness.Records.RelinkOwnPortraitAsync(written, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(new PortraitRelinking(UserHeld: true, Replaced: earlier), relinked);
+        await harness.Store.Received(1).CommitAsync(
+            SyntheticMailUser.Deployment,
+            Arg.Is<string>(json => json!.Contains(written.ToString(), StringComparison.Ordinal)),
+            5,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A record committed before a language was required still takes a portrait, because the link is all that changes.</summary>
+    [Fact]
+    public async Task RelinkOwnPortraitAsync_ARecordHeldFromBeforeALanguageWasRequired_IsStillLinked()
+    {
+        // Arrange
+        var written = StoredFileId.Create(Guid.Parse("0197a3c0-0000-7000-8000-000000000002"));
+        var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(SyntheticMailUser.Deployment, "{}", version: 1);
+        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, written, Arg.Any<CancellationToken>()).Returns(true);
+
+        // Act
+        var relinked = await harness.Records.RelinkOwnPortraitAsync(written, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(new PortraitRelinking(UserHeld: true, Replaced: null), relinked);
+    }
+
+    /// <summary>The relink is an entry point of its own, so it holds the grant itself rather than trusting whoever called it to have checked.</summary>
+    [Fact]
+    public async Task RelinkOwnPortraitAsync_ACallerNotGrantedTheirOwnMail_IsRefusedBeforeTheRecordIsRead()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => harness.Records.RelinkOwnPortraitAsync(null, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+        await harness.Documents.DidNotReceive().ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Whose record is rewritten is the caller's to say only by being that user, so a caller acting for nobody rewrites nothing.</summary>
+    [Fact]
+    public async Task RelinkOwnPortraitAsync_ACallerActingForNoUser_IsRefusedBeforeTheRecordIsRead()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.MailRead);
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => harness.Records.RelinkOwnPortraitAsync(null, TestContext.Current.CancellationToken));
+
+        // Assert
+        await harness.Documents.DidNotReceive().ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -974,10 +1093,14 @@ public sealed class UserRecordAdministrationTests
                     new FakeTimeProvider(Today),
                     Options.Create(scanning ?? new SensitiveContentOptions())),
                 SecretValidation.OverRegisteredSchemes(),
-                this.ServedUsers);
+                this.ServedUsers,
+                this.Files);
         }
 
         internal UserRecordAdministration Records { get; }
+
+        /// <summary>Gets the stored files, which hold nothing of anybody's until a test says otherwise.</summary>
+        internal IStoredFileStore Files { get; } = Substitute.For<IStoredFileStore>();
 
         internal IUserSettingsDocumentReader Documents { get; }
 

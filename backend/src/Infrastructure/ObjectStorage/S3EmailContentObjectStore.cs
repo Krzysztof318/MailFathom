@@ -297,6 +297,7 @@ internal sealed class S3EmailContentObjectStore : IEmailContentObjectStore
         EmailContentKind.OutgoingMessage => "outgoing",
         EmailContentKind.RecurringSendDraft => "recurring-send-drafts",
         EmailContentKind.MailDraft => "mail-drafts",
+        EmailContentKind.StoredFile => "stored-files",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "The payload kind names no group of keys."),
     };
 }

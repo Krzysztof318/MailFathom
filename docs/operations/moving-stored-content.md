@@ -32,7 +32,7 @@ there until somebody says otherwise.
 The deployment carries the copy in bounded background passes, one per `ContentStorage:Move:Interval` however many
 replicas it runs — [which replica carries the move](#which-replica-carries-the-move) says how. A pass walks the
 four tables that hold raw MIME in turn — incoming messages, outgoing messages, drafts, and the drafts a repeated send is
-composed from — and for each payload it reaches:
+composed from — and then the files user records link to, such as portraits, and for each payload it reaches:
 
 1. **Reads the stored bytes** under the same process-wide raw-MIME budget synchronization reads under, so the move waits
    behind ordinary work rather than holding memory beside it.

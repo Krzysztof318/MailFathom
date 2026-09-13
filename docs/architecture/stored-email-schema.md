@@ -291,26 +291,27 @@ and then collide on the key.
 **Erasing a user takes it with the cascade**, like the contact book and unlike the tables the erasure names by hand:
 it keys onto the user row and records no mail account, so nothing has to know this table exists.
 
-## The picture a person is drawn by
+## Files a user record links to
 
-`user_portraits` holds one row per user, carrying the picture the client draws them by on
-[the portrait routes](../operations/client-endpoint.md#the-portrait-routes). It sits beside the preferences document
-rather than inside one for the reason that document is not a settings service: a megabyte of image octets is not a
-small closed document, and reading a switch should not carry a photograph.
+`stored_files` holds binary files a user supplied and a record links to rather than holds — today the picture the
+client draws them by on [the portrait routes](../operations/client-endpoint.md#the-portrait-routes). The user record
+carries the link as `Portrait`, the file's identifier; the octets are held the way a mail payload's are, so a megabyte
+of image never rides along with a read of the record.
 
-| Column of `user_portraits` | What it records |
+| Column of `stored_files` | What it records |
 |---|---|
-| `UserId` | The user whose picture this is, and the primary key. It is also the foreign key onto `settings_accounts` with `ON DELETE CASCADE`, for the reason `client_preferences` keys the same way: one person has one picture and nothing else identifies it |
-| `Content` | The octets the person supplied, unchanged, as `bytea`. Nothing resizes, crops, re-encodes, or strips metadata from them |
-| `CreatedAt`, `UpdatedAt` | When the person first supplied a picture, and when they last replaced it — which is the first instant until they do |
+| `Id` | The identifier the deployment minted when the file was written, and the primary key. It is what the record's link names |
+| `UserId` | The user the file belongs to: the foreign key onto `settings_accounts` with `ON DELETE CASCADE`. Every read and removal names it, so a file of somebody else's reads as absent, and a record write naming a file this column does not assign to that user is refused |
+| `MediaType` | The media type the file is served under, which the write proved from the octets' signature before the row existed |
+| `ByteLength`, `Sha256Hash` | The length and SHA-256 digest of the octets |
+| `Backend`, `Content`, `ObjectLocator`, `ObjectVerifiedAt` | Where the octets are held, under the same check constraint and the same partial unique index on the locator as every content table: in `Content` when the database holds them, in the object `ObjectLocator` names when the object backend does. The move of stored content carries a file like a mail payload, and a release frees its retained copy the same way |
+| `CreatedAt` | When the file was written, which the sweep's age floor is measured from |
 
-**What kind of image it is, is not stored.** It is read from the octets themselves wherever it is needed, so a stored
-media type cannot come to disagree with what is stored under it — and the write had already proved the kind, from the
-signature the format opens with, before the row existed.
-
-**The write is the same one statement `client_preferences` is written by**, with the same guarantees and for the same
-reasons: last write wins, a user this deployment no longer holds affects no row, and two devices arriving at once
-cannot both read nothing and then collide on the key. Erasing a user takes the picture with the cascade.
+**A file is written once and removed, never rewritten.** Replacing a portrait writes a new file, links it, and then
+removes the file it displaced, so a failure between any two steps leaves at most a file nothing links to. A sweep
+removes those once they are an hour old, at most a hundred a run, on whichever replica holds its lease; a file its
+owner's record links to is left alone however it was found. Erasing a user reads the object keys of their files
+before the cascade takes the rows, so the objects go with them.
 
 ## What happened while nobody was looking
 

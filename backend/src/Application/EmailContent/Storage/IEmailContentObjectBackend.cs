@@ -29,7 +29,7 @@ namespace MailFathom.Application.EmailContent.Storage;
 public interface IEmailContentObjectBackend
 {
     /// <summary>Writes one payload under a key minted for this write, and answers with where it went.</summary>
-    /// <param name="kind">Which of the four payload kinds is being written, which reaches the key as a segment.</param>
+    /// <param name="kind">Which of the five payload kinds is being written, which reaches the key as a segment.</param>
     /// <param name="rawMime">The raw RFC 822 bytes.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The placement, naming the whole key and what was measured over the payload.</returns>

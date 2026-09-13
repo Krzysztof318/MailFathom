@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Access;
 using MailFathom.Application.Configuration;
+using MailFathom.Application.StoredFiles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Administration;
@@ -52,8 +53,12 @@ internal sealed class UserRecordAdministration(
     IUserSettingsDocumentWriter store,
     UserAccountDocumentBinder binder,
     SecretConfigurationValidator secrets,
-    ServedMailUsers servedUsers)
+    ServedMailUsers servedUsers,
+    IStoredFileStore files)
 {
+    /// <summary>How many times a portrait link is composed again over a record another write moved underneath it.</summary>
+    private const int MaximumRelinkAttempts = 3;
+
     /// <summary>What a refused save is sent to, which is the act that states a mailbox and its credential afresh.</summary>
     /// <remarks>
     /// Not a narrower change, because a user's record has none: every setting of a mail account sits inside that
@@ -380,7 +385,86 @@ internal sealed class UserRecordAdministration(
                 MailFathomErrorCode.ConfigurationCandidateInvalid,
                 opened.Record.Version,
                 [unmatched])
-            : await this.JudgeAndCommitAsync(user, opened.Record, candidate, UserRecordAuthority.User, cancellationToken);
+            : await this.JudgeAndCommitAsync(
+                user,
+                opened.Record,
+                candidate,
+                UserRecordAuthority.User,
+                UserRecordArrival.BeingWritten,
+                cancellationToken);
+    }
+
+    /// <summary>Points the signed-in user's record at one of their stored files as the portrait they are drawn by, or at none.</summary>
+    /// <param name="portrait">The file to link, or <see langword="null" /> to link none.</param>
+    /// <param name="cancellationToken">Cancels the reads and the commit.</param>
+    /// <returns>Whether the record was held, and the file the link displaced, if any.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the record refused the link for a reason a retry does not settle.</exception>
+    /// <remarks>
+    /// <para>
+    /// Asks for the grant the portrait use case is published under and takes the user from the caller, as every other
+    /// entry point here does, so nothing that resolves this service can rewrite another user's record through it.
+    /// </para>
+    /// <para>
+    /// Composed over whatever version is in force rather than over one a caller read, because nobody authored this change
+    /// against a version: a person uploading a picture has no record buffer open. A write that moved the record between
+    /// the read and the commit is therefore composed over again rather than reported, a bounded number of times.
+    /// </para>
+    /// <para>
+    /// Judged as a record already held rather than as one being written. The link is the only thing that changes, and a
+    /// record committed before a rule a write is held to existed must not stop a person replacing their picture.
+    /// </para>
+    /// </remarks>
+    internal async Task<PortraitRelinking> RelinkOwnPortraitAsync(
+        StoredFileId? portrait,
+        CancellationToken cancellationToken)
+    {
+        authorization.RequirePermission(MailFathomPermission.MailRead);
+
+        var user = authorization.RequireUser();
+
+        for (var attempt = 1; ; attempt++)
+        {
+            if (await documents.ReadAsync(user, cancellationToken) is not { } inForce)
+            {
+                return PortraitRelinking.NoSuchUser;
+            }
+
+            var displaced = OwnPortraitLinks.PortraitOf(inForce.Json);
+
+            if (displaced == portrait)
+            {
+                return new PortraitRelinking(UserHeld: true, Replaced: null);
+            }
+
+            var edit = portrait is { } linked
+                ? ConfigurationEdit.SetTo(nameof(UserAccountOptions.Portrait), linked.ToString())
+                : ConfigurationEdit.Removing(nameof(UserAccountOptions.Portrait));
+
+            var outcome = await this.JudgeAndCommitAsync(
+                user,
+                inForce,
+                SettingsDocumentPatch.Apply(inForce.Json, [edit]),
+                UserRecordAuthority.User,
+                UserRecordArrival.AlreadyHeld,
+                cancellationToken);
+
+            if (outcome is null)
+            {
+                return PortraitRelinking.NoSuchUser;
+            }
+
+            if (outcome.IsSettled)
+            {
+                return new PortraitRelinking(UserHeld: true, Replaced: displaced);
+            }
+
+            if (outcome.Refusal != MailFathomErrorCode.ConfigurationVersionSuperseded || attempt == MaximumRelinkAttempts)
+            {
+                throw new InvalidOperationException(
+                    $"The user record refused the portrait link: {string.Join(" ", outcome.Messages)}");
+            }
+        }
     }
 
     /// <summary>Reads one user's record, redacted.</summary>
@@ -462,6 +546,7 @@ internal sealed class UserRecordAdministration(
             inForce,
             SettingsDocumentPatch.Apply(inForce.Json, edits),
             authority,
+            UserRecordArrival.BeingWritten,
             cancellationToken);
     }
 
@@ -499,7 +584,13 @@ internal sealed class UserRecordAdministration(
                 [$"The mail account is not a JSON object of that account's settings, so nothing was written: {refused.Message}"]);
         }
 
-        return await this.JudgeAndCommitAsync(user, opened.Record, candidate, authority, cancellationToken);
+        return await this.JudgeAndCommitAsync(
+                user,
+                opened.Record,
+                candidate,
+                authority,
+                UserRecordArrival.BeingWritten,
+                cancellationToken);
     }
 
     /// <summary>Withdraws one mail account, refusing an identifier the record does not declare.</summary>
@@ -543,7 +634,13 @@ internal sealed class UserRecordAdministration(
                 MailFathomErrorCode.ConfigurationCandidateInvalid,
                 opened.Record.Version,
                 [$"This user declares no mail account '{accountId}'. Read their record to see the identifiers it holds."])
-            : await this.JudgeAndCommitAsync(user, opened.Record, candidate, authority, cancellationToken);
+            : await this.JudgeAndCommitAsync(
+                user,
+                opened.Record,
+                candidate,
+                authority,
+                UserRecordArrival.BeingWritten,
+                cancellationToken);
     }
 
     /// <summary>Reads the record a change is composed over, and refuses a change authored over a version no longer in force.</summary>
@@ -584,9 +681,10 @@ internal sealed class UserRecordAdministration(
         UserSettingsDocument inForce,
         string candidateJson,
         UserRecordAuthority authority,
+        UserRecordArrival arrival,
         CancellationToken cancellationToken)
     {
-        var binding = binder.Bind(candidateJson, UserRecordArrival.BeingWritten);
+        var binding = binder.Bind(candidateJson, arrival);
 
         if (binding.User is not { } bound)
         {
@@ -603,6 +701,20 @@ internal sealed class UserRecordAdministration(
                 MailFathomErrorCode.ConfigurationCandidateInvalid,
                 inForce.Version,
                 introduced);
+        }
+
+        // Asked of every write whoever makes it, because only the database can say whose a file is: a link to somebody
+        // else's file would serve their octets as this user's picture.
+        if (bound.Portrait is { } portraitLink
+            && (portraitLink == Guid.Empty
+                || !await files.HoldsAsync(user, StoredFileId.Create(portraitLink), cancellationToken)))
+        {
+            return UserRecordWriteOutcome.Refused(
+                MailFathomErrorCode.ConfigurationCandidateInvalid,
+                inForce.Version,
+                [
+                    $"{nameof(UserAccountOptions.Portrait)} names '{portraitLink:D}', which is not a stored file of this user's, so nothing was written. A portrait is linked by uploading one, never by naming a file.",
+                ]);
         }
 
         // Resolved here rather than left to the next start, which refuses the whole deployment over it: a reference

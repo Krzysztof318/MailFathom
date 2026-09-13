@@ -43,7 +43,7 @@ public sealed record StoredContentMoveRun
     /// <summary>Gets the payload the last pass reached inside that kind, or <see langword="null" /> at the start of one.</summary>
     /// <remarks>
     /// The identity of the owning row rather than an object key, because the walk is ordered by that identity: it is
-    /// total, stable, and already the primary key of every one of the four content tables.
+    /// total, stable, and already the primary key of every one of the five content tables.
     /// </remarks>
     public Guid? ResumeAfter { get; init; }
 

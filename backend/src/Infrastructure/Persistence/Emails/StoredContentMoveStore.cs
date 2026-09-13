@@ -9,12 +9,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Emails;
 
-/// <summary>The four content tables as the move reads and rewrites them: what is still here, what one row holds, and where it points.</summary>
+/// <summary>The five content tables as the move reads and rewrites them: what is still here, what one row holds, and where it points.</summary>
 /// <remarks>
 /// <para>
-/// The four payload kinds are four tables with four key columns and two names for the payload column, and nothing above
-/// this type knows any of that. What crosses the port is a kind, an identity, a length, and a digest, which is the same
-/// shape for all four — so the differences are four projections here rather than four use cases up there.
+/// The five payload kinds are five tables with five key columns and three names for the payload column, and nothing
+/// above this type knows any of that. What crosses the port is a kind, an identity, a length, and a digest, which is the
+/// same shape for all five — so the differences are five projections here rather than five use cases up there.
 /// </para>
 /// <para>
 /// No query here is ordered by anything but the primary key, and none of them is indexed for the backend they filter on.
@@ -93,6 +93,11 @@ internal sealed class StoredContentMoveStore(MailFathomDbContext dbContext) : IS
                     && content.Backend == ContentStorageBackend.Database)
                 .Select(content => content.RawMime)
                 .SingleOrDefaultAsync(cancellationToken),
+            EmailContentKind.StoredFile => await dbContext.StoredFiles
+                .AsNoTracking()
+                .Where(file => file.Id == payloadId && file.Backend == ContentStorageBackend.Database)
+                .Select(file => file.Content)
+                .SingleOrDefaultAsync(cancellationToken),
             _ => throw UnknownKind(kind),
         };
 
@@ -160,6 +165,14 @@ internal sealed class StoredContentMoveStore(MailFathomDbContext dbContext) : IS
                         .SetProperty(content => content.ObjectLocator, objectLocator)
                         .SetProperty(content => content.ObjectVerifiedAt, verifiedAt),
                     cancellationToken),
+            EmailContentKind.StoredFile => await dbContext.StoredFiles
+                .Where(file => file.Id == payloadId && file.Backend == ContentStorageBackend.Database)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(file => file.Backend, ContentStorageBackend.ObjectStorage)
+                        .SetProperty(file => file.ObjectLocator, objectLocator)
+                        .SetProperty(file => file.ObjectVerifiedAt, verifiedAt),
+                    cancellationToken),
             _ => throw UnknownKind(kind),
         };
 
@@ -192,7 +205,7 @@ internal sealed class StoredContentMoveStore(MailFathomDbContext dbContext) : IS
 
     /// <summary>Reads one payload kind's database-backed rows in the one shape the move works in.</summary>
     /// <remarks>
-    /// The projection is what lets the walk, the batch, and the backlog be written once over four tables whose key
+    /// The projection is what lets the walk, the batch, and the backlog be written once over five tables whose key
     /// columns and payload columns are named differently. It carries no payload, because every caller of it wants to
     /// know which rows are there rather than what they hold.
     /// </remarks>
@@ -234,10 +247,19 @@ internal sealed class StoredContentMoveStore(MailFathomDbContext dbContext) : IS
                 ByteLength = content.MimeByteLength,
                 Sha256Hash = content.Sha256Hash,
             }),
+        EmailContentKind.StoredFile => dbContext.StoredFiles
+            .AsNoTracking()
+            .Where(file => file.Backend == ContentStorageBackend.Database)
+            .Select(file => new ContentPayloadRow
+            {
+                PayloadId = file.Id,
+                ByteLength = file.ByteLength,
+                Sha256Hash = file.Sha256Hash,
+            }),
         _ => throw UnknownKind(kind),
     };
 
-    /// <summary>One content row as every one of the four tables can answer it, with the payload left where it is.</summary>
+    /// <summary>One content row as every one of the five tables can answer it, with the payload left where it is.</summary>
     private sealed class ContentPayloadRow
     {
         public Guid PayloadId { get; init; }

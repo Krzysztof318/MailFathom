@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Portraits;
+using MailFathom.Application.StoredFiles;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.TestSupport;
@@ -10,7 +11,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
-using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Api;
@@ -36,7 +36,7 @@ public sealed class ClientPortraitEndpointTests
 
         // Act
         var result = await ClientPortraitEndpoint.ReadAsync(
-            SignedIn(StoreHolding(Png)),
+            SignedIn(HeldPortrait.Holding(Png)),
             context,
             TestContext.Current.CancellationToken);
 
@@ -51,14 +51,9 @@ public sealed class ClientPortraitEndpointTests
     [Fact]
     public async Task ReadAsync_APersonWhoSuppliedNone_AnswersThatThereIsNoneRatherThanRefusing()
     {
-        // Arrange
-        var store = Substitute.For<IUserPortraitStore>();
-        store.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
-            .Returns((ReadOnlyMemory<byte>?)null);
-
         // Act
         var result = await ClientPortraitEndpoint.ReadAsync(
-            SignedIn(store),
+            SignedIn(new HeldPortrait()),
             Requesting(),
             TestContext.Current.CancellationToken);
 
@@ -75,7 +70,7 @@ public sealed class ClientPortraitEndpointTests
 
         // Act
         await ClientPortraitEndpoint.ReadAsync(
-            SignedIn(StoreHolding(Png)),
+            SignedIn(HeldPortrait.Holding(Png)),
             context,
             TestContext.Current.CancellationToken);
 
@@ -100,7 +95,7 @@ public sealed class ClientPortraitEndpointTests
 
         // Act
         await ClientPortraitEndpoint.ReadAsync(
-            SignedIn(StoreHolding([.. Png, .. "<script>alert(1)</script>"u8])),
+            SignedIn(HeldPortrait.Holding([.. Png, .. "<script>alert(1)</script>"u8])),
             context,
             TestContext.Current.CancellationToken);
 
@@ -120,7 +115,7 @@ public sealed class ClientPortraitEndpointTests
 
         var first = Requesting(services);
         var served = await ClientPortraitEndpoint.ReadAsync(
-            SignedIn(StoreHolding(Png)),
+            SignedIn(HeldPortrait.Holding(Png)),
             first,
             TestContext.Current.CancellationToken);
 
@@ -131,7 +126,7 @@ public sealed class ClientPortraitEndpointTests
 
         // Act
         var repeated = await ClientPortraitEndpoint.ReadAsync(
-            SignedIn(StoreHolding(Png)),
+            SignedIn(HeldPortrait.Holding(Png)),
             again,
             TestContext.Current.CancellationToken);
 
@@ -149,12 +144,12 @@ public sealed class ClientPortraitEndpointTests
     {
         // Act
         var one = await ClientPortraitEndpoint.ReadAsync(
-            SignedIn(StoreHolding(Png)),
+            SignedIn(HeldPortrait.Holding(Png)),
             Requesting(),
             TestContext.Current.CancellationToken);
 
         var other = await ClientPortraitEndpoint.ReadAsync(
-            SignedIn(StoreHolding(Jpeg)),
+            SignedIn(HeldPortrait.Holding(Jpeg)),
             Requesting(),
             TestContext.Current.CancellationToken);
 
@@ -169,23 +164,21 @@ public sealed class ClientPortraitEndpointTests
     {
         // Arrange
         var supplied = kind == "image/png" ? Png : Jpeg;
-        var store = Substitute.For<IUserPortraitStore>();
-        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<UserPortrait>(), Arg.Any<CancellationToken>())
-            .Returns(true);
+        var held = new HeldPortrait();
 
         // Act
         var result = await ClientPortraitEndpoint.ReplaceAsync(
-            SignedIn(store),
+            SignedIn(held),
             Uploading(supplied),
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.IsType<NoContent>(result.Result);
-        await store.Received(1).SaveAsync(
-            SyntheticMailUser.Deployment,
-            Arg.Is<UserPortrait>(portrait =>
-                portrait!.Type.MediaType == kind && portrait.Content.ToArray().SequenceEqual(supplied)),
-            Arg.Any<CancellationToken>());
+
+        var linked = Assert.Single(held.Files);
+        Assert.Equal(kind, linked.MediaType);
+        Assert.Equal(supplied, linked.Content);
+        Assert.Equal(SyntheticMailUser.Deployment, linked.Owner);
     }
 
     /// <summary>
@@ -196,13 +189,13 @@ public sealed class ClientPortraitEndpointTests
     public async Task ReplaceAsync_OctetsThatAreNoImageDeclaredAsOne_AreRefusedNamingTheKindsOnOffer()
     {
         // Arrange
-        var store = Substitute.For<IUserPortraitStore>();
+        var held = new HeldPortrait();
         var upload = Uploading("<script>alert(1)</script>"u8.ToArray());
         upload.Request.ContentType = "image/png";
 
         // Act
         var result = await ClientPortraitEndpoint.ReplaceAsync(
-            SignedIn(store),
+            SignedIn(held),
             upload,
             TestContext.Current.CancellationToken);
 
@@ -212,9 +205,7 @@ public sealed class ClientPortraitEndpointTests
         Assert.Equal(StatusCodes.Status415UnsupportedMediaType, refusal.StatusCode);
         Assert.Contains("image/jpeg", refusal.ProblemDetails.Detail!, StringComparison.Ordinal);
         Assert.Contains("image/png", refusal.ProblemDetails.Detail!, StringComparison.Ordinal);
-
-        await store.DidNotReceive()
-            .SaveAsync(Arg.Any<MailUserId>(), Arg.Any<UserPortrait>(), Arg.Any<CancellationToken>());
+        Assert.Empty(held.Files);
     }
 
     /// <summary>The transport refuses the body and says nothing about why, so the one thing a person needs from it — the bound they went over — is stated here.</summary>
@@ -222,13 +213,13 @@ public sealed class ClientPortraitEndpointTests
     public async Task ReplaceAsync_AnUploadOverTheBound_IsRefusedNamingTheLimitItHit()
     {
         // Arrange
-        var store = Substitute.For<IUserPortraitStore>();
+        var held = new HeldPortrait();
         var upload = Requesting();
         upload.Request.Body = new RefusedBodyStream();
 
         // Act
         var result = await ClientPortraitEndpoint.ReplaceAsync(
-            SignedIn(store),
+            SignedIn(held),
             upload,
             TestContext.Current.CancellationToken);
 
@@ -237,20 +228,18 @@ public sealed class ClientPortraitEndpointTests
 
         Assert.Equal(StatusCodes.Status413PayloadTooLarge, refusal.StatusCode);
         Assert.Contains("1 MB", refusal.ProblemDetails.Detail!, StringComparison.Ordinal);
-
-        await store.DidNotReceive()
-            .SaveAsync(Arg.Any<MailUserId>(), Arg.Any<UserPortrait>(), Arg.Any<CancellationToken>());
+        Assert.Empty(held.Files);
     }
 
     [Fact]
     public async Task ReplaceAsync_ARequestCarryingNoBodyAtAll_IsRefused()
     {
         // Arrange
-        var store = Substitute.For<IUserPortraitStore>();
+        var held = new HeldPortrait();
 
         // Act
         var result = await ClientPortraitEndpoint.ReplaceAsync(
-            SignedIn(store),
+            SignedIn(held),
             Uploading([]),
             TestContext.Current.CancellationToken);
 
@@ -258,23 +247,16 @@ public sealed class ClientPortraitEndpointTests
         var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
 
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
-
-        await store.DidNotReceive()
-            .SaveAsync(Arg.Any<MailUserId>(), Arg.Any<UserPortrait>(), Arg.Any<CancellationToken>());
+        Assert.Empty(held.Files);
     }
 
     /// <summary>The caller is a person whose row was erased under a credential that has not yet been withdrawn, and the answer to them is that there is nothing here of theirs.</summary>
     [Fact]
     public async Task ReplaceAsync_ADeploymentHoldingNoRecordForTheCaller_ReportsThatRatherThanStoring()
     {
-        // Arrange
-        var store = Substitute.For<IUserPortraitStore>();
-        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<UserPortrait>(), Arg.Any<CancellationToken>())
-            .Returns(false);
-
         // Act
         var result = await ClientPortraitEndpoint.ReplaceAsync(
-            SignedIn(store),
+            SignedIn(new HeldPortrait { UserHeld = false }),
             Uploading(Png),
             TestContext.Current.CancellationToken);
 
@@ -288,29 +270,26 @@ public sealed class ClientPortraitEndpointTests
     public async Task RemoveAsync_APersonTakingTheirPictureDown_RemovesItAndAnswersThatThereIsNone()
     {
         // Arrange
-        var store = Substitute.For<IUserPortraitStore>();
+        var held = HeldPortrait.Holding(Png);
 
         // Act
         var result = await ClientPortraitEndpoint.RemoveAsync(
-            SignedIn(store),
+            SignedIn(held),
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(StatusCodes.Status204NoContent, result.StatusCode);
-        await store.Received(1).RemoveAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>());
+        Assert.Empty(held.Files);
+        Assert.Null(held.Portrait);
     }
 
     /// <summary>Removing what is not there leaves the caller with no portrait, which is the whole of what they asked for.</summary>
     [Fact]
     public async Task RemoveAsync_APersonWhoSuppliedNoPicture_AnswersTheSameWay()
     {
-        // Arrange
-        var store = Substitute.For<IUserPortraitStore>();
-        store.RemoveAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
-
         // Act
         var result = await ClientPortraitEndpoint.RemoveAsync(
-            SignedIn(store),
+            SignedIn(new HeldPortrait()),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -319,15 +298,6 @@ public sealed class ClientPortraitEndpointTests
 
     private static string TagOf(IResult served) =>
         Assert.IsType<FileContentHttpResult>(served).EntityTag!.Tag.ToString();
-
-    private static IUserPortraitStore StoreHolding(byte[] content)
-    {
-        var store = Substitute.For<IUserPortraitStore>();
-        store.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
-            .Returns(new ReadOnlyMemory<byte>(content));
-
-        return store;
-    }
 
     private static DefaultHttpContext Requesting(IServiceProvider? services = null)
     {
@@ -351,9 +321,86 @@ public sealed class ClientPortraitEndpointTests
         return context;
     }
 
-    private static OwnPortrait SignedIn(IUserPortraitStore store) => new(
+    private static OwnPortrait SignedIn(HeldPortrait held) => new(
         AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment, MailFathomPermission.MailRead),
-        store);
+        held,
+        held);
+
+    /// <summary>One user record and the stored files it may link to, kept in memory so a route test states what a deployment holds.</summary>
+    private sealed class HeldPortrait : IStoredFileStore, IUserRecordFileLinks
+    {
+        internal bool UserHeld { get; init; } = true;
+
+        internal List<HeldFile> Files { get; } = [];
+
+        internal StoredFileId? Portrait { get; private set; }
+
+        public static HeldPortrait Holding(byte[] content)
+        {
+            var held = new HeldPortrait();
+            var file = StoredFileId.Create(Guid.NewGuid());
+
+            held.Files.Add(new HeldFile(file, SyntheticMailUser.Deployment, "application/octet-stream", content));
+            held.Portrait = file;
+
+            return held;
+        }
+
+        public Task<StoredFileId?> WriteAsync(
+            MailUserId owner,
+            string mediaType,
+            ReadOnlyMemory<byte> content,
+            CancellationToken cancellationToken)
+        {
+            if (!this.UserHeld)
+            {
+                return Task.FromResult<StoredFileId?>(null);
+            }
+
+            var file = StoredFileId.Create(Guid.NewGuid());
+            this.Files.Add(new HeldFile(file, owner, mediaType, content.ToArray()));
+
+            return Task.FromResult<StoredFileId?>(file);
+        }
+
+        public Task<ReadOnlyMemory<byte>?> ReadAsync(MailUserId owner, StoredFileId file, CancellationToken cancellationToken) =>
+            Task.FromResult(this.Files.FirstOrDefault(held => held.File == file && held.Owner == owner) is { } found
+                ? (ReadOnlyMemory<byte>?)found.Content
+                : null);
+
+        public Task<bool> HoldsAsync(MailUserId owner, StoredFileId file, CancellationToken cancellationToken) =>
+            Task.FromResult(this.Files.Exists(held => held.File == file && held.Owner == owner));
+
+        public Task RemoveAsync(MailUserId owner, StoredFileId file, CancellationToken cancellationToken)
+        {
+            this.Files.RemoveAll(held => held.File == file && held.Owner == owner);
+
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<HeldStoredFile>> FindUnmentionedAsync(
+            DateTimeOffset writtenBefore,
+            int maxFiles,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlySet<StoredFileId>> ReadLinkedFilesAsync(MailUserId user, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<StoredFileId?> FindPortraitAsync(MailUserId user, CancellationToken cancellationToken) =>
+            Task.FromResult(this.Portrait);
+
+        public Task<PortraitRelinking> RelinkOwnPortraitAsync(StoredFileId? portrait, CancellationToken cancellationToken)
+        {
+            var displaced = this.Portrait;
+            this.Portrait = portrait;
+
+            return Task.FromResult(new PortraitRelinking(this.UserHeld, displaced));
+        }
+    }
+
+    /// <summary>One stored file as the in-memory deployment holds it.</summary>
+    private sealed record HeldFile(StoredFileId File, MailUserId Owner, string MediaType, byte[] Content);
 
     /// <summary>A body the server stops reading because it went past the bound the route published, which is how the transport reports an upload over the limit.</summary>
     private sealed class RefusedBodyStream : Stream

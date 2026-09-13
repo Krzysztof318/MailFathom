@@ -88,6 +88,13 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// </remarks>
     public UserSensitiveContentOptions SensitiveContent { get; } = new();
 
+    /// <summary>Gets or sets the stored file this user is drawn by, or <see langword="null" /> for none.</summary>
+    /// <remarks>
+    /// A link rather than the picture: the octets are a stored file of this user's, and a write naming a file that is
+    /// not theirs is refused where the record is committed, because only the database can say whose a file is.
+    /// </remarks>
+    public Guid? Portrait { get; set; }
+
     /// <summary>Gets the language this record states, or <see langword="null" /> where it states none this build writes in.</summary>
     /// <remarks>
     /// Read only where the record has already been judged, which leaves exactly one way for this to answer

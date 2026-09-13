@@ -96,6 +96,7 @@ using MailFathom.Application.Spam.History;
 using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Spam.Scanning;
 using MailFathom.Application.Spam.Signals;
+using MailFathom.Application.StoredFiles;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -136,7 +137,6 @@ using MailFathom.Infrastructure.Persistence.Enrichment;
 using MailFathom.Infrastructure.Persistence.Jobs;
 using MailFathom.Infrastructure.Persistence.Mutations;
 using MailFathom.Infrastructure.Persistence.Notifications;
-using MailFathom.Infrastructure.Persistence.Portraits;
 using MailFathom.Infrastructure.Persistence.Preferences;
 using MailFathom.Infrastructure.Persistence.ReplyDrafts;
 using MailFathom.Infrastructure.Persistence.Rules;
@@ -145,6 +145,7 @@ using MailFathom.Infrastructure.Persistence.Sessions;
 using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.Infrastructure.Persistence.Signals;
 using MailFathom.Infrastructure.Persistence.Spam;
+using MailFathom.Infrastructure.Persistence.StoredFiles;
 using MailFathom.Infrastructure.Persistence.Synchronization;
 using MailFathom.Infrastructure.Persistence.ThreadStates;
 using MailFathom.Infrastructure.Persistence.Users;
@@ -617,11 +618,12 @@ public static class ServiceCollectionExtensions
         // The caller-facing use case over it, separate from the store for the reason the contact book's two are: it
         // carries the grant a caller has to hold and the user the act is resolved for, and the store carries neither.
         services.AddScoped<OwnClientPreferences>();
-        // The picture a person is drawn by, which hangs off the user row beside that document rather than inside it:
-        // a megabyte of octets is not a small closed document, and a read of a switch should not carry one. Scoped and
-        // registered unconditionally for the same reasons the preferences store is.
-        services.AddScoped<IUserPortraitStore, UserPortraitStore>();
+        // Binary files a user record links to, the portrait first among them. The octets follow ContentStorage like a
+        // mail payload does, so the store takes the same placement port; the link itself is the user record's, which
+        // the host supplies. Scoped and registered unconditionally for the same reasons the preferences store is.
+        services.AddScoped<IStoredFileStore, StoredFileStore>();
         services.AddScoped<OwnPortrait>();
+        services.AddScoped<UnlinkedStoredFileSweep>();
         // Taking a user off the deployment, with everything it recorded for them. Scoped because the whole walk runs
         // in one of the request's own transactions, and separate from the provisioning above because provisioning runs
         // on every start and is idempotent while this runs when a person asked for it and cannot be undone.
@@ -648,7 +650,7 @@ public static class ServiceCollectionExtensions
         // the other replicas are about to add to both, and the one thing a process cannot measure for itself.
         services.AddScoped<IStoredContentClaimStore, StoredContentClaimStore>();
         services.AddScoped<IStoredEmailExtractionBackfillStore, StoredEmailExtractionBackfillStore>();
-        // What the move of already-stored content reads and rewrites: the four content tables as one walk, and the one
+        // What the move of already-stored content reads and rewrites: the five content tables as one walk, and the one
         // row that says what an operator asked for. Registered whatever the selected backend is, because reading how
         // much content the database still holds is an ordinary question of a deployment that moves none of it.
         services.AddScoped<IStoredContentMoveStore, StoredContentMoveStore>();

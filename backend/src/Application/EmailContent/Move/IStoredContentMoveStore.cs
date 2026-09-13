@@ -9,7 +9,7 @@ namespace MailFathom.Application.EmailContent.Move;
 /// <summary>The database side of the move: what is still held here, what one payload holds, and where a moved one now points.</summary>
 /// <remarks>
 /// <para>
-/// One contract rather than three, because the operations describe one restartable walk over the four content tables:
+/// One contract rather than three, because the operations describe one restartable walk over the five content tables:
 /// which payloads come next, what one of them holds, where the row points once the object is verified, and how much is
 /// left. A caller holding only some of them could not make the walk terminate.
 /// </para>

@@ -28,7 +28,7 @@ namespace MailFathom.Application.EmailContent.Storage;
 public interface IEmailContentStore
 {
     /// <summary>Puts one raw MIME payload wherever this deployment writes content next, before any unit of work is open.</summary>
-    /// <param name="kind">Which of the four payload kinds is being placed.</param>
+    /// <param name="kind">Which of the five payload kinds is being placed.</param>
     /// <param name="rawMime">The raw RFC 822 bytes.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>Where the payload was put, and what was measured over it.</returns>

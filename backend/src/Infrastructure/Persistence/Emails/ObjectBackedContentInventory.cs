@@ -8,18 +8,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Emails;
 
-/// <summary>Asks each of the four content tables whether it holds a row naming the object backend.</summary>
+/// <summary>Asks each of the content tables, and the stored files, whether it holds a row naming the object backend.</summary>
 /// <remarks>
 /// <para>
-/// Four reads rather than one union, and short-circuited, because the answer is a presence: a deployment that holds
-/// object-backed mail stops at whichever table holds the first of it, and one that holds none pays for all four.
+/// Five reads rather than one union, and short-circuited, because the answer is a presence: a deployment that holds
+/// object-backed mail stops at whichever table holds the first of it, and one that holds none pays for all five.
 /// </para>
 /// <para>
 /// <b>Each read resolves through a partial index rather than by scanning a table</b>, which is what makes this
 /// affordable on a readiness probe. `ix_&lt;table&gt;_object_backed` is filtered to this backend, so on the deployment
 /// that runs this most — the one that configured no endpoint, where the answer is always no — every one of those
-/// indexes is empty and the four reads together cost nothing proportional to the mail stored. Without the filter the
-/// negative answer would be four sequential scans on every scrape, which is the shape this looked like before the
+/// indexes is empty and the five reads together cost nothing proportional to the mail stored. Without the filter the
+/// negative answer would be five sequential scans on every scrape, which is the shape this looked like before the
 /// index existed.
 /// </para>
 /// </remarks>
@@ -35,5 +35,7 @@ internal sealed class ObjectBackedContentInventory(MailFathomDbContext dbContext
         || await dbContext.MailDraftContents
             .AnyAsync(content => content.Backend == ContentStorageBackend.ObjectStorage, cancellationToken)
         || await dbContext.RecurringSendDrafts
-            .AnyAsync(draft => draft.Backend == ContentStorageBackend.ObjectStorage, cancellationToken);
+            .AnyAsync(draft => draft.Backend == ContentStorageBackend.ObjectStorage, cancellationToken)
+        || await dbContext.StoredFiles
+            .AnyAsync(file => file.Backend == ContentStorageBackend.ObjectStorage, cancellationToken);
 }
