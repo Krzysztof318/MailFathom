@@ -57,7 +57,7 @@ public sealed class ClassifyStoredEmailSpamJobPayloadTests
         [
             nameof(ClassifyStoredEmailSpamJobPayload.UserId),
             nameof(ClassifyStoredEmailSpamJobPayload.AccountId),
-            nameof(ClassifyStoredEmailSpamJobPayload.StoredEmailId),
+            nameof(ClassifyStoredEmailSpamJobPayload.EmailRecordId),
             nameof(ClassifyStoredEmailSpamJobPayload.JobType),
         ];
 
@@ -80,7 +80,7 @@ public sealed class ClassifyStoredEmailSpamJobPayloadTests
     public void ToStoredEmailId_AStoredIdentityThatIsEmpty_IsRefused()
     {
         // Arrange
-        var payload = ClassifyStoredEmailSpamJobPayload.For(Account, Email) with { StoredEmailId = Guid.Empty };
+        var payload = ClassifyStoredEmailSpamJobPayload.For(Account, Email) with { EmailRecordId = Guid.Empty };
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() => payload.ToStoredEmailId());

@@ -88,7 +88,7 @@ public sealed class JobPayloadDocumentTests
 
         // Assert
         Assert.Equal(
-            """{"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","storedEmailId":"0199a0c0-0000-7000-8000-000000000001"}""",
+            """{"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","emailRecordId":"0199a0c0-0000-7000-8000-000000000001"}""",
             document);
         Assert.Equal(StoredEmailPayload, restored);
     }

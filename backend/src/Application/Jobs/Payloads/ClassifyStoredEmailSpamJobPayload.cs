@@ -41,7 +41,8 @@ public sealed record ClassifyStoredEmailSpamJobPayload : IJobPayload
     public required string AccountId { get; init; }
 
     /// <summary>Gets the stored identity of the email to classify.</summary>
-    public required Guid StoredEmailId { get; init; }
+    /// <remarks>Named for the record rather than for the type that wraps it, because a property carrying the type's own name would hide it inside this record and leave the identity rebuilt through a qualified name.</remarks>
+    public required Guid EmailRecordId { get; init; }
 
     /// <inheritdoc />
     [JsonIgnore]
@@ -55,7 +56,7 @@ public sealed record ClassifyStoredEmailSpamJobPayload : IJobPayload
     {
         UserId = account.User.Value,
         AccountId = account.Id.Value,
-        StoredEmailId = email.Value,
+        EmailRecordId = email.Value,
     };
 
     /// <summary>Rebuilds the account identity this payload names.</summary>
@@ -67,5 +68,5 @@ public sealed record ClassifyStoredEmailSpamJobPayload : IJobPayload
     /// <summary>Rebuilds the stored identity this payload names.</summary>
     /// <returns>The email's stored identity.</returns>
     /// <exception cref="ArgumentException">Thrown when the stored value is the empty identifier.</exception>
-    public StoredEmailId ToStoredEmailId() => Domain.Emails.StoredEmailId.Create(this.StoredEmailId);
+    public StoredEmailId ToStoredEmailId() => StoredEmailId.Create(this.EmailRecordId);
 }

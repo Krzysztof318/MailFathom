@@ -37,11 +37,6 @@ internal static class MimeFixtures
     public static RemoteEmailContent Message(params string[] lines) =>
         new(OccurrenceId, Encoding.UTF8.GetBytes(string.Join("\r\n", lines)));
 
-    /// <summary>Turns raw bytes into fetched content, for the cases that are about bytes rather than about headers.</summary>
-    /// <param name="rawMime">The raw payload.</param>
-    /// <returns>The content, carrying a fixed occurrence identity.</returns>
-    public static RemoteEmailContent RawContent(ReadOnlyMemory<byte> rawMime) => new(OccurrenceId, rawMime);
-
     /// <summary>Turns MIME lines into stored content a read renders, recorded as intact.</summary>
     /// <param name="lines">The message's lines, joined with CRLF as a mail transport writes them.</param>
     /// <returns>The stored content, whose recorded length and digest describe the bytes beside them.</returns>

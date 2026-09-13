@@ -1721,7 +1721,7 @@ whose act the arrival was.
 
 That is a decision rather than the absence of one, and
 [ADR 0008](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md)
-records why. The short of it: a stored row means one occurrence the server holds, `UID COPY` really does create a second
+records why. The short of it: a stored row is one stored email in one folder, `UID COPY` really does create a second
 message with its own UID, and a model that made the two one local email could only do so for the copies MailFathom
 itself performed — a copy the user made in their own mail client is joined to no record, and identifying it by
 `Message-ID` or by a digest is the guess the join already refuses.
