@@ -13,7 +13,8 @@ import { linkScript, measuringScript } from './src/messageBody/frameScripts';
 //
 // ADR 0024 calls this policy defence in depth, and that is exactly its reach: the reading pane's safety rests on no
 // string from a message ever becoming markup. What the policy limits is a defect somewhere else in the client — which
-// scripts can run in the page at all, and where anything they read could be sent.
+// scripts can run in the page at all, and which origins the page can call. It does not close every way out: the wide
+// `img-src` and `font-src` below still let a running script name any host as a picture's or a font's address.
 
 /** A policy as its directives, each naming the sources it admits. */
 export type ContentSecurityPolicyDirectives = Readonly<Record<string, string>>;
@@ -59,11 +60,10 @@ export const directivesBothHeadsShare: ContentSecurityPolicyDirectives = {
 /**
  * The web head, whose page is served by the deployment it calls and so reaches that origin and no other.
  *
- * `'self'` is the whole of `connect-src` on purpose, and it is the directive that bounds where anything a script read
- * could be sent. A page a deployment served resolves to that deployment and offers no control for naming another, so
- * nothing this head does legitimately leaves its origin; the one case that asks for an address is a page whose own
- * origin the client could not address at all, and a page there that sent a credential to a second host is the
- * exfiltration this directive exists to refuse.
+ * `'self'` is the whole of `connect-src` on purpose. A page a deployment served resolves to that deployment and offers
+ * no control for naming another, so no fetch, `XMLHttpRequest`, or WebSocket this head opens legitimately leaves its
+ * origin, and none of them may. Picture and font addresses are not covered here: `img-src` and `font-src` admit any
+ * host, so this directive does not stop a running script from sending out what it read.
  */
 export const webHeadDirectives: ContentSecurityPolicyDirectives = {
     ...directivesBothHeadsShare,

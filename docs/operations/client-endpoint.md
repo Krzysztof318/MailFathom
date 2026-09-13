@@ -3135,7 +3135,9 @@ Nothing here is configurable, and a proxy in front of this process should pass t
 
 It is defence in depth rather than what keeps the reading pane safe — that rests on no string from a message ever
 becoming markup. What it limits is a defect somewhere else in the client: which scripts can run in the page, and so what
-could read a credential kept by *Keep me signed in*, and where anything read could be sent.
+could read a credential kept by *Keep me signed in*, and which origins the page can call. It does not stop a script
+that does run from sending out what it read: the wide `img-src` and `font-src` below let it name any host as a
+picture's or a font's address.
 
 | Directive | What it admits | Why |
 | --- | --- | --- |
@@ -3144,7 +3146,7 @@ could read a credential kept by *Keep me signed in*, and where anything read cou
 | `style-src` | `'self' 'unsafe-inline'` | A sender's own inline styles are what the full-HTML dialog and the embedded view exist to show, and a framed document inherits this directive too |
 | `img-src` | `'self' data: https: http:` | A message's pictures come from whatever server its sender named, and asking to load them re-reads that message with those addresses left in, so no host can be named. `data:` is a picture the message or an attachment carried inline |
 | `font-src` | `'self' data: https: http:` | The client's own typeface ships inside the bundle; the other sources are a sender's web font, which asking to load a message's remote content restores beside its pictures |
-| `connect-src` | `'self'` | The page calls the deployment that served it — the routes beneath `/api/client`, the signal channel, and the telemetry routes — and nothing else. A page a deployment served offers no control for naming another, so this is the directive that bounds where anything a script read could be sent |
+| `connect-src` | `'self'` | The page calls the deployment that served it — the routes beneath `/api/client`, the signal channel, and the telemetry routes — and nothing else. A page a deployment served offers no control for naming another. This restricts fetch, `XMLHttpRequest`, and WebSocket connections only; a picture or font address is governed by the two rows above, which still admit any host |
 | `frame-src` | `'self' blob:` | An attached PDF is drawn by the browser's own viewer from an object URL the page made |
 | `object-src` | `'none'` | No plugin content |
 | `base-uri` | `'none'` | No `<base>` element can redirect the page's relative references, in the page or in a frame |
