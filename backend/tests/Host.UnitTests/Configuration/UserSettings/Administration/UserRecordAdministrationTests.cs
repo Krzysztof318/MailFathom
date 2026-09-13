@@ -730,6 +730,110 @@ public sealed class UserRecordAdministrationTests
         await harness.Store.DidNotReceiveWithAnyArgs().CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    /// A reference that already reached nothing before the edit is not what the edit is about, so an unrelated setting
+    /// saved beside it commits, the reference stays exactly as the row held it, and the problem is still reported —
+    /// as one the record already carried, since the next start refuses it either way.
+    /// </summary>
+    [Fact]
+    public async Task ApplyRecordAsync_AnUnrelatedSettingBesideAReferenceThatAlreadyReachedNothing_CommitsAndReportsTheReferenceAsAlreadyHeld()
+    {
+        // Arrange
+        var harness = new RecordHarness(
+            MailFathomPermission.AdminConfigurationWrite,
+            alsoGranted: MailFathomPermission.AdminRead);
+        harness.Holding(
+            SyntheticMailUser.Deployment,
+            $$"""{ "Language": "English", "MailAccounts": [ {{AccountWhoseSecretReachesNothing("primary")}} ] }""",
+            version: 3);
+
+        var reading = await harness.Records.ReadRecordAsync(
+            SyntheticMailUser.Deployment,
+            TestContext.Current.CancellationToken);
+
+        var saved = reading!.Json.Replace(
+            "\"Language\": \"English\"",
+            "\"Language\": \"English\", \"SpamClassification\": { \"Enabled\": true }",
+            StringComparison.Ordinal);
+
+        // Act
+        var outcome = await harness.Records.ApplyRecordAsync(
+            SyntheticMailUser.Deployment,
+            saved,
+            expectedVersion: 3,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+        Assert.Contains(
+            "already carried this before the change",
+            Assert.Single(outcome.Messages),
+            StringComparison.Ordinal);
+        await harness.Store.Received(1).CommitAsync(
+            SyntheticMailUser.Deployment,
+            Arg.Is<string>(candidate =>
+                candidate!.Contains($"{RegisteredSchemeSecretReferenceResolver.UnreadableTarget}/primary-password", StringComparison.Ordinal)
+                && candidate.Contains("SpamClassification", StringComparison.Ordinal)
+                && !candidate.Contains(SettingRedaction.Marker, StringComparison.Ordinal)),
+            3,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The walk's sentence names a path and a failure, never the target, so a broken reference replaced by a different
+    /// broken one at the same path reads the same — and is still this write's own problem, refused rather than
+    /// committed as though the record already carried it.
+    /// </summary>
+    [Fact]
+    public async Task ApplyRecordAsync_ABrokenReferenceReplacedByAnotherBrokenOne_IsRefusedRatherThanReportedAsAlreadyHeld()
+    {
+        // Arrange
+        var standing = $$"""{ "Language": "English", "MailAccounts": [ {{AccountWhoseSecretReachesNothing("primary")}} ] }""";
+
+        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(SyntheticMailUser.Deployment, standing, version: 3);
+
+        // Act
+        var outcome = await harness.Records.ApplyRecordAsync(
+            SyntheticMailUser.Deployment,
+            standing.Replace("/primary-password", "/primary-passwrod", StringComparison.Ordinal),
+            expectedVersion: 3,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// What the record already carried excuses only a write that leaves the mail accounts alone: adding a second mailbox
+    /// whose credential reaches nothing is refused, naming it.
+    /// </summary>
+    [Fact]
+    public async Task AddMailAccountAsync_AnUnusableMailboxBesideOneAlreadyUnusable_IsRefusedNamingTheNewOne()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(
+            SyntheticMailUser.Deployment,
+            $$"""{ "Language": "English", "MailAccounts": [ {{AccountWhoseSecretReachesNothing("primary")}} ] }""",
+            version: 1);
+
+        // Act
+        var outcome = await harness.Records.AddMailAccountAsync(
+            SyntheticMailUser.Deployment,
+            AccountWhoseSecretReachesNothing("archive"),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains(outcome.Messages, message => message.Contains("MailAccounts:1", StringComparison.Ordinal));
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+    }
+
     /// <summary>The buffer is what somebody typed, so every way it can be wrong is theirs to correct rather than a defect to raise.</summary>
     [Fact]
     public async Task ApplyRecordAsync_ASavedBufferThatIsNotADocumentOfSettings_IsRefusedRatherThanRaised()

@@ -607,9 +607,13 @@ internal sealed class UserRecordAdministration(
 
         // Resolved here rather than left to the next start, which refuses the whole deployment over it: a reference
         // that is well formed and names nothing retrievable binds cleanly, commits, and then stops the host for every
-        // user it serves until somebody corrects the row by hand.
-        if (await secrets.FindUserMailAccountErrorsAsync(RecordPath, bound.MailAccounts, cancellationToken)
-            is { Count: > 0 } unusable)
+        // user it serves until somebody corrects the row by hand. A write that leaves every mail account exactly as it
+        // was cannot have introduced one, because the walk reads nothing else, so refusing it would block every
+        // unrelated edit without making the next start any worse.
+        var unusable = await secrets.FindUserMailAccountErrorsAsync(RecordPath, bound.MailAccounts, cancellationToken);
+        var alreadyHeld = unusable.Count > 0 && LeavesEveryMailAccountAsItWas(inForce.Json, candidateJson);
+
+        if (unusable.Count > 0 && !alreadyHeld)
         {
             return UserRecordWriteOutcome.Refused(
                 MailFathomErrorCode.ConfigurationCandidateInvalid,
@@ -625,7 +629,7 @@ internal sealed class UserRecordAdministration(
             {
                 servedUsers.UserDocumentPublished(user, inForce.DisplayName, bound, committed);
 
-                return UserRecordWriteOutcome.Committed(committed);
+                return UserRecordWriteOutcome.Committed(committed, [.. unusable.Select(DescribeAsAlreadyHeld)]);
             }
 
             // The record moved while this candidate was being judged, or the user was erased under it. Which of the
@@ -644,6 +648,37 @@ internal sealed class UserRecordAdministration(
             servedUsers.ReleaseRosterPublication();
         }
     }
+
+    /// <summary>Reports whether a candidate carries every mail account setting exactly as the record in force holds it.</summary>
+    /// <remarks>
+    /// <para>
+    /// Compared as settings rather than as the problems the walk reports, because a sentence names a path and a failure
+    /// and never the target behind it: a broken reference replaced by a different broken one reads the same, and only
+    /// the settings tell the two apart.
+    /// </para>
+    /// <para>
+    /// The whole collection rather than the account a problem sits in, because a secret name is judged across every
+    /// account at once — renaming one secret can make an untouched account's name the repeated one.
+    /// </para>
+    /// </remarks>
+    private static bool LeavesEveryMailAccountAsItWas(string standingJson, string candidateJson)
+    {
+        var standing = MailAccountSettingsOf(standingJson);
+        var candidate = MailAccountSettingsOf(candidateJson);
+
+        return standing.Count == candidate.Count
+            && standing.All(setting => candidate.TryGetValue(setting.Key, out var value)
+                && string.Equals(value, setting.Value, StringComparison.Ordinal));
+    }
+
+    private static Dictionary<string, string> MailAccountSettingsOf(string json) =>
+        RedactedDocumentSave.Flatten(json)
+            .Where(setting => setting.Key.StartsWith($"{nameof(UserAccountOptions.MailAccounts)}:", StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(setting => setting.Key, setting => setting.Value, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Says that a problem a committed record still carries was there before the write, and what clears it.</summary>
+    private static string DescribeAsAlreadyHeld(string problem) =>
+        $"{problem} The record already carried this before the change, so the change was committed and left it as it was. A start refuses a record carrying it, so correct it before the deployment next restarts: provision what the reference names, or withdraw the mail account with 'mfctl user account remove' and declare it again with 'mfctl user account add'.";
 
     /// <summary>Names every secret-bearing value the candidate carries that this user may not point their record at.</summary>
     /// <remarks>

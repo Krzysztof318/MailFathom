@@ -55,6 +55,11 @@ internal static class UserOutput
                 + "flight finishes against the previous version; the next run uses this one. Other replicas pick up "
                 + "the change after their next user write or restart.");
 
+            foreach (var standingProblem in answer.Messages ?? [])
+            {
+                context.Console.WriteNotice(standingProblem);
+            }
+
             return CliExitCode.Success;
         }
 
