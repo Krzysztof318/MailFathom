@@ -69,6 +69,70 @@ internal sealed class PersistedUserSettingsDocumentReader(
         WHERE "Id" = @user;
         """;
 
+    /// <summary>Reads every row's version and nothing else, in the order the roster is read in.</summary>
+    private const string SelectVersions =
+        """
+        SELECT "Id", "Version"
+        FROM settings_accounts
+        ORDER BY "CreatedAt", "Id"
+        LIMIT @limit;
+        """;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<UserSettingsDocumentVersion>> ReadVersionsAsync(
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
+
+        var connection = await this.OpenConnectionAsync(cancellationToken);
+
+        await using (connection)
+        {
+            try
+            {
+                await using var command = new NpgsqlCommand(SelectVersions, connection);
+
+                command.CommandTimeout = (int)commandTimeout.Value.TotalSeconds;
+                command.Parameters.AddWithValue("limit", limit);
+
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+                var versions = new List<UserSettingsDocumentVersion>();
+
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    versions.Add(new UserSettingsDocumentVersion(
+                        MailUserId.Create(reader.GetGuid(0)),
+                        reader.GetInt64(1)));
+                }
+
+                return versions;
+            }
+            catch (NpgsqlException exception)
+            {
+                throw new UserSettingsUnreadableException(
+                    UserSettingsReadFailures.DiagnoseWhileReading(exception),
+                    exception);
+            }
+        }
+    }
+
+    /// <summary>Opens a connection in a step of its own, so a database out of reach is told apart from one that answered.</summary>
+    private async Task<NpgsqlConnection> OpenConnectionAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await dataSource.OpenConnectionAsync(cancellationToken);
+        }
+        catch (NpgsqlException exception)
+        {
+            throw new UserSettingsUnreadableException(
+                UserSettingsReadFailures.DiagnoseWhileConnecting(exception),
+                exception);
+        }
+    }
+
     /// <inheritdoc />
     public async Task<UserSettingsDocument?> ReadAsync(MailUserId user, CancellationToken cancellationToken)
     {

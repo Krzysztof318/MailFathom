@@ -116,6 +116,28 @@ public sealed class ServedMailUsersStartupGateTests
         Assert.Equal(["work"], served.MailAccounts.Select(account => account.AccountId));
     }
 
+    /// <summary>
+    /// The version each record was served at is kept beside it, because that is what every later convergence compares
+    /// the rows against — a roster settled without it would read and republish every record on the first interval.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_AUserServedFromTheirRecord_KeepsTheVersionTheRecordWasReadAt()
+    {
+        // Arrange
+        var user = MailUserId.Create(RecordedIdentifier);
+        var roster = new ServedMailUsers();
+
+        // Act
+        await CreateGate(
+                [Held(user, "alex")],
+                servedUsers: roster,
+                documents: RecordsHolding((user, RecordDeclaring("work", "alex@example.test"))))
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, roster.PublishedVersionOf(user));
+    }
+
     /// <summary>Every held row is served, because a row this deployment held and did not serve would be somebody whose mail it stores and never synchronizes.</summary>
     [Fact]
     public async Task StartAsync_SeveralUsersHeld_ServesEachOfThemFromTheirOwnRecord()

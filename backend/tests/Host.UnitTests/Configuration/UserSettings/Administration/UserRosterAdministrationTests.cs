@@ -8,6 +8,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Configuration.UserSettings.Administration;
+using MailFathom.Host.Signals;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
@@ -612,6 +613,7 @@ public sealed class UserRosterAdministrationTests
                 new SeveralUserAdmission(
                     Options.Create(new McpEndpointOptions()),
                     Options.Create(clientEndpoint ?? new ClientEndpointOptions())),
+                new ConfigurationChangeAnnouncements(connect: null, NullLogger<ConfigurationChangeAnnouncements>.Instance),
                 NullLogger<UserRosterAdministration>.Instance);
         }
 

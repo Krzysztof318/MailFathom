@@ -8,6 +8,7 @@ using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Host.Signals;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Settings;
 using Microsoft.Extensions.Configuration;
@@ -533,6 +534,53 @@ public sealed class RootSettingsWriterTests
             TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// A commit is announced once this replica has republished it, which is what lets a replica that did not commit it
+    /// read the new version without waiting for its own interval.
+    /// </summary>
+    [Fact]
+    public async Task WriteAsync_Committed_AnnouncesTheChangeToTheOtherReplicas()
+    {
+        // Arrange
+        using var deployment = Deployment.WithPersisted("{}", version: 4);
+        var heard = 0;
+        await new ConfigurationChangeAnnouncements(
+                () => Task.FromResult(deployment.Backplane.Connect()),
+                new RecordingLogger<ConfigurationChangeAnnouncements>())
+            .ListenAsync(() => Interlocked.Increment(ref heard));
+
+        // Act
+        await deployment.Writer.WriteAsync(
+            [ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "3")],
+            expectedVersion: 4,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, heard);
+    }
+
+    /// <summary>A refused write changed nothing, so no replica is asked to read anything again.</summary>
+    [Fact]
+    public async Task WriteAsync_Refused_AnnouncesNothing()
+    {
+        // Arrange
+        using var deployment = Deployment.WithPersisted("{}", version: 4);
+        var heard = 0;
+        await new ConfigurationChangeAnnouncements(
+                () => Task.FromResult(deployment.Backplane.Connect()),
+                new RecordingLogger<ConfigurationChangeAnnouncements>())
+            .ListenAsync(() => Interlocked.Increment(ref heard));
+
+        // Act
+        await deployment.Writer.WriteAsync(
+            [ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "3")],
+            expectedVersion: 3,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, heard);
+    }
+
     /// <summary>A deployment holding the persisted layer, the row beneath it, and the writer between the two.</summary>
     private sealed class Deployment : IDisposable
     {
@@ -555,11 +603,17 @@ public sealed class RootSettingsWriterTests
                 new CandidateConfigurationComposer(configuration, layer),
                 new CandidateSettingsValidator([], new ServedMailUsers()),
                 new RootSettingsReloader(layer.Provider, row, new RecordingLogger<RootSettingsReloader>()),
+                new ConfigurationChangeAnnouncements(
+                    () => Task.FromResult(this.Backplane.Connect()),
+                    new RecordingLogger<ConfigurationChangeAnnouncements>()),
                 new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
                 this.writerLogger);
         }
 
         public RootSettingsWriter Writer { get; }
+
+        /// <summary>Gets the endpoint the writer announces its commits over, which another replica listens on.</summary>
+        public InMemoryBackplane Backplane { get; } = new();
 
         public InMemoryRootSettingsRow Row { get; }
 

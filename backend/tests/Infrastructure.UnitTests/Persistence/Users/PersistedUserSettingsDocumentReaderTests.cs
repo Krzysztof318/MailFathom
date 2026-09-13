@@ -41,4 +41,25 @@ public sealed class PersistedUserSettingsDocumentReaderTests
         // come back as this instead. That it did not is what says the guard ran first.
         Assert.IsNotType<UserSettingsUnreadableException>(rejected);
     }
+
+    /// <summary>A limit that admits no user is a caller's mistake, refused before a statement that would answer nothing is sent.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task ReadVersionsAsync_ALimitAdmittingNoUser_IsRejectedAsAnArgument(int limit)
+    {
+        // Arrange
+        await using var dataSource = NpgsqlDataSource.Create(UnreachedDatabase);
+        var reader = new PersistedUserSettingsDocumentReader(
+            dataSource,
+            new DatabaseCommandTimeout(TimeSpan.FromSeconds(30)));
+
+        // Act
+        var rejected = await Record.ExceptionAsync(
+            () => reader.ReadVersionsAsync(limit, TestContext.Current.CancellationToken));
+
+        // Assert
+        var argument = Assert.IsType<ArgumentOutOfRangeException>(rejected);
+        Assert.Equal("limit", argument.ParamName);
+    }
 }

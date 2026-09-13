@@ -9,6 +9,7 @@ using MailFathom.Application.StoredFiles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Administration;
+using MailFathom.Host.Signals;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.References;
@@ -54,7 +55,8 @@ internal sealed class UserRecordAdministration(
     UserAccountDocumentBinder binder,
     SecretConfigurationValidator secrets,
     ServedMailUsers servedUsers,
-    IStoredFileStore files)
+    IStoredFileStore files,
+    ConfigurationChangeAnnouncements announcements)
 {
     /// <summary>How many times a portrait link is composed again over a record another write moved underneath it.</summary>
     private const int MaximumRelinkAttempts = 3;
@@ -740,6 +742,7 @@ internal sealed class UserRecordAdministration(
             if (await store.CommitAsync(user, candidateJson, inForce.Version, cancellationToken) is { } committed)
             {
                 servedUsers.UserDocumentPublished(user, inForce.DisplayName, bound, committed);
+                await announcements.AnnounceAsync();
 
                 return UserRecordWriteOutcome.Committed(committed, [.. unusable.Select(DescribeAsAlreadyHeld)]);
             }

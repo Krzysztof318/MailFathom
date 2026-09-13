@@ -83,6 +83,62 @@ public sealed class OrchestratedUserSettingsDocumentTests(MailFathomOrchestratio
         Assert.Null(record);
     }
 
+    /// <summary>
+    /// Every user held is answered at the version their own row stands at, which is the one reading a replica compares
+    /// its roster against on every interval and so is read without any document.
+    /// </summary>
+    [Fact]
+    public async Task ReadVersionsAsync_UsersTheDeploymentHolds_AnswersEachAtTheVersionItsOwnRowStandsAt()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var provisioned = Guid.NewGuid();
+
+        try
+        {
+            await OrchestratedForeignUser.ProvisionAsync(services, provisioned, cancellationToken);
+
+            // Act
+            var (versions, record) = await services.InScopeAsync(
+                async (scope, token) =>
+                {
+                    var documents = scope.GetRequiredService<IUserSettingsDocumentReader>();
+
+                    return (
+                        await documents.ReadVersionsAsync(limit: 1000, token),
+                        await documents.ReadAsync(MailUserId.Create(provisioned), token));
+                },
+                cancellationToken);
+
+            // Assert
+            Assert.NotNull(record);
+            Assert.Contains(new UserSettingsDocumentVersion(MailUserId.Create(provisioned), record.Version), versions);
+            Assert.Equal(versions.Count, versions.Select(held => held.User).Distinct().Count());
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(services, provisioned);
+        }
+    }
+
+    /// <summary>The reading stops at the limit it was given, which is what keeps a deployment past its ceiling from being read whole.</summary>
+    [Fact]
+    public async Task ReadVersionsAsync_ALimitOfOne_AnswersOneUser()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+
+        // Act
+        var versions = await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IUserSettingsDocumentReader>().ReadVersionsAsync(limit: 1, token),
+            cancellationToken);
+
+        // Assert
+        Assert.Single(versions);
+    }
+
     /// <summary>Two users under one label is refused by the schema, so a list of users can be read.</summary>
     /// <remarks>
     /// The user this test provisions is erased in a <c>finally</c>, including on a failure, for the reason

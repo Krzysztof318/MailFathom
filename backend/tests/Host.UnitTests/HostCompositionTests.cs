@@ -531,12 +531,12 @@ public sealed class HostCompositionTests
     }
 
     /// <summary>
-    /// A deployment answering an agent alone holds no client connection, so there is nothing to fan out and it connects
-    /// to no endpoint however much its configuration declares. The section is still read and still refused when it is
-    /// unusable, which is why this is asserted about the registration rather than about the reading.
+    /// A deployment answering an agent alone holds no client connection, so there is no client signal to fan out and
+    /// no hub lifetime manager is registered. It still connects for the announcement of a committed configuration
+    /// change, because several replicas serving agents read one set of settings as much as several serving a client do.
     /// </summary>
     [Fact]
-    public void Compose_BackplaneDeclaredWithNoClientSurface_RegistersNothingForOne()
+    public void Compose_BackplaneDeclaredWithNoClientSurface_ConnectsForConfigurationChangesAlone()
     {
         // Arrange
         var builder = ConfiguredBuilder("mcp and admin served", BackplaneDeclared);
@@ -546,7 +546,7 @@ public sealed class HostCompositionTests
 
         // Assert
         Assert.DoesNotContain(builder.Services, static registration => registration.ImplementationType == typeof(RedisHubLifetimeManager<>));
-        Assert.DoesNotContain(builder.Services, static registration => registration.ImplementationType == typeof(SignalBackplaneConnection));
+        Assert.Contains(builder.Services, static registration => registration.ImplementationType == typeof(SignalBackplaneConnection));
     }
 
     /// <summary>

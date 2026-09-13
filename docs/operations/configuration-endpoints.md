@@ -417,9 +417,11 @@ routinely not the one holding the connection that has to hear about it. A deploy
 none of this and should write none of it.
 
 **Writing no section registers nothing.** No connection is opened, no library is asked for, and the host behaves
-exactly as one built before this section existed. Writing the section registers it inside the client surface's own
-composition, so a deployment serving no client surface still connects to nothing. What losing the backplane costs, and
-what a client does about it, is [the signal channel](client-endpoint.md#the-signal-channel).
+exactly as one built before this section existed. Writing the section makes every replica connect, whichever surfaces
+it serves, because the endpoint also carries the announcement that a configuration change committed —
+[what reaches every replica](configuration-sources.md#what-reaches-every-replica) is that half. Client signals are
+fanned out over it only where the client surface is served. What losing the backplane costs, and what a client does
+about it, is [the signal channel](client-endpoint.md#the-signal-channel).
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |

@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
+using MailFathom.Host.Signals;
 using MailFathom.Infrastructure.Persistence.Users;
 
 namespace MailFathom.Host.Configuration.UserSettings.Administration;
@@ -41,6 +42,7 @@ internal sealed partial class UserRosterAdministration(
     IUserSettingsDocumentWriter documents,
     ServedMailUsers servedUsers,
     SeveralUserAdmission admission,
+    ConfigurationChangeAnnouncements announcements,
     ILogger<UserRosterAdministration> logger)
 {
     /// <summary>The language a user is provisioned reading, which is the one the client also opens in.</summary>
@@ -152,6 +154,7 @@ internal sealed partial class UserRosterAdministration(
                 label,
                 new UserAccountOptions { Language = ProvisionedLanguage },
                 committed);
+            await announcements.AnnounceAsync();
 
             this.LogUserProvisioned(label);
 
@@ -245,6 +248,7 @@ internal sealed partial class UserRosterAdministration(
             if (erased)
             {
                 servedUsers.UserErased(user);
+                await announcements.AnnounceAsync();
                 this.LogUserErased(served);
             }
 

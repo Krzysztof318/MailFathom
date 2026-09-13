@@ -13,6 +13,7 @@ using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Configuration.UserSettings.Administration;
+using MailFathom.Host.Signals;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Secrets.Resolution;
@@ -1094,7 +1095,8 @@ public sealed class UserRecordAdministrationTests
                     Options.Create(scanning ?? new SensitiveContentOptions())),
                 SecretValidation.OverRegisteredSchemes(),
                 this.ServedUsers,
-                this.Files);
+                this.Files,
+                new ConfigurationChangeAnnouncements(connect: null, new RecordingLogger<ConfigurationChangeAnnouncements>()));
         }
 
         internal UserRecordAdministration Records { get; }

@@ -97,13 +97,14 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
             throw DeploymentMailUserUnresolvedException.TooManyUsers(ServedMailUsers.MaximumUsers);
         }
 
-        var served = await this.ServeEveryHeldUserAsync(scope, held, cancellationToken);
+        var composed = await this.ServeEveryHeldUserAsync(scope, held, cancellationToken);
+        IReadOnlyList<ServedMailUser> served = [.. composed.Select(entry => entry.User)];
 
         this.RefuseSeveralUsersOnAUserFacingSurface(served);
 
         await this.RefuseUnusableMailAccountSecretsAsync(scope, served, cancellationToken);
 
-        this.servedUsers.Resolved(served);
+        this.servedUsers.Resolved(served, composed.ToDictionary(entry => entry.User.User, entry => entry.Version));
 
         this.Report(served);
 
@@ -118,12 +119,12 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// Every held user is served and none is left out, because one source reaches all of them: a deployment that holds
     /// a row it did not serve would be one holding somebody's mail and synchronizing nobody's.
     /// </remarks>
-    private async Task<IReadOnlyList<ServedMailUser>> ServeEveryHeldUserAsync(
+    private async Task<IReadOnlyList<(ServedMailUser User, long Version)>> ServeEveryHeldUserAsync(
         AsyncServiceScope scope,
         IReadOnlyList<MailUserRecord> held,
         CancellationToken cancellationToken)
     {
-        var served = new List<ServedMailUser>(held.Count);
+        var served = new List<(ServedMailUser User, long Version)>(held.Count);
 
         foreach (var record in held)
         {
@@ -147,7 +148,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// accepted before it into a start this host cannot complete.
     /// </para>
     /// </remarks>
-    private async Task<ServedMailUser> ServeFromTheOwnDocumentAsync(
+    private async Task<(ServedMailUser User, long Version)> ServeFromTheOwnDocumentAsync(
         AsyncServiceScope scope,
         MailUserRecord record,
         CancellationToken cancellationToken)
@@ -168,13 +169,15 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
             throw DeploymentMailUserUnresolvedException.UserRecordUnusable(record.DisplayName, binding.Refusals);
         }
 
-        return new ServedMailUser(
+        var served = new ServedMailUser(
             record.User,
             record.DisplayName,
             bound.MailAccounts,
             bound.ReadingLanguage ?? MailUserLanguage.English,
             bound.SpamClassification,
             bound.SensitiveContent);
+
+        return (served, document.Version);
     }
 
     /// <summary>Refuses a user whose own mail accounts carry a secret or a trust anchor this deployment cannot use.</summary>

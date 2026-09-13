@@ -11,6 +11,7 @@ using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Configuration.UserSettings.Administration;
+using MailFathom.Host.Signals;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Secrets;
 using MailFathom.Infrastructure.Secrets.Database;
@@ -100,6 +101,7 @@ internal sealed class UserRecordDeployment
             this.Store,
             this.servedUsers,
             admission,
+            new ConfigurationChangeAnnouncements(connect: null, NullLogger<ConfigurationChangeAnnouncements>.Instance),
             NullLogger<UserRosterAdministration>.Instance);
 
         this.Records = new UserRecordAdministration(
@@ -112,7 +114,8 @@ internal sealed class UserRecordDeployment
                 Options.Create(new SensitiveContentOptions())),
             SecretValidation.OverRegisteredSchemes(),
             this.servedUsers,
-            Substitute.For<IStoredFileStore>());
+            Substitute.For<IStoredFileStore>(),
+            new ConfigurationChangeAnnouncements(connect: null, NullLogger<ConfigurationChangeAnnouncements>.Instance));
 
         this.StoredSecrets = Substitute.For<IStoredSecretStore>();
         this.StoredSecrets.CanStore.Returns(true);

@@ -75,12 +75,17 @@ internal sealed class SignalBackplaneConnection : IConfigureOptions<RedisOptions
     /// <returns>The connection, which may not have reached the endpoint yet.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the declared reference resolves to no material, which the caller retries on its next attempt.</exception>
     /// <remarks>
+    /// Two callers open one each: the hub's lifetime manager, and the announcements of a committed configuration change,
+    /// which are carried on a connection of their own so that a replica serving no client surface still hears them.
+    /// Both report through the one telemetry, because either losing the endpoint is this replica losing it.
+    /// <para>
     /// The material reaches a string here and nowhere else. <see cref="ConfigurationOptions" /> parses one and holds
     /// the password inside it for the life of the connection, so there is no erasable form to keep it in — the buffer
     /// it was resolved into is still erased as soon as it has been read, which is what bounds the copies to the one the
     /// client itself holds.
+    /// </para>
     /// </remarks>
-    private async Task<IConnectionMultiplexer> ConnectAsync(TextWriter log)
+    internal async Task<IConnectionMultiplexer> ConnectAsync(TextWriter log)
     {
         ConnectionMultiplexer connection;
 

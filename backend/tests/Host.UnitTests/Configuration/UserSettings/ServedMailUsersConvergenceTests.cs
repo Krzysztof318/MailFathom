@@ -1,0 +1,188 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Domain.Access;
+using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.SensitiveContent;
+using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Persistence.Users;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
+using Xunit;
+
+namespace MailFathom.Host.UnitTests.Configuration.UserSettings;
+
+/// <summary>
+/// Covers how a replica brings its roster up to the user records another replica committed. Each case is a replica that
+/// heard no announcement at all, because the rows are the only thing a reading takes its answer from.
+/// </summary>
+public sealed class ServedMailUsersConvergenceTests
+{
+    private const string LanguageOnly = """{"Language":"English"}""";
+
+    private static readonly MailUserId Alex = MailUserId.Create(new Guid("33333333-3333-3333-3333-333333333333"));
+
+    /// <summary>A record committed on another replica is published here at the version the row holds.</summary>
+    [Fact]
+    public async Task ConvergeAsync_ARecordCommittedOnAnotherReplica_PublishesItsNewerVersion()
+    {
+        // Arrange
+        var roster = ServingAlexAt(version: 2);
+        var documents = Holding((Alex, DeclaringMailbox("work"), 3));
+
+        // Act
+        await Convergence(documents, roster).ConvergeAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var served = Assert.Single(roster.Users);
+        Assert.Equal(["work"], served.MailAccounts.Select(account => account.AccountId));
+        Assert.Equal(3, roster.PublishedVersionOf(Alex));
+    }
+
+    /// <summary>
+    /// A record already bound at the version the row holds is not read again, which is what keeps a reading between two
+    /// changes to one statement however many users the deployment serves.
+    /// </summary>
+    [Fact]
+    public async Task ConvergeAsync_EveryRecordAtTheVersionBound_ReadsNoRecord()
+    {
+        // Arrange
+        var roster = ServingAlexAt(version: 2);
+        var documents = Holding((Alex, LanguageOnly, 2));
+
+        // Act
+        await Convergence(documents, roster).ConvergeAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        await documents.DidNotReceive().ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A user another replica recorded is served here, under the label their row carries.</summary>
+    [Fact]
+    public async Task ConvergeAsync_AUserRecordedOnAnotherReplica_ServesThem()
+    {
+        // Arrange
+        var roster = new ServedMailUsers();
+        roster.Resolved([]);
+        var documents = Holding((Alex, LanguageOnly, 2));
+
+        // Act
+        await Convergence(documents, roster).ConvergeAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var served = Assert.Single(roster.Users);
+        Assert.Equal(Alex, served.User);
+        Assert.Equal("alex", served.DisplayName);
+    }
+
+    /// <summary>A user another replica erased is no longer served here, since a row that is gone is the whole of what an erasure leaves.</summary>
+    [Fact]
+    public async Task ConvergeAsync_AUserErasedOnAnotherReplica_DropsThemFromTheRoster()
+    {
+        // Arrange
+        var roster = ServingAlexAt(version: 2);
+        var documents = Holding();
+
+        // Act
+        await Convergence(documents, roster).ConvergeAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(roster.Users);
+    }
+
+    /// <summary>
+    /// A record that does not bind is not published, the version bound before it stays in force, and it is reported once
+    /// rather than on every interval the same row is read at the same version.
+    /// </summary>
+    [Fact]
+    public async Task ConvergeAsync_ARecordThatDoesNotBind_KeepsTheVersionBoundAndReportsItOnce()
+    {
+        // Arrange
+        var roster = ServingAlexAt(version: 2);
+        var documents = Holding((Alex, """{"Language":"English","NothingBindsThis":true}""", 3));
+        var log = new RecordingLogger<ServedMailUsersConvergence>();
+        var convergence = Convergence(documents, roster, log);
+
+        // Act
+        await convergence.ConvergeAsync(TestContext.Current.CancellationToken);
+        await convergence.ConvergeAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, roster.PublishedVersionOf(Alex));
+        Assert.Single(log.Messages, message => message.Contains("rejected at version 3", StringComparison.Ordinal));
+    }
+
+    /// <summary>A replica whose startup gate has not settled a roster reads nothing, because that gate composes the whole roster from the rows itself.</summary>
+    [Fact]
+    public async Task ConvergeAsync_BeforeTheStartupGateSettledARoster_ReadsNothing()
+    {
+        // Arrange
+        var documents = Holding((Alex, LanguageOnly, 2));
+
+        // Act
+        await Convergence(documents, new ServedMailUsers()).ConvergeAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        await documents.DidNotReceive().ReadVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    private static ServedMailUsers ServingAlexAt(long version)
+    {
+        var roster = new ServedMailUsers();
+
+        roster.Resolved([new ServedMailUser(Alex, "alex", [])], new Dictionary<MailUserId, long> { [Alex] = version });
+
+        return roster;
+    }
+
+    /// <summary>The rows a deployment holds: each user's version, and the record a read of that user answers with.</summary>
+    private static IUserSettingsDocumentReader Holding(params (MailUserId User, string Json, long Version)[] records)
+    {
+        var documents = Substitute.For<IUserSettingsDocumentReader>();
+
+        documents.ReadVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([.. records.Select(record => new UserSettingsDocumentVersion(record.User, record.Version))]);
+
+        foreach (var record in records)
+        {
+            documents.ReadAsync(record.User, Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<UserSettingsDocument?>(
+                    new UserSettingsDocument(record.User, "alex", record.Json, record.Version)));
+        }
+
+        return documents;
+    }
+
+    private static ServedMailUsersConvergence Convergence(
+        IUserSettingsDocumentReader documents,
+        ServedMailUsers roster,
+        RecordingLogger<ServedMailUsersConvergence>? log = null) =>
+        new(
+            UserRecordScopes.Resolving(
+                documents,
+                new UserAccountDocumentBinder(
+                    new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
+                    new FakeTimeProvider(),
+                    Options.Create(new SensitiveContentOptions()))),
+            roster,
+            log ?? new RecordingLogger<ServedMailUsersConvergence>());
+
+    private static string DeclaringMailbox(string accountId) =>
+        $$"""
+          {
+            "Language": "English",
+            "MailAccounts": [
+              {
+                "AccountId": "{{accountId}}",
+                "DisplayName": "{{accountId}}",
+                "Host": "imap.example.test",
+                "UserName": "alex@example.test",
+                "Secrets": { "Password": { "Name": "imap-password", "SecretReference": "systemd-credential:imap-password" } }
+              }
+            ]
+          }
+          """;
+}

@@ -20,19 +20,46 @@ namespace MailFathom.Host.Configuration.RootSettings;
 /// quietly change settings the deployment had already adopted.
 /// </para>
 /// <para>
-/// Nothing on the read path triggers this. A reload follows a write, so what calls it is the surface that commits one.
+/// Two things call it: the write that committed a document, and the convergence every replica runs so that a document
+/// another replica committed reaches this one as well. Calls are serialized here, because the layer's provider is not
+/// written for two publishers at the same instant. A reading that finds the version already in force — which is what
+/// every convergence between two changes finds — publishes nothing and reports nothing.
+/// </para>
+/// <para>
+/// A document is rejected once per version. Reading the same version again would reject it again in the same words on
+/// every interval, so it is passed over silently until the row moves on, which only another commit does.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this service.")]
+[SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "This process-lifetime singleton never requests SemaphoreSlim.AvailableWaitHandle, so the semaphore owns no operating-system handle to release.")]
 internal sealed partial class RootSettingsReloader(
     RootSettingsConfigurationProvider provider,
     IRootSettingsDocumentReader reader,
     ILogger<RootSettingsReloader> logger)
 {
+    private readonly SemaphoreSlim publication = new(1, 1);
+
+    /// <summary>The version this process last rejected, or zero while it has rejected none.</summary>
+    private long rejectedVersion;
+
     /// <summary>Reads the persisted configuration again and publishes it when it is usable.</summary>
-    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <param name="cancellationToken">Cancels the read, and the wait for a reload already running.</param>
     /// <returns><see langword="true" /> when a candidate was published, <see langword="false" /> when the version in force was kept.</returns>
     public async Task<bool> ReloadAsync(CancellationToken cancellationToken)
+    {
+        await this.publication.WaitAsync(cancellationToken);
+
+        try
+        {
+            return await this.ReloadAsTheOnlyPublisherAsync(cancellationToken);
+        }
+        finally
+        {
+            this.publication.Release();
+        }
+    }
+
+    private async Task<bool> ReloadAsTheOnlyPublisherAsync(CancellationToken cancellationToken)
     {
         RootSettingsDocument candidate;
 
@@ -44,6 +71,11 @@ internal sealed partial class RootSettingsReloader(
         {
             this.LogPersistedConfigurationUnreadable(provider.Version, exception);
 
+            return false;
+        }
+
+        if (candidate.Version == provider.Version || candidate.Version == this.rejectedVersion)
+        {
             return false;
         }
 
@@ -64,6 +96,7 @@ internal sealed partial class RootSettingsReloader(
                 or BootstrapOnlySettingPersistedException
                 or MisroutedSettingPersistedException)
         {
+            this.rejectedVersion = candidate.Version;
             this.LogCandidateRejected(candidate.Version, provider.Version, exception);
 
             return false;

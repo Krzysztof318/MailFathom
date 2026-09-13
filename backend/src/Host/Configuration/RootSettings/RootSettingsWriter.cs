@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using MailFathom.Application.Configuration;
 using MailFathom.Domain.Failures;
+using MailFathom.Host.Signals;
 using MailFathom.Infrastructure.Persistence.Settings;
 
 namespace MailFathom.Host.Configuration.RootSettings;
@@ -39,6 +40,7 @@ internal sealed partial class RootSettingsWriter(
     CandidateConfigurationComposer composer,
     CandidateSettingsValidator validator,
     RootSettingsReloader reloader,
+    ConfigurationChangeAnnouncements announcements,
     PersistedSecretMaterial secretMaterial,
     ILogger<RootSettingsWriter> logger) : IConfigurationWriter
 {
@@ -153,6 +155,7 @@ internal sealed partial class RootSettingsWriter(
         // reads, so a caller who gave up between the commit and the reload would otherwise leave the deployment bound
         // to a version the database no longer holds, with nothing scheduled to correct it.
         await reloader.ReloadAsync(CancellationToken.None);
+        await announcements.AnnounceAsync();
 
         return ConfigurationWriteResult.Committed(committedVersion);
     }
