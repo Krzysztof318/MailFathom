@@ -55,11 +55,13 @@ internal sealed class ClientSessionStore(NpgsqlDataSource dataSource) : IClientS
     /// <remarks>
     /// The first of the three locks, and it earns its place twice over: it is what orders a mint or a renewal against
     /// an erasure, and under <c>READ COMMITTED</c> it also refuses outright where the erasure committed first, the row
-    /// it asks for being gone by then.
+    /// it asks for being gone by then. It asks the client endpoint switch in the same condition, so a user an
+    /// administrator kept off the client is refused a session here exactly as an erased one is, and the switch being
+    /// turned off while this runs waits for the commit rather than passing over the row it is about to write.
     /// </remarks>
     private const string LockUserStatement = $"""
         SELECT 1 FROM "{UserAccountEntity.TableName}"
-        WHERE "{UserAccountEntity.IdColumnName}" = @userId
+        WHERE "{UserAccountEntity.IdColumnName}" = @userId AND "{UserAccountEntity.ClientEndpointEnabledColumnName}"
         FOR SHARE;
         """;
 
@@ -98,11 +100,12 @@ internal sealed class ClientSessionStore(NpgsqlDataSource dataSource) : IClientS
         """;
 
     /// <summary>Reports what the deployment holds under one identifier.</summary>
-    /// <remarks>The one statement on the request path: an index lookup by the key, on a request that is about to read mail out of the same database. Nothing in front of it, because a cache would make a revoked session go on working for its own window on every replica that had already read one.</remarks>
+    /// <remarks>The one statement on the request path: an index lookup by the key joined to the user row by its own key, on a request that is about to read mail out of the same database. The user's endpoint switches come back beside the session rather than being stored on it, so a switch turned off reaches a session minted before it on the next request. Nothing in front of it, because a cache would make a revoked session go on working for its own window on every replica that had already read one.</remarks>
     private const string FindSessionStatement = $"""
-        SELECT "{ClientSessionEntity.UserIdColumnName}", "{ClientSessionEntity.CredentialIdColumnName}", "{ClientSessionEntity.PermissionsColumnName}", "{ClientSessionEntity.SecretDigestColumnName}", "{ClientSessionEntity.ExpiresAtColumnName}"
-        FROM "{ClientSessionEntity.TableName}"
-        WHERE "{ClientSessionEntity.IdentifierColumnName}" = @identifier;
+        SELECT session."{ClientSessionEntity.UserIdColumnName}", session."{ClientSessionEntity.CredentialIdColumnName}", session."{ClientSessionEntity.PermissionsColumnName}", session."{ClientSessionEntity.SecretDigestColumnName}", session."{ClientSessionEntity.ExpiresAtColumnName}", account."{UserAccountEntity.McpEndpointEnabledColumnName}", account."{UserAccountEntity.ClientEndpointEnabledColumnName}"
+        FROM "{ClientSessionEntity.TableName}" AS session
+        JOIN "{UserAccountEntity.TableName}" AS account ON account."{UserAccountEntity.IdColumnName}" = session."{ClientSessionEntity.UserIdColumnName}"
+        WHERE session."{ClientSessionEntity.IdentifierColumnName}" = @identifier;
         """;
 
     /// <summary>Reads which user and which credential the presented session names, which is what the two locks below it need.</summary>
@@ -210,7 +213,8 @@ internal sealed class ClientSessionStore(NpgsqlDataSource dataSource) : IClientS
             return new HeldClientSession(
                 ReadGrant(reader, userIdOrdinal: 0, credentialIdOrdinal: 1, permissionsOrdinal: 2),
                 reader.GetFieldValue<byte[]>(3),
-                reader.GetFieldValue<DateTimeOffset>(4));
+                reader.GetFieldValue<DateTimeOffset>(4),
+                new MailUserEndpointAccess(reader.GetBoolean(5), reader.GetBoolean(6)));
         }
         catch (NpgsqlException failure)
         {

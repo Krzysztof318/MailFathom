@@ -117,10 +117,13 @@ internal static class ClientSessionTokenEndpoints
                 : SessionNoLongerAccepted();
         }
 
+        // The access is left at the default reaching nothing, because a mint writes the grant alone: whether the user
+        // may still be served on this surface is decided by the store inside the transaction that would hold the row.
         var admitted = new AdmittedUserCredential(
             CredentialBehind(context),
             authorization.RequireUser(),
-            [.. MailFathomPermission.All.Where(authorization.Permits)]);
+            [.. MailFathomPermission.All.Where(authorization.Permits)],
+            EndpointAccess: default);
 
         // Which of the three the store reports is the whole answer, and nothing here asks a second question about it:
         // whether the user and the credential still admit a session is decided inside the transaction that would have

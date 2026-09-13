@@ -155,6 +155,7 @@ public sealed class ClientUserRecordEndpointTests
         await deployment.Store.Received(1).CommitAsync(
             SyntheticMailUser.Deployment,
             Arg.Any<string>(),
+            Arg.Any<MailUserEndpointAccess>(),
             4,
             Arg.Any<CancellationToken>());
     }
@@ -216,6 +217,7 @@ public sealed class ClientUserRecordEndpointTests
         await deployment.Store.Received(1).CommitAsync(
             SyntheticMailUser.Deployment,
             Arg.Any<string>(),
+            Arg.Any<MailUserEndpointAccess>(),
             6,
             Arg.Any<CancellationToken>());
     }
@@ -241,7 +243,7 @@ public sealed class ClientUserRecordEndpointTests
         // Assert
         Assert.False(Assert.IsType<Ok<UserRecordWriteResponse>>(result.Result).Value!.Committed);
         await deployment.Store.DidNotReceiveWithAnyArgs()
-            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     [Theory]
@@ -285,6 +287,7 @@ public sealed class ClientUserRecordEndpointTests
         await deployment.Store.Received(1).CommitAsync(
             SyntheticMailUser.Deployment,
             Arg.Is<string>(candidate => !candidate!.Contains("archive", StringComparison.Ordinal)),
+            Arg.Any<MailUserEndpointAccess>(),
             1,
             Arg.Any<CancellationToken>());
     }
@@ -352,6 +355,7 @@ public sealed class ClientUserRecordEndpointTests
         await deployment.Store.Received(1).CommitAsync(
             SyntheticMailUser.Deployment,
             Arg.Is<string>(candidate => candidate!.Contains("INBOX/PROJECTS", StringComparison.Ordinal)),
+            Arg.Any<MailUserEndpointAccess>(),
             1,
             Arg.Any<CancellationToken>());
     }
@@ -375,7 +379,7 @@ public sealed class ClientUserRecordEndpointTests
         Assert.False(answered.Committed);
         Assert.Contains(answered.Messages, said => said.Contains("INBOX/PROJECTS/2027/Q1", StringComparison.Ordinal));
         await deployment.Store.DidNotReceiveWithAnyArgs()
-            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>A grant that reads mail has not thereby been granted the ability to change what this deployment reads.</summary>
@@ -417,6 +421,7 @@ public sealed class ClientUserRecordEndpointTests
             Arg.Is<string>(candidate =>
                 candidate!.Contains("INBOX/NEW", StringComparison.Ordinal)
                 && !candidate.Contains("INBOX/OLD", StringComparison.Ordinal)),
+            Arg.Any<MailUserEndpointAccess>(),
             1,
             Arg.Any<CancellationToken>());
     }
@@ -517,7 +522,7 @@ public sealed class ClientUserRecordEndpointTests
         // Assert
         Assert.False(Assert.IsType<Ok<UserRecordWriteResponse>>(result.Result).Value!.Committed);
         await deployment.Store.DidNotReceiveWithAnyArgs()
-            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
     private static UserRecordDeployment SignedInAs(MailUserId user, MailFathomPermission granted) =>

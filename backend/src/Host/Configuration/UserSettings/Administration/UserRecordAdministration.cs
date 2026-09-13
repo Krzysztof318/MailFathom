@@ -251,6 +251,96 @@ internal sealed class UserRecordAdministration(
             cancellationToken);
     }
 
+    /// <summary>Keeps one user off either mail-serving endpoint, or lets them back on, leaving a switch not named where it is.</summary>
+    /// <param name="user">The user whose switches are written.</param>
+    /// <param name="mcpEndpoint">Whether they are served on the MCP endpoint from now on, or <see langword="null" /> to leave it.</param>
+    /// <param name="clientEndpoint">Whether they are served on the client endpoint from now on, or <see langword="null" /> to leave it.</param>
+    /// <param name="cancellationToken">Cancels the read and the commit.</param>
+    /// <returns>What the write did and the switches the record states afterwards, or <see langword="null" /> when this deployment holds no such user.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// A keyed change to the record rather than a statement of its own, so the switch lands where a saved record would put
+    /// it and a later edit of the whole record reads it back. It is composed over whatever version stands, because no
+    /// other setting decides it; a writer committing in between is still refused rather than overwritten.
+    /// </para>
+    /// <para>
+    /// The configuration grant rather than the erasing one, because it decides where the deployment serves somebody
+    /// rather than disposing of anything they hold: no mail, credential, or session is removed, and a switch turned
+    /// back on serves them again with what they already had.
+    /// </para>
+    /// </remarks>
+    internal async Task<UserEndpointAccessWrite?> SetEndpointAccessAsync(
+        MailUserId user,
+        bool? mcpEndpoint,
+        bool? clientEndpoint,
+        CancellationToken cancellationToken)
+    {
+        RequireNamed(user);
+        authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+
+        if (await documents.ReadAsync(user, cancellationToken) is not { } inForce)
+        {
+            return null;
+        }
+
+        MailUserEndpointAccess standing;
+
+        try
+        {
+            standing = UserEndpointAccessOptions.ReadFrom(RedactedDocumentSave.Flatten(inForce.Json));
+        }
+        catch (Exception refused)
+            when (refused is FormatException or System.Text.Json.JsonException or InvalidDataException)
+        {
+            // The parser's own message names the path it stopped at, composed from the row's own key names — which for a
+            // user's record are their mailboxes — so the refusal says what to do rather than repeating it.
+            return new UserEndpointAccessWrite(
+                UserRecordWriteOutcome.Refused(
+                    MailFathomErrorCode.ConfigurationCandidateInvalid,
+                    inForce.Version,
+                    ["This user's record is not a document of settings, so its endpoint switches cannot be written. Correct the row where it was written."]),
+                default);
+        }
+
+        var requested = new MailUserEndpointAccess(
+            mcpEndpoint ?? standing.McpEndpoint,
+            clientEndpoint ?? standing.ClientEndpoint);
+
+        if (requested == standing)
+        {
+            return new UserEndpointAccessWrite(
+                UserRecordWriteOutcome.NothingToChange(
+                    inForce.Version,
+                    $"The user's record already states these switches, so nothing was written and version {inForce.Version} stays in force."),
+                standing);
+        }
+
+        ConfigurationEdit[] edits =
+        [
+            .. new (bool? Value, string Key)[]
+                {
+                    (mcpEndpoint, UserEndpointAccessOptions.McpEndpointKey),
+                    (clientEndpoint, UserEndpointAccessOptions.ClientEndpointKey),
+                }
+                .Where(named => named.Value is not null)
+                .Select(named => ConfigurationEdit.SetTo(named.Key, named.Value!.Value ? "true" : "false")),
+        ];
+
+        var outcome = await this.JudgeAndCommitAsync(
+            user,
+            inForce,
+            SettingsDocumentPatch.Apply(inForce.Json, edits),
+            UserRecordAuthority.Administrator,
+            UserRecordArrival.AlreadyHeld,
+            cancellationToken);
+
+        return outcome is null
+            ? null
+            : new UserEndpointAccessWrite(outcome, outcome.IsCommitted ? requested : standing);
+    }
+
     /// <summary>Declares one more folder in one of the signed-in user's mail accounts.</summary>
     /// <param name="accountId">The identifier the account the folder belongs to is named by.</param>
     /// <param name="folderJson">The folder, as the JSON object a file would have written.</param>
@@ -696,6 +786,20 @@ internal sealed class UserRecordAdministration(
                 binding.Refusals);
         }
 
+        // Which endpoints somebody is served on is the deployment's decision about them, so a user saving their own
+        // record may carry the switches through unchanged and may not move either one.
+        if (authority == UserRecordAuthority.User
+            && bound.EndpointAccess.Access
+                != UserEndpointAccessOptions.ReadFrom(RedactedDocumentSave.Flatten(inForce.Json)))
+        {
+            return UserRecordWriteOutcome.Refused(
+                MailFathomErrorCode.ConfigurationCandidateInvalid,
+                inForce.Version,
+                [
+                    $"{UserEndpointAccessOptions.BlockName} states which endpoints this deployment serves you on, and whoever administers it decides that. Leave it as your record already states it.",
+                ]);
+        }
+
         if (authority == UserRecordAuthority.User
             && FindSecretsTheUserMayNotName(user, inForce.Json, candidateJson) is { Count: > 0 } introduced)
         {
@@ -740,7 +844,12 @@ internal sealed class UserRecordAdministration(
 
         try
         {
-            if (await store.CommitAsync(user, candidateJson, inForce.Version, cancellationToken) is { } committed)
+            if (await store.CommitAsync(
+                    user,
+                    candidateJson,
+                    bound.EndpointAccess.Access,
+                    inForce.Version,
+                    cancellationToken) is { } committed)
             {
                 servedUsers.UserDocumentPublished(user, inForce.DisplayName, bound, committed);
                 outcome = UserRecordWriteOutcome.Committed(committed, [.. unusable.Select(DescribeAsAlreadyHeld)]);

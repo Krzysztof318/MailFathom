@@ -8105,6 +8105,42 @@
         ],
         "type": "object"
       },
+      "UserEndpointAccessRequest": {
+        "properties": {
+          "clientEndpoint": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "mcpEndpoint": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        },
+        "required": [
+          "mcpEndpoint",
+          "clientEndpoint"
+        ],
+        "type": "object"
+      },
+      "UserEndpointAccessResponse": {
+        "properties": {
+          "clientEndpoint": {
+            "type": "boolean"
+          },
+          "mcpEndpoint": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mcpEndpoint",
+          "clientEndpoint"
+        ],
+        "type": "object"
+      },
       "UserErasureResponse": {
         "properties": {
           "erased": {
@@ -8394,12 +8430,18 @@
       },
       "UserRosterEntryResponse": {
         "properties": {
+          "clientEndpoint": {
+            "type": "boolean"
+          },
           "displayName": {
             "type": "string"
           },
           "id": {
             "format": "uuid",
             "type": "string"
+          },
+          "mcpEndpoint": {
+            "type": "boolean"
           },
           "served": {
             "type": "boolean"
@@ -8408,7 +8450,9 @@
         "required": [
           "id",
           "displayName",
-          "served"
+          "served",
+          "mcpEndpoint",
+          "clientEndpoint"
         ],
         "type": "object"
       },
@@ -10654,6 +10698,61 @@
         "responses": {
           "204": {
             "description": "No Content"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/users/{userId}/endpoint-access": {
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserEndpointAccessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEndpointAccessResponse"
+                }
+              }
+            },
+            "description": "OK"
           },
           "404": {
             "content": {

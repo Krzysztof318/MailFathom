@@ -206,6 +206,7 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{UserCredentialEndpoints.UserCredentialEnablementRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserCredentialEndpoints.UserCredentialMaterialRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserDisplayNameRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserEndpointAccessRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserRecordRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserRecordRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserMailAccountsRoute}",
@@ -300,6 +301,7 @@ public sealed class AdminApiEndpointsTests
                 $"POST {prefix}{UserRecordEndpoints.UsersRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
                 $"DELETE {prefix}{UserRecordEndpoints.UserRoute} -> {MailFathomPermission.AdminErase.Name}",
                 $"PUT {prefix}{UserRecordEndpoints.UserDisplayNameRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"PUT {prefix}{UserRecordEndpoints.UserEndpointAccessRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
                 $"GET {prefix}{UserRecordEndpoints.UserRecordRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{UserRecordEndpoints.UserRecordRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
                 $"POST {prefix}{UserRecordEndpoints.UserMailAccountsRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
@@ -389,6 +391,7 @@ public sealed class AdminApiEndpointsTests
     [Theory]
     [InlineData("POST", UserRecordEndpoints.UsersRoute)]
     [InlineData("PUT", UserRecordEndpoints.UserDisplayNameRoute)]
+    [InlineData("PUT", UserRecordEndpoints.UserEndpointAccessRoute)]
     [InlineData("POST", UserRecordEndpoints.UserRecordRoute)]
     [InlineData("POST", UserRecordEndpoints.UserMailAccountsRoute)]
     [InlineData("POST", UserRecordEndpoints.UserMailAccountRemovalRoute)]

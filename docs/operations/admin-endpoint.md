@@ -215,9 +215,10 @@ what it was never granted is what the record exists to make visible.
 | `POST /api/admin/configuration/document` | `mailfathom.admin.configuration.write` | Takes that document back edited and commits it as one change against the version it was opened over. |
 | `GET /api/admin/configuration/adoption` | `mailfathom.admin.read` | Reports what adopting a path would copy out of the deployment's files, naming the file behind each setting, and writes nothing. |
 | `POST /api/admin/configuration/adoption` | `mailfathom.admin.configuration.write` | Copies those values into the persisted document. **This is the one route that moves a decision out of a deployment's files and into its database.** |
-| `GET /api/admin/users` | `mailfathom.admin.read` | Reads [the users this deployment holds records for](#users-and-their-records), each with the label it tells them apart by and whether the running process serves them. It is what a user or credential command reads before it acts, so that a deployment serving one person needs no `--user`. |
+| `GET /api/admin/users` | `mailfathom.admin.read` | Reads [the users this deployment holds records for](#users-and-their-records), each with the label it tells them apart by, whether the running process serves them, and whether they are served on the MCP endpoint and on the client endpoint. It is what a user or credential command reads before it acts, so that a deployment serving one person needs no `--user`. |
 | `POST /api/admin/users` | `mailfathom.admin.configuration.write` | Records a user this deployment did not hold, from the display name the body carries, and answers with the identifier they were minted under. It refuses, naming what to change, a second user while a user-facing endpoint admits a caller who names nobody, a label another user already carries, and a roster already at its bound. |
 | `PUT /api/admin/users/{userId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the label the user is told apart by. It answers with no body — the label the request carried is the whole of what changed — refuses a label another user carries, naming what to change, and answers `404` for a user this deployment holds no record for, as every other user-scoped route does. |
+| `PUT /api/admin/users/{userId}/endpoint-access` | `mailfathom.admin.configuration.write` | Keeps the user off [the MCP endpoint, the client endpoint, or both](#users-and-their-records), or lets them back on, from `mcpEndpoint` and `clientEndpoint` in the body; a switch the body leaves out stays where it is and a body naming neither is refused. It writes them into the user's record, answers both switches as the record now states them, and answers `404` for a user this deployment holds no record for and `409` where another write moved the record first. |
 | `DELETE /api/admin/users/{userId}` | `mailfathom.admin.erase` | Erases the user and every message, folder, attachment, and derived index this deployment holds for them. **This is the one route here that destroys mail, and it cannot be undone.** A user this deployment does not hold is reported as nothing erased rather than as a refusal. |
 | `GET /api/admin/users/{userId}/record` | `mailfathom.admin.read` | Hands over one user's record as the redacted JSON an editing session opens, with the version it was read at and where this deployment currently reads that user's mail accounts from. |
 | `POST /api/admin/users/{userId}/record` | `mailfathom.admin.configuration.write` | Takes that record back edited and commits it as one change against the version it was opened over. It is what `mfctl user edit` sends when the editor exits, and a record another writer moved past is refused as superseded rather than merged. |
@@ -1215,11 +1216,12 @@ such user exists rather than editing somebody else's mailboxes.
 
 | Command | What it does |
 | --- | --- |
-| `mfctl user list` | Reads who this deployment holds, where each one's mail accounts come from, and whether the running process serves them |
+| `mfctl user list` | Reads who this deployment holds, where each one's mail accounts come from, whether the running process serves them, and which of the MCP and client endpoints each one is served on |
 | `mfctl user add --display-name <name>` | Records a user this deployment did not hold, and reports the identifier they were minted under |
 | `mfctl user show` | Reads one user's record as this deployment holds it, secrets redacted |
 | `mfctl user edit` | Opens that record in your `$VISUAL` or `$EDITOR` and commits what you saved as one change |
 | `mfctl user rename --display-name <name>` | Replaces the label that user is told apart by |
+| `mfctl user endpoints [--mcp true\|false] [--client true\|false]` | Keeps that user off the MCP endpoint, the client endpoint, or both, or lets them back on |
 | `mfctl user account add --from-file <path>` | Declares one more mailbox in that record |
 | `mfctl user account remove --id <account>` | Stops the record declaring one mailbox, leaving its stored mail alone |
 | `mfctl user remove` | Erases the user and every message this deployment holds for them, which cannot be undone |
@@ -1247,6 +1249,37 @@ The new label lasts, for every user this deployment serves. No configuration sou
 anybody's label out of a file and there is nobody for whom this reports a change the deployment undoes. The identifier
 is the opposite case, and
 [configuration sources](configuration-sources.md#the-identifier-mailfathom-mints) holds what changing one would cost.
+
+**Which endpoints a user is served on is two switches in the user's record, not a property of any credential.** Both
+are on when a user is recorded, and a record that states neither reads as both on. `mfctl user endpoints --mcp false`
+keeps a person who only reads mail off the MCP endpoint, so no agent can act for them, and `--client false` keeps an
+automation account out of the mail client; a switch the command does not name stays where it is. The route beneath it
+is `PUT /api/admin/users/{userId}/endpoint-access` with `{"mcpEndpoint": false}`, `{"clientEndpoint": false}`, or both,
+it takes `mailfathom.admin.configuration.write`, and it answers both switches as the record now states them. The
+switches are the record's `EndpointAccess:McpEndpoint` and `EndpointAccess:ClientEndpoint`, so `mfctl user edit`
+changes them too, and `mfctl user show` reads them back once either has been written:
+
+```json
+{ "Language": "English", "EndpointAccess": { "McpEndpoint": "false" } }
+```
+
+Whichever of the two writes them, the commit that stores the record copies both onto the user's row in the same
+statement, and that row is what a request reads — authentication never reads a document. A user saving their own
+record over the client endpoint may carry the switches through as they stand and is refused a change to either.
+
+A user kept off an endpoint is refused there whichever credential they present, exactly as an unknown credential is,
+and a session or a token they already hold stops working there on their next request, on every replica. Nothing is
+revoked or deleted, so turning a switch back on serves them again with what they still hold — disabling or deleting a
+credential is the act that ends one for good. **The switch is judged where an endpoint authenticates.** An endpoint
+configured to require no credential names no user from what a request presents, so it has no switch to consult and
+serves its one user as before; keeping somebody off such an endpoint means configuring a credential for it, or
+disabling it.
+
+```console
+$ mfctl user endpoints --mcp false
+User 3f1d... is served as follows from their next request, on every replica:
+    MCP endpoint: off; client endpoint: on
+```
 
 **A second user is refused while a user-facing endpoint authenticates nobody.** A deployment serving one person may
 leave the MCP endpoint open, because there is only one answer to whose mail a caller is asking about. Recording a second

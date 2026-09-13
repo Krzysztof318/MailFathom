@@ -19,17 +19,18 @@ namespace MailFathom.Host.Security.Basic;
 /// <remarks>
 /// <para>
 /// The handler is the adapter and nothing more: it lifts the header out of the request, names the source the attempt
-/// came from, hands both to <see cref="UserPasswordAuthenticator" />, and turns the answer into the framework's own
-/// vocabulary. Every rule worth asserting — what a readable credential is, what a username folds to, how a password is
+/// came from, hands both to <see cref="UserPasswordAuthenticator" />, asks the surface whether the user the credential
+/// resolved is served on it, and turns the answer into the framework's own vocabulary. Every rule worth asserting — what a readable credential is, what a username folds to, how a password is
 /// compared, how often one may be tried, and what a refusal is allowed to distinguish — lives below this boundary,
 /// where a test reaches it without a request pipeline.
 /// </para>
 /// <para>
-/// One handler serves every surface, because the only thing that differs between two of them is the attempt bucket,
-/// which the scheme's own options carry. The grant is not among them: it arrives on the credential the password
-/// resolved, so nothing here decides what an admitted user may do. A credential is the deployment's rather than a
-/// surface's, so the same user signs in to the client and to the MCP endpoint with one password — and spends a
-/// separate bucket of attempts on each, which is what the surface in the partition key buys.
+/// One handler serves every surface, because what differs between two of them is carried by the scheme's own options:
+/// the attempt bucket, and the surface that judges whether the resolved user is served on it. The grant is not among
+/// them: it arrives on the credential the password resolved, so nothing here decides what an admitted user may do. A
+/// credential is the deployment's rather than a surface's, so a user served on both endpoints signs in to the client
+/// and to the MCP endpoint with one password — and spends a separate bucket of attempts on each, which is what the
+/// surface in the partition key buys.
 /// </para>
 /// <para>
 /// Every refusal produces one indistinguishable answer: an empty <c>401</c> carrying the same two challenges, whether
@@ -105,6 +106,11 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
         if (result.Admitted is not { } admitted)
         {
             return AuthenticateResult.Fail("The request presented no usable credential.");
+        }
+
+        if (!this.Options.Surface.Admits(admitted.EndpointAccess))
+        {
+            return AuthenticateResult.Fail("The credential's user is kept off this endpoint.");
         }
 
         var identity = TransportGrant.IdentityFor(

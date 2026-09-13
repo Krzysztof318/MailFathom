@@ -43,14 +43,17 @@ internal sealed class PersistedUserSettingsDocumentWriter(
     /// The cast is what turns the parameter into the column's own type, so the server parses the document and refuses
     /// text that is not JSON at all rather than storing something nothing can read back. <c>RETURNING</c> is what
     /// distinguishes the two outcomes in one round trip: a version when the row was replaced, nothing at all when the
-    /// user is not held or another writer had already moved their record.
+    /// user is not held or another writer had already moved their record. The endpoint switches move in the same
+    /// statement, so no request can find the row serving a user on an endpoint their committed record keeps them off.
     /// </remarks>
     private const string CommitRecord =
         """
         UPDATE settings_accounts
         SET "Document" = @document::jsonb,
             "Version" = "Version" + 1,
-            "UpdatedAt" = @updatedAt
+            "UpdatedAt" = @updatedAt,
+            "McpEndpointEnabled" = @mcpEndpoint,
+            "ClientEndpointEnabled" = @clientEndpoint
         WHERE "Id" = @user AND "Version" = @expectedVersion
         RETURNING "Version";
         """;
@@ -59,6 +62,7 @@ internal sealed class PersistedUserSettingsDocumentWriter(
     public async Task<long?> CommitAsync(
         MailUserId user,
         string json,
+        MailUserEndpointAccess endpointAccess,
         long expectedVersion,
         CancellationToken cancellationToken)
     {
@@ -99,6 +103,8 @@ internal sealed class PersistedUserSettingsDocumentWriter(
 
                 command.Parameters.AddWithValue("document", json);
                 command.Parameters.AddWithValue("updatedAt", timeProvider.GetUtcNow());
+                command.Parameters.AddWithValue("mcpEndpoint", endpointAccess.McpEndpoint);
+                command.Parameters.AddWithValue("clientEndpoint", endpointAccess.ClientEndpoint);
                 command.Parameters.AddWithValue("user", user.Value);
                 command.Parameters.AddWithValue("expectedVersion", expectedVersion);
 

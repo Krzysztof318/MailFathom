@@ -18,6 +18,21 @@ internal sealed record UserProvisioningRequest(
 internal sealed record UserRelabelRequest(
     [property: JsonPropertyName("displayName")] string DisplayName);
 
+/// <summary>The endpoint switches one user carries from now on.</summary>
+/// <param name="McpEndpoint">Whether the user is served on the MCP endpoint, or <see langword="null" /> to leave it.</param>
+/// <param name="ClientEndpoint">Whether the user is served on the client endpoint, or <see langword="null" /> to leave it.</param>
+/// <remarks>A switch left out is written as absent rather than as a guess, so the deployment leaves it where it stands.</remarks>
+internal sealed record UserEndpointAccessRequest(
+    [property: JsonPropertyName("mcpEndpoint"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? McpEndpoint,
+    [property: JsonPropertyName("clientEndpoint"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? ClientEndpoint);
+
+/// <summary>The endpoint switches one user carries once the deployment wrote them.</summary>
+/// <param name="McpEndpoint">Whether the user is served on the MCP endpoint.</param>
+/// <param name="ClientEndpoint">Whether the user is served on the client endpoint.</param>
+internal sealed record UserEndpointAccess(
+    [property: JsonPropertyName("mcpEndpoint")] bool McpEndpoint,
+    [property: JsonPropertyName("clientEndpoint")] bool ClientEndpoint);
+
 /// <summary>The user a provisioning recorded.</summary>
 /// <param name="Id">The identifier the deployment minted.</param>
 internal sealed record UserProvisioned([property: JsonPropertyName("id")] Guid Id);

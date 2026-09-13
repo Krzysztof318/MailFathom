@@ -70,6 +70,11 @@ internal sealed class UserApiKeyAuthenticationHandler : AuthenticationHandler<Us
             return AuthenticateResult.Fail("The request presented no usable credential.");
         }
 
+        if (!this.Options.Surface.Admits(admitted.EndpointAccess))
+        {
+            return AuthenticateResult.Fail("The credential's user is kept off this endpoint.");
+        }
+
         var identity = TransportGrant.IdentityFor(
             admitted.CredentialId.ToString("D", CultureInfo.InvariantCulture),
             ApiKeyAuthentication.ApiKeyNameClaimType,

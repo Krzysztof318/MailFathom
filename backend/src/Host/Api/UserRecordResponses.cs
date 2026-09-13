@@ -26,10 +26,14 @@ internal sealed record UserRosterResponse(IReadOnlyList<UserRosterEntryResponse>
 /// <param name="Id">The identifier the user was minted under, which every other act names them by.</param>
 /// <param name="DisplayName">The label an administrator tells them apart by, which may change and is never the identity.</param>
 /// <param name="Served">Whether the running process is serving them, which every user it holds is; a user it is not serving is one whose mail is neither read nor refreshed.</param>
+/// <param name="McpEndpoint">Whether they are served on the MCP endpoint, whichever credential they present there.</param>
+/// <param name="ClientEndpoint">Whether they are served on the client endpoint, whichever credential or session they present there.</param>
 internal sealed record UserRosterEntryResponse(
     Guid Id,
     string DisplayName,
-    bool Served)
+    bool Served,
+    bool McpEndpoint,
+    bool ClientEndpoint)
 {
     /// <summary>Describes one user.</summary>
     /// <param name="entry">The user as the roster reported them.</param>
@@ -39,9 +43,26 @@ internal sealed record UserRosterEntryResponse(
     {
         ArgumentNullException.ThrowIfNull(entry);
 
-        return new UserRosterEntryResponse(entry.User.Value, entry.DisplayName, entry.Served);
+        return new UserRosterEntryResponse(
+            entry.User.Value,
+            entry.DisplayName,
+            entry.Served,
+            entry.EndpointAccess.McpEndpoint,
+            entry.EndpointAccess.ClientEndpoint);
     }
 }
+
+/// <summary>The endpoint switches an administrator writes for one user.</summary>
+/// <param name="McpEndpoint">Whether the user is served on the MCP endpoint from now on, or absent to leave it as it is.</param>
+/// <param name="ClientEndpoint">Whether the user is served on the client endpoint from now on, or absent to leave it as it is.</param>
+/// <remarks>Each switch may be left out, so keeping somebody off one endpoint never needs the other read first and cannot put back a value another administrator just wrote.</remarks>
+internal sealed record UserEndpointAccessRequest(bool? McpEndpoint, bool? ClientEndpoint);
+
+/// <summary>The endpoint switches one user carries once a write has run.</summary>
+/// <param name="McpEndpoint">Whether the user is served on the MCP endpoint.</param>
+/// <param name="ClientEndpoint">Whether the user is served on the client endpoint.</param>
+/// <remarks>Both, rather than an echo of what was sent, because a switch the request left out is part of what the caller acts on next.</remarks>
+internal sealed record UserEndpointAccessResponse(bool McpEndpoint, bool ClientEndpoint);
 
 /// <summary>The label a user is recorded under.</summary>
 /// <param name="DisplayName">What an administrator tells this user apart by, unique across the deployment.</param>

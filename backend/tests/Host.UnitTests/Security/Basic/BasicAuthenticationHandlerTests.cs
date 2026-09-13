@@ -111,6 +111,46 @@ public sealed class BasicAuthenticationHandlerTests
         Assert.Equal(CredentialUser, TransportCallerUser.CarriedBy(result.Principal!));
     }
 
+    /// <summary>
+    /// The switch is the user's and says nothing about the client, so the password that no longer opens the MCP endpoint
+    /// still signs the same person in to their mail client.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateAsync_AUserKeptOffTheMcpEndpoint_IsStillSignedInToTheClientWithTheirPassword()
+    {
+        // Arrange
+        using var harness = new HandlerHarness { Surface = TransportSurface.Client };
+        harness.HoldsTheUsersCredential(new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true));
+        var handler = await harness.InitializeAsync(BasicHeader("user", Password), https: true);
+
+        // Act
+        var result = await handler.AuthenticateAsync();
+
+        // Assert
+        Assert.True(result.Succeeded);
+        Assert.Equal(CredentialUser, TransportCallerUser.CarriedBy(result.Principal!));
+    }
+
+    /// <summary>
+    /// On the surface the user is kept off, the same correct password authenticates nobody, so the request meets the
+    /// challenge an unknown credential meets rather than a refusal telling the caller the password is good elsewhere.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateAsync_AUserKeptOffTheMcpEndpoint_IsRefusedThereWithTheirCorrectPassword()
+    {
+        // Arrange
+        using var harness = new HandlerHarness { Surface = TransportSurface.Mcp };
+        harness.HoldsTheUsersCredential(new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true));
+        var handler = await harness.InitializeAsync(BasicHeader("user", Password), https: true);
+
+        // Act
+        var result = await handler.AuthenticateAsync();
+
+        // Assert
+        Assert.False(result.Succeeded);
+        Assert.Null(result.Principal);
+    }
+
     /// <summary>The credential itself travels beside the user, so a session this request exchanges it for is one disabling that credential ends.</summary>
     [Fact]
     public async Task AuthenticateAsync_AProvisionedCredential_CarriesTheCredentialThatAdmittedTheRequest()
@@ -336,8 +376,12 @@ public sealed class BasicAuthenticationHandlerTests
 
         internal IUserCredentialStore Credentials { get; }
 
+        /// <summary>Gets or sets the surface the handler is registered for.</summary>
+        internal TransportSurface Surface { get; set; } = TransportSurface.Client;
+
         /// <summary>Holds one enabled credential for <see cref="CredentialUser" />, whose password the hasher recognizes.</summary>
-        internal void HoldsTheUsersCredential() =>
+        /// <param name="endpointAccess">The user's endpoint switches as the store reads them beside the credential, or both on.</param>
+        internal void HoldsTheUsersCredential(MailUserEndpointAccess? endpointAccess = null) =>
             this.Credentials.FindAsync(
                     UserCredentialMethod.Password,
                     Arg.Is<UserCredentialLookup>(lookup => lookup.Value == "user"),
@@ -348,7 +392,8 @@ public sealed class BasicAuthenticationHandlerTests
                     UserCredentialMethod.Password,
                     Grant,
                     Enabled: true,
-                    StoredHash));
+                    StoredHash,
+                    endpointAccess ?? MailUserEndpointAccess.Everywhere));
 
         private UserPasswordAuthenticator Authenticator { get; }
 
@@ -384,7 +429,7 @@ public sealed class BasicAuthenticationHandlerTests
             var handler = new BasicAuthenticationHandler(
                 new StaticOptionsMonitor(new BasicAuthenticationSchemeOptions
                 {
-                    Surface = TransportSurface.Client,
+                    Surface = this.Surface,
                     AttemptsPerMinute = attemptsPerMinute,
                     MaxConcurrentVerifications = 128,
                 }),
@@ -398,7 +443,7 @@ public sealed class BasicAuthenticationHandlerTests
 
             await handler.InitializeAsync(
                 new AuthenticationScheme(
-                    TransportSurface.Client.BasicSchemeName,
+                    this.Surface.BasicSchemeName,
                     displayName: null,
                     typeof(BasicAuthenticationHandler)),
                 context);

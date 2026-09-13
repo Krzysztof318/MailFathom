@@ -75,6 +75,54 @@ public sealed class UserCommandTests : IDisposable
             line => line.Contains("mfctl user account add", StringComparison.Ordinal));
     }
 
+    /// <summary>A switch the operator did not name is left out of the request, so the deployment keeps it and the command reports both as they now stand.</summary>
+    [Fact]
+    public async Task Endpoints_OneSwitchNamed_SendsThatSwitchAloneAndReportsBoth()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.Holding(User);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "user",
+            "endpoints",
+            "--user",
+            $"{User:D}",
+            "--mcp",
+            "false",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var write = Assert.Single(
+            deployment.UserRequestsTo(HttpMethod.Put, AdminEndpointRoutes.UserEndpointAccessPath(User)));
+        var body = JsonDocument.Parse(write.ContentAsUtf8String()).RootElement;
+
+        Assert.False(body.GetProperty("mcpEndpoint").GetBoolean());
+        Assert.False(body.TryGetProperty("clientEndpoint", out _));
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains("MCP endpoint: off; client endpoint: on", StringComparison.Ordinal));
+    }
+
+    /// <summary>Naming neither switch would change nothing, so the command refuses before it reaches the deployment.</summary>
+    [Fact]
+    public async Task Endpoints_NoSwitchNamed_FailsWithoutWriting()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.Holding(User);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "endpoints", "--user", $"{User:D}", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Empty(deployment.UserRequestsTo(HttpMethod.Put, AdminEndpointRoutes.UserEndpointAccessPath(User)));
+    }
+
     /// <summary>A label is the operator's own text and nothing is keyed by it, so a rename asks nothing and reports what the user now carries.</summary>
     [Fact]
     public async Task Rename_AUserTheDeploymentHolds_SendsTheLabelAndReportsIt()
@@ -168,6 +216,27 @@ public sealed class UserCommandTests : IDisposable
         Assert.Contains(
             this.harness.Console.Lines,
             line => line.Contains("Record the first one with 'user add'", StringComparison.Ordinal));
+    }
+
+    /// <summary>Each user's switches are printed under that user, so a listing of several never leaves an operator reading one person's line as another's.</summary>
+    [Fact]
+    public async Task List_UsersServedOnDifferentEndpoints_StatesEachOnesSwitchesUnderThem()
+    {
+        // Arrange
+        using var deployment = FakeUserRecordDeployment.HoldingServedOn((User, true, true), (AnotherUser, false, true));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "user", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        List<string> lines = [.. this.harness.Console.Lines];
+        var first = lines.FindIndex(line => line.StartsWith($"{User:D}", StringComparison.Ordinal));
+        var second = lines.FindIndex(line => line.StartsWith($"{AnotherUser:D}", StringComparison.Ordinal));
+
+        Assert.Contains("MCP endpoint: on; client endpoint: on", lines[first + 1], StringComparison.Ordinal);
+        Assert.Contains("MCP endpoint: off; client endpoint: on", lines[second + 1], StringComparison.Ordinal);
     }
 
     /// <summary>A deployment serving one user needs no identifier typed, which is what makes the ordinary invocation short.</summary>

@@ -80,7 +80,8 @@ internal sealed partial class UserRosterAdministration(
             .. held.Select(record => new UserRosterEntry(
                 record.User,
                 record.DisplayName,
-                Served: servedUsers.Users.Any(served => served.User == record.User))),
+                Served: servedUsers.Users.Any(served => served.User == record.User),
+                record.EndpointAccess)),
         ];
     }
 
@@ -162,7 +163,12 @@ internal sealed partial class UserRosterAdministration(
 
         // Committed rather than published from the insert alone, because the commit is what proves the row still
         // stands and it answers the version the published record is composed over.
-        if (await documents.CommitAsync(user, ProvisionedRecord, ProvisionedVersion, cancellationToken) is not { } committed)
+        if (await documents.CommitAsync(
+                user,
+                ProvisionedRecord,
+                MailUserEndpointAccess.Everywhere,
+                ProvisionedVersion,
+                cancellationToken) is not { } committed)
         {
             // The envelope was written and the row is gone again, which is another administrator erasing this user
             // between the two statements. Reporting the user as recorded would hand back an identifier nothing holds.

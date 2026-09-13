@@ -375,7 +375,7 @@ public sealed class ClientSessionTokenEndpointsTests
     }
 
     private static AdmittedUserCredential Admitted() =>
-        new(CredentialId, SyntheticMailUser.Deployment, [MailFathomPermission.MailRead]);
+        new(CredentialId, SyntheticMailUser.Deployment, [MailFathomPermission.MailRead], MailUserEndpointAccess.Everywhere);
 
     private static DefaultHttpContext RequestCarrying(string headerValue) =>
         RequestAdmittedBy(headerValue, CredentialId);

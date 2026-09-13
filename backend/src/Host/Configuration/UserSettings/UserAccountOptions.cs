@@ -34,7 +34,8 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// <para>
 /// The envelope is not repeated here. The user's identifier, the label they are told apart by, the version, and the
 /// marker saying whether this document has ever been written are relational columns, because authenticating a request
-/// and joining a user's mail must never depend on reading a document.
+/// and joining a user's mail must never depend on reading a document. The endpoint switches are the one value both
+/// places hold: stated here so every record write reaches them, and copied onto the row by the commit that writes them.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The configuration binder materializes this type when a user's document is read.")]
@@ -94,6 +95,13 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// not theirs is refused where the record is committed, because only the database can say whose a file is.
     /// </remarks>
     public Guid? Portrait { get; set; }
+
+    /// <summary>Gets which of the two mail-serving endpoints this user is served on.</summary>
+    /// <remarks>
+    /// Always present and on in both switches, so a record written before this block existed serves its user where it
+    /// always did. The commit writes what it states onto the user's row as well, which is where a request reads it.
+    /// </remarks>
+    public UserEndpointAccessOptions EndpointAccess { get; } = new();
 
     /// <summary>Gets the language this record states, or <see langword="null" /> where it states none this build writes in.</summary>
     /// <remarks>

@@ -668,7 +668,9 @@ declared, is served from that moment — no restart.
 ```console
 $ mfctl user list
 3f1d... (Alex)
+    MCP endpoint: on; client endpoint: on
 7c02... (Sam)
+    MCP endpoint: off; client endpoint: on
 
 $ mfctl user add --display-name Morgan
 Recorded Morgan as 9b41....
@@ -681,6 +683,14 @@ Every command but `list` and `add` takes `--user` and does not need it while the
 on the single user there is, and refuses rather than guessing where there are several. `mfctl user rename` replaces
 the label you tell somebody apart by; nothing is keyed by it, so it moves no mail and invalidates no identifier, and
 the new label lasts — no start reads anybody's label out of a file any more, so there is nobody a rename is undone for.
+
+**Keeping somebody off one endpoint is `mfctl user endpoints`.** `--mcp false` stops any agent acting for a person who
+only reads their mail, and `--client false` keeps an automation account out of the mail client; both switches start on,
+and one you do not name stays as it is. It holds whichever password, key, or token they present, and whatever they are
+already signed in with stops working there on their next request. Nothing is deleted, so `--mcp true` lets them back on.
+The switches live in that person's record, so `mfctl user edit` shows and changes them as `EndpointAccess` too, and they
+cannot change them from their own client. An endpoint you left requiring no credential has no idea who is calling, so
+it has nobody to keep off: give it a credential first.
 
 **Changing more than one thing about somebody at once is `mfctl user edit`.** `mfctl user account add` and
 `mfctl user account remove` each name one mailbox, so two changes are two commands and the deployment briefly reads what

@@ -49,17 +49,25 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
         var storedMethod = RequireMethod(method);
         var storedLookup = RequireLookup(lookup);
 
+        // The user's two switches are joined into the same statement rather than read after it, so judging whether the
+        // surface serves this user costs a request nothing beyond resolving the credential it presented.
         var stored = await dbContext.UserCredentials
             .AsNoTracking()
             .Where(credential => credential.Method == storedMethod && credential.Lookup == storedLookup)
-            .Select(credential => new
-            {
-                credential.Id,
-                credential.UserId,
-                credential.Enabled,
-                credential.Permissions,
-                credential.Material,
-            })
+            .Join(
+                dbContext.UserAccounts,
+                credential => credential.UserId,
+                userAccount => userAccount.Id,
+                (credential, userAccount) => new
+                {
+                    credential.Id,
+                    credential.UserId,
+                    credential.Enabled,
+                    credential.Permissions,
+                    credential.Material,
+                    userAccount.McpEndpointEnabled,
+                    userAccount.ClientEndpointEnabled,
+                })
             .SingleOrDefaultAsync(cancellationToken);
 
         return stored is null
@@ -70,7 +78,8 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
                 method,
                 GrantOf(stored.Permissions),
                 stored.Enabled,
-                stored.Material);
+                stored.Material,
+                new MailUserEndpointAccess(stored.McpEndpointEnabled, stored.ClientEndpointEnabled));
     }
 
     /// <inheritdoc />

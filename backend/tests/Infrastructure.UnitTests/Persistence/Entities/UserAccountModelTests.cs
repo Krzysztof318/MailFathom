@@ -141,6 +141,47 @@ public sealed class UserAccountModelTests
     }
 
     /// <summary>
+    /// Both switches default to on in the database, which is what a user recorded before the columns existed reads
+    /// once the migration adds them, and what a provisioning insert naming neither writes.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(UserAccountEntity.McpEndpointEnabled))]
+    [InlineData(nameof(UserAccountEntity.ClientEndpointEnabled))]
+    public void UserAccountModel_EndpointSwitch_DefaultsToOnForARowThatNamesNone(string switchName)
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var endpointSwitch = EntityTypeOf<UserAccountEntity>(context).FindProperty(switchName);
+
+        // Assert
+        Assert.NotNull(endpointSwitch);
+        Assert.False(endpointSwitch.IsNullable);
+        Assert.Equal(true, endpointSwitch.GetDefaultValue());
+    }
+
+    /// <summary>
+    /// The sentinel is the database default, so a row an administrator keeps off an endpoint is written with the false
+    /// it carries instead of that false being read as "unset" and replaced by the default.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(UserAccountEntity.McpEndpointEnabled))]
+    [InlineData(nameof(UserAccountEntity.ClientEndpointEnabled))]
+    public void UserAccountModel_EndpointSwitch_SendsAnExplicitOffRatherThanTheDefault(string switchName)
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var endpointSwitch = EntityTypeOf<UserAccountEntity>(context).FindProperty(switchName);
+
+        // Assert
+        Assert.NotNull(endpointSwitch);
+        Assert.Equal(true, endpointSwitch.Sentinel);
+    }
+
+    /// <summary>
     /// Reads the design-time model rather than <c>DbContext.Model</c>, because the runtime model is trimmed to what a
     /// query needs and throws for the index configuration a schema is generated from.
     /// </summary>

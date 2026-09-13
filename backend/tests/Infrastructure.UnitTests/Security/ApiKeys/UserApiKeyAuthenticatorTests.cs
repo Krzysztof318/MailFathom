@@ -164,7 +164,8 @@ public sealed class UserApiKeyAuthenticatorTests
                     UserCredentialMethod.ApiKey,
                     Grant,
                     enabled,
-                    Material: null));
+                    Material: null,
+                    MailUserEndpointAccess.Everywhere));
 
         internal Task<UserApiKeyAuthenticationResult> AuthenticateAsync(string? authorizationHeaderValue) =>
             this.Authenticator.AuthenticateAsync(authorizationHeaderValue, TestContext.Current.CancellationToken);

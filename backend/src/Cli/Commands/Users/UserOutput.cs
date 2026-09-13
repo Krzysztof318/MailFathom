@@ -15,7 +15,7 @@ namespace MailFathom.Cli.Commands.Users;
 /// </remarks>
 internal static class UserOutput
 {
-    /// <summary>Writes the users a deployment holds, one to a line.</summary>
+    /// <summary>Writes the users a deployment holds, each followed by the endpoints they are served on.</summary>
     /// <param name="console">Where the listing is written.</param>
     /// <param name="users">The users, in the deployment's own order.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -33,8 +33,19 @@ internal static class UserOutput
                 console.WriteLine(
                     "    not served by the running deployment; its mail is neither read nor refreshed until a restart");
             }
+
+            console.WriteLine(DescribeEndpoints(user.McpEndpoint, user.ClientEndpoint));
         }
     }
+
+    /// <summary>States which of the two mail-serving endpoints a user is served on, as one indented line.</summary>
+    /// <param name="mcpEndpoint">Whether the user is served on the MCP endpoint.</param>
+    /// <param name="clientEndpoint">Whether the user is served on the client endpoint.</param>
+    /// <returns>The line.</returns>
+    internal static string DescribeEndpoints(bool mcpEndpoint, bool clientEndpoint) =>
+        $"    MCP endpoint: {OnOrOff(mcpEndpoint)}; client endpoint: {OnOrOff(clientEndpoint)}";
+
+    private static string OnOrOff(bool enabled) => enabled ? "on" : "off";
 
     /// <summary>Reports what one write to a user's record did, and returns what the command exits with.</summary>
     /// <param name="context">What the command needs from its surroundings.</param>

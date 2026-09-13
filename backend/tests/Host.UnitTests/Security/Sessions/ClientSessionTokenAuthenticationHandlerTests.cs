@@ -83,6 +83,27 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
         Assert.False(result.Succeeded);
     }
 
+    /// <summary>
+    /// The switch is read beside the session on every request rather than stored on it, so a session minted while the
+    /// user could reach the client stops working on the next request once an administrator keeps them off it.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateAsync_ASessionWhoseUserWasKeptOffTheClientSinceItWasMinted_IsRefused()
+    {
+        // Arrange
+        var store = new InMemoryClientSessionStore();
+        var sessions = new ClientSessionTokens(store, new FakeTimeProvider(Instant));
+        var minted = (await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken)).Token!;
+        store.EndpointAccess = new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false);
+
+        // Act
+        var result = await AuthenticateAsync(sessions, $"Bearer {minted.Value}");
+
+        // Assert
+        Assert.False(result.Succeeded);
+        Assert.Null(result.Principal);
+    }
+
     /// <summary>Everything that is not a live token is refused identically, so a refusal says nothing about which of them it was.</summary>
     [Theory]
     [InlineData("")]
@@ -150,7 +171,8 @@ public sealed class ClientSessionTokenAuthenticationHandlerTests
     private static AdmittedUserCredential Admitted() => new(
         CredentialId,
         SyntheticMailUser.Deployment,
-        [MailFathomPermission.MailRead, MailFathomPermission.MailAsk]);
+        [MailFathomPermission.MailRead, MailFathomPermission.MailAsk],
+        MailUserEndpointAccess.Everywhere);
 
     private static async Task<AuthenticateResult> AuthenticateAsync(ClientSessionTokens sessions, string headerValue)
     {

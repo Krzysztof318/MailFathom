@@ -144,7 +144,12 @@ public sealed class PersistedUserSettingsDocumentWriterTests
             new FakeTimeProvider());
 
         return await Record.ExceptionAsync(
-            () => writer.CommitAsync(user, json, expectedVersion, TestContext.Current.CancellationToken));
+            () => writer.CommitAsync(
+                user,
+                json,
+                MailUserEndpointAccess.Everywhere,
+                expectedVersion,
+                TestContext.Current.CancellationToken));
     }
 
     /// <summary>

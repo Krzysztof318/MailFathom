@@ -132,7 +132,9 @@ rather than from what it presented.
 otherwise.** Every credential a mail-serving surface accepts resolves one user record, whichever of the four methods it
 is, so a request admitted on one carries that user as a claim and the adapter acts for it — which is what lets one
 deployment serve more than one person's mail over one address, and what makes a credential resolving no user refusable
-exactly as an unknown credential is.
+exactly as an unknown credential is. The same read carries the two endpoint switches on that user's row, so a user an
+administrator kept off the surface the request arrived on is refused at authentication with that same answer, whatever
+the method and however long ago a session or token was minted, and never reaches a policy to be told `403` instead.
 
 The gate settles the whole roster while the host starts — every user the deployment holds, each with the mail accounts
 their own record declares. No configuration source names a user or declares a mailbox. A caller that names no user needs

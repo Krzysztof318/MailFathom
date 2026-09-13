@@ -728,7 +728,8 @@ public sealed class UserPasswordAuthenticatorTests
             UserCredentialMethod.Password,
             Grant,
             enabled,
-            StoredHash);
+            StoredHash,
+            MailUserEndpointAccess.Everywhere);
 
         internal Task<UserPasswordAuthenticationResult> AuthenticateAsync(
             string? authorizationHeaderValue,

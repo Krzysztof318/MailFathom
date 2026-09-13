@@ -185,7 +185,8 @@ public sealed partial class UserPasswordAuthenticator
         return UserPasswordAuthenticationResult.Authenticated(
             credential.Id,
             credential.User,
-            credential.Permissions);
+            credential.Permissions,
+            credential.EndpointAccess);
     }
 
     /// <summary>Rewrites a record whose work parameters are behind the current policy, while the plaintext is still here.</summary>

@@ -10,11 +10,13 @@ namespace MailFathom.Application.Access.Credentials;
 /// <param name="CredentialId">The credential that matched, which is what an audit record and a diagnostic correlate on.</param>
 /// <param name="User">The user the request acts for.</param>
 /// <param name="Permissions">What the request may do, in the published order.</param>
+/// <param name="EndpointAccess">Which endpoints the user may be served on, as read when the credential or the session was resolved, which the surface judging the request asks of its own switch.</param>
 /// <remarks>
 /// <para>
-/// The three facts are one shape because they are established together and travel together: a credential resolves a
-/// user, and what that user's caller may do was decided when the credential was provisioned. Four methods producing
-/// four shapes of the same answer would be four places for one of the three to be dropped on the way to the principal.
+/// The four facts are one shape because they are established together and travel together: a credential resolves a
+/// user, what that user's caller may do was decided when the credential was provisioned, and which endpoints the user
+/// is served on is read in the same statement. Four methods producing four shapes of the same answer would be four
+/// places for one of them to be dropped on the way to the principal.
 /// </para>
 /// <para>
 /// What is deliberately absent is the lookup. A username, a key digest, a fingerprint, and a subject are each what the
@@ -25,7 +27,8 @@ namespace MailFathom.Application.Access.Credentials;
 public sealed record AdmittedUserCredential(
     Guid CredentialId,
     MailUserId User,
-    IReadOnlyList<MailFathomPermission> Permissions)
+    IReadOnlyList<MailFathomPermission> Permissions,
+    MailUserEndpointAccess EndpointAccess)
 {
     /// <summary>Describes the credential one resolution admitted, refusing an answer that names nothing.</summary>
     /// <param name="credential">The credential the store resolved.</param>
@@ -37,7 +40,11 @@ public sealed record AdmittedUserCredential(
         ArgumentNullException.ThrowIfNull(credential);
 
         return credential.User.IsSpecified
-            ? new AdmittedUserCredential(credential.Id, credential.User, credential.Permissions)
+            ? new AdmittedUserCredential(
+                credential.Id,
+                credential.User,
+                credential.Permissions,
+                credential.EndpointAccess)
             : throw new ArgumentException(
                 "An admitted credential names the user the request acts for.",
                 nameof(credential));

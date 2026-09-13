@@ -226,6 +226,11 @@ internal static class AdminEndpointRoutes
     /// <returns>The path.</returns>
     internal static string UserDisplayNamePath(Guid userId) => $"{UserPath(userId)}/display-name";
 
+    /// <summary>Where one user's two endpoint switches are written.</summary>
+    /// <param name="userId">The user the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string UserEndpointAccessPath(Guid userId) => $"{UserPath(userId)}/endpoint-access";
+
     /// <summary>Where one user's record is read whole, and where an edited one is saved back.</summary>
     /// <param name="userId">The user the path names.</param>
     /// <returns>The path.</returns>

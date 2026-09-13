@@ -38,11 +38,19 @@ internal sealed class PersistedMailUserDirectory(MailFathomDbContext dbContext) 
             {
                 user.Id,
                 user.DisplayName,
+                user.McpEndpointEnabled,
+                user.ClientEndpointEnabled,
             })
             .Take(limit)
             .ToArrayAsync(cancellationToken);
 
-        return [.. users.Select(user => new MailUserRecord(MailUserId.Create(user.Id), user.DisplayName))];
+        return
+        [
+            .. users.Select(user => new MailUserRecord(MailUserId.Create(user.Id), user.DisplayName)
+            {
+                EndpointAccess = new MailUserEndpointAccess(user.McpEndpointEnabled, user.ClientEndpointEnabled),
+            }),
+        ];
     }
 
     /// <inheritdoc />
@@ -57,12 +65,22 @@ internal sealed class PersistedMailUserDirectory(MailFathomDbContext dbContext) 
 
         // The same projection the roster read makes, on the primary key: the document beside the envelope is the
         // user's own record and nothing asking what this deployment records about a person materializes one.
-        var displayName = await dbContext.UserAccounts
+        var envelope = await dbContext.UserAccounts
             .AsNoTracking()
             .Where(record => record.Id == userId)
-            .Select(record => record.DisplayName)
+            .Select(record => new
+            {
+                record.DisplayName,
+                record.McpEndpointEnabled,
+                record.ClientEndpointEnabled,
+            })
             .SingleOrDefaultAsync(cancellationToken);
 
-        return displayName is null ? null : new MailUserRecord(user, displayName);
+        return envelope is null
+            ? null
+            : new MailUserRecord(user, envelope.DisplayName)
+            {
+                EndpointAccess = new MailUserEndpointAccess(envelope.McpEndpointEnabled, envelope.ClientEndpointEnabled),
+            };
     }
 }

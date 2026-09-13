@@ -332,6 +332,22 @@ public sealed class ClientSessionTokensTests
         Assert.Null(renewed);
     }
 
+    /// <summary>A renewal for a user an administrator kept off the client meanwhile answers nothing, so the switch reaches a client that stays signed in by renewing.</summary>
+    [Fact]
+    public async Task RenewAsync_WhenTheUserIsKeptOffTheClientEndpoint_AnswersNothing()
+    {
+        // Arrange
+        var sessions = Sessions(out var store);
+        var minted = await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken);
+
+        // Act
+        store.EndpointAccess = new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false);
+        var renewed = await sessions.RenewAsync(minted.Token!.Value, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(renewed);
+    }
+
     /// <summary>Signing out ends the session at once rather than leaving the token good until it expires.</summary>
     [Fact]
     public async Task RevokeAsync_ALiveSession_LeavesTheTokenRefusedOnTheNextRequest()
@@ -384,6 +400,22 @@ public sealed class ClientSessionTokensTests
         Assert.Null(minted.Token);
     }
 
+    /// <summary>A sign-in for a user kept off the client endpoint mints no session, and is reported as a sign-in the deployment no longer admits.</summary>
+    [Fact]
+    public async Task MintAsync_ForAUserKeptOffTheClientEndpoint_ReportsNoLongerAdmittedAndMintsNothing()
+    {
+        // Arrange
+        var sessions = Sessions(out var store);
+        store.EndpointAccess = new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false);
+
+        // Act
+        var minted = await sessions.MintAsync(Admitted(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ClientSessionMintOutcome.NoLongerAdmitted, minted.Outcome);
+        Assert.Null(minted.Token);
+    }
+
     /// <summary>A client endpoint requiring no credential still signs somebody in, and the session it mints names the user an erasure reaches it through.</summary>
     /// <remarks>
     /// The configuration a foreign key on the credential would have broken outright: nothing on such an endpoint is
@@ -395,7 +427,11 @@ public sealed class ClientSessionTokensTests
     {
         // Arrange
         var sessions = Sessions(out var store);
-        var admitted = new AdmittedUserCredential(Guid.Empty, SyntheticMailUser.Deployment, [MailFathomPermission.MailRead]);
+        var admitted = new AdmittedUserCredential(
+            Guid.Empty,
+            SyntheticMailUser.Deployment,
+            [MailFathomPermission.MailRead],
+            MailUserEndpointAccess.Everywhere);
 
         // Act
         var minted = await sessions.MintAsync(admitted, TestContext.Current.CancellationToken);
@@ -450,7 +486,8 @@ public sealed class ClientSessionTokensTests
                 new HeldClientSession(
                     new ClientSessionGrant(SyntheticMailUser.Deployment, CredentialId, [MailFathomPermission.MailRead]),
                     SHA256.HashData([(byte)ordinal]),
-                    Instant - TimeSpan.FromSeconds(1)));
+                    Instant - TimeSpan.FromSeconds(1),
+                    MailUserEndpointAccess.Everywhere));
         }
 
         // Act
@@ -477,7 +514,8 @@ public sealed class ClientSessionTokensTests
                 new HeldClientSession(
                     new ClientSessionGrant(SyntheticMailUser.Deployment, CredentialId, [MailFathomPermission.MailRead]),
                     SHA256.HashData([(byte)ordinal]),
-                    Instant + ClientSessionTokens.Lifetime));
+                    Instant + ClientSessionTokens.Lifetime,
+                    MailUserEndpointAccess.Everywhere));
         }
 
         // Act
@@ -579,10 +617,10 @@ public sealed class ClientSessionTokensTests
         new("The deployment's client sessions could not be reached.", new InvalidOperationException("No connection."));
 
     private static AdmittedUserCredential Admitted(params MailFathomPermission[] permissions) =>
-        new(CredentialId, SyntheticMailUser.Deployment, permissions.Length == 0 ? [MailFathomPermission.MailRead] : permissions);
+        new(CredentialId, SyntheticMailUser.Deployment, permissions.Length == 0 ? [MailFathomPermission.MailRead] : permissions, MailUserEndpointAccess.Everywhere);
 
     private static AdmittedUserCredential Admitted(MailUserId user) =>
-        new(CredentialId, user, [MailFathomPermission.MailRead]);
+        new(CredentialId, user, [MailFathomPermission.MailRead], MailUserEndpointAccess.Everywhere);
 
     /// <summary>The half of a token that is looked up, separator included, so a test can compose one from two.</summary>
     private static string NameOf(string token) => token[..(token.IndexOf('.', StringComparison.Ordinal) + 1)];

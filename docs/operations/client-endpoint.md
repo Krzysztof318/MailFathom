@@ -1742,6 +1742,12 @@ somebody's mail is not deciding which mailboxes are read for them.
 | `POST /api/client/record/mail-accounts/folders/replacement` | States one folder afresh, in place of the one carrying an alias |
 | `POST /api/client/record/mail-accounts/folders/removal` | Stops the mailbox declaring one folder, named by its alias |
 
+**A user's record states which endpoints they are served on, and saving it here never changes that.** The record
+carries `EndpointAccess` once an administrator has written it, and a record committed back here may carry it through
+exactly as it stands; one moving either switch is refused naming the block, because
+[whether a person is served on an endpoint](admin-endpoint.md#users-and-their-records) is decided by whoever
+administers the deployment.
+
 **The three folder routes are the whole of what a client may do to a folder, and none of them touches a mail
 server.** Each is a change to the mapping the record declares: a declaration adds one and lets the account's next run
 create the folder its own configuration names, a replacement states that mapping afresh in the position the old one
@@ -2678,6 +2684,24 @@ schemes and its own authorization policy, and a policy consults only its own sch
 settings here, and one credential is presented on whichever surface accepts its method; what keeps the two apart for a
 signed assertion is the audience it names, `urn:mailfathom:client`, so an assertion minted to read a mailbox as an agent
 cannot sign in as somebody's mail client.
+
+**Whether a person reaches this endpoint at all is their own switch rather than their credential's.** Each user carries
+one switch for this endpoint and one for the MCP endpoint, both on until `mfctl user endpoints --client false` turns this
+one off. A user kept off it is refused here whichever credential they present, with the same `401` a credential nobody
+holds receives: the exchange mints them no session, and a session they already hold stops working on their next
+request, on every replica, because the switch is read beside the session on each one. Nothing is revoked, so turning the
+switch back on serves the sessions they still hold. The switch decides where somebody is served and the grant decides
+what they may do once they are; neither widens the other, and an automation account kept off this endpoint still reads
+mail over MCP with exactly its grant. [What a permission does not decide](permissions.md#what-a-permission-does-not-decide)
+holds the whole rule.
+
+Two things the switch does not reach. **A signal connection already open stays open**: it was admitted against a ticket
+when it connected, and nothing is re-judged on a connection that is already carrying statements — so the client goes on
+being told that something changed until the connection closes, while every route it then calls to read what changed is
+refused, and no new ticket is minted for them — though a ticket minted just before the switch moved still opens a
+connection until it expires, thirty seconds after it was minted. And **this endpoint configured to require no credential judges no
+switch**, because a request presents nothing that names a user and every one is served as the single user the
+deployment holds; keeping somebody off it means configuring a credential for it, or disabling it.
 
 A grant is recorded on the credential rather than on the entry, and it draws from the mailbox half of the published set
 — a name reaching only the administrative half is refused where the credential is provisioned.

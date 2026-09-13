@@ -7,6 +7,7 @@ using System.Buffers.Text;
 using System.Security.Cryptography;
 using MailFathom.Application.Access.Credentials;
 using MailFathom.Application.Access.Sessions;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Host.Security.Sessions;
 
@@ -204,13 +205,13 @@ internal sealed class ClientSessionTokens
             return null;
         }
 
-        return AdmittedBy(held.Grant);
+        return AdmittedBy(held.Grant, held.EndpointAccess);
     }
 
     /// <summary>Replaces a live session with a fresh token, so a client renews without anybody typing a password.</summary>
     /// <param name="presented">The token the renewing request carried.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>The new token, or <see langword="null" /> where the presented one no longer authenticates or the credential behind it no longer admits a session.</returns>
+    /// <returns>The new token, or <see langword="null" /> where the presented one no longer authenticates, the credential behind it no longer admits a session, or the user it names is kept off the client endpoint.</returns>
     /// <exception cref="ClientSessionStoreUnavailableException">Thrown when the deployment's sessions could not be reached, which the route answers as unavailable rather than by refusing the renewal.</exception>
     /// <remarks>
     /// The presented token stops working the moment this answers, which is what keeps one sign-in to one live token
@@ -321,10 +322,11 @@ internal sealed class ClientSessionTokens
 
     /// <summary>Reads what a held session admits back into what every surface downstream of authentication expects.</summary>
     /// <remarks>The absent credential becomes the empty identifier again, which is what the claim on such a request has always carried and what an operator reading one is already told matches no credential.</remarks>
-    private static AdmittedUserCredential AdmittedBy(ClientSessionGrant grant) => new(
+    private static AdmittedUserCredential AdmittedBy(ClientSessionGrant grant, MailUserEndpointAccess endpointAccess) => new(
         grant.CredentialId ?? Guid.Empty,
         grant.User,
-        grant.Permissions);
+        grant.Permissions,
+        endpointAccess);
 
     /// <summary>Removes what can no longer authenticate anything, at most once per <see cref="SweepInterval" />.</summary>
     /// <remarks>

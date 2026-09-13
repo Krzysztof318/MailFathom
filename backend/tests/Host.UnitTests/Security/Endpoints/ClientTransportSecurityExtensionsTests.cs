@@ -287,6 +287,26 @@ public sealed class ClientTransportSecurityExtensionsTests
         Assert.Equal(MappedCredentialId, TransportCallerCredential.CarriedBy(validated.Principal));
     }
 
+    /// <summary>A token is judged against the switch on every request, so one minted before the user was kept off the client authenticates nobody afterwards.</summary>
+    [Fact]
+    public async Task AddClientTransportSecurity_AnOAuthOnlyEndpoint_RefusesATokenWhoseUserIsKeptOffTheClient()
+    {
+        // Arrange
+        using var composed = ComposeOAuthOnlyEndpoint(MapsTheSubjectOfAUserKeptOffTheClient);
+        var validated = ValidatedTokenReaching(composed);
+
+        // Act
+        await composed
+            .GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
+            .Get(TransportSurface.Client.OAuthSchemeNameFor("workforce"))
+            .Events!
+            .OnTokenValidated(validated);
+
+        // Assert
+        Assert.NotNull(validated.Result);
+        Assert.False(validated.Result.Succeeded);
+    }
+
     /// <summary>A session this deployment minted authenticates on the composed surface and is admitted by the requirement its routes carry.</summary>
     /// <remarks>
     /// The seam nothing else reaches: the handler, the scheme selector and the access policy are each covered on their
@@ -411,9 +431,16 @@ public sealed class ClientTransportSecurityExtensionsTests
     private static AdmittedUserCredential AdmittedByACredential() => new(
         MappedCredentialId,
         MailUserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff")),
-        [MailFathomPermission.MailRead]);
+        [MailFathomPermission.MailRead],
+        MailUserEndpointAccess.Everywhere);
 
-    private static void MapsTheSubject(IServiceCollection services)
+    private static void MapsTheSubject(IServiceCollection services) =>
+        MapsTheSubjectServedOn(services, MailUserEndpointAccess.Everywhere);
+
+    private static void MapsTheSubjectOfAUserKeptOffTheClient(IServiceCollection services) =>
+        MapsTheSubjectServedOn(services, new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false));
+
+    private static void MapsTheSubjectServedOn(IServiceCollection services, MailUserEndpointAccess endpointAccess)
     {
         var credentials = Substitute.For<IUserCredentialStore>();
         Assert.True(UserCredentialLookup.TryCreateForOAuthSubject(MappedIssuer, MappedSubject, out var lookup));
@@ -425,7 +452,8 @@ public sealed class ClientTransportSecurityExtensionsTests
                 UserCredentialMethod.OAuthSubject,
                 [MailFathomPermission.MailRead],
                 Enabled: true,
-                Material: null));
+                Material: null,
+                endpointAccess));
 
         services.AddSingleton(credentials);
         services.AddScoped<UserOAuthSubjectResolver>();

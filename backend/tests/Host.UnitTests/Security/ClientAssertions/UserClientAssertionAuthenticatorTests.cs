@@ -5,11 +5,15 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
 using MailFathom.Application.Access.Credentials;
 using MailFathom.Common.ClientAssertions;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Security.ClientAssertions;
+using MailFathom.Host.Security.Transport;
 using MailFathom.Host.UnitTests.TestDoubles;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -24,7 +28,8 @@ namespace MailFathom.Host.UnitTests.Security.ClientAssertions;
 /// row, and everything that fails to select an enabled row is refused as an unrecognized signature — so a key nobody
 /// registered, a credential somebody disabled, and a fingerprint naming a row this deployment does not hold are one
 /// answer. The successful result is the other half: it names the user, which is what makes the request act for a
-/// person rather than for whichever user a read happened to find.
+/// person rather than for whichever user a read happened to find. The handler in front of it is run here too, over the
+/// same assertions, for the one thing it adds: whether the surface serves the user the key resolved.
 /// </remarks>
 public sealed class UserClientAssertionAuthenticatorTests
 {
@@ -241,11 +246,73 @@ public sealed class UserClientAssertionAuthenticatorTests
         Assert.Equal(ClientAssertionRejection.CredentialMalformed, result.Rejection);
     }
 
+    /// <summary>A key whose user is kept off the endpoint authenticates nobody there, which is the challenge a stranger's key meets.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_ThroughTheHandler_AKeyWhoseUserIsKeptOffTheMcpEndpoint_IsRefusedThere()
+    {
+        // Arrange
+        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var harness = HarnessHolding(
+            clientKey,
+            endpointAccess: new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true));
+
+        // Act
+        var result = await AuthenticateThroughTheHandlerAsync(harness, TransportSurface.Mcp, Presenting(clientKey));
+
+        // Assert
+        Assert.False(result.Succeeded);
+        Assert.Null(result.Principal);
+    }
+
+    /// <summary>The same assertion from a user the switch leaves on the endpoint is admitted, which is what says the refusal above is the switch.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_ThroughTheHandler_AKeyWhoseUserIsKeptOffOnlyTheClient_IsAdmittedOnTheMcpEndpoint()
+    {
+        // Arrange
+        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var harness = HarnessHolding(
+            clientKey,
+            endpointAccess: new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false));
+
+        // Act
+        var result = await AuthenticateThroughTheHandlerAsync(harness, TransportSurface.Mcp, Presenting(clientKey));
+
+        // Assert
+        Assert.True(result.Succeeded);
+        Assert.Equal(User, TransportCallerUser.CarriedBy(result.Principal!));
+    }
+
+    /// <summary>Runs one assertion through the handler registered for a surface, over the harness's authenticator.</summary>
+    private static async Task<AuthenticateResult> AuthenticateThroughTheHandlerAsync(
+        Harness harness,
+        TransportSurface surface,
+        string assertion)
+    {
+        var handler = new UserClientAssertionAuthenticationHandler(
+            new TestOptionsMonitor<UserClientAssertionAuthenticationSchemeOptions>(new UserClientAssertionAuthenticationSchemeOptions { Surface = surface }),
+            NullLoggerFactory.Instance,
+            UrlEncoder.Default,
+            harness.Authenticator);
+
+        var context = new DefaultHttpContext();
+        context.Request.Headers.Authorization = $"Bearer {assertion}";
+
+        await handler.InitializeAsync(
+            new AuthenticationScheme(
+                surface.ClientAssertionSchemeName,
+                displayName: null,
+                typeof(UserClientAssertionAuthenticationHandler)),
+            context);
+
+        return await handler.AuthenticateAsync();
+    }
+
     /// <summary>Builds a deployment holding exactly one public-key credential, resolved by the fingerprint the reader derives.</summary>
     private static Harness HarnessHolding(
         AsymmetricAlgorithm clientKey,
         bool enabled = true,
-        string? material = null)
+        string? material = null,
+        MailUserEndpointAccess? endpointAccess = null)
     {
         Assert.True(UserCredentialLookup.TryCreate(FingerprintOf(clientKey), out var lookup));
 
@@ -263,7 +330,8 @@ public sealed class UserClientAssertionAuthenticatorTests
                     UserCredentialMethod.PublicKey,
                     MailFathomPermission.PublishedFor(ProtectedSurface.Mail),
                     enabled,
-                    material ?? registeredMaterial)
+                    material ?? registeredMaterial,
+                    endpointAccess ?? MailUserEndpointAccess.Everywhere)
                 : null);
 
         var clock = new FakeTimeProvider(VerifiedAt);

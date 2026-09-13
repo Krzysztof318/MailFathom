@@ -23,4 +23,8 @@ public sealed record MailUserRecord(MailUserId User, string DisplayName)
     /// accepted and then refused by PostgreSQL is a start that fails with the server's own sentence.
     /// </remarks>
     public const int MaximumDisplayNameLength = 128;
+
+    /// <summary>Gets which endpoints this user may be served on, which is part of the envelope rather than of the document.</summary>
+    /// <remarks>Both until an administrator says otherwise, which is what a user is recorded with.</remarks>
+    public MailUserEndpointAccess EndpointAccess { get; init; } = MailUserEndpointAccess.Everywhere;
 }

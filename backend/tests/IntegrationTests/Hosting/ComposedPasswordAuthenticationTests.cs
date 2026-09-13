@@ -280,7 +280,8 @@ public sealed class ComposedPasswordAuthenticationTests
                     UserCredentialMethod.Password,
                     MailFathomPermission.PublishedFor(ProtectedSurface.Mail),
                     Enabled: true,
-                    StoredHash)
+                    StoredHash,
+                    MailUserEndpointAccess.Everywhere)
                 : null);
 
         return credentials;
