@@ -475,20 +475,19 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         var claimed = await services.InScopeAsync(
             (scope, token) => ClaimAsync(scope, batchSize: 10, HeldLease, token),
             cancellationToken);
-        var availableAt = TimeProvider.System.GetUtcNow().AddHours(1);
 
         // Act
-        var scheduled = await services.InScopeAsync(
+        var scheduledAvailableAt = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IJobStore>().ScheduleRetryAsync(
                 jobId,
                 Assert.Single(claimed).Lease.User,
                 TransientFailure,
-                availableAt,
+                TimeSpan.FromHours(1),
                 token),
             cancellationToken);
 
         // Assert
-        Assert.True(scheduled);
+        Assert.NotNull(scheduledAvailableAt);
         Assert.Equal(nameof(JobState.Pending), await ReadStateAsync(services, jobId, cancellationToken));
         Assert.Equal(
             nameof(JobFailureClassification.Transient),

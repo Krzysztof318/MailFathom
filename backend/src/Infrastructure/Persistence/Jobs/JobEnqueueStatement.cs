@@ -63,14 +63,21 @@ internal static class JobEnqueueStatement
     /// <param name="jobId">The identifier a created job takes.</param>
     /// <param name="request">The execution to enqueue.</param>
     /// <param name="payload">The serialized document describing what the work points at.</param>
-    /// <param name="enqueuedAt">The instant the job is written at, and its available instant unless the request names one.</param>
+    /// <param name="enqueuedAt">The instant recorded as the job's enqueue and state change; it decides nothing about when the job is due.</param>
     /// <param name="enqueuedTrace">The trace the enqueue is happening inside, or <see langword="null" /> when none is being recorded.</param>
     /// <returns>The statement, whose one row is the identifier of a created job and which returns none when the identity was taken.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// The trace is written by the insert and by nothing else. A losing insert leaves the row that already exists
     /// alone, including its trace, which is the right answer rather than a limitation: the job that will run is the one
     /// that was enqueued first, and pointing its attempt at a later caller would name a cause that produced nothing.
+    /// </para>
+    /// <para>
+    /// A job naming no available instant of its own is available at PostgreSQL's <c>now()</c>, because that is the clock
+    /// a claim judges the instant against; stamping the enqueuing replica's clock would hold the job back by however
+    /// far that replica runs fast. An instant the request names is kept as given, since it is the enqueuer's schedule.
+    /// </para>
     /// </remarks>
     internal static FormattableString Compose(
         Guid jobId,
@@ -85,7 +92,7 @@ internal static class JobEnqueueStatement
         var idempotencyKey = request.Key.Value;
         var userId = request.Account?.User.Value;
         var accountId = request.Account?.Id.Value;
-        var availableAt = request.AvailableAt ?? enqueuedAt;
+        var requestedAvailableAt = request.AvailableAt;
         var pending = nameof(JobState.Pending);
         var claimableStates = new[] { pending, nameof(JobState.Claimed) };
         var turnSpacing = TurnSpacing;
@@ -109,9 +116,9 @@ internal static class JobEnqueueStatement
                     "EnqueuedTraceParent", "EnqueuedTraceState")
                 VALUES (
                     {jobId}, {jobTypeName}, {idempotencyKey}, CAST({payload} AS jsonb), {userId}, {accountId},
-                    {pending}, {availableAt},
+                    {pending}, COALESCE({requestedAvailableAt}, now()),
                     GREATEST(
-                        {availableAt},
+                        COALESCE({requestedAvailableAt}, now()),
                         (SELECT waiting."TurnAt"
                          FROM jobs AS waiting
                          WHERE waiting."State" = ANY({claimableStates})

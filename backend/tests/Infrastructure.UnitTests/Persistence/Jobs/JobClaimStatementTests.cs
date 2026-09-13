@@ -81,6 +81,37 @@ public sealed class JobClaimStatementTests
     }
 
     /// <summary>
+    /// Replicas decide whether one job's lease has run out by comparing it with the present, so both due predicates and
+    /// the lease the claim stamps are PostgreSQL's <c>now()</c>. A present read from the claiming process would let a
+    /// replica running fast take a job its holder is still executing. The only process instant left in the statement
+    /// is the state change it records.
+    /// </summary>
+    [Fact]
+    public void Compose_AClaim_JudgesAndStampsTheLeaseByTheDatabasesClock()
+    {
+        // Act
+        var statement = JobClaimStatement.Compose(Request, ClaimedAt);
+
+        // Assert
+        Assert.Contains(
+            $"candidate.\"{nameof(JobEntity.AvailableAt)}\" <= now()",
+            statement.Format,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"candidate.\"{nameof(JobEntity.LeaseExpiresAt)}\" <= now()",
+            statement.Format,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"\"{nameof(JobEntity.LeaseExpiresAt)}\" = now() + ",
+            statement.Format,
+            StringComparison.Ordinal);
+        Assert.Contains(statement.GetArguments(), argument => Equals(argument, Request.LeaseDuration));
+        Assert.All(
+            statement.GetArguments().OfType<DateTimeOffset>(),
+            instant => Assert.Equal(ClaimedAt, instant));
+    }
+
+    /// <summary>
     /// The claimable states are named explicitly even though the two due predicates already imply them, so PostgreSQL
     /// can prove the partial claim index applies rather than having to derive that through a disjunction. Naming the
     /// claimable states rather than excluding the terminal ones is what keeps the predicate and the index filter one
@@ -183,7 +214,7 @@ public sealed class JobClaimStatementTests
         Assert.DoesNotContain("classify-email-spam", statement.Format, StringComparison.Ordinal);
         Assert.Contains(arguments, argument => Equals(argument, request.User.Value));
         Assert.Contains(arguments, argument => Equals(argument, request.BatchSize));
-        Assert.Contains(arguments, argument => Equals(argument, ClaimedAt + request.LeaseDuration));
+        Assert.Contains(arguments, argument => Equals(argument, request.LeaseDuration));
         Assert.Contains(
             arguments,
             argument => argument is string[] handledTypes && handledTypes is ["classify-email-spam"]);

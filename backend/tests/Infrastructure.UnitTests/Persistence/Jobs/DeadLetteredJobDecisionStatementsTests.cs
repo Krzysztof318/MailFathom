@@ -48,7 +48,7 @@ public sealed class DeadLetteredJobDecisionStatementsTests
 
         // Assert
         Assert.Contains($"""SET "{nameof(JobEntity.State)}" =""", statement.Format, StringComparison.Ordinal);
-        Assert.Contains($"""    "{nameof(JobEntity.AvailableAt)}" =""", statement.Format, StringComparison.Ordinal);
+        Assert.Contains($"""    "{nameof(JobEntity.AvailableAt)}" = now(),""", statement.Format, StringComparison.Ordinal);
         Assert.Contains($"""    "{nameof(JobEntity.AttemptCount)}" = 0""", statement.Format, StringComparison.Ordinal);
         Assert.Contains($"""    "{nameof(JobEntity.StateChangedAt)}" =""", statement.Format, StringComparison.Ordinal);
         Assert.Contains(nameof(JobState.Pending), statement.GetArguments().OfType<string>());
@@ -68,7 +68,7 @@ public sealed class DeadLetteredJobDecisionStatementsTests
 
         // Assert
         Assert.Contains(
-            $"""    "{nameof(JobEntity.TurnAt)}" = GREATEST("{nameof(JobEntity.TurnAt)}", """,
+            $"""    "{nameof(JobEntity.TurnAt)}" = GREATEST("{nameof(JobEntity.TurnAt)}", now()),""",
             statement.Format,
             StringComparison.Ordinal);
     }

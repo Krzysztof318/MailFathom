@@ -27,7 +27,7 @@ internal static class DeadLetteredJobDecisionStatements
 {
     /// <summary>Composes the statement that offers one dead-lettered job to the queue again.</summary>
     /// <param name="jobId">The job the decision is about.</param>
-    /// <param name="retriedAt">The instant the decision is taken and stamped at.</param>
+    /// <param name="retriedAt">The instant recorded as the job's state change.</param>
     /// <returns>The statement, whose row count is one when the decision took effect.</returns>
     /// <remarks>
     /// <para>
@@ -41,6 +41,11 @@ internal static class DeadLetteredJobDecisionStatements
     /// and every other dead letter an operator returned in the same sitting — in front of every user's due work. It
     /// keeps a later turn where it somehow has one, which is the same rule a scheduled retry follows.
     /// </para>
+    /// <para>
+    /// Both are PostgreSQL's <c>now()</c>, because a claim judges the available instant against that clock: one stamped
+    /// from a replica running fast would hold the returned job back by the drift. The state-change instant stays the
+    /// caller's, since it records the decision rather than deciding when the job is due.
+    /// </para>
     /// </remarks>
     internal static FormattableString ComposeRetry(Guid jobId, DateTimeOffset retriedAt)
     {
@@ -50,8 +55,8 @@ internal static class DeadLetteredJobDecisionStatements
         return $"""
                 UPDATE jobs
                 SET "State" = {pending},
-                    "AvailableAt" = {retriedAt},
-                    "TurnAt" = GREATEST("TurnAt", {retriedAt}),
+                    "AvailableAt" = now(),
+                    "TurnAt" = GREATEST("TurnAt", now()),
                     "AttemptCount" = 0,
                     "StateChangedAt" = {retriedAt}
                 WHERE "Id" = {jobId}

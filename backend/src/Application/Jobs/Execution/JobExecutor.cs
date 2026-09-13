@@ -301,16 +301,15 @@ public sealed class JobExecutor
             this.settings.RetryMaxDelay,
             minimumDelay: TimeSpan.Zero,
             job.AttemptCount);
-        var availableAt = this.timeProvider.GetUtcNow() + delay;
 
-        var scheduled = await this.store.ScheduleRetryAsync(
+        var scheduledAvailableAt = await this.store.ScheduleRetryAsync(
             job.JobId,
             job.Lease.User,
             failure,
-            availableAt,
+            delay,
             CancellationToken.None);
 
-        return scheduled
+        return scheduledAvailableAt is { } availableAt
             ? this.Report(
                 job,
                 outcome,

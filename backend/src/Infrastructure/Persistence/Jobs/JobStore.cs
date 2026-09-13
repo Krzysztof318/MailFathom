@@ -24,6 +24,15 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 /// state that is already committed. There is therefore nothing for a caller to enlist this in, which is what makes
 /// enqueuing uncommitted work structurally impossible rather than merely discouraged.
 /// </para>
+/// <para>
+/// <strong>Every instant that decides whether a job is due or its lease has run out is PostgreSQL's <c>now()</c></strong>
+/// — the available instant, the lease expiry, and the comparisons a claim makes against both — and a duration crosses
+/// the boundary as an interval. Replicas judge one job's lease by comparing it with "now", so a "now" read from each
+/// replica's own clock would let one running fast take a job its holder is still executing; this is the rule
+/// <see cref="Coordination.WorkLeaseStatements" /> follows for the same reason. The instants that only record history,
+/// <c>EnqueuedAt</c> and <c>StateChangedAt</c>, stay on the injected clock, because nothing compares them with the
+/// present.
+/// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class JobStore(
@@ -157,22 +166,11 @@ internal sealed class JobStore(
         ArgumentNullException.ThrowIfNull(user);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(leaseDuration, TimeSpan.Zero);
 
-        var leaseExpiresAt = timeProvider.GetUtcNow() + leaseDuration;
-        var jobIdValue = jobId.Value;
-        var userValue = user.Value;
-        var claimed = nameof(JobState.Claimed);
+        var renewedExpiries = await dbContext.Database
+            .SqlQuery<DateTimeOffset>(JobLeaseRenewalStatement.Compose(jobId, user, leaseDuration))
+            .ToArrayAsync(cancellationToken);
 
-        var renewedRows = await dbContext.Database.ExecuteSqlAsync(
-            $"""
-             UPDATE jobs
-             SET "LeaseExpiresAt" = {leaseExpiresAt}
-             WHERE "Id" = {jobIdValue}
-               AND "State" = {claimed}
-               AND "LeaseOwner" = {userValue}
-             """,
-            cancellationToken);
-
-        return renewedRows == 1 ? new JobLease(user, leaseExpiresAt) : null;
+        return renewedExpiries is [var leaseExpiresAt] ? new JobLease(user, leaseExpiresAt) : null;
     }
 
     /// <inheritdoc />
@@ -220,15 +218,16 @@ internal sealed class JobStore(
     /// failure should improve on.
     /// </para>
     /// </remarks>
-    public async Task<bool> ScheduleRetryAsync(
+    public async Task<DateTimeOffset?> ScheduleRetryAsync(
         JobId jobId,
         JobLeaseOwner user,
         JobFailureRecord failure,
-        DateTimeOffset availableAt,
+        TimeSpan retryDelay,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentNullException.ThrowIfNull(failure);
+        ArgumentOutOfRangeException.ThrowIfLessThan(retryDelay, TimeSpan.Zero);
 
         var stateChangedAt = timeProvider.GetUtcNow();
         var jobIdValue = jobId.Value;
@@ -238,24 +237,26 @@ internal sealed class JobStore(
         var classification = failure.Classification.ToString();
         var reason = failure.Reason;
 
-        var scheduledRows = await dbContext.Database.ExecuteSqlAsync(
-            $"""
-             UPDATE jobs
-             SET "State" = {pending},
-                 "LeaseOwner" = NULL,
-                 "LeaseExpiresAt" = NULL,
-                 "AvailableAt" = {availableAt},
-                 "TurnAt" = GREATEST("TurnAt", {availableAt}),
-                 "LastFailureClassification" = {classification},
-                 "LastFailureReason" = {reason},
-                 "StateChangedAt" = {stateChangedAt}
-             WHERE "Id" = {jobIdValue}
-               AND "State" = {claimed}
-               AND "LeaseOwner" = {userValue}
-             """,
-            cancellationToken);
+        var scheduledAvailableInstants = await dbContext.Database
+            .SqlQuery<DateTimeOffset>(
+                $"""
+                 UPDATE jobs
+                 SET "State" = {pending},
+                     "LeaseOwner" = NULL,
+                     "LeaseExpiresAt" = NULL,
+                     "AvailableAt" = now() + {retryDelay},
+                     "TurnAt" = GREATEST("TurnAt", now() + {retryDelay}),
+                     "LastFailureClassification" = {classification},
+                     "LastFailureReason" = {reason},
+                     "StateChangedAt" = {stateChangedAt}
+                 WHERE "Id" = {jobIdValue}
+                   AND "State" = {claimed}
+                   AND "LeaseOwner" = {userValue}
+                 RETURNING "AvailableAt" AS "Value"
+                 """)
+            .ToArrayAsync(cancellationToken);
 
-        return scheduledRows == 1;
+        return scheduledAvailableInstants is [var availableAt] ? availableAt : null;
     }
 
     /// <inheritdoc />
@@ -323,7 +324,7 @@ internal sealed class JobStore(
              SET "State" = {pending},
                  "LeaseOwner" = NULL,
                  "LeaseExpiresAt" = NULL,
-                 "AvailableAt" = {releasedAt},
+                 "AvailableAt" = now(),
                  "AttemptCount" = GREATEST("AttemptCount" - 1, 0),
                  "StateChangedAt" = {releasedAt}
              WHERE "Id" = {jobIdValue}
