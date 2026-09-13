@@ -1610,8 +1610,8 @@ public sealed class EmailContentReaderTests
             RequestFor([summary.StoredEmailId]),
             TestContext.Current.CancellationToken);
         var derived = await derivedReader.ReadMetadataAsync(
-            RemoteContentOf(),
-            SyntheticMailUser.Deployment,
+            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId)),
+            StoredRawMime,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -2090,9 +2090,9 @@ public sealed class EmailContentReaderTests
     {
         var reader = Substitute.For<IEmailMimeReader>();
 
-        reader.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+        reader.ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
-                call.Arg<RemoteEmailContent>()!.OccurrenceId,
+                call.Arg<MailAccountIdentity>().Id,
                 Subject: "Subject",
                 SentAt: null,
                 ReceivedAt: null,
@@ -2104,16 +2104,6 @@ public sealed class EmailContentReaderTests
 
         return reader;
     }
-
-    private static RemoteEmailContent RemoteContentOf() => new(
-        EmailOccurrenceId.Create(
-            MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId),
-            new MailFolderResolutionId(
-                MailFolderAlias.Create(SyntheticEmailSummaries.DefaultFolderAlias),
-                MailFolderResolutionGeneration.First),
-            ImapUidValidity.Create(5),
-            ImapUid.Create(11)),
-        StoredRawMime);
 
     private static EmailContentHeaders HeadersOf(
         string? subject,

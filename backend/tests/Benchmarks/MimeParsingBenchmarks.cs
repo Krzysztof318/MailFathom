@@ -5,6 +5,7 @@
 using BenchmarkDotNet.Attributes;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.TestSupport;
 
@@ -23,6 +24,10 @@ public class MimeParsingBenchmarks
         new NoTrustedAuthentication(),
         localSenderVerifier: null);
 
+    private readonly MailAccountIdentity account = MailAccountIdentity.Create(
+        SyntheticMailUser.Deployment,
+        MailAccountId.Create("primary"));
+
     private RemoteEmailContent content = null!;
 
     /// <summary>Composes the message every iteration reads, outside what is measured.</summary>
@@ -33,5 +38,5 @@ public class MimeParsingBenchmarks
     /// <returns>What the extraction produced, returned so nothing about it can be optimized away.</returns>
     [Benchmark]
     public Task<EmailMimeExtractionResult> ReadMetadata() =>
-        this.reader.ReadMetadataAsync(this.content, SyntheticMailUser.Deployment, CancellationToken.None);
+        this.reader.ReadMetadataAsync(this.account, this.content.RawMime, CancellationToken.None);
 }

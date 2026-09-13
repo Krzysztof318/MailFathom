@@ -322,8 +322,8 @@ public sealed class OrchestratedAuthoredDeleteTests(MailFathomOrchestrationFixtu
                 .Where(storedEmail => storedEmail.Subject == subject)
                 .Select(storedEmail => new StoredEmailRow(
                     StoredEmailId.Create(storedEmail.Id),
-                    ImapUidValidity.Create(storedEmail.UidValidity),
-                    ImapUid.Create(storedEmail.Uid),
+                    ImapUidValidity.Create(storedEmail.UidValidity!.Value),
+                    ImapUid.Create(storedEmail.Uid!.Value),
                     storedEmail.EmailThreadId,
                     storedEmail.RemoteExpungeObservedAt,
                     storedEmail.IsRetainedAfterAuthoredDelete))

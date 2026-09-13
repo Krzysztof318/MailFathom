@@ -15,7 +15,6 @@ using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
@@ -428,11 +427,7 @@ public sealed class StoredMailRederivationHandlerTests
     [
         .. Enumerable.Range(1, count).Select(position => new StoredMailAwaitingRederivation(
             StoredEmailId.Create(Guid.Parse($"00000000-0000-0000-0000-{position:D12}")),
-            EmailOccurrenceId.Create(
-                MailAccountId.Create("work"),
-                new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
-                ImapUidValidity.Create(5),
-                ImapUid.Create((uint)position)))),
+            MailAccountId.Create("work"))),
     ];
 
     private IReadOnlyList<JobEnqueueRequest> EnqueuedRequests() =>
@@ -466,9 +461,9 @@ public sealed class StoredMailRederivationHandlerTests
 
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(
-                MetadataOf(call.Arg<RemoteEmailContent>()!.OccurrenceId))));
+                MetadataOf(call.Arg<MailAccountIdentity>().Id))));
 
         return new StoredMailRederivationHandler(
             new StoredMailRederivation(
@@ -488,9 +483,9 @@ public sealed class StoredMailRederivationHandlerTests
             this.telemetry);
     }
 
-    private static ExtractedEmailMetadata MetadataOf(EmailOccurrenceId occurrenceId) =>
+    private static ExtractedEmailMetadata MetadataOf(MailAccountId accountId) =>
         new(
-            occurrenceId,
+            accountId,
             Subject: "Subject",
             SentAt: null,
             ReceivedAt: null,

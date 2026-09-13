@@ -197,10 +197,7 @@ public sealed class ScopedJobAttemptRunnerTests : IDisposable
         {
             UserId = SyntheticMailUser.Deployment.Value,
             AccountId = "account-a",
-            FolderAlias = "inbox",
-            FolderResolutionGeneration = 1,
-            UidValidity = 1,
-            Uid = (uint)uid,
+            StoredEmailId = Guid.CreateVersion7(Noon.AddSeconds(uid)),
         },
         AccountId: null,
         AttemptCount: 1,

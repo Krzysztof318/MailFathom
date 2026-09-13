@@ -36,8 +36,8 @@ public readonly record struct JobType
 
     private JobType(string name) => this.name = name;
 
-    /// <summary>Gets the type whose work is deciding whether one stored message occurrence is junk.</summary>
-    /// <remarks>Its payload contract is <see cref="ClassifyEmailSpamJobPayload" />, which names the occurrence and copies nothing out of the message.</remarks>
+    /// <summary>Gets the type whose work is deciding whether one stored email is junk.</summary>
+    /// <remarks>Its payload contract is <see cref="ClassifyEmailSpamJobPayload" />, which names the stored email and copies nothing out of the message.</remarks>
     public static JobType ClassifyEmailSpam { get; } = new("classify-email-spam");
 
     /// <summary>Gets the type whose work is asking for one account's scheduled rules to be run over its whole mailbox.</summary>

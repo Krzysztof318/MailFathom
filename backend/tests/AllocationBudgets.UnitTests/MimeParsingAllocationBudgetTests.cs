@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.TestSupport;
 using Xunit;
@@ -39,19 +40,20 @@ public sealed class MimeParsingAllocationBudgetTests
             new NoTrustedAuthentication(),
             localSenderVerifier: null);
 
+        var account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
         var content = LargeSyntheticMessage.AsFetched();
         var cancellationToken = TestContext.Current.CancellationToken;
         var budgetBytes = (long)(content.RawMime.Length * MaximumAllocatedShareOfMessage);
 
         // The measured run asserts nothing, because an assertion inside it would allocate and be charged to the path.
         // Establishing that the run does the work is therefore a step of its own, before anything is counted.
-        var extraction = await reader.ReadMetadataAsync(content, SyntheticMailUser.Deployment, cancellationToken);
+        var extraction = await reader.ReadMetadataAsync(account, content.RawMime, cancellationToken);
         Assert.Equal(EmailMimeExtractionOutcome.Extracted, extraction.Outcome);
 
         // Act, Assert
         await AllocationBudget.AssertWithinAsync(
             "Extracting metadata from a large message",
             budgetBytes,
-            () => reader.ReadMetadataAsync(content, SyntheticMailUser.Deployment, cancellationToken));
+            () => reader.ReadMetadataAsync(account, content.RawMime, cancellationToken));
     }
 }

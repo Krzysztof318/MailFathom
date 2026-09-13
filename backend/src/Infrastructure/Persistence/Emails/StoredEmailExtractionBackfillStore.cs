@@ -9,6 +9,7 @@ using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -111,15 +112,16 @@ internal sealed class StoredEmailExtractionBackfillStore(
             .Where(email => resumeAfterId == null || email.Id > resumeAfterId)
             .OrderBy(email => email.Id)
             .Take(batchSize)
-            .Select(StoredEmailOccurrenceRow.Projection)
+            .Select(email => new { email.Id, email.UserId, email.MailboxAccountId })
             .ToArrayAsync(cancellationToken);
 
         return
         [
             .. candidates.Select(candidate => new StoredEmailAwaitingExtraction(
                 StoredEmailId.Create(candidate.Id),
-                candidate.ToOccurrenceId(),
-                MailUserId.Create(candidate.UserId))),
+                MailAccountIdentity.Create(
+                    MailUserId.Create(candidate.UserId),
+                    MailAccountId.Create(candidate.MailboxAccountId)))),
         ];
     }
 

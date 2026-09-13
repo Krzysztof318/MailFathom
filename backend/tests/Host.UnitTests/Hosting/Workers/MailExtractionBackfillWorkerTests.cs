@@ -12,7 +12,6 @@ using MailFathom.Common.Observability;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
-using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -410,12 +409,7 @@ public sealed class MailExtractionBackfillWorkerTests : IDisposable
     private static StoredEmailAwaitingExtraction AwaitingExtraction(StoredEmailId storedEmailId) =>
         new(
             storedEmailId,
-            EmailOccurrenceId.Create(
-                MailAccountId.Create("primary"),
-                new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
-                ImapUidValidity.Create(1),
-                ImapUid.Create(1)),
-            MailUserId.Create(Guid.CreateVersion7()));
+            MailAccountIdentity.Create(MailUserId.Create(Guid.CreateVersion7()), MailAccountId.Create("primary")));
 
     private static async Task<IReadOnlyList<StoredEmailAwaitingExtraction>> NeverAnswerUntilStoppedAsync(
         TaskCompletionSource asked,

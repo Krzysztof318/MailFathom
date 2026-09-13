@@ -442,7 +442,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(MimeFixtures.Account, OrdinaryMessage().RawMime, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(extraction.Metadata?.RedactedUnder);
@@ -488,7 +488,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(MimeFixtures.Account, OrdinaryMessage().RawMime, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(policy.Revision, extraction.Metadata?.SenderTrust.PolicyRevision);
@@ -530,7 +530,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(MimeFixtures.RawContent(signed.RawMime), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(MimeFixtures.Account, signed.RawMime, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -569,7 +569,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(MimeFixtures.RawContent(signed.RawMime), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(MimeFixtures.Account, signed.RawMime, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -609,7 +609,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(MimeFixtures.Account, OrdinaryMessage().RawMime, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.Unlikely, extraction.Metadata?.MachineAuthorship.Band);
@@ -645,7 +645,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(MimeFixtures.Account, OrdinaryMessage().RawMime, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.NotAssessed, extraction.Metadata?.MachineAuthorship.Band);
@@ -688,7 +688,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(MimeFixtures.Account, OrdinaryMessage().RawMime, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmailMimeExtractionOutcome.Extracted, extraction.Outcome);
@@ -726,7 +726,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(ConcealingMessage(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(MimeFixtures.Account, ConcealingMessage().RawMime, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.Likely, extraction.Metadata?.MachineAuthorship.Band);

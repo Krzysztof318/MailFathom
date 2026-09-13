@@ -176,5 +176,5 @@ public sealed class OrchestratedEmailOccurrenceIdentityTests(MailFathomOrchestra
             cancellationToken);
 
     /// <summary>The columns this class reads back, projected so no entity graph is materialized.</summary>
-    private sealed record StoredOccurrenceRow(Guid Id, string? Subject, uint UidValidity, uint Uid);
+    private sealed record StoredOccurrenceRow(Guid Id, string? Subject, uint? UidValidity, uint? Uid);
 }

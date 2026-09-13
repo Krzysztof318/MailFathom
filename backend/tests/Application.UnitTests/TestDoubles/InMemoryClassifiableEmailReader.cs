@@ -3,28 +3,26 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Spam;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
 
-/// <summary>Answers both reads of the port over a set of stored occurrences held in memory.</summary>
+/// <summary>Answers both reads of the port over a set of stored emails held in memory.</summary>
 /// <remarks>
-/// The walk is a keyset read ordered by the occurrence's identity, which is what a resumed run depends on, so the double
+/// The walk is a keyset read ordered by the stored identity, which is what a resumed run depends on, so the double
 /// implements exactly that rather than handing back whatever order it was arranged in.
 /// </remarks>
 internal sealed class InMemoryClassifiableEmailReader : IClassifiableEmailReader
 {
     private readonly List<ClassifiableEmail> emails = [];
-    private readonly Dictionary<EmailOccurrenceId, StoredEmailId> emailIdsByOccurrence = [];
 
     /// <summary>Gets the batch sizes the reads asked for, oldest first.</summary>
     internal List<int> RequestedBatchSizes { get; } = [];
 
-    /// <summary>Stores one occurrence the walk can reach.</summary>
-    /// <param name="email">The occurrence to store.</param>
+    /// <summary>Stores one email the walk can reach.</summary>
+    /// <param name="email">The email to store.</param>
     /// <returns>Its identity, so a test can assert the order the walk reached it in.</returns>
     internal StoredEmailId Add(ClassifiableEmail email)
     {
@@ -33,22 +31,9 @@ internal sealed class InMemoryClassifiableEmailReader : IClassifiableEmailReader
         return email.Id;
     }
 
-    /// <summary>Stores the occurrence one held email was discovered at, so a job payload naming it resolves.</summary>
-    /// <param name="occurrenceId">The stable remote occurrence identity.</param>
-    /// <param name="emailId">The local identity it was stored as.</param>
-    internal void AddOccurrence(EmailOccurrenceId occurrenceId, StoredEmailId emailId) =>
-        this.emailIdsByOccurrence[occurrenceId] = emailId;
-
     /// <inheritdoc />
     public Task<ClassifiableEmail?> FindAsync(StoredEmailId emailId, CancellationToken cancellationToken) =>
         Task.FromResult(this.emails.FirstOrDefault(email => email.Id == emailId));
-
-    /// <inheritdoc />
-    public Task<StoredEmailId?> FindStoredEmailIdAsync(
-        MailUserId user,
-        EmailOccurrenceId occurrenceId,
-        CancellationToken cancellationToken) => Task.FromResult(
-        this.emailIdsByOccurrence.TryGetValue(occurrenceId, out var emailId) ? emailId : (StoredEmailId?)null);
 
     /// <inheritdoc />
     public Task<IReadOnlyList<ClassifiableEmail>> GetStoredEmailsAsync(

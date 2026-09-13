@@ -12,7 +12,6 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
-using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -124,7 +123,7 @@ public sealed class StoredEmailExtractionBackfillTests
         var contentStore = CreateContentStoreWithReadableMime();
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailMimeExtractionResult.MalformedContent()));
         var backfill = CreateBackfill(store, contentStore, mimeReader, batchSize: 10);
 
@@ -362,12 +361,12 @@ public sealed class StoredEmailExtractionBackfillTests
         // Assert
         Assert.Equal(2, result.ExtractedEmailCount);
         await mimeReader.Received(1).ReadMetadataAsync(
-            Arg.Is<RemoteEmailContent>(content => content!.OccurrenceId.Uid == ImapUid.Create(1)),
-            SyntheticMailUser.Deployment,
+            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary")),
+            Arg.Any<ReadOnlyMemory<byte>>(),
             Arg.Any<CancellationToken>());
         await mimeReader.Received(1).ReadMetadataAsync(
-            Arg.Is<RemoteEmailContent>(content => content!.OccurrenceId.Uid == ImapUid.Create(2)),
-            SyntheticMailUser.Another,
+            MailAccountIdentity.Create(SyntheticMailUser.Another, MailAccountId.Create("primary")),
+            Arg.Any<ReadOnlyMemory<byte>>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -375,9 +374,9 @@ public sealed class StoredEmailExtractionBackfillTests
     {
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
-                call.Arg<RemoteEmailContent>()!.OccurrenceId,
+                call.Arg<MailAccountIdentity>().Id,
                 Subject: "Subject",
                 SentAt: null,
                 ReceivedAt: null,
@@ -402,14 +401,7 @@ public sealed class StoredEmailExtractionBackfillTests
     private static StoredEmailAwaitingExtraction EmailAwaitingExtraction(int position, MailUserId user) =>
         new(
             StoredEmailId.Create(Guid.Parse($"00000000-0000-0000-0000-{position:D12}")),
-            EmailOccurrenceId.Create(
-                MailAccountId.Create("primary"),
-                new MailFolderResolutionId(
-                    MailFolderAlias.Create("inbox"),
-                    MailFolderResolutionGeneration.First),
-                ImapUidValidity.Create(5),
-                ImapUid.Create((uint)position)),
-            user);
+            MailAccountIdentity.Create(user, MailAccountId.Create("primary")));
 
     /// <summary>Stands in for the persisted walk state, keyed the way the real store's ordering is.</summary>
     private sealed class FakeBackfillStore(IReadOnlyList<StoredEmailAwaitingExtraction> awaitingExtraction)

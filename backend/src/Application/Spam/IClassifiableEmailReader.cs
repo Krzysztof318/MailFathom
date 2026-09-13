@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -33,22 +32,6 @@ public interface IClassifiableEmailReader
     /// and the moment it runs, and that is the message leaving rather than a failure to report.
     /// </remarks>
     Task<ClassifiableEmail?> FindAsync(StoredEmailId emailId, CancellationToken cancellationToken);
-
-    /// <summary>Resolves the stable remote occurrence identity into the local email it was stored as.</summary>
-    /// <param name="user">The user whose account the occurrence belongs to, which the read narrows on ahead of the account.</param>
-    /// <param name="occurrenceId">The account, folder binding, UIDVALIDITY, and UID the message was discovered under.</param>
-    /// <param name="cancellationToken">Cancels the lookup.</param>
-    /// <returns>The local identity, or <see langword="null" /> when nothing is stored at that occurrence.</returns>
-    /// <remarks>
-    /// A durable execution names the occurrence rather than the local key, because the local key is a value this system
-    /// generated and the occurrence is what the mail server and the enqueuer both know. This is where the one is turned
-    /// into the other, and an absent answer is the ordinary case of a message expunged between the moment the work was
-    /// enqueued and the moment it ran.
-    /// </remarks>
-    Task<StoredEmailId?> FindStoredEmailIdAsync(
-        MailUserId user,
-        EmailOccurrenceId occurrenceId,
-        CancellationToken cancellationToken);
 
     /// <summary>Reads one account's stored occurrences in identity order, narrowed to a set of folders.</summary>
     /// <param name="account">The account whose mailbox is walked.</param>

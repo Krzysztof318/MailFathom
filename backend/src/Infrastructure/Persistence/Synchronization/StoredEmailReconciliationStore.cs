@@ -53,7 +53,7 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
             .Select(email => new
             {
                 email.Id,
-                email.Uid,
+                Uid = email.Uid!.Value,
                 ObservedAt = email.RemoteFlagsObservedAt,
                 email.IsRemotelySeen,
                 email.IsRemotelyFlagged,
@@ -68,7 +68,7 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
             .Select(email => new
             {
                 email.Id,
-                email.Uid,
+                Uid = email.Uid!.Value,
                 ObservedAt = (DateTimeOffset?)null,
                 email.IsRemotelySeen,
                 email.IsRemotelyFlagged,

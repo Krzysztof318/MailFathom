@@ -6,34 +6,30 @@ using System.Text.Json.Serialization;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
-using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Jobs.Payloads;
 
-/// <summary>Points one job at a single stored message occurrence, and at nothing inside the message.</summary>
+/// <summary>Points one job at a single stored email, and at nothing inside the message.</summary>
 /// <remarks>
 /// <para>
-/// Every property is one of MailFathom's own identifiers: the user the mailbox belongs to, and the four that are the
-/// stable remote occurrence identity within them — account, folder binding, UIDVALIDITY, and UID. A handler therefore
-/// resolves what it needs from committed local state rather than from anything the enqueuer copied, and a subject, an
-/// address, a body, and extracted text are all absent by construction: there is no property to put one in.
+/// Every property is one of MailFathom's own identifiers: the user the mailbox belongs to, the account within them, and
+/// the email's own stored identity. A handler therefore resolves what it needs from committed local state rather than
+/// from anything the enqueuer copied, and a subject, an address, a body, and extracted text are all absent by
+/// construction: there is no property to put one in.
 /// </para>
 /// <para>
-/// The folder is named by its alias and the generation that alias was bound under rather than by the local key of the
-/// row, because the identity is only stable while its folder component identifies one specific remote folder, and an
-/// alias can be repointed to another one.
+/// The email is named by its stored identity rather than by where a mail server holds it, because that identity is what
+/// the email is for its whole life. A UID is renumbered by a UIDVALIDITY change and cleared once no server holds the
+/// message, and a job naming one would then find nothing to classify although the mail is still here.
 /// </para>
 /// <para>
 /// The properties are primitives rather than the domain value objects they came from, because this record is the stored
-/// document: it is serialized into one <c>jsonb</c> column and read by an operator looking at a queue. Rebuilding them
-/// is <see cref="ToAccountIdentity" /> for the user and the account and <see cref="ToOccurrenceId" /> for the
-/// occurrence, which between them validate every component the way the domain types do — the occurrence identity does
-/// not carry the user, so neither method covers the record on its own.
+/// document: it is serialized into one <c>jsonb</c> column and read by an operator looking at a queue.
 /// </para>
 /// </remarks>
 public sealed record ClassifyEmailSpamJobPayload : IJobPayload
 {
-    /// <summary>Gets the user whose account the occurrence belongs to.</summary>
+    /// <summary>Gets the user whose account the email belongs to.</summary>
     /// <remarks>
     /// Named beside the identifier, because an identifier names one account within its user and the rows this work
     /// writes are about that account. The user is generated and names nobody outside this deployment, so carrying it
@@ -41,72 +37,35 @@ public sealed record ClassifyEmailSpamJobPayload : IJobPayload
     /// </remarks>
     public required Guid UserId { get; init; }
 
-    /// <summary>Gets the account whose mailbox the occurrence belongs to, within that user.</summary>
+    /// <summary>Gets the account whose mailbox the email belongs to, within that user.</summary>
     public required string AccountId { get; init; }
 
-    /// <summary>Gets the operator-facing name of the folder the occurrence was read in.</summary>
-    public required string FolderAlias { get; init; }
-
-    /// <summary>Gets which binding of that alias the occurrence belongs to.</summary>
-    public required int FolderResolutionGeneration { get; init; }
-
-    /// <summary>Gets the UIDVALIDITY the folder advertised when the occurrence was stored.</summary>
-    public required uint UidValidity { get; init; }
-
-    /// <summary>Gets the UID the occurrence carries within that UIDVALIDITY scope.</summary>
-    public required uint Uid { get; init; }
+    /// <summary>Gets the stored identity of the email to classify.</summary>
+    public required Guid StoredEmailId { get; init; }
 
     /// <inheritdoc />
     [JsonIgnore]
     public JobType JobType => JobType.ClassifyEmailSpam;
 
-    /// <summary>Describes one occurrence as the document a job carries.</summary>
-    /// <param name="user">The user whose account the occurrence belongs to, as the run that met it resolved.</param>
-    /// <param name="occurrence">The stable remote occurrence identity.</param>
-    /// <returns>The payload naming that occurrence.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrence" /> is <see langword="null" />.</exception>
-    public static ClassifyEmailSpamJobPayload For(MailUserId user, EmailOccurrenceId occurrence)
+    /// <summary>Describes one stored email as the document a job carries.</summary>
+    /// <param name="account">The account the email belongs to, as the run that stored it resolved.</param>
+    /// <param name="email">The email's stored identity.</param>
+    /// <returns>The payload naming that email.</returns>
+    public static ClassifyEmailSpamJobPayload For(MailAccountIdentity account, StoredEmailId email) => new()
     {
-        ArgumentNullException.ThrowIfNull(occurrence);
-
-        return new ClassifyEmailSpamJobPayload
-        {
-            UserId = user.Value,
-            AccountId = occurrence.AccountId.Value,
-            FolderAlias = occurrence.FolderResolutionId.Alias.Value,
-            FolderResolutionGeneration = occurrence.FolderResolutionId.Generation.Value,
-            UidValidity = occurrence.UidValidity.Value,
-            Uid = occurrence.Uid.Value,
-        };
-    }
+        UserId = account.User.Value,
+        AccountId = account.Id.Value,
+        StoredEmailId = email.Value,
+    };
 
     /// <summary>Rebuilds the account identity this payload names.</summary>
     /// <returns>The account identity.</returns>
     /// <exception cref="ArgumentException">Thrown when the stored values no longer name a valid account identity.</exception>
-    /// <remarks>
-    /// The user is a required property, so a document that carries none is refused by the deserializer before
-    /// this is reached rather than resolving to a user nobody named. A document the previous release wrote is
-    /// not that case: the migration that put the user on the queue row writes it into the document beside it, so
-    /// what remains here is a value that is present and does not name an account — which this refuses for the
-    /// reason every payload record refuses a component that no longer validates.
-    /// </remarks>
     public MailAccountIdentity ToAccountIdentity() =>
         MailAccountIdentity.Create(MailUserId.Create(this.UserId), MailAccountId.Create(this.AccountId));
 
-    /// <summary>Rebuilds the occurrence identity this payload names.</summary>
-    /// <returns>The stable remote occurrence identity.</returns>
-    /// <exception cref="ArgumentException">Thrown when a stored component no longer names a valid identity.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when a stored numeric component is outside the range its domain type allows.</exception>
-    /// <remarks>
-    /// A stored document that no longer parses is refused rather than repaired. Every component was written from a
-    /// validated identity, so a value that fails here describes a row nothing can act on, and reconstructing a
-    /// plausible identity from it would point the work at a different message.
-    /// </remarks>
-    public EmailOccurrenceId ToOccurrenceId() => EmailOccurrenceId.Create(
-        MailAccountId.Create(this.AccountId),
-        new MailFolderResolutionId(
-            MailFolderAlias.Create(this.FolderAlias),
-            MailFolderResolutionGeneration.Create(this.FolderResolutionGeneration)),
-        ImapUidValidity.Create(this.UidValidity),
-        ImapUid.Create(this.Uid));
+    /// <summary>Rebuilds the stored identity this payload names.</summary>
+    /// <returns>The email's stored identity.</returns>
+    /// <exception cref="ArgumentException">Thrown when the stored value is the empty identifier.</exception>
+    public StoredEmailId ToStoredEmailId() => Domain.Emails.StoredEmailId.Create(this.StoredEmailId);
 }

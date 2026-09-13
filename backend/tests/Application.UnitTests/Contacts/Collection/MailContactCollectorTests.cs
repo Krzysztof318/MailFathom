@@ -442,11 +442,7 @@ public sealed class MailContactCollectorTests
         MessageWith(new EmailParticipant(EmailAddressRole.From, AddressOf(address, displayName)));
 
     private static ExtractedEmailMetadata MessageWith(params EmailParticipant[] participants) => new(
-        EmailOccurrenceId.Create(
-            MailAccountId.Create("primary"),
-            new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
-            ImapUidValidity.Create(5),
-            ImapUid.Create(11)),
+        MailAccountId.Create("primary"),
         Subject: "Subject",
         SentAt: Now,
         ReceivedAt: Now,

@@ -39,9 +39,9 @@ namespace MailFathom.Application.Spam;
 /// records.
 /// </para>
 /// <para>
-/// Nothing from the message reaches the queue. The payload names the occurrence and the idempotency key is the message's
-/// own stored identity, so an operator reading a stuck job sees where the message is and can ask what was concluded
-/// about it, and neither carries a subject, an address, or anything else out of the mail.
+/// Nothing from the message reaches the queue. The payload and the idempotency key both name the message's own stored
+/// identity, so an operator reading a stuck job can ask what was concluded about it, and neither carries a subject, an
+/// address, or anything else out of the mail.
 /// </para>
 /// </remarks>
 public sealed class SpamClassificationArrivals
@@ -89,13 +89,13 @@ public sealed class SpamClassificationArrivals
             return;
         }
 
+        // Composed from the user the run already resolved rather than looked up here: the queue row records whose
+        // account the classification is about, and the synchronization run settled that once for the whole run.
+        var account = MailAccountIdentity.Create(user, occurrenceId.AccountId);
         var request = JobEnqueueRequest.Create(
             KeyOf(emailId),
-            ClassifyEmailSpamJobPayload.For(user, occurrenceId),
-
-            // Composed from the user the run already resolved rather than looked up here: the queue row records whose
-            // account the classification is about, and the synchronization run settled that once for the whole run.
-            MailAccountIdentity.Create(user, occurrenceId.AccountId));
+            ClassifyEmailSpamJobPayload.For(account, emailId),
+            account);
 
         await this.jobs.EnqueueAsync(request, cancellationToken);
     }
@@ -105,8 +105,7 @@ public sealed class SpamClassificationArrivals
     /// The stored identity rather than the occurrence written out, and the reason is a bound rather than a preference: a
     /// key may be 256 characters, while an account identifier and a folder alias may each be 128, so a composition of
     /// the two plus the remote numbers can exceed it — and a key that cannot be composed would raise out of the
-    /// synchronization run that asked, which is exactly what this trigger may never do. What is lost is nothing an
-    /// operator needs: the occurrence is in the payload beside the key, and this is the identifier
+    /// synchronization run that asked, which is exactly what this trigger may never do. It is also the identifier
     /// <c>mfctl spam classifications --email</c> already takes, so a stuck job leads straight to what was concluded.
     /// </remarks>
     private static JobIdempotencyKey KeyOf(StoredEmailId emailId) => JobIdempotencyKey.Create(

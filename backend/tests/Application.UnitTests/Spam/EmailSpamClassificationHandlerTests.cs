@@ -28,12 +28,6 @@ public sealed class EmailSpamClassificationHandlerTests
 
     private static readonly DateTimeOffset EvaluatedAt = new(2026, 8, 13, 9, 0, 0, TimeSpan.Zero);
 
-    private static readonly EmailOccurrenceId Occurrence = EmailOccurrenceId.Create(
-        Account.Id,
-        new MailFolderResolutionId(Inbox, MailFolderResolutionGeneration.First),
-        ImapUidValidity.Create(9),
-        ImapUid.Create(4401));
-
     private readonly SpamClassificationHarness harness = new(EvaluatedAt);
 
     public EmailSpamClassificationHandlerTests() => this.harness.ContentStore
@@ -41,18 +35,18 @@ public sealed class EmailSpamClassificationHandlerTests
         .Returns(_ => SpamClassificationHarness.SomeContent());
 
     [Fact]
-    public void JobType_Always_IsTheClassificationOfOneOccurrence() =>
+    public void JobType_Always_IsTheClassificationOfOneStoredEmail() =>
         Assert.Equal(JobType.ClassifyEmailSpam, this.CreateHandler().JobType);
 
     [Fact]
-    public async Task RunAsync_AnOccurrenceNobodyHasScored_RecordsTheVerdictAndActsOnIt()
+    public async Task RunAsync_AStoredEmailNobodyHasScored_RecordsTheVerdictAndActsOnIt()
     {
         // Arrange
-        var emailId = this.StoreEmailAtTheOccurrence();
+        var emailId = this.StoreEmail();
 
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyEmailSpamJobPayload.For(SyntheticMailUser.Deployment, Occurrence),
+            ClassifyEmailSpamJobPayload.For(Account, emailId),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -63,15 +57,15 @@ public sealed class EmailSpamClassificationHandlerTests
 
     /// <summary>An attempt that committed its verdict and lost its lease leaves the next one the filing to finish.</summary>
     [Fact]
-    public async Task RunAsync_AnOccurrenceAnEarlierAttemptAlreadyScored_ScoresNothingAgainAndStillActsOnTheVerdict()
+    public async Task RunAsync_AStoredEmailAnEarlierAttemptAlreadyScored_ScoresNothingAgainAndStillActsOnTheVerdict()
     {
         // Arrange
-        var emailId = this.StoreEmailAtTheOccurrence();
+        var emailId = this.StoreEmail();
         this.harness.Classifications.Hold(ClassificationOf(emailId));
 
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyEmailSpamJobPayload.For(SyntheticMailUser.Deployment, Occurrence),
+            ClassifyEmailSpamJobPayload.For(Account, emailId),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -79,13 +73,16 @@ public sealed class EmailSpamClassificationHandlerTests
         Assert.Equal(1, this.harness.Mutations.OpenedRecordCount);
     }
 
-    /// <summary>Mail expunged between the enqueue and the lease is the message leaving, not work to attempt again.</summary>
+    /// <summary>A message removed between the enqueue and the lease is the message leaving, not work to attempt again.</summary>
     [Fact]
-    public async Task RunAsync_AnOccurrenceNothingIsStoredAt_EndsTheJobWithoutClassifyingOrActing()
+    public async Task RunAsync_AStoredEmailNothingIsStoredUnder_EndsTheJobWithoutClassifyingOrActing()
     {
+        // Arrange
+        var neverStored = StoredEmailId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000002"));
+
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyEmailSpamJobPayload.For(SyntheticMailUser.Deployment, Occurrence),
+            ClassifyEmailSpamJobPayload.For(Account, neverStored),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -93,15 +90,40 @@ public sealed class EmailSpamClassificationHandlerTests
         Assert.Equal(0, this.harness.Mutations.OpenedRecordCount);
     }
 
+    /// <summary>
+    /// A message the mail server has forgotten is still mail MailFathom holds, so the job reaches it by the identity it
+    /// was stored under and records a verdict — and asks the mailbox for nothing, because there is no occurrence left
+    /// for a change to be written against.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_AStoredEmailNoMailServerHoldsAnyLonger_IsStillClassifiedByItsStoredIdentity()
+    {
+        // Arrange
+        var emailId = this.StoreEmail();
+        var noOccurrence = Substitute.For<ISpamActionOccurrenceReader>();
+        noOccurrence
+            .FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<SpamActionOccurrence?>(null));
+
+        // Act
+        await this.CreateHandler(MarksJunkRead, occurrences: noOccurrence).RunAsync(
+            ClassifyEmailSpamJobPayload.For(Account, emailId),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([emailId], this.harness.Classifications.Saved.Select(classification => classification.EmailId));
+        Assert.Equal(0, this.harness.Mutations.OpenedRecordCount);
+    }
+
     [Fact]
     public async Task RunAsync_ClassificationSwitchedOff_RecordsNoVerdictAndAsksTheMailboxForNothing()
     {
         // Arrange
-        this.StoreEmailAtTheOccurrence();
+        var emailId = this.StoreEmail();
 
         // Act
         await this.CreateHandler(MarksJunkRead, SpamClassificationSettings.Disabled).RunAsync(
-            ClassifyEmailSpamJobPayload.For(SyntheticMailUser.Deployment, Occurrence),
+            ClassifyEmailSpamJobPayload.For(Account, emailId),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -138,21 +160,15 @@ public sealed class EmailSpamClassificationHandlerTests
         [],
         EvaluatedAt.AddMinutes(-1));
 
-    private StoredEmailId StoreEmailAtTheOccurrence()
-    {
-        var emailId = this.harness.Emails.Add(new ClassifiableEmail(
-            StoredEmailId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000001")),
-            Account.Id,
-            Inbox));
-
-        this.harness.Emails.AddOccurrence(Occurrence, emailId);
-
-        return emailId;
-    }
+    private StoredEmailId StoreEmail() => this.harness.Emails.Add(new ClassifiableEmail(
+        StoredEmailId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000001")),
+        Account.Id,
+        Inbox));
 
     private EmailSpamClassificationHandler CreateHandler(
         SpamActionSettings? actions = null,
-        SpamClassificationSettings? settings = null)
+        SpamClassificationSettings? settings = null,
+        ISpamActionOccurrenceReader? occurrences = null)
     {
         var settingsReader = Substitute.For<ISpamClassificationSettingsReader>();
         settingsReader.SettingsFor(Arg.Any<MailUserId>()).Returns(settings ?? SettingsCovering(Inbox));
@@ -161,12 +177,11 @@ public sealed class EmailSpamClassificationHandlerTests
         var commitPolicy = this.harness.CommitPolicyOver(sessionFactory);
 
         return new EmailSpamClassificationHandler(
-            this.harness.Emails,
             this.harness.Classifications,
             this.harness.CreateClassifier(settingsReader, commitPolicy),
             this.harness.CreateActionRecorder(
                 actions ?? SpamActionSettings.None,
-                SpamClassificationHarness.OccurrenceReader(Account.Id, Inbox),
+                occurrences ?? SpamClassificationHarness.OccurrenceReader(Account.Id, Inbox),
                 sessionFactory,
                 commitPolicy));
     }

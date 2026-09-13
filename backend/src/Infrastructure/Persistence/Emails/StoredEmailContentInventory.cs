@@ -75,7 +75,8 @@ internal sealed class StoredEmailContentInventory(MailFathomDbContext dbContext)
             .Take(maxEmailCount)
             .Select(email => new
             {
-                email.Uid,
+                // The UIDVALIDITY filter above already confines the walk to rows carrying an occurrence.
+                Uid = email.Uid!.Value,
                 email.InternetMessageId,
                 email.Subject,
                 email.SentAt,

@@ -112,7 +112,7 @@ internal static class SyntheticEmail
         DateTimeOffset receivedAt,
         params string[] recipientAddresses) =>
         new(
-            occurrenceId,
+            occurrenceId.AccountId,
             subject,
             SentAt,
             receivedAt,

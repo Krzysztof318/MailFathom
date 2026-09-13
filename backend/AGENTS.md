@@ -137,7 +137,8 @@ The root file holds what both stacks owe on timeouts, retries, untrusted input, 
 
 ## Cross-boundary email invariants
 
-- Treat `(account, folder, UIDVALIDITY, UID)` as the stable remote occurrence identity.
+- Treat a stored email's row identifier as its identity, assigned once when it is first stored and never changed; key every read, derived row, and erasure on it.
+- Treat `(account, folder, UIDVALIDITY, UID)` as the stable remote occurrence identity, which a stored email carries as an optional attribute: only the paths that talk to the server select on it, and none of them may assume it is present.
 - Keep MCP reads local; an MCP request must not trigger a synchronous IMAP fetch.
 - Make synchronization, object writes, indexing, and SMTP outbox processing idempotent.
 

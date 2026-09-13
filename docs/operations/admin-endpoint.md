@@ -742,7 +742,7 @@ Stopped               Job                                   Kind                
 Run one again with 'mfctl jobs retry --job <id>', or write it off with 'mfctl jobs drop --job <id>'.
 ```
 
-**Nothing any of the three routes answers with is mail.** A job's payload names a message occurrence, and it is never
+**Nothing any of the three routes answers with is mail.** A job's payload names a stored email, and it is never
 read: the reading projects the identity, the kind of work, the attempts spent, the failure classification and its
 recorded reason, and two instants. The idempotency key is the one field composed from a folder alias and a message
 identifier, and it is reported because a retry runs under it — an operator deciding whether to run something again is

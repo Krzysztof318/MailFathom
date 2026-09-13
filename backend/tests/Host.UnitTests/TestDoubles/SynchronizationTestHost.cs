@@ -695,9 +695,9 @@ internal static class SynchronizationTestHost
     {
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
-                call.Arg<RemoteEmailContent>()!.OccurrenceId,
+                call.Arg<MailAccountIdentity>().Id,
                 Subject: null,
                 SentAt: null,
                 ReceivedAt: null,

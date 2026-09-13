@@ -21,14 +21,8 @@ public sealed class JobPayloadDocumentTests
         MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("account-a"));
 
     private static ClassifyEmailSpamJobPayload Payload => ClassifyEmailSpamJobPayload.For(
-        SyntheticMailUser.Deployment,
-        EmailOccurrenceId.Create(
-            MailAccountId.Create("account-a"),
-            new MailFolderResolutionId(
-                MailFolderAlias.Create("inbox"),
-                MailFolderResolutionGeneration.Create(2)),
-            ImapUidValidity.Create(12345),
-            ImapUid.Create(4711)));
+        Account,
+        StoredEmailId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000001")));
 
     /// <summary>One payload of every declared job type, which is what the closed-set assertion below is stated over.</summary>
     private static IJobPayload[] DeclaredPayloads =>
@@ -62,14 +56,14 @@ public sealed class JobPayloadDocumentTests
 
     /// <summary>The document is read by an operator looking at a queue, so its property names are the ones they see.</summary>
     [Fact]
-    public void Serialize_AnOccurrencePayload_WritesTheReferencesAndNothingElse()
+    public void Serialize_AStoredEmailPayload_WritesTheReferencesAndNothingElse()
     {
         // Act
         var document = JobPayloadDocument.Serialize(Payload);
 
         // Assert
         Assert.Equal(
-            """{"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","folderAlias":"INBOX","folderResolutionGeneration":2,"uidValidity":12345,"uid":4711}""",
+            """{"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","storedEmailId":"0199a0c0-0000-7000-8000-000000000001"}""",
             document);
     }
 
@@ -219,7 +213,7 @@ public sealed class JobPayloadDocumentTests
     public void Serialize_ADocumentOverTheBound_IsRefusedRatherThanStored()
     {
         // Arrange
-        var oversized = Payload with { FolderAlias = new string('f', JobPayloadDocument.MaximumByteCount) };
+        var oversized = Payload with { AccountId = new string('a', JobPayloadDocument.MaximumByteCount) };
 
         // Act
         var refusal = Assert.Throws<JobPayloadTooLargeException>(() => JobPayloadDocument.Serialize(oversized));
@@ -235,11 +229,11 @@ public sealed class JobPayloadDocumentTests
     public void Serialize_ADocumentWhoseCharactersFitButWhoseBytesDoNot_IsRefused()
     {
         // Arrange
-        var multiByteAlias = new string('ł', (JobPayloadDocument.MaximumByteCount / 2) + 1);
-        var oversized = Payload with { FolderAlias = multiByteAlias };
+        var multiByteAccountId = new string('ł', (JobPayloadDocument.MaximumByteCount / 2) + 1);
+        var oversized = Payload with { AccountId = multiByteAccountId };
 
         // Act & Assert
-        Assert.True(multiByteAlias.Length <= JobPayloadDocument.MaximumByteCount);
+        Assert.True(multiByteAccountId.Length <= JobPayloadDocument.MaximumByteCount);
         Assert.Throws<JobPayloadTooLargeException>(() => JobPayloadDocument.Serialize(oversized));
     }
 
@@ -265,7 +259,7 @@ public sealed class JobPayloadDocumentTests
     [Theory]
     [InlineData("{")]
     [InlineData("null")]
-    [InlineData("""{"folderAlias":"inbox"}""")]
+    [InlineData("""{"accountId":"account-a"}""")]
     public void Deserialize_ADocumentThatIsNotTheContractOfItsType_IsRefused(string document)
     {
         // Act & Assert

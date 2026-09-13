@@ -56,7 +56,7 @@ flowchart TD
     judge --> commit
     commit --> ask
     commit --> collect
-    ask -. "one job per occurrence; a full queue refuses rather than waits" .-> job
+    ask -. "one job per stored email; a full queue refuses rather than waits" .-> job
     ask --> classify
     job -. "one scan per message" .-> spamd
     classify -. "one scan per message" .-> spamd

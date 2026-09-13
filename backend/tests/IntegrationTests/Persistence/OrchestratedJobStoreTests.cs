@@ -8,7 +8,6 @@ using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
-using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
@@ -136,7 +135,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
     /// resolves committed local state rather than anything copied into the queue.
     /// </summary>
     [Fact]
-    public async Task ClaimAsync_AClaimedJob_CarriesTheOccurrenceAndTheAccountItWasEnqueuedWith()
+    public async Task ClaimAsync_AClaimedJob_CarriesTheStoredEmailAndTheAccountItWasEnqueuedWith()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -158,8 +157,8 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         Assert.Equal(request.Key, job.Key);
         Assert.Equal(SyntheticMailAccount.AccountId, job.AccountId);
         Assert.Equal(
-            ((ClassifyEmailSpamJobPayload)request.Payload).ToOccurrenceId(),
-            Assert.IsType<ClassifyEmailSpamJobPayload>(job.Payload).ToOccurrenceId());
+            ((ClassifyEmailSpamJobPayload)request.Payload).ToStoredEmailId(),
+            Assert.IsType<ClassifyEmailSpamJobPayload>(job.Payload).ToStoredEmailId());
     }
 
     /// <summary>
@@ -664,12 +663,8 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         return JobEnqueueRequest.CreateAvailableAt(
             JobIdempotencyKey.Create($"{SecondUserAccount}/1"),
             ClassifyEmailSpamJobPayload.For(
-                account.User,
-                EmailOccurrenceId.Create(
-                    account.Id,
-                    new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
-                    ImapUidValidity.Create(90_002),
-                    ImapUid.Create(1))),
+                account,
+                StoredEmailId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000090002"))),
             account,
             QueuedAt);
     }
@@ -697,7 +692,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         return JobIdOf(enqueued);
     }
 
-    /// <summary>Enqueues one job about a synthetic occurrence this class owns, and answers with whatever the queue did.</summary>
+    /// <summary>Enqueues one job about a synthetic stored email this class owns, and answers with whatever the queue did.</summary>
     private static async Task<JobEnqueueResult> EnqueueOnceAsync(
         OrchestratedMailFathomServices services,
         uint uid,
@@ -714,7 +709,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
     private static JobId JobIdOf(JobEnqueueResult enqueued) => enqueued.JobId
         ?? throw new XunitException($"The enqueue was {enqueued.Outcome} and named no job to act on.");
 
-    /// <summary>Enqueues one job about a synthetic occurrence this class owns, and answers with its identifier.</summary>
+    /// <summary>Enqueues one job about a synthetic stored email this class owns, and answers with its identifier.</summary>
     private static async Task<JobId> EnqueueAsync(
         OrchestratedMailFathomServices services,
         uint uid,
@@ -730,7 +725,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         return JobIdOf(enqueued);
     }
 
-    /// <summary>Composes one execution about an occurrence in this class's own folder binding.</summary>
+    /// <summary>Composes one execution about a stored email in this class's own account.</summary>
     /// <remarks>
     /// The binding is committed first because the job's account column is a foreign key: a queue holding work for an
     /// account that is gone is exactly what the key exists to prevent, so the account has to be there to point at.
@@ -740,14 +735,10 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         uint uid,
         CancellationToken cancellationToken)
     {
-        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var payload = ClassifyEmailSpamJobPayload.For(
-            SyntheticMailAccount.User,
-            EmailOccurrenceId.Create(
-                SyntheticMailAccount.AccountId,
-                binding.Id,
-                ImapUidValidity.Create(90_001),
-                ImapUid.Create(uid)));
+            SyntheticMailAccount.Account,
+            StoredEmailId.Create(Guid.CreateVersion7(QueuedAt.AddSeconds(uid))));
 
         return JobEnqueueRequest.Create(
             JobIdempotencyKey.Create($"{FolderAlias}/{uid}"),

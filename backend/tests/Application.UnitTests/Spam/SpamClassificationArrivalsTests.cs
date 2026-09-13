@@ -35,7 +35,7 @@ public sealed class SpamClassificationArrivalsTests
         .Returns(JobEnqueueResult.Created(JobId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000001"))));
 
     [Fact]
-    public async Task ScheduleAsync_AMessageInAClassifiedFolder_EnqueuesOneClassificationNamingTheOccurrence()
+    public async Task ScheduleAsync_AMessageInAClassifiedFolder_EnqueuesOneClassificationNamingTheStoredEmail()
     {
         // Arrange
         var occurrence = OccurrenceIn(Inbox, uid: 4401);
@@ -53,7 +53,9 @@ public sealed class SpamClassificationArrivalsTests
 
         Assert.Equal(JobType.ClassifyEmailSpam, request.JobType);
         Assert.Equal(Account, request.Account);
-        Assert.Equal(occurrence, Assert.IsType<ClassifyEmailSpamJobPayload>(request.Payload).ToOccurrenceId());
+        var payload = Assert.IsType<ClassifyEmailSpamJobPayload>(request.Payload);
+        Assert.Equal(Account, payload.ToAccountIdentity());
+        Assert.Equal(StoredEmail, payload.ToStoredEmailId());
         Assert.Null(request.AvailableAt);
     }
 

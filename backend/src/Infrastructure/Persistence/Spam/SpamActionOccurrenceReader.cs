@@ -45,7 +45,7 @@ internal sealed class SpamActionOccurrenceReader(MailFathomDbContext dbContext) 
             })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (row is null)
+        if (row is not { UidValidity: { } uidValidity, Uid: { } uid })
         {
             return null;
         }
@@ -60,8 +60,8 @@ internal sealed class SpamActionOccurrenceReader(MailFathomDbContext dbContext) 
                 new MailFolderResolutionId(
                     folderAlias,
                     MailFolderResolutionGeneration.Create(row.ResolutionGeneration)),
-                ImapUidValidity.Create(row.UidValidity),
-                ImapUid.Create(row.Uid)),
+                ImapUidValidity.Create(uidValidity),
+                ImapUid.Create(uid)),
             folderAlias,
             row.IsRemotelySeen);
     }

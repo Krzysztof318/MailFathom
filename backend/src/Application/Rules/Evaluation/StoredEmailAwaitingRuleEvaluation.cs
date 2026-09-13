@@ -12,7 +12,8 @@ namespace MailFathom.Application.Rules.Evaluation;
 /// <param name="Occurrence">
 /// Where the email is on the mail server, which is what a change a matching rule asks for is issued against. It is read
 /// with the facts rather than looked up afterwards, because an occurrence a later query returned would be the one the
-/// mailbox holds now rather than the one the rule matched.
+/// mailbox holds now rather than the one the rule matched. Absent where no mail server holds the email any longer, which
+/// leaves the email evaluated and every change a rule asks for unrecorded.
 /// </param>
 /// <param name="Facts">The metadata every fact but the body text is resolved from.</param>
 /// <param name="AwaitsExtraction">
@@ -23,6 +24,6 @@ namespace MailFathom.Application.Rules.Evaluation;
 /// </param>
 public sealed record StoredEmailAwaitingRuleEvaluation(
     StoredEmailId StoredEmailId,
-    EmailOccurrenceId Occurrence,
+    EmailOccurrenceId? Occurrence,
     MailRuleEmailFacts Facts,
     bool AwaitsExtraction);

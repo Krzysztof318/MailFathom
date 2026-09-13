@@ -53,6 +53,10 @@ public sealed class StoredMailRederivationTests
 
     private static readonly StoredMailScope WholeAccount = new(MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")), null);
 
+    private static readonly byte[] ReadableMime = [1, 2, 3];
+
+    private static readonly byte[] UnreadableMime = [0];
+
     private readonly InMemoryStoredMailRederivationRunStore runs = new();
     private int arrangedRunCount;
 
@@ -196,8 +200,8 @@ public sealed class StoredMailRederivationTests
         var store = new FakeRederivationStore(mail);
         var rederivation = this.RederivationOver(
             store,
-            ContentStoreWithReadableMime(),
-            ReaderThatFails(mail[0].StoredEmailId, mail));
+            ContentStoreWithUnreadableMimeFor(mail[0].StoredEmailId),
+            ReaderThatFailsOnUnreadableMime());
 
         // Act
         var pass = await this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken);
@@ -433,14 +437,26 @@ public sealed class StoredMailRederivationTests
     [
         .. Enumerable.Range(1, count).Select(position => new StoredMailAwaitingRederivation(
             StoredEmailId.Create(Guid.Parse($"00000000-0000-0000-0000-{position:D12}")),
-            EmailOccurrenceId.Create(
-                MailAccountId.Create("work"),
-                new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
-                ImapUidValidity.Create(5),
-                ImapUid.Create((uint)position)))),
+            MailAccountId.Create("work"))),
     ];
 
-    private static IEmailContentStore ContentStoreWithReadableMime() => ContentStoreWithMimeOf([1, 2, 3]);
+    private static IEmailContentStore ContentStoreWithReadableMime() => ContentStoreWithMimeOf(ReadableMime);
+
+    /// <summary>Answers one message with bytes the reader refuses and every other with bytes it reads.</summary>
+    /// <remarks>
+    /// The reader is handed an account and bytes and nothing naming the message, so the bytes are what tells it which
+    /// one it cannot parse.
+    /// </remarks>
+    private static IEmailContentStore ContentStoreWithUnreadableMimeFor(StoredEmailId unreadable)
+    {
+        var contentStore = ContentStores.Substituted();
+        contentStore
+            .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult<StoredEmailContent?>(StoredContent(
+                call.Arg<StoredEmailId>() == unreadable ? UnreadableMime : ReadableMime)));
+
+        return contentStore;
+    }
 
     /// <summary>Answers every read with one payload, which is what lets a large one be arranged without allocating it per email.</summary>
     private static IEmailContentStore ContentStoreWithMimeOf(byte[] rawMime)
@@ -461,38 +477,30 @@ public sealed class StoredMailRederivationTests
     {
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(
-                MetadataOf(call.Arg<RemoteEmailContent>()!.OccurrenceId, bodyText))));
+                MetadataOf(call.Arg<MailAccountIdentity>().Id, bodyText))));
 
         return mimeReader;
     }
 
-    /// <summary>Builds a reader that cannot parse one of the walk's messages and reads every other one.</summary>
-    private static IEmailMimeReader ReaderThatFails(
-        StoredEmailId unreadable,
-        IReadOnlyList<StoredMailAwaitingRederivation> mail)
+    /// <summary>Builds a reader that cannot parse <see cref="UnreadableMime" /> and reads every other payload.</summary>
+    private static IEmailMimeReader ReaderThatFailsOnUnreadableMime()
     {
-        var unreadableOccurrence = mail.Single(email => email.StoredEmailId == unreadable).OccurrenceId;
         var mimeReader = Substitute.For<IEmailMimeReader>();
 
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var occurrenceId = call.Arg<RemoteEmailContent>()!.OccurrenceId;
-
-                return Task.FromResult(occurrenceId == unreadableOccurrence
-                    ? EmailMimeExtractionResult.MalformedContent()
-                    : EmailMimeExtractionResult.Extracted(MetadataOf(occurrenceId, "Body")));
-            });
+            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(call.Arg<ReadOnlyMemory<byte>>().Span.SequenceEqual(UnreadableMime)
+                ? EmailMimeExtractionResult.MalformedContent()
+                : EmailMimeExtractionResult.Extracted(MetadataOf(call.Arg<MailAccountIdentity>().Id, "Body"))));
 
         return mimeReader;
     }
 
-    private static ExtractedEmailMetadata MetadataOf(EmailOccurrenceId occurrenceId, string bodyText) =>
+    private static ExtractedEmailMetadata MetadataOf(MailAccountId accountId, string bodyText) =>
         new(
-            occurrenceId,
+            accountId,
             Subject: "Subject",
             SentAt: null,
             ReceivedAt: null,

@@ -525,10 +525,7 @@ public sealed class JobExecutorTests
         {
             UserId = SyntheticMailUser.Deployment.Value,
             AccountId = "account-a",
-            FolderAlias = "inbox",
-            FolderResolutionGeneration = 1,
-            UidValidity = 1,
-            Uid = 42,
+            StoredEmailId = Guid.Parse("0199a0c0-0000-7000-8000-000000000042"),
         },
         AccountId: null,
         attemptCount,

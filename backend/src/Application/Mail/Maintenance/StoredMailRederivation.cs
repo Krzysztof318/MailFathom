@@ -7,6 +7,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Mail.Maintenance;
@@ -268,8 +269,8 @@ public sealed class StoredMailRederivation
             readByteCount += storedContent.RawMime.Length;
 
             var extraction = await this.mimeReader.ReadMetadataAsync(
-                new RemoteEmailContent(email.OccurrenceId, storedContent.RawMime),
-                user,
+                MailAccountIdentity.Create(user, email.AccountId),
+                storedContent.RawMime,
                 cancellationToken);
 
             // A message no reader can parse keeps what it already holds and the position moves past it, exactly as

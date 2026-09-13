@@ -73,10 +73,7 @@ public sealed class ScheduledMailRuleRunHandlerTests
             {
                 UserId = SyntheticMailUser.Deployment.Value,
                 AccountId = Account.Id.Value,
-                FolderAlias = "inbox",
-                FolderResolutionGeneration = 1,
-                UidValidity = 42,
-                Uid = 7,
+                StoredEmailId = Guid.Parse("0199a0c0-0000-7000-8000-000000000007"),
             },
             TestContext.Current.CancellationToken));
 

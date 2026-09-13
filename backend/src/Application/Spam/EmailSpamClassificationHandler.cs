@@ -12,10 +12,10 @@ using MailFathom.Domain.Spam;
 
 namespace MailFathom.Application.Spam;
 
-/// <summary>Runs the classification of one message occurrence as a leased execution of the durable queue.</summary>
+/// <summary>Runs the classification of one stored email as a leased execution of the durable queue.</summary>
 /// <remarks>
 /// <para>
-/// The work is the use case that already exists, reached once per occurrence: the queue supplies the lease, the bounded
+/// The work is the use case that already exists, reached once per stored email: the queue supplies the lease, the bounded
 /// attempts, the jittered backoff between them, and the dead letter that ends a job nothing can finish. That is the
 /// whole reason classification is a job rather than a step of the account's synchronization run — a scan reaches a
 /// sidecar that can be unreachable, saturated, or restarting, and a run that deferred the whole account could not
@@ -28,7 +28,7 @@ namespace MailFathom.Application.Spam;
 /// </para>
 /// <para>
 /// Running it twice with one payload is the same as running it once, which is what the queue asks of every handler. The
-/// use case is keyed to the occurrence and asked to leave an existing record alone, and the changes a verdict asks of
+/// use case is keyed to the stored email and asked to leave an existing record alone, and the changes a verdict asks of
 /// the mailbox are written under an identity of their own, so an attempt that crashed after committing its verdict
 /// leaves the next one with the same verdict to act on rather than with a second one to reach.
 /// </para>
@@ -41,29 +41,24 @@ namespace MailFathom.Application.Spam;
 /// </remarks>
 public sealed class EmailSpamClassificationHandler : IJobHandler
 {
-    private readonly IClassifiableEmailReader emails;
     private readonly IEmailSpamClassificationStore classifications;
     private readonly EmailSpamClassifier classifier;
     private readonly SpamActionRecorder actionRecorder;
 
     /// <summary>Initializes the handler over the work one job describes.</summary>
-    /// <param name="emails">Turns the occurrence the payload names into the local email it was stored as.</param>
     /// <param name="classifications">Reads the verdict an earlier attempt recorded, so a repeated attempt still acts on it.</param>
-    /// <param name="classifier">Reaches a verdict about the occurrence and records it.</param>
+    /// <param name="classifier">Reaches a verdict about the stored email and records it.</param>
     /// <param name="actionRecorder">Writes down whatever the operator's switches ask a verdict to do to the mailbox.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public EmailSpamClassificationHandler(
-        IClassifiableEmailReader emails,
         IEmailSpamClassificationStore classifications,
         EmailSpamClassifier classifier,
         SpamActionRecorder actionRecorder)
     {
-        ArgumentNullException.ThrowIfNull(emails);
         ArgumentNullException.ThrowIfNull(classifications);
         ArgumentNullException.ThrowIfNull(classifier);
         ArgumentNullException.ThrowIfNull(actionRecorder);
 
-        this.emails = emails;
         this.classifications = classifications;
         this.classifier = classifier;
         this.actionRecorder = actionRecorder;
@@ -75,31 +70,21 @@ public sealed class EmailSpamClassificationHandler : IJobHandler
     /// <inheritdoc />
     /// <exception cref="ArgumentException">Thrown when the payload is not the contract this job type names.</exception>
     /// <remarks>
-    /// An occurrence nothing is stored at ends the job as done rather than as a failure. Mail can be expunged between
+    /// An email nothing is stored under ends the job as done rather than as a failure. Mail can be expunged between
     /// the moment a classification was asked for and the moment it runs, and that is the message leaving rather than
     /// work to attempt again.
     /// </remarks>
     public async Task RunAsync(IJobPayload payload, CancellationToken cancellationToken)
     {
-        if (payload is not ClassifyEmailSpamJobPayload occurrence)
+        if (payload is not ClassifyEmailSpamJobPayload email)
         {
             throw new ArgumentException(
-                $"A '{JobType.ClassifyEmailSpam}' job carries a payload naming one message occurrence.",
+                $"A '{JobType.ClassifyEmailSpam}' job carries a payload naming one stored email.",
                 nameof(payload));
         }
 
-        var account = occurrence.ToAccountIdentity();
-        var storedEmailId = await this.emails.FindStoredEmailIdAsync(
-            account.User,
-            occurrence.ToOccurrenceId(),
-            cancellationToken);
-
-        if (storedEmailId is not { } emailId)
-        {
-            return;
-        }
-
-        var classification = await this.ClassifyAsync(account.User, emailId, cancellationToken);
+        var account = email.ToAccountIdentity();
+        var classification = await this.ClassifyAsync(account.User, email.ToStoredEmailId(), cancellationToken);
 
         if (classification is not null)
         {
@@ -111,11 +96,11 @@ public sealed class EmailSpamClassificationHandler : IJobHandler
         }
     }
 
-    /// <summary>Reaches a verdict about the occurrence, or recovers the one an earlier attempt already recorded.</summary>
+    /// <summary>Reaches a verdict about the stored email, or recovers the one an earlier attempt already recorded.</summary>
     /// <remarks>
     /// The re-read is what makes a repeated attempt whole rather than merely harmless. An attempt that committed its
     /// verdict and then lost its lease left the message classified and its filing unasked for, and a second attempt that
-    /// read only its own result would see an occurrence already classified and end having done neither. Every other
+    /// read only its own result would see a message already classified and end having done neither. Every other
     /// outcome is a reason no verdict exists — classification switched off, a folder outside the scope, content that is
     /// not stored — and none of them has anything for the mailbox to be asked about.
     /// </remarks>

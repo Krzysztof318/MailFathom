@@ -378,7 +378,7 @@ passage reaches either of them, or a log line about them.
 
 ## Classifying is idempotent, and reclassifying is explicit
 
-Classification is keyed to the occurrence, so repeating it either leaves the existing record alone or replaces it with
+Classification is keyed to the stored email, so repeating it either leaves the existing record alone or replaces it with
 what the same inputs produce. Two callers asking together resolve to one record rather than to a history: a concurrent
 write conflicts on the record's own optimistic-concurrency token and is retried from a fresh read.
 
@@ -396,7 +396,9 @@ soon as it has committed the message and its content, and the work then runs as 
 that carries every other background job: leased to one worker, bounded by a timeout, retried with a jittered backoff,
 and dead-lettered once it has spent its attempts. A job that stopped is read and acted on through
 [administering a deployment](../operations/admin-endpoint.md#reading-the-background-work-that-stopped-and-deciding-what-becomes-of-it),
-under the job type `classify-email-spam`.
+under the job type `classify-email-spam`. The job names the stored email rather than where the server holds it, so a
+message the source has since expunged is still classified; only the action a verdict asks for needs the occurrence, and
+is not recorded without one.
 
 **Why a job rather than another step of the synchronization run.** Rule evaluation is a step of that run and needs
 nothing else, because evaluating a rule over committed local state has no transient failure and therefore nothing to

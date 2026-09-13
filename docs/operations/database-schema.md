@@ -250,6 +250,10 @@ already serving:
   same terms as before — the predicate compares the backend name and null-tests the locator, the payload, and the new
   column, none of which dereferences a payload PostgreSQL stored out of line — and the column is added without a
   rewrite, since a nullable column with no default is a catalog change.
+  `MakeStoredEmailOccurrenceOptional` adds `ck_stored_emails_occurrence_complete` to `stored_emails`, so the message
+  table is scanned under `ACCESS EXCLUSIVE` once; dropping `NOT NULL` from `uid_validity` and `uid` beside it is a
+  catalog change. The same migration rewrites every queued `classify-email-spam` job, which is proportional to the
+  queue rather than to the mail.
 
 The first release's script creates a schema from nothing, so none of these applies to an empty database.
 
@@ -276,6 +280,13 @@ names the account identifier as the conflict target, no unique constraint matche
 statement is refused — so a rotation an older build receives against this schema is logged as a failure to store rather
 than stored. Keep the middle of the rollout short on these releases, and do not treat a previous image as something
 that can be left running against them.
+
+**`MakeStoredEmailOccurrenceOptional` fails classification work on an older replica rather than losing it.** It
+rewrites every queued `classify-email-spam` job to name the stored email instead of where the server holds it, and an
+older build cannot read that document. A replica of it that claims such a job cannot start any job in the batch it
+claimed, so that batch waits for its lease to run out before a replica of the new build takes it again — and every such
+claim spends one of each job's attempts, which leaves fewer for a genuine failure before the job is dead-lettered. Keep
+the middle of the rollout short, and read the dead letters after it with the job type in mind.
 
 **`AddMailboxMutationWithdrawalHold` shortens a way back rather than failing anything.** It adds `HeldUntil` to
 `mailbox_mutations`, nullable with no default, so it is a catalog change on a table of any size. A build older than the
