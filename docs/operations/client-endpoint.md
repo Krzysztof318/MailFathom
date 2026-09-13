@@ -3125,6 +3125,37 @@ There is no client-certificate profile here. The trust question a certificate an
 not yet ask; where it is served is stated in exactly the settings the existing endpoints use, so the day it does ask,
 the answer arrives as a profile on a listener already shaped to carry one.
 
+### The content security policy it is served with
+
+Every file served beneath `/app/` carries a `Content-Security-Policy` header, on the client listeners and on no other.
+The policy is the bundle's own: the client's build writes it into the bundle as `content-security-policy.txt`, and the
+service reads that file once at startup and attaches it. A bundle carrying no such file is refused at startup exactly as
+a missing bundle is, because serving the page without its policy is the undefended page the file exists to prevent.
+Nothing here is configurable, and a proxy in front of this process should pass the header through rather than replace it.
+
+It is defence in depth rather than what keeps the reading pane safe — that rests on no string from a message ever
+becoming markup. What it limits is a defect somewhere else in the client: which scripts can run in the page, and so what
+could read a credential kept by *Keep me signed in*, and where anything read could be sent.
+
+| Directive | What it admits | Why |
+| --- | --- | --- |
+| `default-src` | `'self'` | Anything not named below comes from the deployment that served the page or not at all |
+| `script-src` | `'self'` and two `'sha256-…'` hashes | The bundle, and the two scripts the client writes into the frames that draw a sender's own markup — one reports a clicked link, one measures the embedded view's height. A framed `srcdoc` document inherits this policy, so each is admitted by the hash of its exact text, computed when the bundle is built; nothing a message carries runs |
+| `style-src` | `'self' 'unsafe-inline'` | A sender's own inline styles are what the full-HTML dialog and the embedded view exist to show, and a framed document inherits this directive too |
+| `img-src` | `'self' data: https: http:` | A message's pictures come from whatever server its sender named, and asking to load them re-reads that message with those addresses left in, so no host can be named. `data:` is a picture the message or an attachment carried inline |
+| `font-src` | `'self'` | The typeface ships inside the bundle |
+| `connect-src` | `'self'` | The page calls the deployment that served it — the routes beneath `/api/client`, the signal channel, and the telemetry routes — and nothing else |
+| `frame-src` | `'self' blob:` | An attached PDF is drawn by the browser's own viewer from an object URL the page made |
+| `object-src` | `'none'` | No plugin content |
+| `base-uri` | `'none'` | No `<base>` element can redirect the page's relative references, in the page or in a frame |
+| `form-action` | `'none'` | No form submits anywhere; the client's own forms are handled by the page |
+| `frame-ancestors` | `'none'` | No other page may frame this one |
+
+The desktop head carries the same policy with one directive wider: its `connect-src` admits `https:`, `wss:`, `http:`,
+and `ws:` rather than `'self'`, because which deployment it calls is decided by its user at run time while its policy is
+fixed when the application is built. `frontend/src/Client.App/contentSecurityPolicy.ts` holds both, with the reason for
+each directive beside it.
+
 ## Publishing it
 
 Behind an ingress, publish `/api/client` as its own path to the same backend the other surfaces are on and keep the

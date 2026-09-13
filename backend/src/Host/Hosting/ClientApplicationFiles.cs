@@ -45,19 +45,24 @@ internal static class ClientApplicationFiles
 
     /// <summary>Reports whether this deployment's files actually carry a client to serve.</summary>
     /// <param name="environment">The hosting environment, whose web root is where the image copies the bundle.</param>
-    /// <returns><see langword="true" /> when the bundle's entry document is there.</returns>
+    /// <returns><see langword="true" /> when the bundle's entry document and its content security policy are both there.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="environment" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// Asked through the environment's own file provider rather than of the file system, so a host composed in a test
     /// answers from whatever provider it was given. The entry document is what a present bundle is recognized by: the
     /// directory exists in an image built without one, and a deployment that enabled the client would otherwise learn
-    /// about it from a page of 404s rather than from a refusal naming the setting.
+    /// about it from a page of 404s rather than from a refusal naming the setting. The policy is asked for beside it
+    /// because a page served without one is the undefended page it exists to prevent, so a bundle lacking it is refused
+    /// as incomplete rather than served.
     /// </remarks>
     internal static bool BundleIsPresent(IWebHostEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(environment);
 
-        return environment.WebRootFileProvider.GetFileInfo(ClientApplicationOptions.EntryDocument).Exists;
+        var webRoot = environment.WebRootFileProvider;
+
+        return webRoot.GetFileInfo(ClientApplicationOptions.EntryDocument).Exists
+            && webRoot.GetFileInfo(ClientApplicationOptions.ContentSecurityPolicyDocument).Exists;
     }
 
     /// <summary>Serves the bundle on the listeners the client surface is served on.</summary>
@@ -81,6 +86,12 @@ internal static class ClientApplicationFiles
     /// so requiring one to fetch it would be a client that can never sign in; what the page then calls is judged by the
     /// endpoint's own authorization exactly as any other caller is.
     /// </para>
+    /// <para>
+    /// Every file it serves carries the content security policy the bundle was built with, read once here. The service
+    /// does not state a policy of its own, because what the policy admits by hash is the text of scripts the client
+    /// writes into the reading pane's frames, and a copy kept here would stop admitting them the first time one changed.
+    /// Attaching it where the static files are answered is what confines it to the client listeners with them.
+    /// </para>
     /// </remarks>
     internal static IApplicationBuilder UseClientApplication(
         this IApplicationBuilder app,
@@ -88,6 +99,9 @@ internal static class ClientApplicationFiles
     {
         ArgumentNullException.ThrowIfNull(app);
         ArgumentNullException.ThrowIfNull(clientListenerPorts);
+
+        var contentSecurityPolicy = ContentSecurityPolicyOf(
+            app.ApplicationServices.GetRequiredService<IWebHostEnvironment>());
 
         var contentTypes = new FileExtensionContentTypeProvider();
 
@@ -109,6 +123,19 @@ internal static class ClientApplicationFiles
                 {
                     RequestPath = ClientApplicationOptions.RequestPath,
                     ContentTypeProvider = contentTypes,
+                    OnPrepareResponse = served =>
+                        served.Context.Response.Headers.ContentSecurityPolicy = contentSecurityPolicy,
                 }));
+    }
+
+    /// <summary>Reads the policy the bundle was built with, as the one header value its build wrote.</summary>
+    private static string ContentSecurityPolicyOf(IWebHostEnvironment environment)
+    {
+        var policyDocument = environment.WebRootFileProvider.GetFileInfo(
+            ClientApplicationOptions.ContentSecurityPolicyDocument);
+
+        using var reader = new StreamReader(policyDocument.CreateReadStream());
+
+        return reader.ReadToEnd().Trim();
     }
 }

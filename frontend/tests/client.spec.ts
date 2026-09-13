@@ -1185,6 +1185,41 @@ test('carries nothing that runs, and reaches no host but its own until the reade
     expect([...hosts]).not.toContain(messages.senderScriptHost);
 });
 
+// The preview server attaches the policy the build wrote into the bundle, which is the same file a deployment reads and
+// attaches — so what is proven is that the screens a person reads mail on run under the policy they are served with.
+// A violation is only ever reported to the console, including one inside the sender's frame, which inherits the page's
+// policy: a frame script the policy did not admit would fail silently on the screen and loudly here.
+test('reads mail, the sender own markup, its pictures, and its links under a policy none of them violates', async ({
+    page,
+}) => {
+    const violations: string[] = [];
+
+    page.on('console', (message) => {
+        if (message.text().includes('Content Security Policy')) {
+            violations.push(message.text());
+        }
+    });
+
+    const served = await page.request.get('/');
+
+    expect(served.headers()['content-security-policy']).toContain("frame-ancestors 'none'");
+
+    await openTheFirstMessage(page);
+    await showTheSenderMarkup(page);
+
+    const surface = page.getByRole('region', { name: 'The original message, as its sender wrote it' });
+
+    await surface.getByRole('button', { name: 'Load pictures from the sender' }).click();
+    await expect(surface.getByText(/their servers can tell it was opened/)).toBeVisible();
+
+    const opened = page.context().waitForEvent('page');
+
+    await page.frameLocator(`iframe[title="${markupFrame}"]`).getByText('Read the offers').click();
+    await (await opened).close();
+
+    expect(violations).toStrictEqual([]);
+});
+
 // What only a browser can say about the shape the two surfaces take where somebody does not work in tabs: the design
 // project draws each as a window over the message, and a window is the platform's own modal — which jsdom carries the
 // element of and none of the behaviour of. So the focus handed back as it closes is asserted here and nowhere else.

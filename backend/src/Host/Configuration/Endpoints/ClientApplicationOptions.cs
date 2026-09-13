@@ -40,6 +40,10 @@ internal sealed class ClientApplicationOptions
     /// <remarks>The bundle's entry document. Its presence is what separates an image carrying a bundle from one built without it, which is a distinction worth making at startup rather than as a page of 404s.</remarks>
     public const string EntryDocument = "index.html";
 
+    /// <summary>The file the bundle carries its content security policy in, as one header value.</summary>
+    /// <remarks>The client's build writes it, because the policy admits the scripts the reading pane's frames run by hashes of their text, and only that build knows the text. A bundle without it is an incomplete one and is not served.</remarks>
+    public const string ContentSecurityPolicyDocument = "content-security-policy.txt";
+
     /// <summary>The path the bundle is served beneath, so the root of a listener belongs to no static file.</summary>
     /// <remarks>A constant rather than a setting: the page resolves the surface it calls against the origin rather than against this path, so nothing a deployment configures depends on it.</remarks>
     public const string RequestPath = "/app";
