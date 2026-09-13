@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { asHeaderValue, desktopHeadDirectives, webHeadDirectives } from './contentSecurityPolicy';
+import { asHeaderValue, directivesBothHeadsShare, webHeadDirectives } from './contentSecurityPolicy';
 import { LocalizationProvider } from './src/localization/Localization';
 import { EmbeddedMessageMarkup } from './src/messageBody/MessageMarkupFrame';
 import { LinkOpenerContext } from './src/shellOperations/linkOpener';
@@ -33,9 +33,9 @@ function hashSourceOf(script: string): string {
 
 describe('contentSecurityPolicy', () => {
     it.each([
-        ['web', webHeadDirectives],
-        ['desktop', desktopHeadDirectives],
-    ])('admits on the %s head every script the embedded markup frame writes, by its hash', (_head, directives) => {
+        ['that both heads share', directivesBothHeadsShare],
+        ['the web head is served under', webHeadDirectives],
+    ])('admits, in the directives %s, every script the embedded markup frame writes by its hash', (_, directives) => {
         const scripts = scriptsTheEmbeddedFrameWrites();
 
         expect(scripts).toHaveLength(2);

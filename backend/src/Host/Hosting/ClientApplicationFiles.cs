@@ -67,9 +67,11 @@ internal static class ClientApplicationFiles
 
     /// <summary>Serves the bundle on the listeners the client surface is served on.</summary>
     /// <param name="app">The application pipeline being composed.</param>
+    /// <param name="environment">The hosting environment, whose web root holds the bundle and the policy it was built with.</param>
     /// <param name="clientListenerPorts">The ports the client surface answers on.</param>
     /// <returns>The same application instance for chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the web root carries no content security policy, or one with nothing in it.</exception>
     /// <remarks>
     /// <para>
     /// Everything is served beneath <see cref="ClientApplicationOptions.RequestPath" />: the entry document answers
@@ -95,13 +97,14 @@ internal static class ClientApplicationFiles
     /// </remarks>
     internal static IApplicationBuilder UseClientApplication(
         this IApplicationBuilder app,
+        IWebHostEnvironment environment,
         IReadOnlySet<int> clientListenerPorts)
     {
         ArgumentNullException.ThrowIfNull(app);
+        ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(clientListenerPorts);
 
-        var contentSecurityPolicy = ContentSecurityPolicyOf(
-            app.ApplicationServices.GetRequiredService<IWebHostEnvironment>());
+        var contentSecurityPolicy = ContentSecurityPolicyOf(environment);
 
         var contentTypes = new FileExtensionContentTypeProvider();
 
@@ -129,13 +132,29 @@ internal static class ClientApplicationFiles
     }
 
     /// <summary>Reads the policy the bundle was built with, as the one header value its build wrote.</summary>
+    /// <remarks>
+    /// An empty value is refused here rather than attached, because assigning one removes the header instead of writing
+    /// it: a truncated copy of the file would otherwise pass every check for its existence and serve each page with no
+    /// policy at all, while startup reported the bundle complete.
+    /// </remarks>
     private static string ContentSecurityPolicyOf(IWebHostEnvironment environment)
     {
         var policyDocument = environment.WebRootFileProvider.GetFileInfo(
             ClientApplicationOptions.ContentSecurityPolicyDocument);
 
+        if (!policyDocument.Exists)
+        {
+            throw new InvalidOperationException(
+                $"The client's bundle carries no '{ClientApplicationOptions.ContentSecurityPolicyDocument}', so it cannot be served under the policy it was built with.");
+        }
+
         using var reader = new StreamReader(policyDocument.CreateReadStream());
 
-        return reader.ReadToEnd().Trim();
+        var policy = reader.ReadToEnd().Trim();
+
+        return policy.Length > 0
+            ? policy
+            : throw new InvalidOperationException(
+                $"The client's bundle carries an empty '{ClientApplicationOptions.ContentSecurityPolicyDocument}', so serving it would attach no policy at all.");
     }
 }

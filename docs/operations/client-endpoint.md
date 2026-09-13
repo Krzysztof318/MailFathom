@@ -3143,18 +3143,20 @@ could read a credential kept by *Keep me signed in*, and where anything read cou
 | `script-src` | `'self'` and two `'sha256-…'` hashes | The bundle, and the two scripts the client writes into the frames that draw a sender's own markup — one reports a clicked link, one measures the embedded view's height. A framed `srcdoc` document inherits this policy, so each is admitted by the hash of its exact text, computed when the bundle is built; nothing a message carries runs |
 | `style-src` | `'self' 'unsafe-inline'` | A sender's own inline styles are what the full-HTML dialog and the embedded view exist to show, and a framed document inherits this directive too |
 | `img-src` | `'self' data: https: http:` | A message's pictures come from whatever server its sender named, and asking to load them re-reads that message with those addresses left in, so no host can be named. `data:` is a picture the message or an attachment carried inline |
-| `font-src` | `'self'` | The typeface ships inside the bundle |
-| `connect-src` | `'self'` | The page calls the deployment that served it — the routes beneath `/api/client`, the signal channel, and the telemetry routes — and nothing else |
+| `font-src` | `'self' data: https: http:` | The client's own typeface ships inside the bundle; the other sources are a sender's web font, which asking to load a message's remote content restores beside its pictures |
+| `connect-src` | `'self'` | The page calls the deployment that served it — the routes beneath `/api/client`, the signal channel, and the telemetry routes — and nothing else. A page a deployment served offers no control for naming another, so this is the directive that bounds where anything a script read could be sent |
 | `frame-src` | `'self' blob:` | An attached PDF is drawn by the browser's own viewer from an object URL the page made |
 | `object-src` | `'none'` | No plugin content |
 | `base-uri` | `'none'` | No `<base>` element can redirect the page's relative references, in the page or in a frame |
 | `form-action` | `'none'` | No form submits anywhere; the client's own forms are handled by the page |
 | `frame-ancestors` | `'none'` | No other page may frame this one |
 
-The desktop head carries the same policy with one directive wider: its `connect-src` admits `https:`, `wss:`, `http:`,
-and `ws:` rather than `'self'`, because which deployment it calls is decided by its user at run time while its policy is
-fixed when the application is built. `frontend/src/Client.App/contentSecurityPolicy.ts` holds both, with the reason for
-each directive beside it.
+The desktop head carries the same policy with one directive wider. Its `connect-src` is
+`'self' ipc: http://ipc.localhost https: wss: http: ws:`: `ipc:` and `http://ipc.localhost` are how its page reaches the
+shell's own commands, and the four schemes admit whichever deployment its user names, because that is decided at run
+time while its policy is fixed when the application is built. `frontend/src/Client.App/contentSecurityPolicy.ts` holds
+the directives both heads share with the reason for each beside it, and `frontend/src-tauri/run-tauri.ts` holds the
+desktop head's `connect-src` and its reason.
 
 ## Publishing it
 

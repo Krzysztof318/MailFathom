@@ -1201,8 +1201,16 @@ test('reads mail, the sender own markup, its pictures, and its links under a pol
     });
 
     const served = await page.request.get('/');
+    const policy = served.headers()['content-security-policy'];
 
-    expect(served.headers()['content-security-policy']).toContain("frame-ancestors 'none'");
+    expect(policy).toContain("frame-ancestors 'none'");
+
+    // The file the build wrote is what a deployment attaches and what it refuses to start without, and nothing else
+    // reads it before an image ships — so the header this suite runs under is held to it here.
+    const written = await page.request.get('/content-security-policy.txt');
+
+    expect(written.ok()).toBe(true);
+    expect((await written.text()).trim()).toBe(policy);
 
     await openTheFirstMessage(page);
     await showTheSenderMarkup(page);

@@ -233,7 +233,7 @@ internal static class HostPipeline
                 ]);
         }
 
-        app.UseClientApplication(composition.Client.ListenerPorts);
+        app.UseClientApplication(app.Environment, composition.Client.ListenerPorts);
     }
 
     /// <summary>Maps the liveness and readiness routes, having proved each configured probe is answered by something.</summary>

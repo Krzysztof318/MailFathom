@@ -153,6 +153,28 @@ public sealed class ClientApplicationFilesTests
         Assert.False(context.Response.Headers.ContainsKey("Content-Security-Policy"));
     }
 
+    /// <summary>An empty file passes a check for its existence, and serving under it would drop the header on every response.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData(" \n")]
+    public async Task UseClientApplication_ABundleWhosePolicyDocumentIsBlank_RefusesToServeIt(string policyDocument)
+    {
+        // Arrange
+        await using var services = new ServiceCollection().BuildServiceProvider();
+
+        var application = new ApplicationBuilder(services);
+
+        // Act
+        var refusal = Record.Exception(() => application.UseClientApplication(
+            WebRootCarryingTheBundle(policyDocument),
+            new HashSet<int> { ClientListenerPort }));
+
+        // Assert
+        var refused = Assert.IsType<InvalidOperationException>(refusal);
+
+        Assert.Contains(ClientApplicationOptions.ContentSecurityPolicyDocument, refused.Message, StringComparison.Ordinal);
+    }
+
     private static DefaultHttpContext RequestOnTheClientListener(string path) => RequestOn(ClientListenerPort, path);
 
     private static DefaultHttpContext RequestOn(int localPort, string path)
@@ -169,14 +191,17 @@ public sealed class ClientApplicationFilesTests
 
     private static async Task ServeAsync(DefaultHttpContext context)
     {
+        // Written the way the client's build writes it, one line with a trailing newline the service must not attach.
+        var environment = WebRootCarryingTheBundle($"{ContentSecurityPolicy}\n");
+
         await using var services = new ServiceCollection()
-            .AddSingleton(WebRootCarryingTheBundle())
+            .AddSingleton(environment)
             .AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance)
             .BuildServiceProvider();
 
         var application = new ApplicationBuilder(services);
 
-        application.UseClientApplication(new HashSet<int> { ClientListenerPort });
+        application.UseClientApplication(environment, new HashSet<int> { ClientListenerPort });
         application.Run(unmatched =>
         {
             unmatched.Response.StatusCode = StatusCodes.Status404NotFound;
@@ -189,8 +214,8 @@ public sealed class ClientApplicationFilesTests
         await application.Build()(context);
     }
 
-    /// <summary>A web root holding the entry document and its policy at its root, which is where the image copies the bundle.</summary>
-    private static IWebHostEnvironment WebRootCarryingTheBundle()
+    /// <summary>A web root holding the entry document and a policy document at its root, which is where the image copies the bundle.</summary>
+    private static IWebHostEnvironment WebRootCarryingTheBundle(string policyDocumentContent)
     {
         var content = Encoding.UTF8.GetBytes(EntryDocumentContent);
 
@@ -202,8 +227,7 @@ public sealed class ClientApplicationFilesTests
         entryDocument.LastModified.Returns(DateTimeOffset.UnixEpoch);
         entryDocument.CreateReadStream().Returns(_ => new MemoryStream(content));
 
-        // Written the way the client's build writes it, one line with a trailing newline the service must not attach.
-        var policy = Encoding.UTF8.GetBytes($"{ContentSecurityPolicy}\n");
+        var policy = Encoding.UTF8.GetBytes(policyDocumentContent);
 
         var policyDocument = Substitute.For<IFileInfo>();
 
