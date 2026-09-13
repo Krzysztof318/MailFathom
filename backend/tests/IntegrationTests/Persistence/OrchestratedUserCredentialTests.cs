@@ -31,9 +31,11 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// unit suite, and what is under test here is the row the statement leaves.
 /// </para>
 /// <para>
-/// Each test provisions under lookups of its own, because the lookup index is deployment-wide and this class shares a
-/// database with every other class in the collection. The index is over the method beside the lookup, which is why one
-/// test provisions the same value under two methods and expects both to land.
+/// Each test provisions under lookups of its own, because this class shares a database with every other class in the
+/// collection. The unique index is over <c>(Method, OrganizationId, Lookup)</c> with nulls not distinct: a password's
+/// username is unique within its organization, and every other method's lookup, which names no organization, is unique
+/// across the deployment. That is why one test provisions the same value under two methods and expects both to land,
+/// and another expects one API key refused for members of two different organizations.
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
@@ -475,7 +477,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
                     $"""
                      INSERT INTO user_credentials
                          ("Id", "UserId", "Method", "Lookup", "Material", "Permissions", "Enabled", "Version", "CreatedAt", "MaterialChangedAt", "OrganizationId")
-                     VALUES (gen_random_uuid(), {members.FirstUser}, {method}, {lookup}, {StoredHash}, {permissions}, TRUE, 1, {provisionedAt}, {provisionedAt}, {members.FirstOrganization})
+                     VALUES (gen_random_uuid(), {members.FirstUser}, {method}, {lookup}, NULL, {permissions}, TRUE, 1, {provisionedAt}, {provisionedAt}, {members.FirstOrganization})
                      """,
                     token),
                 cancellationToken));
@@ -512,7 +514,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
                 MailUserId.Create(userId),
                 method,
                 lookup,
-                StoredHash,
+                method.StoresMaterial ? StoredHash : null,
                 WholeMailSurface,
                 token),
             cancellationToken);
@@ -583,7 +585,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
                 SyntheticMailAccount.User,
                 method,
                 lookup,
-                StoredHash,
+                method.StoresMaterial ? StoredHash : null,
                 WholeMailSurface,
                 token),
             cancellationToken);
