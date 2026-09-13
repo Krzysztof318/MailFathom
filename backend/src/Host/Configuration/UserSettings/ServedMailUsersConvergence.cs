@@ -79,6 +79,7 @@ internal sealed partial class ServedMailUsersConvergence(
             foreach (var erased in servedUsers.Users.Where(served => held.All(record => record.User != served.User)))
             {
                 servedUsers.UserErased(erased.User);
+                this.refusedVersions.Remove(erased.User);
             }
 
             foreach (var record in held)

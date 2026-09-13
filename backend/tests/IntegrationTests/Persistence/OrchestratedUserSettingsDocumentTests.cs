@@ -129,14 +129,25 @@ public sealed class OrchestratedUserSettingsDocumentTests(MailFathomOrchestratio
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var provisioned = Guid.NewGuid();
 
-        // Act
-        var versions = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IUserSettingsDocumentReader>().ReadVersionsAsync(limit: 1, token),
-            cancellationToken);
+        try
+        {
+            // A second user beside the one the deployment holds, so a statement that ignored its limit answers two.
+            await OrchestratedForeignUser.ProvisionAsync(services, provisioned, cancellationToken);
 
-        // Assert
-        Assert.Single(versions);
+            // Act
+            var versions = await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<IUserSettingsDocumentReader>().ReadVersionsAsync(limit: 1, token),
+                cancellationToken);
+
+            // Assert
+            Assert.Single(versions);
+        }
+        finally
+        {
+            await OrchestratedForeignUser.EraseAsync(services, provisioned);
+        }
     }
 
     /// <summary>Two users under one label is refused by the schema, so a list of users can be read.</summary>

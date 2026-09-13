@@ -125,45 +125,62 @@ internal sealed partial class UserRosterAdministration(
             return UserProvisioningOutcome.Refused(LabelTaken(label));
         }
 
-        var user = MailUserId.Create(Guid.NewGuid());
+        UserProvisioningOutcome outcome;
         await servedUsers.WaitForRosterPublicationAsync(cancellationToken);
 
         try
         {
-            if (!await provisioning.ProvisionAsync(user, label, cancellationToken))
-            {
-                // The label was taken between the roster being read and the insert reaching the table, which no reading of
-                // a snapshot could have refused earlier.
-                return UserProvisioningOutcome.Refused(LabelTaken(label));
-            }
-
-            // Committed rather than published from the insert alone, because the commit is what proves the row still
-            // stands and it answers the version the published record is composed over.
-            if (await documents.CommitAsync(user, ProvisionedRecord, ProvisionedVersion, cancellationToken) is not { } committed)
-            {
-                // The envelope was written and the row is gone again, which is another administrator erasing this user
-                // between the two statements. Reporting the user as recorded would hand back an identifier nothing holds.
-                return UserProvisioningOutcome.Refused(
-                    "The user was recorded and then removed before their record could be written, so this deployment holds nobody under that label. Record them again.");
-            }
-
-            // The committed record names a language and nothing else, so the user it publishes declares no mailbox,
-            // classifies nothing, and reads the deployment's own scanning posture until they write one.
-            servedUsers.UserDocumentPublished(
-                user,
-                label,
-                new UserAccountOptions { Language = ProvisionedLanguage },
-                committed);
-            await announcements.AnnounceAsync();
-
-            this.LogUserProvisioned(label);
-
-            return UserProvisioningOutcome.Provisioned(user);
+            outcome = await this.RecordAndPublishAsync(MailUserId.Create(Guid.NewGuid()), label, cancellationToken);
         }
         finally
         {
             servedUsers.ReleaseRosterPublication();
         }
+
+        // Announced once the roster is released: nothing on this replica waits for the announcement, and a backplane
+        // slow to answer would otherwise hold every other roster write and the convergence reading behind it.
+        if (outcome.IsProvisioned)
+        {
+            await announcements.AnnounceAsync();
+        }
+
+        return outcome;
+    }
+
+    /// <summary>Records a user and their first record, and publishes them, under the roster publication the caller holds.</summary>
+    private async Task<UserProvisioningOutcome> RecordAndPublishAsync(
+        MailUserId user,
+        string label,
+        CancellationToken cancellationToken)
+    {
+        if (!await provisioning.ProvisionAsync(user, label, cancellationToken))
+        {
+            // The label was taken between the roster being read and the insert reaching the table, which no reading of
+            // a snapshot could have refused earlier.
+            return UserProvisioningOutcome.Refused(LabelTaken(label));
+        }
+
+        // Committed rather than published from the insert alone, because the commit is what proves the row still
+        // stands and it answers the version the published record is composed over.
+        if (await documents.CommitAsync(user, ProvisionedRecord, ProvisionedVersion, cancellationToken) is not { } committed)
+        {
+            // The envelope was written and the row is gone again, which is another administrator erasing this user
+            // between the two statements. Reporting the user as recorded would hand back an identifier nothing holds.
+            return UserProvisioningOutcome.Refused(
+                "The user was recorded and then removed before their record could be written, so this deployment holds nobody under that label. Record them again.");
+        }
+
+        // The committed record names a language and nothing else, so the user it publishes declares no mailbox,
+        // classifies nothing, and reads the deployment's own scanning posture until they write one.
+        servedUsers.UserDocumentPublished(
+            user,
+            label,
+            new UserAccountOptions { Language = ProvisionedLanguage },
+            committed);
+
+        this.LogUserProvisioned(label);
+
+        return UserProvisioningOutcome.Provisioned(user);
     }
 
     /// <summary>Puts a new label on a user this deployment already holds.</summary>
@@ -238,26 +255,32 @@ internal sealed partial class UserRosterAdministration(
 
         authorization.RequirePermission(MailFathomPermission.AdminErase);
 
+        bool served;
+        bool erased;
         await servedUsers.WaitForRosterPublicationAsync(cancellationToken);
 
         try
         {
-            var served = servedUsers.Users.Any(candidate => candidate.User == user);
-            var erased = await erasure.EraseAsync(user, cancellationToken);
+            served = servedUsers.Users.Any(candidate => candidate.User == user);
+            erased = await erasure.EraseAsync(user, cancellationToken);
 
             if (erased)
             {
                 servedUsers.UserErased(user);
-                await announcements.AnnounceAsync();
                 this.LogUserErased(served);
             }
-
-            return new UserErasureOutcome(erased, served);
         }
         finally
         {
             servedUsers.ReleaseRosterPublication();
         }
+
+        if (erased)
+        {
+            await announcements.AnnounceAsync();
+        }
+
+        return new UserErasureOutcome(erased, served);
     }
 
     /// <summary>Says why a label cannot be a user's, or nothing when it can.</summary>

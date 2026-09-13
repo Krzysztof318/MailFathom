@@ -126,6 +126,53 @@ public sealed class UserRecordAdministrationTests
         Assert.True(outcome!.IsCommitted);
     }
 
+    /// <summary>
+    /// A committed record is announced so a replica that did not commit it reads it at once, and only once the roster is
+    /// released, so a backplane slow to answer holds no other roster write behind it.
+    /// </summary>
+    [Fact]
+    public async Task ApplyOwnRecordAsync_ACommittedRecord_AnnouncesTheChangeOnceTheRosterIsReleased()
+    {
+        // Arrange
+        var own = Guid.Parse("0197a3c0-0000-7000-8000-000000000001");
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 3);
+        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, StoredFileId.Create(own), Arg.Any<CancellationToken>())
+            .Returns(true);
+        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+
+        // Act
+        await harness.Records.ApplyOwnRecordAsync(
+            $$"""{"Language":"English","Portrait":"{{own:D}}"}""",
+            expectedVersion: 3,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([true], heard);
+    }
+
+    /// <summary>A refused record changed nothing, so no replica is asked to read anything again.</summary>
+    [Fact]
+    public async Task ApplyOwnRecordAsync_ARefusedRecord_AnnouncesNothing()
+    {
+        // Arrange
+        var foreign = Guid.Parse("0197a3c0-0000-7000-8000-00000000f00d");
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 3);
+        harness.Files.HoldsAsync(SyntheticMailUser.Deployment, StoredFileId.Create(foreign), Arg.Any<CancellationToken>())
+            .Returns(false);
+        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+
+        // Act
+        await harness.Records.ApplyOwnRecordAsync(
+            $$"""{"Language":"English","Portrait":"{{foreign:D}}"}""",
+            expectedVersion: 3,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(heard);
+    }
+
     /// <summary>What the use case removes afterwards is the file the link displaced, so the relink has to name it.</summary>
     [Fact]
     public async Task RelinkOwnPortraitAsync_ARecordLinkingAnEarlierPortrait_LinksTheNewFileAndNamesTheOneItDisplaced()
@@ -1096,10 +1143,15 @@ public sealed class UserRecordAdministrationTests
                 SecretValidation.OverRegisteredSchemes(),
                 this.ServedUsers,
                 this.Files,
-                new ConfigurationChangeAnnouncements(connect: null, new RecordingLogger<ConfigurationChangeAnnouncements>()));
+                new ConfigurationChangeAnnouncements(
+                    () => Task.FromResult(this.Backplane.Connect()),
+                    new RecordingLogger<ConfigurationChangeAnnouncements>()));
         }
 
         internal UserRecordAdministration Records { get; }
+
+        /// <summary>Gets the backplane a commit is announced over, which nobody hears until a test listens.</summary>
+        internal InMemoryBackplane Backplane { get; } = new();
 
         /// <summary>Gets the stored files, which hold nothing of anybody's until a test says otherwise.</summary>
         internal IStoredFileStore Files { get; } = Substitute.For<IStoredFileStore>();
