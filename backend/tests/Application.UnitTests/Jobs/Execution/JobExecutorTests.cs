@@ -105,7 +105,7 @@ public sealed class JobExecutorTests
             Arg.Any<JobId>(),
             Arg.Any<JobLeaseOwner>(),
             Arg.Any<JobFailureRecord>(),
-            Arg.Any<DateTimeOffset>(),
+            Arg.Any<TimeSpan>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -141,7 +141,7 @@ public sealed class JobExecutorTests
             job.Lease.User,
             Arg.Is<JobFailureRecord>(failure =>
                 failure!.Classification == JobFailureClassification.Transient && failure.Reason == "TransientFailure"),
-            Arg.Any<DateTimeOffset>(),
+            Arg.Any<TimeSpan>(),
             Arg.Any<CancellationToken>());
         await this.store.DidNotReceive().DeadLetterAsync(
             Arg.Any<JobId>(),
@@ -213,7 +213,7 @@ public sealed class JobExecutorTests
             job.JobId,
             job.Lease.User,
             Arg.Is<JobFailureRecord>(failure => failure!.Reason == JobFailureRecord.ExecutionTimedOut.Reason),
-            Arg.Any<DateTimeOffset>(),
+            Arg.Any<TimeSpan>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -298,7 +298,7 @@ public sealed class JobExecutorTests
             Arg.Any<JobId>(),
             Arg.Any<JobLeaseOwner>(),
             Arg.Any<JobFailureRecord>(),
-            Arg.Any<DateTimeOffset>(),
+            Arg.Any<TimeSpan>(),
             Arg.Any<CancellationToken>());
         await this.store.DidNotReceive().ReleaseAsync(
             Arg.Any<JobId>(),
@@ -343,7 +343,7 @@ public sealed class JobExecutorTests
             Arg.Any<JobId>(),
             Arg.Any<JobLeaseOwner>(),
             Arg.Any<JobFailureRecord>(),
-            Arg.Any<DateTimeOffset>(),
+            Arg.Any<TimeSpan>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -451,9 +451,9 @@ public sealed class JobExecutorTests
                 job.JobId,
                 job.Lease.User,
                 Arg.Any<JobFailureRecord>(),
-                Arg.Any<DateTimeOffset>(),
+                Arg.Any<TimeSpan>(),
                 Arg.Any<CancellationToken>())
-            .Returns(false);
+            .Returns((DateTimeOffset?)null);
 
         var executor = this.ExecutorFor(
             new StubJobFailureClassifier(JobFailureClassification.Transient),
@@ -545,9 +545,9 @@ public sealed class JobExecutorTests
             job.JobId,
             job.Lease.User,
             Arg.Any<JobFailureRecord>(),
-            Arg.Any<DateTimeOffset>(),
+            Arg.Any<TimeSpan>(),
             Arg.Any<CancellationToken>())
-        .Returns(true);
+        .Returns(call => Task.FromResult<DateTimeOffset?>(Noon + call.ArgAt<TimeSpan>(3)));
 
     private void AllowDeadLettering(LeasedJob job) => this.store
         .DeadLetterAsync(job.JobId, job.Lease.User, Arg.Any<JobFailureRecord>(), Arg.Any<CancellationToken>())

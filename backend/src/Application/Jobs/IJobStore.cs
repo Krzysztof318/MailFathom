@@ -80,7 +80,7 @@ public interface IJobStore
     /// <param name="user">The attempt claiming to hold it.</param>
     /// <param name="leaseDuration">How much longer the job is held from now.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>The renewed lease, or <see langword="null" /> when this attempt no longer holds the job.</returns>
+    /// <returns>The renewed lease carrying the expiry the store recorded, or <see langword="null" /> when this attempt no longer holds the job.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="user" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="leaseDuration" /> is not positive.</exception>
     /// <remarks>An absent answer is the signal to stop working: the lease expired and another attempt has the job, so anything this one goes on to produce would be a second execution's result.</remarks>
@@ -102,25 +102,32 @@ public interface IJobStore
     /// </remarks>
     Task<bool> CompleteAsync(JobId jobId, JobLeaseOwner user, CancellationToken cancellationToken);
 
-    /// <summary>Gives a held job back after a transient failure, claimable again once the instant named has passed.</summary>
+    /// <summary>Gives a held job back after a transient failure, claimable again once the delay named has passed.</summary>
     /// <param name="jobId">The job to schedule another attempt for.</param>
     /// <param name="user">The attempt claiming to hold it.</param>
     /// <param name="failure">What this attempt failed with, which replaces whatever the previous one recorded.</param>
-    /// <param name="availableAt">The instant before which no claim may take the job again.</param>
+    /// <param name="retryDelay">How long after the store records the retry no claim may take the job again.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><see langword="true" /> when this attempt still held the job and the schedule was written; otherwise <see langword="false" />.</returns>
+    /// <returns>The instant the job becomes claimable again, as the store recorded it, or <see langword="null" /> when this attempt no longer held the job.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="user" /> or <paramref name="failure" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="retryDelay" /> is negative.</exception>
     /// <remarks>
+    /// <para>
     /// The attempt stays counted, because it was handed out and spent: the count is what the attempt bound is read
     /// against, and a retry that gave it back would loop forever. Delaying the job rather than releasing it is what
     /// separates this from a shutdown — a job returned to the queue at once after failing would be taken again as fast
     /// as the queue can hand it out.
+    /// </para>
+    /// <para>
+    /// A delay rather than an instant, because the store measures it from the same clock every claim judges the job
+    /// against; an instant computed from the caller's clock would elapse early or late by however far that clock drifts.
+    /// </para>
     /// </remarks>
-    Task<bool> ScheduleRetryAsync(
+    Task<DateTimeOffset?> ScheduleRetryAsync(
         JobId jobId,
         JobLeaseOwner user,
         JobFailureRecord failure,
-        DateTimeOffset availableAt,
+        TimeSpan retryDelay,
         CancellationToken cancellationToken);
 
     /// <summary>Ends a held job as work nothing will attempt again, leaving a terminal row that keeps its key and its last failure.</summary>

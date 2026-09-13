@@ -25,6 +25,13 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 /// lease is indistinguishable from one whose holder is gone.
 /// </para>
 /// <para>
+/// <strong>Both predicates and the lease the claim stamps are judged by PostgreSQL's clock.</strong> Two replicas decide
+/// whether one job's lease has run out by comparing its expiry with "now", so a "now" each replica read from its own
+/// clock would let one running minutes fast take a job its holder is still executing. <c>now()</c> is one clock for the
+/// whole deployment, and the lease duration crosses the boundary as an interval, as it does for a work lease. The
+/// state-change instant stays the process's: it records when something happened and decides nothing.
+/// </para>
+/// <para>
 /// The predicate opens by naming the two states a claim can take, which the two due predicates below it already imply.
 /// It is there so PostgreSQL can prove the partial claim index applies: an implication it would otherwise have to
 /// derive through a disjunction, which its prover does not attempt, and a queue whose only volume query fell back to a
@@ -49,7 +56,7 @@ internal static class JobClaimStatement
 {
     /// <summary>Composes the statement that takes and stamps a batch of due jobs.</summary>
     /// <param name="request">Which types this process runs, how many to take, and under what lease.</param>
-    /// <param name="claimedAt">The instant the claim is judged and stamped at.</param>
+    /// <param name="claimedAt">The instant recorded as the claimed jobs' state change; it decides nothing about which jobs are due.</param>
     /// <returns>The statement, whose rows are the identifiers of the jobs this claim took.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     internal static FormattableString Compose(JobClaimRequest request, DateTimeOffset claimedAt)
@@ -61,7 +68,7 @@ internal static class JobClaimStatement
         var claimed = nameof(JobState.Claimed);
         var claimableStates = new[] { pending, claimed };
         var leaseOwner = request.User.Value;
-        var leaseExpiresAt = claimedAt + request.LeaseDuration;
+        var leaseDuration = request.LeaseDuration;
         var batchSize = request.BatchSize;
 
         // The locking clause follows LIMIT, which is where the standard puts it. The order matters to the plan as well
@@ -73,8 +80,8 @@ internal static class JobClaimStatement
                     FROM jobs AS candidate
                     WHERE candidate."State" = ANY({claimableStates})
                       AND candidate."JobType" = ANY({handledTypeNames})
-                      AND ((candidate."State" = {pending} AND candidate."AvailableAt" <= {claimedAt})
-                        OR (candidate."State" = {claimed} AND candidate."LeaseExpiresAt" <= {claimedAt}))
+                      AND ((candidate."State" = {pending} AND candidate."AvailableAt" <= now())
+                        OR (candidate."State" = {claimed} AND candidate."LeaseExpiresAt" <= now()))
                     ORDER BY candidate."TurnAt", candidate."Id"
                     LIMIT {batchSize}
                     FOR UPDATE SKIP LOCKED
@@ -82,7 +89,7 @@ internal static class JobClaimStatement
                 UPDATE jobs AS job
                 SET "State" = {claimed},
                     "LeaseOwner" = {leaseOwner},
-                    "LeaseExpiresAt" = {leaseExpiresAt},
+                    "LeaseExpiresAt" = now() + {leaseDuration},
                     "AttemptCount" = job."AttemptCount" + 1,
                     "StateChangedAt" = {claimedAt}
                 FROM due

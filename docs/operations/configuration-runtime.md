@@ -288,7 +288,9 @@ without limit.
 `ExecutionTimeout` must be shorter than `LeaseDuration`, and startup refuses a pair that inverts them. That ordering is
 what keeps two workers off one job: an attempt is cancelled before its lease can expire underneath it. The lease is
 renewed at half its duration while a handler works, so a job that legitimately takes longer than one lease is not
-reclaimed while it runs.
+reclaimed while it runs. The gap between the two covers the cancelled attempt's own stopping and the round trip that
+records it, and not clock drift between replicas: a job's lease and its available instant are stamped and judged by
+PostgreSQL's clock, so replicas whose clocks disagree still agree on whether a job is due.
 
 `LeaseDuration` also times the one lease a job holds beside its own. A segment of a [stored-mail
 re-derivation](../features/imap-synchronization.md#bringing-stored-mail-up-to-a-later-release) walks only while it

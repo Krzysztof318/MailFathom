@@ -46,7 +46,7 @@ public sealed class JobExecutor
     /// <param name="handlers">Answers which handler runs the job's type.</param>
     /// <param name="failureClassifier">Decides whether a failure is worth attempting again, and names it safely.</param>
     /// <param name="settings">The execution timeout, the lease duration, the attempt bound, and the retry delays.</param>
-    /// <param name="timeProvider">Times the attempt, the timeout, the renewal interval, and the next attempt's instant.</param>
+    /// <param name="timeProvider">Times the attempt, the timeout, and the renewal interval; the next attempt's instant is the store's to stamp.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public JobExecutor(
         IJobStore store,
@@ -301,16 +301,15 @@ public sealed class JobExecutor
             this.settings.RetryMaxDelay,
             minimumDelay: TimeSpan.Zero,
             job.AttemptCount);
-        var availableAt = this.timeProvider.GetUtcNow() + delay;
 
-        var scheduled = await this.store.ScheduleRetryAsync(
+        var scheduledAvailableAt = await this.store.ScheduleRetryAsync(
             job.JobId,
             job.Lease.User,
             failure,
-            availableAt,
+            delay,
             CancellationToken.None);
 
-        return scheduled
+        return scheduledAvailableAt is { } availableAt
             ? this.Report(
                 job,
                 outcome,

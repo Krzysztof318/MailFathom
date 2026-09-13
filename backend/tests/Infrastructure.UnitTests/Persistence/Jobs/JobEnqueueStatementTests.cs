@@ -72,19 +72,25 @@ public sealed class JobEnqueueStatementTests
         Assert.Contains("RETURNING \"Id\" AS \"Value\"", statement.Format, StringComparison.Ordinal);
     }
 
-    /// <summary>A job with no available instant of its own is claimable as soon as it is written.</summary>
+    /// <summary>
+    /// A job with no available instant of its own is claimable as soon as it is written, measured by the clock the claim
+    /// judges it against. Stamping the enqueuing process's clock would hold the job back by however far that replica
+    /// runs fast, so the process instant is written only where it records history.
+    /// </summary>
     /// <remarks>
-    /// Four rather than three, because the available instant is passed twice: once as the column and once as the floor
-    /// the turn is taken no earlier than.
+    /// The fallback appears twice, because the available instant is written twice: once as the column and once as the
+    /// floor the turn is taken no earlier than.
     /// </remarks>
     [Fact]
-    public void Compose_AnEnqueueThatNamesNoAvailableInstant_UsesTheInstantItIsWrittenAt()
+    public void Compose_AnEnqueueThatNamesNoAvailableInstant_IsAvailableAtTheDatabasesClock()
     {
         // Act
         var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt, enqueuedTrace: null);
 
         // Assert
-        Assert.Equal(4, statement.GetArguments().Count(argument => Equals(argument, EnqueuedAt)));
+        Assert.Equal(2, statement.Format.Split(", now())").Length - 1);
+        Assert.Contains("COALESCE(", statement.Format, StringComparison.Ordinal);
+        Assert.Equal(2, statement.GetArguments().Count(argument => Equals(argument, EnqueuedAt)));
     }
 
     /// <summary>
@@ -239,15 +245,21 @@ public sealed class JobEnqueueStatementTests
     }
 
     /// <summary>An enqueue nothing was tracing writes the columns as absent, which is what an attempt reads as no link.</summary>
+    /// <remarks>The request names an available instant so the trace columns are the only absent values.</remarks>
     [Fact]
     public void Compose_AnEnqueueOutsideAnyTrace_WritesTheColumnsAsAbsent()
     {
         // Arrange
+        var scheduled = JobEnqueueRequest.CreateAvailableAt(
+            Request.Key,
+            Request.Payload,
+            Request.Account,
+            EnqueuedAt.AddHours(1));
 
         // Act
         var statement = JobEnqueueStatement.Compose(
             Guid.CreateVersion7(),
-            Request,
+            scheduled,
             "{}",
             EnqueuedAt,
             enqueuedTrace: null);
