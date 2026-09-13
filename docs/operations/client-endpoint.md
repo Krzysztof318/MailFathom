@@ -198,8 +198,10 @@ than per sign-in. Verifying a token is one indexed read and one fixed-time compa
 the whole of what the exchange removes.
 
 **Every credential this deployment holds is exchanged here** — a password, an API key, a signed assertion. Nothing else
-changes about them: the bound on guessing a password is the same bound, counted the same way per source and per user
-name, because the exchange is where a password is presented and is therefore where that bound applies. The rest of the
+changes about them: the bound on guessing a password is the same bound, counted the same way per source and per whole
+login, organization included, because the exchange is where a password is presented and is therefore where that bound
+applies. A password is presented under the login [the MCP endpoint describes](mcp-endpoint.md#passwords) —
+`SHORTNAME/username` for a member of an organization and `username` otherwise. The rest of the
 surface still refuses a request carrying no credential at all.
 
 **An access token is refused here, with `403`.** A session standing in for a token would outlive it: the token's own

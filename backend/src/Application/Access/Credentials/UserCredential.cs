@@ -16,6 +16,7 @@ namespace MailFathom.Application.Access.Credentials;
 /// <param name="Version">How many times the record has been written, counting the act that provisioned it.</param>
 /// <param name="CreatedAt">When the credential was provisioned.</param>
 /// <param name="MaterialChangedAt">When what the credential is presented as was last replaced, which is the provisioning instant until it is.</param>
+/// <param name="Organization">The short name of the organization a password credential is scoped to, or the unspecified default where it is scoped to none — which is every credential of the other three methods.</param>
 /// <remarks>
 /// <para>
 /// There is no password here, no key, and no stored record of either, and the absence is the point: this is the whole
@@ -48,7 +49,8 @@ public sealed record UserCredential(
     bool Enabled,
     long Version,
     DateTimeOffset CreatedAt,
-    DateTimeOffset MaterialChangedAt)
+    DateTimeOffset MaterialChangedAt,
+    OrganizationShortName Organization = default)
 {
     /// <summary>The most credentials one user may hold, which is therefore the most a listing returns.</summary>
     /// <remarks>

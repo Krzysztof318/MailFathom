@@ -85,6 +85,14 @@ internal sealed class UserCredentialEntity
     /// <remarks>Already canonical when it is stored — a folded username, a computed digest, an issuer and subject composed in one order — so the index enforces uniqueness over the same form a request is resolved by rather than over whichever spelling reached it.</remarks>
     public required string Lookup { get; set; }
 
+    /// <summary>The organization a password credential's username is unique within, or <see langword="null" /> for one scoped to none.</summary>
+    /// <remarks>
+    /// Written from the user for a password and left null for every other method, whose lookups are unique across the
+    /// deployment already. It names the organization by identifier rather than by short name, so changing a short name
+    /// moves every login with it and rewrites no credential; moving the user rewrites it in the same transaction.
+    /// </remarks>
+    public Guid? OrganizationId { get; set; }
+
     /// <summary>The stored material the presented credential is judged against, or <see langword="null" /> for a method that keeps none.</summary>
     /// <remarks>
     /// A password's own record, which is never a plaintext and never reversible, or a client's public key, which is not

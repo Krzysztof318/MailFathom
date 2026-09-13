@@ -91,6 +91,7 @@ internal static class FakeUserCredentialDeployment
     /// <param name="lookup">What the credential is resolved by, and <see langword="null" /> where the value is derived from the secret and therefore withheld.</param>
     /// <param name="method">How the credential is presented, by the name the method publishes.</param>
     /// <param name="enabled">Whether it still authenticates requests.</param>
+    /// <param name="login">What a password credential is typed as, and <see langword="null" /> where the deployment reports none.</param>
     /// <param name="permissions">What the credential grants, by permission name.</param>
     /// <returns>The credential, as an element of the listing's array.</returns>
     internal static string Credential(
@@ -98,9 +99,10 @@ internal static class FakeUserCredentialDeployment
         string? lookup,
         string method = "password",
         bool enabled = true,
+        string? login = null,
         params string[] permissions) => string.Create(
         CultureInfo.InvariantCulture,
-        $$"""{"id":"{{id:D}}","method":"{{method}}","lookup":{{Written(lookup)}},"permissions":[{{string.Join(',', permissions.Select(permission => $"\"{permission}\""))}}],"enabled":{{(enabled ? "true" : "false")}},"createdAt":"{{Provisioned}}","materialChangedAt":"{{MaterialChanged}}"}""");
+        $$"""{"id":"{{id:D}}","method":"{{method}}","lookup":{{Written(lookup)}},"permissions":[{{string.Join(',', permissions.Select(permission => $"\"{permission}\""))}}],"enabled":{{(enabled ? "true" : "false")}},"createdAt":"{{Provisioned}}","materialChangedAt":"{{MaterialChanged}}","login":{{Written(login)}}}""");
 
     /// <summary>Reports the requests the command sent to one path under one method.</summary>
     /// <param name="deployment">The deployment the command was pointed at.</param>

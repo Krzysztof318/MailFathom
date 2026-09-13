@@ -8,6 +8,7 @@ using MailFathom.Cli.Commands.Contacts;
 using MailFathom.Cli.Commands.Content;
 using MailFathom.Cli.Commands.Folders;
 using MailFathom.Cli.Commands.Jobs;
+using MailFathom.Cli.Commands.Organizations;
 using MailFathom.Cli.Commands.Outbox;
 using MailFathom.Cli.Commands.Rules;
 using MailFathom.Cli.Commands.Spam;
@@ -191,8 +192,22 @@ internal static class CliRootCommand
             EditUserRecordCommand.Create(context),
             RenameUserCommand.Create(context),
             SetUserEndpointsCommand.Create(context),
+            SetUserOrganizationCommand.Create(context),
             RemoveUserCommand.Create(context),
             userAccountCommand,
+        };
+
+        // How the people this deployment serves are grouped, which decides the login a password credential is typed
+        // as and nothing about what anybody may read. Moving a user between organizations is under "user" rather than
+        // here, because it is a change to one user; "set-short-name" is apart from "rename" because it is the one act
+        // here that changes what every member types.
+        Command organizationCommand = new("organization", "Record the organizations users sign in under, and maintain their names.")
+        {
+            AddOrganizationCommand.Create(context),
+            ListOrganizationsCommand.Create(context),
+            RenameOrganizationCommand.Create(context),
+            SetOrganizationShortNameCommand.Create(context),
+            RemoveOrganizationCommand.Create(context),
         };
 
         // The one group whose credentials belong to a person rather than to this deployment, which is why every command
@@ -231,6 +246,7 @@ internal static class CliRootCommand
             contactCommand,
             configCommand,
             userCommand,
+            organizationCommand,
             credentialCommand,
         };
     }

@@ -61,6 +61,39 @@ public sealed class UserCredentialEndpointsTests
         Assert.True(credential.Enabled);
     }
 
+    /// <summary>A password credential of a member of an organization is listed in the form it is typed.</summary>
+    [Fact]
+    public async Task ListAsync_APasswordCredentialScopedToAnOrganization_ReportsTheLoginAsItIsTyped()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminRead);
+        harness.Credentials.ReadForUserAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>())
+            .Returns([
+                new UserCredential(
+                    CredentialId,
+                    SyntheticMailUser.Deployment,
+                    UserCredentialMethod.Password,
+                    UserCredentialLookup.ForUsername(UserCredentialUsername.Create("jan")),
+                    [MailFathomPermission.MailRead],
+                    Enabled: true,
+                    Version: 1,
+                    Moment,
+                    Moment,
+                    OrganizationShortName.Create("ACME")),
+            ]);
+
+        // Act
+        var result = await UserCredentialEndpoints.ListAsync(
+            SyntheticMailUser.Deployment.Value,
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var credential = Assert.Single(Assert.IsType<Ok<UserCredentialListResponse>>(result.Result).Value!.Credentials);
+        Assert.Equal("ACME/jan", credential.Login);
+        Assert.Equal("jan", credential.Lookup);
+    }
+
     /// <summary>
     /// A key's lookup is derived from the key itself, so publishing it would publish something an offline search can
     /// walk back to the credential. A username and a mapping say nothing a listing was not already for.

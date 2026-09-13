@@ -113,7 +113,7 @@ public sealed partial class UserPasswordAuthenticator
                     : UserPasswordRejection.CredentialMalformed);
             }
 
-            if (!UserCredentialUsername.TryCreate(presented.UserId, out var username))
+            if (!UserCredentialLogin.TryRead(presented.UserId, out var login))
             {
                 return UserPasswordAuthenticationResult.Rejected(UserPasswordRejection.UsernameUnusable);
             }
@@ -121,7 +121,7 @@ public sealed partial class UserPasswordAuthenticator
             var attempt = new PasswordAttempt(
                 surfaceName,
                 string.IsNullOrWhiteSpace(source) ? null : source,
-                username.Value,
+                login.Value,
                 attemptsPerMinute,
                 maxConcurrentVerifications);
 
@@ -136,7 +136,7 @@ public sealed partial class UserPasswordAuthenticator
                 return UserPasswordAuthenticationResult.Rejected(UserPasswordRejection.TooManyAttempts);
             }
 
-            var judgement = await this.JudgeAsync(username, presented, cancellationToken);
+            var judgement = await this.JudgeAsync(login, presented, cancellationToken);
 
             // Spent on the answer rather than on the attempt, so a caller presenting a password that works costs the
             // bound nothing however often it presents it — which is what Basic makes it do, having no session.
@@ -153,19 +153,16 @@ public sealed partial class UserPasswordAuthenticator
         }
     }
 
-    /// <summary>Resolves the username and compares the password, at one cost whatever the answer is.</summary>
+    /// <summary>Resolves the login and compares the password, at one cost whatever the answer is.</summary>
     private async Task<UserPasswordAuthenticationResult> JudgeAsync(
-        UserCredentialUsername username,
+        UserCredentialLogin login,
         PresentedBasicCredential presented,
         CancellationToken cancellationToken)
     {
-        var credential = await this.credentials.FindAsync(
-            UserCredentialMethod.Password,
-            UserCredentialLookup.ForUsername(username),
-            cancellationToken);
+        var credential = await this.credentials.FindPasswordAsync(login, cancellationToken);
 
-        // The decoy is verified rather than skipped, so a username nobody holds costs what a username somebody holds
-        // costs. Its result is discarded because it can only ever be a failure. A password credential without stored
+        // The decoy is verified rather than skipped, so a username nobody holds — or an organization nobody holds —
+        // costs what a login somebody holds costs. Its result is discarded because it can only ever be a failure. A password credential without stored
         // material cannot arise — the store refuses to write one — and it is met with the decoy rather than with a
         // fault, because a row nothing can judge is a credential nobody holds.
         var verification = this.passwordHasher.Verify(

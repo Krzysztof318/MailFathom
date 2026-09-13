@@ -82,6 +82,7 @@ internal sealed record UserCredentialEnablementRequest(bool? Enabled);
 /// <param name="Version">How many times the record has been written, counting the act that provisioned it.</param>
 /// <param name="CreatedAt">When the credential was provisioned.</param>
 /// <param name="MaterialChangedAt">When what it is presented as was last replaced.</param>
+/// <param name="Login">What a person types to sign in with a password credential — <c>SHORTNAME/username</c> for a member of an organization, the username otherwise — or <see langword="null" /> for every other method.</param>
 /// <remarks>
 /// There is no password here, no hash, and no key digest, and the absence is what makes the listing safe to serve:
 /// every field is a fact about the record rather than about the secret. The one field that could have been both is
@@ -97,7 +98,8 @@ internal sealed record UserCredentialResponse(
     bool Enabled,
     long Version,
     DateTimeOffset CreatedAt,
-    DateTimeOffset MaterialChangedAt)
+    DateTimeOffset MaterialChangedAt,
+    string? Login)
 {
     /// <summary>Describes one credential for a caller.</summary>
     /// <param name="credential">The credential as the deployment holds it.</param>
@@ -115,7 +117,12 @@ internal sealed record UserCredentialResponse(
             credential.Enabled,
             credential.Version,
             credential.CreatedAt,
-            credential.MaterialChangedAt);
+            credential.MaterialChangedAt,
+            credential.Method == UserCredentialMethod.Password
+                ? UserCredentialLogin.Compose(
+                    credential.Organization,
+                    UserCredentialUsername.Create(credential.Lookup.Value))
+                : null);
     }
 
     private static string? PublishedLookupOf(UserCredential credential) =>

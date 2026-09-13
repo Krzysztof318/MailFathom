@@ -49,7 +49,7 @@ internal static class UserCredentialOutput
             listing.AddRow(
                 $"{credential.Id:D}",
                 credential.Method ?? "unreported",
-                credential.Lookup ?? WithheldLookup,
+                credential.Login ?? credential.Lookup ?? WithheldLookup,
                 DescribeGrant(credential.Permissions),
                 credential.Enabled ? "enabled" : "disabled",
                 $"{credential.CreatedAt:u}",

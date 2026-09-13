@@ -68,6 +68,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<RootSettingsEntity> RootSettings => this.Set<RootSettingsEntity>();
 
+    internal DbSet<OrganizationEntity> Organizations => this.Set<OrganizationEntity>();
+
     internal DbSet<UserAccountEntity> UserAccounts => this.Set<UserAccountEntity>();
 
     internal DbSet<UserCredentialEntity> UserCredentials =>
@@ -221,6 +223,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.HasPostgresExtension("vector");
 
         modelBuilder.ApplyConfiguration(new RootSettingsConfiguration());
+        modelBuilder.ApplyConfiguration(new OrganizationConfiguration());
         modelBuilder.ApplyConfiguration(new UserAccountConfiguration());
         modelBuilder.ApplyConfiguration(new StoredSecretConfiguration());
         modelBuilder.ApplyConfiguration(new UserCredentialConfiguration());

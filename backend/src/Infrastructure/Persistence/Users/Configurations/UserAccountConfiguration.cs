@@ -36,6 +36,15 @@ internal sealed class UserAccountConfiguration : IEntityTypeConfiguration<UserAc
             .IsUnique()
             .HasDatabaseName(PersistenceConstraintNames.UserAccountDisplayNameUniqueIndexName);
 
+        // Restricted rather than cascaded, because deleting an organization is refused while it has members rather than
+        // taking them with it; the index serves that count and the listing's member figure.
+        entity.HasOne<OrganizationEntity>()
+            .WithMany()
+            .HasForeignKey(user => user.OrganizationId)
+            .OnDelete(DeleteBehavior.Restrict);
+        entity.HasIndex(user => user.OrganizationId)
+            .HasDatabaseName(PersistenceConstraintNames.UserAccountOrganizationIndexName);
+
         // A document rather than a schema, for the reason the job payload is one: nothing here queries into it, and
         // what it holds is decided by the configuration layer that writes it.
         entity.Property(user => user.Document).HasColumnType("jsonb").IsRequired();

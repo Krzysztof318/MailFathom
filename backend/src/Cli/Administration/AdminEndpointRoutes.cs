@@ -276,6 +276,32 @@ internal static class AdminEndpointRoutes
     internal static string UserCredentialEnablementPath(Guid userId, Guid credentialId) =>
         $"{UserCredentialPath(userId, credentialId)}/enablement";
 
+    /// <summary>Where the organization one user belongs to is set or cleared.</summary>
+    /// <param name="userId">The user the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string UserOrganizationPath(Guid userId) => $"{UserPath(userId)}/organization";
+
+    /// <summary>Where the organizations a deployment holds are listed, and where one is recorded.</summary>
+    internal const string OrganizationsPath = $"{Prefix}/organizations";
+
+    /// <summary>Where one organization is removed.</summary>
+    /// <param name="organizationId">The organization the path names.</param>
+    /// <returns>The path, with the identity written the way a deployment's route constraint reads one.</returns>
+    internal static string OrganizationPath(Guid organizationId) => $"{OrganizationsPath}/{organizationId:D}";
+
+    /// <summary>Where the name one organization is read by is replaced.</summary>
+    /// <param name="organizationId">The organization the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string OrganizationDisplayNamePath(Guid organizationId) =>
+        $"{OrganizationPath(organizationId)}/display-name";
+
+    /// <summary>Where the short name one organization's members sign in under is replaced.</summary>
+    /// <param name="organizationId">The organization the path names.</param>
+    /// <returns>The path.</returns>
+    /// <remarks>A path of its own rather than a field beside the display name, because only this one changes the login every member types.</remarks>
+    internal static string OrganizationShortNamePath(Guid organizationId) =>
+        $"{OrganizationPath(organizationId)}/short-name";
+
     /// <summary>Where a deployment publishes the document naming its authorization servers, resource, and required scopes.</summary>
     /// <remarks>
     /// Composed rather than discovered from a challenge, because a client that knows which routes it is about to call

@@ -93,7 +93,9 @@ public sealed class UserAccountModelTests
 
         // Act
         var displayName = entityType.FindProperty("DisplayName");
-        var index = Assert.Single(entityType.GetIndexes());
+        var index = Assert.Single(
+            entityType.GetIndexes(),
+            candidate => candidate.Properties.Any(property => property.Name == "DisplayName"));
 
         // Assert
         Assert.NotNull(displayName);

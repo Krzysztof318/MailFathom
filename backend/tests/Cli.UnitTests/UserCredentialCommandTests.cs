@@ -762,6 +762,27 @@ public sealed class UserCredentialCommandTests : IDisposable
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("not published", StringComparison.Ordinal));
     }
 
+    /// <summary>A member of an organization types the short name before the username, so the listing shows the login in that form rather than the bare username.</summary>
+    [Fact]
+    public async Task List_APasswordCredentialOfAnOrganizationMember_ShowsTheLoginAsItIsTyped()
+    {
+        // Arrange
+        using var deployment = FakeUserCredentialDeployment.Holding(
+            [User],
+            FakeUserCredentialDeployment.Credential(CredentialId, "jan", login: "ACME/jan"));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "credential", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var listing = DrawnListing.ReadFrom(this.harness.Console.Lines, "Credential", "Method", "Resolved by", "Grants");
+        var row = Assert.Single(listing.Rows);
+
+        Assert.Equal("ACME/jan", listing.Cell(row, "Resolved by"));
+    }
+
     /// <summary>Nothing about an invocation may carry the password, which is what keeps it out of a shell history and a process table.</summary>
     [Fact]
     public async Task EveryCommand_TheHelpItPublishes_OffersNoOptionCarryingAPassword()

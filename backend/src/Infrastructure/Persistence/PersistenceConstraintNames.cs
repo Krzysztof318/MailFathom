@@ -557,14 +557,24 @@ internal static class PersistenceConstraintNames
     /// </remarks>
     internal const string UserAccountDisplayNameUniqueIndexName = "ix_settings_accounts_display_name";
 
-    /// <summary>The index that keeps one credential lookup to one user across the deployment, within its own method.</summary>
+    /// <summary>The index a count of one organization's members is answered from.</summary>
+    internal const string UserAccountOrganizationIndexName = "ix_settings_accounts_organization";
+
+    /// <summary>The index that keeps one short name to one organization across the deployment.</summary>
+    /// <remarks>Stated because the store reads it: a write that violates it is a short name another organization signs in under, which an operator acts on rather than a provider failure.</remarks>
+    internal const string OrganizationShortNameUniqueIndexName = "ix_organizations_short_name";
+
+    /// <summary>The index that keeps one credential lookup to one user within its method and its organization.</summary>
     /// <remarks>
     /// Stated rather than left to convention because the store reads it: an insert that violates it is a lookup another
-    /// credential already holds, which is an answer an operator acts on rather than a provider failure. It is
-    /// deployment-wide rather than per user, because a request presents a lookup and nothing else, and it is scoped to
-    /// the method because the four vocabularies are unrelated.
+    /// credential already holds, which is an answer an operator acts on rather than a provider failure. It is scoped to
+    /// the method because the four vocabularies are unrelated and to the organization because a password's username is
+    /// unique only within one, with nulls not distinct so a credential scoped to no organization is unique among those.
     /// </remarks>
-    internal const string UserCredentialLookupUniqueIndexName = "ix_user_credentials_method_lookup";
+    internal const string UserCredentialLookupUniqueIndexName = "ix_user_credentials_method_organization_lookup";
+
+    /// <summary>The constraint that keeps every method but a password scoped to no organization.</summary>
+    internal const string UserCredentialOrganizationScopesPasswordCheckConstraintName = "ck_user_credentials_organization_scopes_password";
 
     /// <summary>The index every administrative listing of one user's credentials is answered from.</summary>
     /// <remarks>Stated because it covers the user and the provisioning instant together, which is the listing's own order, and a name composed from the two properties would say nothing about that being why.</remarks>

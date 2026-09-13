@@ -267,13 +267,11 @@ public sealed class ComposedPasswordAuthenticationTests
     private static IUserCredentialStore OneProvisionedCredential()
     {
         var credentials = Substitute.For<IUserCredentialStore>();
-        var provisioned = UserCredentialLookup.ForUsername(UserCredentialUsername.Create(Username));
+        var provisioned = UserCredentialUsername.Create(Username);
 
-        credentials.FindAsync(
-                Arg.Any<UserCredentialMethod>(),
-                Arg.Any<UserCredentialLookup>(),
-                Arg.Any<CancellationToken>())
-            .Returns(callInfo => callInfo.Arg<UserCredentialLookup>() == provisioned
+        credentials.FindPasswordAsync(Arg.Any<UserCredentialLogin>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => callInfo.Arg<UserCredentialLogin>() is { Organization.IsSpecified: false } login
+                && login.Username == provisioned
                 ? new ResolvedUserCredential(
                     CredentialId,
                     User,
