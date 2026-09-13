@@ -36,9 +36,23 @@ public readonly record struct JobType
 
     private JobType(string name) => this.name = name;
 
-    /// <summary>Gets the type whose work is deciding whether one stored email is junk.</summary>
-    /// <remarks>Its payload contract is <see cref="ClassifyEmailSpamJobPayload" />, which names the stored email and copies nothing out of the message.</remarks>
+    /// <summary>Gets the type whose work is deciding whether the stored email at one remote occurrence is junk.</summary>
+    /// <remarks>
+    /// Its payload contract is <see cref="ClassifyEmailSpamJobPayload" />, which names the occurrence and copies nothing
+    /// out of the message. Nothing this build does enqueues it: arriving mail is classified under
+    /// <see cref="ClassifyStoredEmailSpam" />. It stays declared and handled so that work a previous build enqueued — and
+    /// a replica of that build still enqueues during a rolling upgrade — is read and run rather than refused at claim.
+    /// </remarks>
     public static JobType ClassifyEmailSpam { get; } = new("classify-email-spam");
+
+    /// <summary>Gets the type whose work is deciding whether one stored email is junk.</summary>
+    /// <remarks>
+    /// Its payload contract is <see cref="ClassifyStoredEmailSpamJobPayload" />, which names the stored email and copies
+    /// nothing out of the message. It is a type of its own rather than a new shape under <see cref="ClassifyEmailSpam" />,
+    /// because a replica of the previous build claims that name and could not read this document, and a document a
+    /// claim cannot read stops every job claimed beside it.
+    /// </remarks>
+    public static JobType ClassifyStoredEmailSpam { get; } = new("classify-stored-email-spam");
 
     /// <summary>Gets the type whose work is asking for one account's scheduled rules to be run over its whole mailbox.</summary>
     /// <remarks>
@@ -88,6 +102,7 @@ public readonly record struct JobType
     public static IReadOnlyList<JobType> All { get; } =
     [
         ClassifyEmailSpam,
+        ClassifyStoredEmailSpam,
         RunScheduledMailRules,
         RederiveStoredMail,
         DispatchHeldSend,

@@ -94,7 +94,7 @@ public sealed class SpamClassificationArrivals
         var account = MailAccountIdentity.Create(user, occurrenceId.AccountId);
         var request = JobEnqueueRequest.Create(
             KeyOf(emailId),
-            ClassifyEmailSpamJobPayload.For(account, emailId),
+            ClassifyStoredEmailSpamJobPayload.For(account, emailId),
             account);
 
         await this.jobs.EnqueueAsync(request, cancellationToken);

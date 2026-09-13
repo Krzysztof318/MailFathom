@@ -252,8 +252,7 @@ already serving:
   rewrite, since a nullable column with no default is a catalog change.
   `MakeStoredEmailOccurrenceOptional` adds `ck_stored_emails_occurrence_complete` to `stored_emails`, so the message
   table is scanned under `ACCESS EXCLUSIVE` once; dropping `NOT NULL` from `uid_validity` and `uid` beside it is a
-  catalog change. The same migration rewrites every queued `classify-email-spam` job, which is proportional to the
-  queue rather than to the mail.
+  catalog change.
 
 The first release's script creates a schema from nothing, so none of these applies to an empty database.
 
@@ -281,12 +280,11 @@ statement is refused — so a rotation an older build receives against this sche
 than stored. Keep the middle of the rollout short on these releases, and do not treat a previous image as something
 that can be left running against them.
 
-**`MakeStoredEmailOccurrenceOptional` fails classification work on an older replica rather than losing it.** It
-rewrites every queued `classify-email-spam` job to name the stored email instead of where the server holds it, and an
-older build cannot read that document. A replica of it that claims such a job cannot start any job in the batch it
-claimed, so that batch waits for its lease to run out before a replica of the new build takes it again — and every such
-claim spends one of each job's attempts, which leaves fewer for a genuine failure before the job is dead-lettered. Keep
-the middle of the rollout short, and read the dead letters after it with the job type in mind.
+**The release carrying `MakeStoredEmailOccurrenceOptional` leaves queued classifications alone.** Arriving mail is
+now classified under a job type of its own, `classify-stored-email-spam`, which names the stored email; a replica of
+the previous build does not declare that type and so never claims one. `classify-email-spam` keeps its contract and a
+handler, so the jobs a previous build queued — and still queues in the middle of the rollout — are claimed and run by
+either build. Nothing in the queue is rewritten and nothing waits on the rollout finishing.
 
 **`AddMailboxMutationWithdrawalHold` shortens a way back rather than failing anything.** It adds `HeldUntil` to
 `mailbox_mutations`, nullable with no default, so it is a catalog change on a table of any size. A build older than the

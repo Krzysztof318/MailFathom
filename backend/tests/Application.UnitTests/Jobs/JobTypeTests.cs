@@ -21,6 +21,7 @@ public sealed class JobTypeTests
         JobType[] expected =
         [
             JobType.ClassifyEmailSpam,
+            JobType.ClassifyStoredEmailSpam,
             JobType.RunScheduledMailRules,
             JobType.RederiveStoredMail,
             JobType.DispatchHeldSend,

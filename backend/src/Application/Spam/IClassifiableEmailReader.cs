@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -23,15 +24,34 @@ namespace MailFathom.Application.Spam;
 /// </remarks>
 public interface IClassifiableEmailReader
 {
-    /// <summary>Finds one stored occurrence.</summary>
+    /// <summary>Finds one stored email of one user.</summary>
+    /// <param name="user">The user the classification runs for, whose mail alone the read may answer with.</param>
     /// <param name="emailId">The stable local identifier.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
-    /// <returns>The occurrence, or <see langword="null" /> when nothing is stored under that identifier.</returns>
+    /// <returns>The email, or <see langword="null" /> when that user holds nothing under that identifier.</returns>
     /// <remarks>
-    /// An absent occurrence is an ordinary answer: mail can be expunged between the moment classification was asked for
-    /// and the moment it runs, and that is the message leaving rather than a failure to report.
+    /// An absent email is an ordinary answer: mail can be erased between the moment classification was asked for and the
+    /// moment it runs, and that is the message leaving rather than a failure to report. An email another user holds is
+    /// answered the same way, because the user decides whose settings, scope, and switches the verdict is reached and
+    /// acted under, and a classification must never apply one person's to another person's mail.
     /// </remarks>
-    Task<ClassifiableEmail?> FindAsync(StoredEmailId emailId, CancellationToken cancellationToken);
+    Task<ClassifiableEmail?> FindAsync(MailUserId user, StoredEmailId emailId, CancellationToken cancellationToken);
+
+    /// <summary>Resolves the stable remote occurrence identity into the local email it was stored as.</summary>
+    /// <param name="user">The user whose account the occurrence belongs to, which the read narrows on ahead of the account.</param>
+    /// <param name="occurrenceId">The account, folder binding, UIDVALIDITY, and UID the message was discovered under.</param>
+    /// <param name="cancellationToken">Cancels the lookup.</param>
+    /// <returns>The local identity, or <see langword="null" /> when nothing is stored at that occurrence.</returns>
+    /// <remarks>
+    /// A durable execution names the occurrence rather than the local key, because the local key is a value this system
+    /// generated and the occurrence is what the mail server and the enqueuer both know. This is where the one is turned
+    /// into the other, and an absent answer is the ordinary case of a message expunged between the moment the work was
+    /// enqueued and the moment it ran.
+    /// </remarks>
+    Task<StoredEmailId?> FindStoredEmailIdAsync(
+        MailUserId user,
+        EmailOccurrenceId occurrenceId,
+        CancellationToken cancellationToken);
 
     /// <summary>Reads one account's stored occurrences in identity order, narrowed to a set of folders.</summary>
     /// <param name="account">The account whose mailbox is walked.</param>

@@ -26,6 +26,8 @@ internal sealed class SpamActionOccurrenceReader(MailFathomDbContext dbContext) 
     /// A tombstoned occurrence is deliberately still readable, exactly as it is for classification. Whether it is acted
     /// on is settled above this: the mail server no longer holds the message, so the convergence pass finds nothing to
     /// move and the record ends as the failure it is rather than as a change nobody can explain.
+    /// A stored email with no occurrence answers null as an absent one does: there is no UID a mailbox change could be
+    /// issued against, and nothing acts on such mail until it can be changed locally.
     /// </remarks>
     public async Task<SpamActionOccurrence?> FindAsync(StoredEmailId emailId, CancellationToken cancellationToken)
     {

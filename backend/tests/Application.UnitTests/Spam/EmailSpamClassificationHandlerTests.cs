@@ -36,7 +36,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
     [Fact]
     public void JobType_Always_IsTheClassificationOfOneStoredEmail() =>
-        Assert.Equal(JobType.ClassifyEmailSpam, this.CreateHandler().JobType);
+        Assert.Equal(JobType.ClassifyStoredEmailSpam, this.CreateHandler().JobType);
 
     [Fact]
     public async Task RunAsync_AStoredEmailNobodyHasScored_RecordsTheVerdictAndActsOnIt()
@@ -46,7 +46,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyEmailSpamJobPayload.For(Account, emailId),
+            ClassifyStoredEmailSpamJobPayload.For(Account, emailId),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -65,7 +65,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyEmailSpamJobPayload.For(Account, emailId),
+            ClassifyStoredEmailSpamJobPayload.For(Account, emailId),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -82,7 +82,30 @@ public sealed class EmailSpamClassificationHandlerTests
 
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyEmailSpamJobPayload.For(Account, neverStored),
+            ClassifyStoredEmailSpamJobPayload.For(Account, neverStored),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(this.harness.Classifications.Saved);
+        Assert.Equal(0, this.harness.Mutations.OpenedRecordCount);
+    }
+
+    /// <summary>
+    /// The payload names a user and a stored email as two values, so a document naming a user who does not hold that
+    /// email must not reach a verdict under that user's settings or ask anybody's mailbox for a change.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_AStoredEmailThePayloadsUserDoesNotHold_EndsTheJobWithoutClassifyingOrActing()
+    {
+        // Arrange
+        var emailId = this.StoreEmail();
+        var anotherUser = MailAccountIdentity.Create(
+            MailUserId.Create(Guid.Parse("22222222-2222-2222-2222-222222222222")),
+            Account.Id);
+
+        // Act
+        await this.CreateHandler(MarksJunkRead).RunAsync(
+            ClassifyStoredEmailSpamJobPayload.For(anotherUser, emailId),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -107,7 +130,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
         // Act
         await this.CreateHandler(MarksJunkRead, occurrences: noOccurrence).RunAsync(
-            ClassifyEmailSpamJobPayload.For(Account, emailId),
+            ClassifyStoredEmailSpamJobPayload.For(Account, emailId),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -123,7 +146,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
         // Act
         await this.CreateHandler(MarksJunkRead, SpamClassificationSettings.Disabled).RunAsync(
-            ClassifyEmailSpamJobPayload.For(Account, emailId),
+            ClassifyStoredEmailSpamJobPayload.For(Account, emailId),
             TestContext.Current.CancellationToken);
 
         // Assert

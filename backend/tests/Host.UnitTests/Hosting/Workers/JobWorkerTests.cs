@@ -302,7 +302,10 @@ public sealed class JobWorkerTests
         {
             UserId = SyntheticMailUser.Deployment.Value,
             AccountId = "account-a",
-            StoredEmailId = Guid.CreateVersion7(Noon.AddSeconds(index)),
+            FolderAlias = "inbox",
+            FolderResolutionGeneration = 1,
+            UidValidity = 1,
+            Uid = (uint)(index + 1),
         },
         AccountId: null,
         AttemptCount: 1,

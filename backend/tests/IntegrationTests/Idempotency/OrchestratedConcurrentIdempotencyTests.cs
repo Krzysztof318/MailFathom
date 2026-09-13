@@ -308,10 +308,10 @@ public sealed class OrchestratedConcurrentIdempotencyTests(MailFathomOrchestrati
         OrchestratedMailFathomServices services,
         CancellationToken cancellationToken)
     {
-        await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var payload = ClassifyEmailSpamJobPayload.For(
-            SyntheticMailAccount.Account,
-            StoredEmailId.Create(Guid.CreateVersion7(DateTimeOffset.UnixEpoch.AddSeconds(LeasedJobUid))));
+            SyntheticMailAccount.User,
+            SyntheticEmail.OccurrenceIn(binding, LeasedJobUid));
         var request = JobEnqueueRequest.Create(
             JobIdempotencyKey.Create($"{FolderAlias}/{LeasedJobUid}"),
             payload,

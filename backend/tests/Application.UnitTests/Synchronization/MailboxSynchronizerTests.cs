@@ -316,8 +316,8 @@ public sealed class MailboxSynchronizerTests
 
         var request = Assert.Single(EnqueuedJobs(jobStore));
 
-        Assert.Equal(JobType.ClassifyEmailSpam, request.JobType);
-        Assert.Equal(storedEmailId, Assert.IsType<ClassifyEmailSpamJobPayload>(request.Payload).ToStoredEmailId());
+        Assert.Equal(JobType.ClassifyStoredEmailSpam, request.JobType);
+        Assert.Equal(storedEmailId, Assert.IsType<ClassifyStoredEmailSpamJobPayload>(request.Payload).ToStoredEmailId());
     }
 
     /// <summary>A message stored from its envelope alone is asked of nothing: no content means no verdict is coming.</summary>

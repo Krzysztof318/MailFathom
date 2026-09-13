@@ -710,7 +710,11 @@ internal static class HostComposition
         // recorded here and walked by the account's own synchronization run, so that job is short; a classification runs the
         // whole of one message's work, which is what the per-message lease and backoff exist for.
         builder.Services.AddScoped<IJobHandler, ScheduledMailRuleRunHandler>();
-        builder.Services.AddScoped<IJobHandler, EmailSpamClassificationHandler>();
+        // Two types carry a classification, and the second exists to drain what an older build enqueued: it resolves the
+        // occurrence it names and hands the stored email to the first, so both run exactly one classification.
+        builder.Services.AddScoped<EmailSpamClassificationHandler>();
+        builder.Services.AddScoped<IJobHandler>(services => services.GetRequiredService<EmailSpamClassificationHandler>());
+        builder.Services.AddScoped<IJobHandler, OccurrenceSpamClassificationHandler>();
         // The re-derivation is the long one: an attempt runs bounded passes over stored mail for as long as the
         // execution timeout allows, and hands what it did not reach to a segment of its own rather than holding a
         // worker for as long as a mailbox takes.

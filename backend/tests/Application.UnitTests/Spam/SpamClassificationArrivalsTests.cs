@@ -51,9 +51,9 @@ public sealed class SpamClassificationArrivalsTests
         // Assert
         var request = this.EnqueuedRequests().Single();
 
-        Assert.Equal(JobType.ClassifyEmailSpam, request.JobType);
+        Assert.Equal(JobType.ClassifyStoredEmailSpam, request.JobType);
         Assert.Equal(Account, request.Account);
-        var payload = Assert.IsType<ClassifyEmailSpamJobPayload>(request.Payload);
+        var payload = Assert.IsType<ClassifyStoredEmailSpamJobPayload>(request.Payload);
         Assert.Equal(Account, payload.ToAccountIdentity());
         Assert.Equal(StoredEmail, payload.ToStoredEmailId());
         Assert.Null(request.AvailableAt);

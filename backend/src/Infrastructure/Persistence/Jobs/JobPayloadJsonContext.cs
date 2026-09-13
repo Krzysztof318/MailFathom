@@ -30,6 +30,7 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(ClassifyEmailSpamJobPayload))]
+[JsonSerializable(typeof(ClassifyStoredEmailSpamJobPayload))]
 [JsonSerializable(typeof(HeldSendJobPayload))]
 [JsonSerializable(typeof(RecurringSendJobPayload))]
 [JsonSerializable(typeof(RunScheduledMailRulesJobPayload))]

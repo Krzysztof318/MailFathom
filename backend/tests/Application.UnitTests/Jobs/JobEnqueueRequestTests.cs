@@ -6,6 +6,7 @@ using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -14,8 +15,12 @@ namespace MailFathom.Application.UnitTests.Jobs;
 public sealed class JobEnqueueRequestTests
 {
     private static ClassifyEmailSpamJobPayload Payload => ClassifyEmailSpamJobPayload.For(
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("account-a")),
-        StoredEmailId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000001")));
+        SyntheticMailUser.Deployment,
+        EmailOccurrenceId.Create(
+        MailAccountId.Create("account-a"),
+        new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
+        ImapUidValidity.Create(12345),
+        ImapUid.Create(4711)));
 
     /// <summary>The type is read from the payload rather than supplied beside it, so the two can never disagree.</summary>
     [Fact]

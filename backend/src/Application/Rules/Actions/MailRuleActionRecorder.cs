@@ -166,7 +166,7 @@ public sealed class MailRuleActionRecorder
         }
     }
 
-    /// <summary>Reports every action of a plan as failed, for an account the configuration has stopped declaring.</summary>
+    /// <summary>Reports every action of a plan as failed under the reason it is given.</summary>
     private static IReadOnlyList<MailRuleActionFailure> FailuresOf(
         MailRuleActionPlan plan,
         MailRuleActionFailureReason reason) =>

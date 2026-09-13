@@ -155,7 +155,7 @@ public sealed class EmailSpamClassifier
             return SpamClassificationResult.NotClassified(SpamClassificationOutcome.Disabled);
         }
 
-        var email = await this.emailReader.FindAsync(emailId, cancellationToken);
+        var email = await this.emailReader.FindAsync(user, emailId, cancellationToken);
 
         if (email is null)
         {

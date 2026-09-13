@@ -212,7 +212,10 @@ public sealed class JobQueuePassTests : IDisposable
         {
             UserId = SyntheticMailUser.Deployment.Value,
             AccountId = "account-a",
-            StoredEmailId = Guid.CreateVersion7(Noon.AddSeconds(uid)),
+            FolderAlias = "inbox",
+            FolderResolutionGeneration = 1,
+            UidValidity = 1,
+            Uid = (uint)(uid + 1),
         },
         AccountId: null,
         AttemptCount: 1,

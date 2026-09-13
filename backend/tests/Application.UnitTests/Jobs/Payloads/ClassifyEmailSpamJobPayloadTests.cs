@@ -6,6 +6,7 @@ using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -13,22 +14,23 @@ namespace MailFathom.Application.UnitTests.Jobs.Payloads;
 
 public sealed class ClassifyEmailSpamJobPayloadTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("account-a"));
-
-    private static readonly StoredEmailId Email =
-        StoredEmailId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000001"));
+    private static EmailOccurrenceId Occurrence => EmailOccurrenceId.Create(
+        MailAccountId.Create("account-a"),
+        new MailFolderResolutionId(
+            MailFolderAlias.Create("inbox"),
+            MailFolderResolutionGeneration.Create(2)),
+        ImapUidValidity.Create(12345),
+        ImapUid.Create(4711));
 
     /// <summary>The payload is a reference to committed local state, so what goes in has to come back out unchanged.</summary>
     [Fact]
-    public void ToStoredEmailId_AfterDescribingAStoredEmail_RebuildsTheSameAccountAndIdentity()
+    public void ToOccurrenceId_AfterDescribingAnOccurrence_RebuildsTheSameIdentity()
     {
         // Act
-        var payload = ClassifyEmailSpamJobPayload.For(Account, Email);
+        var payload = ClassifyEmailSpamJobPayload.For(SyntheticMailUser.Deployment, Occurrence);
 
         // Assert
-        Assert.Equal(Account, payload.ToAccountIdentity());
-        Assert.Equal(Email, payload.ToStoredEmailId());
+        Assert.Equal(Occurrence, payload.ToOccurrenceId());
     }
 
     /// <summary>
@@ -36,10 +38,10 @@ public sealed class ClassifyEmailSpamJobPayloadTests
     /// was written as without a discriminator.
     /// </summary>
     [Fact]
-    public void JobType_OfAStoredEmailPayload_NamesTheTypeItIsTheContractOf()
+    public void JobType_OfAnOccurrencePayload_NamesTheTypeItIsTheContractOf()
     {
         // Act
-        var payload = ClassifyEmailSpamJobPayload.For(Account, Email);
+        var payload = ClassifyEmailSpamJobPayload.For(SyntheticMailUser.Deployment, Occurrence);
 
         // Assert
         Assert.Equal(JobType.ClassifyEmailSpam, payload.JobType);
@@ -50,14 +52,17 @@ public sealed class ClassifyEmailSpamJobPayloadTests
     /// no property here to put a subject, an address, or a body in. This test fails the moment one is added.
     /// </summary>
     [Fact]
-    public void Payload_DeclaresOnlyTheAccountAndTheStoredIdentity()
+    public void Payload_DeclaresOnlyTheComponentsOfAnOccurrenceIdentity()
     {
         // Arrange
         string[] expected =
         [
             nameof(ClassifyEmailSpamJobPayload.UserId),
             nameof(ClassifyEmailSpamJobPayload.AccountId),
-            nameof(ClassifyEmailSpamJobPayload.StoredEmailId),
+            nameof(ClassifyEmailSpamJobPayload.FolderAlias),
+            nameof(ClassifyEmailSpamJobPayload.FolderResolutionGeneration),
+            nameof(ClassifyEmailSpamJobPayload.UidValidity),
+            nameof(ClassifyEmailSpamJobPayload.Uid),
             nameof(ClassifyEmailSpamJobPayload.JobType),
         ];
 
@@ -72,17 +77,24 @@ public sealed class ClassifyEmailSpamJobPayloadTests
         Assert.Equal(expected.Order(StringComparer.Ordinal), declared.Order(StringComparer.Ordinal));
     }
 
+    [Fact]
+    public void For_NoOccurrence_IsRefused()
+    {
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => ClassifyEmailSpamJobPayload.For(SyntheticMailUser.Deployment, null!));
+    }
+
     /// <summary>
-    /// A stored document whose identity no longer validates describes work nothing can perform, so it is refused
+    /// A stored document whose components no longer validate describes work nothing can perform, so it is refused
     /// rather than reconstructed into an identity that would point the work at a different message.
     /// </summary>
     [Fact]
-    public void ToStoredEmailId_AStoredIdentityThatIsEmpty_IsRefused()
+    public void ToOccurrenceId_AStoredComponentThatNoLongerValidates_IsRefused()
     {
         // Arrange
-        var payload = ClassifyEmailSpamJobPayload.For(Account, Email) with { StoredEmailId = Guid.Empty };
+        var payload = ClassifyEmailSpamJobPayload.For(SyntheticMailUser.Deployment, Occurrence) with { Uid = 0 };
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => payload.ToStoredEmailId());
+        Assert.Throws<ArgumentOutOfRangeException>(payload.ToOccurrenceId);
     }
 }

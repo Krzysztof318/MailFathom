@@ -119,7 +119,7 @@ public sealed class JobRecordMappingTests
         IdempotencyKey = "account-a/INBOX#1/12345/4711",
         Payload = """
                   {"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a",
-                   "storedEmailId":"0199a0c0-0000-7000-8000-000000004711"}
+                   "folderAlias":"INBOX","folderResolutionGeneration":1,"uidValidity":12345,"uid":4711}
                   """,
         MailboxAccountId = "account-a",
         State = JobState.Claimed,

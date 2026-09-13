@@ -65,21 +65,22 @@ public sealed class EmailSpamClassificationHandler : IJobHandler
     }
 
     /// <inheritdoc />
-    public JobType JobType => JobType.ClassifyEmailSpam;
+    public JobType JobType => JobType.ClassifyStoredEmailSpam;
 
     /// <inheritdoc />
     /// <exception cref="ArgumentException">Thrown when the payload is not the contract this job type names.</exception>
     /// <remarks>
-    /// An email nothing is stored under ends the job as done rather than as a failure. Mail can be expunged between
-    /// the moment a classification was asked for and the moment it runs, and that is the message leaving rather than
-    /// work to attempt again.
+    /// An email nothing is stored under for the payload's user ends the job as done rather than as a failure. Mail can be
+    /// erased between the moment a classification was asked for and the moment it runs, and that is the message leaving
+    /// rather than work to attempt again; a user who does not own the email is answered the same way, so no job can
+    /// classify one person's mail under another's settings.
     /// </remarks>
     public async Task RunAsync(IJobPayload payload, CancellationToken cancellationToken)
     {
-        if (payload is not ClassifyEmailSpamJobPayload email)
+        if (payload is not ClassifyStoredEmailSpamJobPayload email)
         {
             throw new ArgumentException(
-                $"A '{JobType.ClassifyEmailSpam}' job carries a payload naming one stored email.",
+                $"A '{JobType.ClassifyStoredEmailSpam}' job carries a payload naming one stored email.",
                 nameof(payload));
         }
 

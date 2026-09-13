@@ -505,7 +505,7 @@ public sealed class EmailSpamClassifierTests
     {
         var emailReader = Substitute.For<IClassifiableEmailReader>();
         emailReader
-            .FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
+            .FindAsync(Arg.Any<MailUserId>(), Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(withEmail ? email ?? new ClassifiableEmail(Occurrence, Account, Inbox) : null);
 
         this.contentStore

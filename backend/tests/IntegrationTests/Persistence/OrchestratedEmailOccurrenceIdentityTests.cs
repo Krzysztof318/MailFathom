@@ -39,6 +39,94 @@ public sealed class OrchestratedEmailOccurrenceIdentityTests(MailFathomOrchestra
 
     private const uint DuplicatedUid = 7;
 
+    private const uint HalfOccurrenceUid = 11;
+
+    private const uint FirstForgottenUid = 12;
+
+    private const uint SecondForgottenUid = 13;
+
+    /// <summary>Proves PostgreSQL itself refuses a row that carries a UID without the UIDVALIDITY that gives it meaning.</summary>
+    /// <remarks>
+    /// No production write produces half an occurrence, so the row is stored whole and one column is then cleared
+    /// directly: what is under test is the constraint the migration created, not a writer.
+    /// </remarks>
+    [Fact]
+    public async Task UpdateAsync_ClearingOnlyTheUidValidityOfAStoredEmail_IsRefusedByTheOccurrenceCompleteCheck()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var occurrenceId = SyntheticEmail.OccurrenceIn(binding, HalfOccurrenceUid);
+        await StoreAsync(services, occurrenceId, "half-occurrence", cancellationToken);
+        var storedRow = Assert.Single(await ReadRowsForAsync(services, occurrenceId, cancellationToken));
+
+        // Act
+        var refusal = await Record.ExceptionAsync(() => services.InScopeAsync(
+            (scope, token) => scope
+                .GetRequiredService<MailFathomDbContext>()
+                .StoredEmails
+                .Where(storedEmail => storedEmail.Id == storedRow.Id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(storedEmail => storedEmail.UidValidity, (uint?)null), token),
+            cancellationToken));
+
+        // Assert
+        var violation = Assert.IsType<PostgresException>(refusal is DbUpdateException { InnerException: { } inner } ? inner : refusal);
+        Assert.Equal(PostgresErrorCodes.CheckViolation, violation.SqlState);
+        Assert.Equal(PersistenceConstraintNames.StoredEmailOccurrenceCompleteCheckConstraintName, violation.ConstraintName);
+        Assert.Single(await ReadRowsForAsync(services, occurrenceId, cancellationToken));
+    }
+
+    /// <summary>
+    /// Proves that stored emails no mail server holds any longer do not collide in one folder: PostgreSQL treats the null
+    /// occurrence columns as distinct, so the unique occurrence index admits any number of them.
+    /// </summary>
+    [Fact]
+    public async Task UpdateAsync_ClearingTheOccurrenceOfTwoStoredEmailsInOneFolder_KeepsBothRows()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var firstOccurrence = SyntheticEmail.OccurrenceIn(binding, FirstForgottenUid);
+        var secondOccurrence = SyntheticEmail.OccurrenceIn(binding, SecondForgottenUid);
+        await StoreAsync(services, firstOccurrence, "forgotten-first", cancellationToken);
+        await StoreAsync(services, secondOccurrence, "forgotten-second", cancellationToken);
+        Guid[] storedEmailIds =
+        [
+            Assert.Single(await ReadRowsForAsync(services, firstOccurrence, cancellationToken)).Id,
+            Assert.Single(await ReadRowsForAsync(services, secondOccurrence, cancellationToken)).Id,
+        ];
+
+        // Act
+        var clearedCount = await services.InScopeAsync(
+            (scope, token) => scope
+                .GetRequiredService<MailFathomDbContext>()
+                .StoredEmails
+                .Where(storedEmail => storedEmailIds.Contains(storedEmail.Id))
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(storedEmail => storedEmail.UidValidity, (uint?)null)
+                        .SetProperty(storedEmail => storedEmail.Uid, (uint?)null),
+                    token),
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(2, clearedCount);
+        var remainingCount = await services.InScopeAsync(
+            (scope, token) => scope
+                .GetRequiredService<MailFathomDbContext>()
+                .StoredEmails
+                .AsNoTracking()
+                .CountAsync(
+                    storedEmail => storedEmailIds.Contains(storedEmail.Id)
+                        && storedEmail.UidValidity == null
+                        && storedEmail.Uid == null,
+                    token),
+            cancellationToken);
+        Assert.Equal(2, remainingCount);
+    }
+
     [Fact]
     public async Task UpsertMetadataAsync_ForTheSameOccurrenceInASecondSession_RewritesTheOneRowAndKeepsItsUnsignedIdentity()
     {

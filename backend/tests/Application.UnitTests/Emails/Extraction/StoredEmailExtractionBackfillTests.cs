@@ -346,12 +346,18 @@ public sealed class StoredEmailExtractionBackfillTests
     public async Task RunAsync_EmailsOfTwoUsers_ReReadsEachOfThemUnderItsOwnUser()
     {
         // Arrange
-        var store = new FakeBackfillStore(
-        [
-            EmailAwaitingExtraction(1, SyntheticMailUser.Deployment),
-            EmailAwaitingExtraction(2, SyntheticMailUser.Another),
-        ]);
-        var contentStore = CreateContentStoreWithReadableMime();
+        var deploymentEmail = EmailAwaitingExtraction(1, SyntheticMailUser.Deployment);
+        var anotherEmail = EmailAwaitingExtraction(2, SyntheticMailUser.Another);
+        var store = new FakeBackfillStore([deploymentEmail, anotherEmail]);
+        byte[] deploymentMime = [1, 1, 1];
+        byte[] anotherMime = [2, 2, 2];
+        var contentStore = ContentStores.Substituted();
+        contentStore
+            .FindStoredContentAsync(deploymentEmail.StoredEmailId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<StoredEmailContent?>(StoredContent(deploymentMime)));
+        contentStore
+            .FindStoredContentAsync(anotherEmail.StoredEmailId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<StoredEmailContent?>(StoredContent(anotherMime)));
         var mimeReader = CreateReaderThatExtractsEverything();
         var backfill = CreateBackfill(store, contentStore, mimeReader, batchSize: 10);
 
@@ -361,12 +367,12 @@ public sealed class StoredEmailExtractionBackfillTests
         // Assert
         Assert.Equal(2, result.ExtractedEmailCount);
         await mimeReader.Received(1).ReadMetadataAsync(
-            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary")),
-            Arg.Any<ReadOnlyMemory<byte>>(),
+            deploymentEmail.Account,
+            Arg.Is<ReadOnlyMemory<byte>>(rawMime => rawMime.ToArray().SequenceEqual(deploymentMime)),
             Arg.Any<CancellationToken>());
         await mimeReader.Received(1).ReadMetadataAsync(
-            MailAccountIdentity.Create(SyntheticMailUser.Another, MailAccountId.Create("primary")),
-            Arg.Any<ReadOnlyMemory<byte>>(),
+            anotherEmail.Account,
+            Arg.Is<ReadOnlyMemory<byte>>(rawMime => rawMime.ToArray().SequenceEqual(anotherMime)),
             Arg.Any<CancellationToken>());
     }
 

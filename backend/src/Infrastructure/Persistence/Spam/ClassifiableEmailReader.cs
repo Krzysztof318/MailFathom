@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Spam;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -26,12 +27,16 @@ internal sealed class ClassifiableEmailReader(MailFathomDbContext dbContext) : I
     /// copy is kept is a disposition a user chose; a copy that is kept is mail a reader can still reach, so refusing to
     /// classify it would leave exactly the mail nobody else can act on unclassified.
     /// </remarks>
-    public async Task<ClassifiableEmail?> FindAsync(StoredEmailId emailId, CancellationToken cancellationToken)
+    public async Task<ClassifiableEmail?> FindAsync(
+        MailUserId user,
+        StoredEmailId emailId,
+        CancellationToken cancellationToken)
     {
+        var userId = user.Value;
         var storedEmailId = emailId.Value;
         var row = await dbContext.StoredEmails
             .AsNoTracking()
-            .Where(email => email.Id == storedEmailId)
+            .Where(email => email.Id == storedEmailId && email.UserId == userId)
             .Select(email => new { email.MailboxAccountId, email.MailFolder.Alias })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -41,6 +46,41 @@ internal sealed class ClassifiableEmailReader(MailFathomDbContext dbContext) : I
                 emailId,
                 MailAccountId.Create(row.MailboxAccountId),
                 MailFolderAlias.Create(row.Alias));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The folder is matched on the alias and the generation it was bound under rather than on the remote path, for the
+    /// reason the occurrence identity carries both: an alias repointed at another folder names a different message from
+    /// the one the work was enqueued for. A tombstoned occurrence is readable here on the same terms as everywhere else
+    /// in this reader.
+    /// </remarks>
+    public async Task<StoredEmailId?> FindStoredEmailIdAsync(
+        MailUserId user,
+        EmailOccurrenceId occurrenceId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(occurrenceId);
+
+        var userId = user.Value;
+        var mailboxAccountId = occurrenceId.AccountId.Value;
+        var alias = occurrenceId.FolderResolutionId.Alias.Value;
+        var generation = occurrenceId.FolderResolutionId.Generation.Value;
+        var uidValidity = occurrenceId.UidValidity.Value;
+        var uid = occurrenceId.Uid.Value;
+
+        var row = await dbContext.StoredEmails
+            .AsNoTracking()
+            .Where(email => email.UserId == userId
+                && email.MailboxAccountId == mailboxAccountId
+                && email.MailFolder.Alias == alias
+                && email.MailFolder.ResolutionGeneration == generation
+                && email.UidValidity == uidValidity
+                && email.Uid == uid)
+            .Select(email => new { email.Id })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return row is null ? null : StoredEmailId.Create(row.Id);
     }
 
     /// <inheritdoc />
