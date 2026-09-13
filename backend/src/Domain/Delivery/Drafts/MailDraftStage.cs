@@ -4,12 +4,14 @@
 
 namespace MailFathom.Domain.Delivery.Drafts;
 
-/// <summary>States what one draft owes the mail server, read from the copies it has recorded.</summary>
+/// <summary>States what one draft owes the mail server, read from the copies it has recorded and the local message it filed.</summary>
 /// <remarks>
 /// <para>
-/// It is derived rather than stored, because storing it would be a second statement of what the copies already say and
+/// It is derived rather than stored, because storing it would be a second statement of what the record already says and
 /// the two could disagree. What it names is the point a resumed attempt continues from: a process that dies partway
-/// through a replacement is recognized by which of these the record reads as, and no other state is consulted.
+/// through a replacement is recognized by which of these the record reads as. On an account MailFathom holds alone the
+/// local message the draft filed, and the revision it shows, are read before the copies, because a draft filed there
+/// owes no server anything.
 /// </para>
 /// <para>
 /// The two replacement members are the reason the type exists. Editing a draft is an append followed by a removal, and
@@ -31,6 +33,10 @@ public enum MailDraftStage
     AppendIssued = 1,
 
     /// <summary>The current revision stands in the drafts folder and nothing it replaced is left there.</summary>
+    /// <remarks>
+    /// On a held account it means the current revision is filed into the local drafts folder. Copies a server still holds
+    /// from while the account was mirrored may remain in the source, and taking them out is the drain's work.
+    /// </remarks>
     Filed = 2,
 
     /// <summary>The current revision is not appended yet and the copy it replaces is still in the folder.</summary>

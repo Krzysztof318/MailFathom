@@ -266,6 +266,7 @@ public interface IMailDraftStore
     /// <param name="session">The session the write joins, which is the one that stored the message.</param>
     /// <param name="draftId">The draft the message shows.</param>
     /// <param name="filedEmail">The stored message.</param>
+    /// <param name="revision">The revision the stored message shows, which a later revision is compared against.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The stored message the draft named before, which the caller erases in the same session, or <see langword="null" /> where it named none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
@@ -278,6 +279,7 @@ public interface IMailDraftStore
         IPersistenceSession session,
         MailDraftId draftId,
         StoredEmailId filedEmail,
+        int revision,
         CancellationToken cancellationToken);
 
     /// <summary>Removes one draft and everything held under it.</summary>

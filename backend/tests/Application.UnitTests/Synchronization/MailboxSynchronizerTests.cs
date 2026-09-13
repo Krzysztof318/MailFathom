@@ -279,8 +279,8 @@ public sealed class MailboxSynchronizerTests
         var sent = HeldSentRun(out var account, out var occurrence);
         var filedCopy = StoredEmailId.Create(Guid.CreateVersion7(new DateTimeOffset(2026, 7, 24, 11, 0, 0, TimeSpan.Zero)));
         sent.MetadataRepository
-            .FindFiledSentCopyAsync(account, $"message-{occurrence.Uid.Value}@example.test", Arg.Any<CancellationToken>())
-            .Returns(filedCopy);
+            .FindFiledSentCopiesAsync(account, Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, StoredEmailId> { [$"message-{occurrence.Uid.Value}@example.test"] = filedCopy });
         sent.MetadataRepository
             .TryCarryToOccurrenceAsync(Arg.Any<IPersistenceSession>(), account.User, filedCopy, occurrence, Arg.Any<CancellationToken>())
             .Returns(true);
@@ -321,9 +321,10 @@ public sealed class MailboxSynchronizerTests
 
         // Assert
         Assert.Equal(1, result.StoredEmailCount);
-        await sent.MetadataRepository.Received(1).FindFiledSentCopyAsync(
+        var internetMessageId = $"message-{occurrence.Uid.Value}@example.test";
+        await sent.MetadataRepository.Received(1).FindFiledSentCopiesAsync(
             account,
-            $"message-{occurrence.Uid.Value}@example.test",
+            Arg.Is<IReadOnlyCollection<string>>(ids => ids != null && ids.SequenceEqual(new[] { internetMessageId })),
             Arg.Any<CancellationToken>());
         await sent.MetadataRepository.DidNotReceive().TryCarryToOccurrenceAsync(
             Arg.Any<IPersistenceSession>(),

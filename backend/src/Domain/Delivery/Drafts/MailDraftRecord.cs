@@ -137,11 +137,15 @@ public sealed record MailDraftRecord
 
     /// <summary>Gets the stored message that shows this draft in the local drafts folder of a held account, or <see langword="null" /> where none was filed.</summary>
     /// <remarks>
-    /// It is the whole account of a local copy, because a local copy needs none of what a server copy does: it is written
-    /// in the transaction that writes the revision it shows and replaced in the transaction that writes the next, so no
-    /// append can go unanswered and no removal can be left owing.
+    /// Together with <see cref="FiledRevision" /> it is the whole account of a local copy, because a local copy needs none
+    /// of what a server copy does: a new message and the erasure of the one it replaces commit together, so no append can
+    /// go unanswered and no removal can be left owing. A revision that could not be filed when it was written leaves the
+    /// previous message named here, behind the revision, until a pass files the current one over it.
     /// </remarks>
     public StoredEmailId? FiledEmail { get; init; }
+
+    /// <summary>Gets the revision <see cref="FiledEmail" /> shows, or <see langword="null" /> where none was filed.</summary>
+    public int? FiledRevision { get; init; }
 
     /// <summary>Gets the copy carrying the revision the stored message is.</summary>
     public MailDraftServerCopy? CurrentCopy =>
@@ -209,8 +213,9 @@ public sealed record MailDraftRecord
     /// <remarks>
     /// A discarded draft owes a removal whatever else is true of it, and an append nobody answered stops every later
     /// act on the mailbox — so both are read before the replacement pair, which is what is left once neither holds. A
-    /// draft filed into a local folder is filed whatever its server copies say, since those belong to a source the account
-    /// no longer writes to.
+    /// draft whose current revision is filed into a local folder is filed whatever its server copies say, since those
+    /// belong to a source the account no longer writes to; one whose local message is behind its revision reads from the
+    /// copies like any other, which on a held account is the composed stage a pass files it from.
     /// </remarks>
     private MailDraftStage ReadStage()
     {
@@ -219,7 +224,7 @@ public sealed record MailDraftRecord
             return MailDraftStage.Discarded;
         }
 
-        if (this.FiledEmail is not null)
+        if (this.FiledEmail is not null && this.FiledRevision == this.Revision)
         {
             return MailDraftStage.Filed;
         }

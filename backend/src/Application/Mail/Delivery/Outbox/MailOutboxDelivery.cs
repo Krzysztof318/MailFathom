@@ -239,21 +239,22 @@ public sealed class MailOutboxDelivery
             envelope,
             attemptToken.Token);
 
-        return await this.SettleAnsweredAsync(claimed, envelope, transmission);
+        return await this.SettleAnsweredAsync(claimed, envelope, transmission, stoppingToken);
     }
 
     /// <summary>Settles a send the server answered about, which is the case where nothing is left to infer.</summary>
     private Task<MailOutboxDeliveryResult> SettleAnsweredAsync(
         ClaimedOutgoingEmail claimed,
         MailEnvelopeLedger envelope,
-        MailTransmission transmission)
+        MailTransmission transmission,
+        CancellationToken stoppingToken)
     {
         var acknowledged = transmission.Outcome == MailTransmissionOutcome.Accepted;
         var outcomes = this.ReadRecipientOutcomes(claimed, envelope, acknowledged);
 
         return transmission.Outcome switch
         {
-            MailTransmissionOutcome.Accepted => this.CompleteAsync(claimed, outcomes, transmission.ReplyCode),
+            MailTransmissionOutcome.Accepted => this.CompleteAsync(claimed, outcomes, transmission.ReplyCode, stoppingToken),
             MailTransmissionOutcome.RefusedPermanently => this.RefuseAsync(
                 claimed,
                 outcomes,
@@ -274,12 +275,14 @@ public sealed class MailOutboxDelivery
     /// <remarks>
     /// On a held account the sent copy is filed in the commit that records the delivery, so a crash cannot fall between
     /// the two and the copy is filed exactly as often as the send reaches <see cref="OutgoingEmailStage.Sent" />, which the
-    /// lease makes once.
+    /// lease makes once. Preparing that copy stops with the host rather than with the attempt's budget: the server has
+    /// already taken the message, and a budget the transmission used up would otherwise cost the account its sent copy.
     /// </remarks>
     private async Task<MailOutboxDeliveryResult> CompleteAsync(
         ClaimedOutgoingEmail claimed,
         IReadOnlyList<OutgoingRecipientOutcome> outcomes,
-        int? replyCode)
+        int? replyCode,
+        CancellationToken stoppingToken)
     {
         if (outcomes.Any(outcome => outcome.IsOutstanding))
         {
@@ -288,7 +291,7 @@ public sealed class MailOutboxDelivery
             return await this.DeferOrExhaustAsync(claimed, outcomes, failure: null, replyCode);
         }
 
-        var sentCopy = await this.localFiler.PrepareSentCopyAsync(claimed.Record);
+        var sentCopy = await this.localFiler.PrepareSentCopyAsync(claimed.Record, stoppingToken);
         FiledLocalEmail? filed = null;
 
         await this.CommitAsync(async (session, token) =>

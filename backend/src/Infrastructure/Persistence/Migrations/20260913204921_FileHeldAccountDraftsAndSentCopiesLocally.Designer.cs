@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260913194727_FileHeldAccountDraftsAndSentCopiesLocally")]
+    [Migration("20260913204921_FileHeldAccountDraftsAndSentCopiesLocally")]
     partial class FileHeldAccountDraftsAndSentCopiesLocally
     {
         /// <inheritdoc />
@@ -1385,6 +1385,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<string>("DivergenceReason")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<int?>("FiledRevision")
+                        .HasColumnType("integer");
 
                     b.Property<Guid?>("FiledStoredEmailId")
                         .HasColumnType("uuid");

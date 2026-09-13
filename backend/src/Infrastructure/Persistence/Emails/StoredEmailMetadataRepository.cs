@@ -254,29 +254,37 @@ internal sealed class StoredEmailMetadataRepository(
     }
 
     /// <inheritdoc />
-    public async Task<StoredEmailId?> FindFiledSentCopyAsync(
+    public async Task<IReadOnlyDictionary<string, StoredEmailId>> FindFiledSentCopiesAsync(
         MailAccountIdentity account,
-        string internetMessageId,
+        IReadOnlyCollection<string> internetMessageIds,
         CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrEmpty(internetMessageId);
+        ArgumentNullException.ThrowIfNull(internetMessageIds);
+
+        if (internetMessageIds.Count == 0)
+        {
+            return new Dictionary<string, StoredEmailId>(StringComparer.Ordinal);
+        }
 
         var user = account.User.Value;
         var accountValue = account.Id.Value;
 
-        var filedCopy = await readContext.StoredEmails
+        var filedCopies = await readContext.StoredEmails
             .AsNoTracking()
             .Where(email => email.UserId == user
                 && email.MailboxAccountId == accountValue
-                && email.InternetMessageId == internetMessageId
+                && email.InternetMessageId != null
+                && internetMessageIds.Contains(email.InternetMessageId)
                 && email.FiledFromOutgoingEmailId != null
                 && email.UidValidity == null
                 && email.ContentAvailability == StoredEmailContentAvailability.Available)
             .OrderBy(email => email.Id)
-            .Select(email => (Guid?)email.Id)
-            .FirstOrDefaultAsync(cancellationToken);
+            .Select(email => new { InternetMessageId = email.InternetMessageId!, email.Id })
+            .ToListAsync(cancellationToken);
 
-        return filedCopy is { } id ? StoredEmailId.Create(id) : null;
+        return filedCopies
+            .GroupBy(copy => copy.InternetMessageId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => StoredEmailId.Create(group.First().Id), StringComparer.Ordinal);
     }
 
     /// <summary>Reads whatever row already occupies one occurrence, including one this session has staged and not committed.</summary>

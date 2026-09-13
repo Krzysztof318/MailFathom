@@ -113,6 +113,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness();
+        harness.MapDraftsFolder(Account.Id);
         var held = harness.HoldAccount(Account);
 
         // Act
@@ -137,6 +138,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness();
+        harness.MapDraftsFolder(Account.Id);
         var held = harness.HoldAccount(Account);
         var draft = await SaveAsync(harness, "first version");
 
@@ -163,6 +165,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness();
+        harness.MapDraftsFolder(Account.Id);
         var held = harness.HoldAccount(Account);
         var draft = await SaveAsync(harness, "first version");
 

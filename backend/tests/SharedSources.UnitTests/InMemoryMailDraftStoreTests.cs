@@ -272,8 +272,8 @@ public sealed class InMemoryMailDraftStoreTests
         var second = StoredEmailId.Create(Guid.CreateVersion7(Moment.AddMinutes(1)));
 
         // Act
-        var replacedByFirst = await store.RecordFiledAsync(Session, draft.Id, first, TestContext.Current.CancellationToken);
-        var replacedBySecond = await store.RecordFiledAsync(Session, draft.Id, second, TestContext.Current.CancellationToken);
+        var replacedByFirst = await store.RecordFiledAsync(Session, draft.Id, first, draft.Revision, TestContext.Current.CancellationToken);
+        var replacedBySecond = await store.RecordFiledAsync(Session, draft.Id, second, draft.Revision, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(replacedByFirst);

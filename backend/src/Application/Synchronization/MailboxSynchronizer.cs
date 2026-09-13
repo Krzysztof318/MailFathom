@@ -295,6 +295,11 @@ public sealed class MailboxSynchronizer
                     uidValidity,
                     batch,
                     cancellationToken);
+                var filedSentCopies = await this.ReadFiledSentCopiesInBatchAsync(
+                    account,
+                    recognizesFiledSentCopies,
+                    batch,
+                    cancellationToken);
 
                 var processedThroughUid = default(ImapUid?);
 
@@ -318,7 +323,7 @@ public sealed class MailboxSynchronizer
                     }
 
                     if (recognizesFiledSentCopies
-                        && await this.TryCarryFiledSentCopyAsync(account, metadata, cancellationToken))
+                        && await this.TryCarryFiledSentCopyAsync(account, metadata, filedSentCopies, cancellationToken))
                     {
                         processedThroughUid = metadata.OccurrenceId.Uid;
 
@@ -792,6 +797,31 @@ public sealed class MailboxSynchronizer
             cancellationToken);
     }
 
+    /// <summary>Reads which of a batch's messages are the provider's copies of sends a held account filed locally.</summary>
+    /// <remarks>
+    /// Read once for the whole batch, for the reason the filings above are. A message whose <c>Message-ID</c> is absent
+    /// or empty is left out rather than compared: no identity this deployment mints is empty, and a server reporting one
+    /// as an empty string must not stop the folder's run at that message.
+    /// </remarks>
+    private async Task<IReadOnlyDictionary<string, StoredEmailId>> ReadFiledSentCopiesInBatchAsync(
+        MailAccountIdentity account,
+        bool recognizesFiledSentCopies,
+        RemoteEmailMetadataBatch batch,
+        CancellationToken cancellationToken)
+    {
+        string[] internetMessageIds = recognizesFiledSentCopies
+            ? [.. batch.Emails
+                .Select(static email => email.InternetMessageId)
+                .OfType<string>()
+                .Where(static internetMessageId => internetMessageId.Length > 0)
+                .Distinct(StringComparer.Ordinal)]
+            : [];
+
+        return internetMessageIds.Length == 0
+            ? new Dictionary<string, StoredEmailId>(StringComparer.Ordinal)
+            : await this.metadataRepository.FindFiledSentCopiesAsync(account, internetMessageIds, cancellationToken);
+    }
+
     /// <summary>Finds the copy this discovery is, if it is one MailFathom filed.</summary>
     /// <remarks>
     /// The placement is preferred over the message identity, because the placement is the server's own statement about
@@ -875,11 +905,11 @@ public sealed class MailboxSynchronizer
     private async Task<bool> TryCarryFiledSentCopyAsync(
         MailAccountIdentity account,
         RemoteEmailMetadata metadata,
+        IReadOnlyDictionary<string, StoredEmailId> filedSentCopies,
         CancellationToken cancellationToken)
     {
-        if (metadata.InternetMessageId is not { } internetMessageId
-            || await this.metadataRepository.FindFiledSentCopyAsync(account, internetMessageId, cancellationToken)
-                is not { } filedCopy)
+        if (metadata.InternetMessageId is not { Length: > 0 } internetMessageId
+            || !filedSentCopies.TryGetValue(internetMessageId, out var filedCopy))
         {
             return false;
         }

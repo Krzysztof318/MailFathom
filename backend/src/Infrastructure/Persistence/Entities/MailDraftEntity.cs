@@ -74,6 +74,9 @@ internal sealed class MailDraftEntity
     /// </remarks>
     public Guid? FiledStoredEmailId { get; set; }
 
+    /// <summary>Gets or sets the revision <see cref="FiledStoredEmailId" /> shows, and <see langword="null" /> while none is filed.</summary>
+    public int? FiledRevision { get; set; }
+
     /// <summary>Gets or sets why the tracked copy stopped being one MailFathom may touch, and <see langword="null" /> while none has.</summary>
     public MailDraftDivergenceReason? DivergenceReason { get; set; }
 

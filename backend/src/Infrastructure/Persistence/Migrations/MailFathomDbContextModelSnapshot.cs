@@ -1383,6 +1383,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<int?>("FiledRevision")
+                        .HasColumnType("integer");
+
                     b.Property<Guid?>("FiledStoredEmailId")
                         .HasColumnType("uuid");
 

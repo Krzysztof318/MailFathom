@@ -147,6 +147,7 @@ public sealed class MailDraftFiler
     /// <summary>Files a revision's local copy and erases the one it replaces, inside the transaction that writes the revision.</summary>
     /// <param name="session">The transaction.</param>
     /// <param name="draftId">The draft.</param>
+    /// <param name="revision">The revision the copy is of.</param>
     /// <param name="copy">The prepared copy.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>What was filed, or <see langword="null" /> where the account is no longer held.</returns>
@@ -157,6 +158,7 @@ public sealed class MailDraftFiler
     internal async Task<FiledLocalEmail?> FileLocallyAsync(
         IPersistenceSession session,
         MailDraftId draftId,
+        int revision,
         LocalMailCopy copy,
         CancellationToken cancellationToken)
     {
@@ -165,7 +167,7 @@ public sealed class MailDraftFiler
             return null;
         }
 
-        var replaced = await this.drafts.RecordFiledAsync(session, draftId, filed.Email, cancellationToken);
+        var replaced = await this.drafts.RecordFiledAsync(session, draftId, filed.Email, revision, cancellationToken);
 
         if (replaced is { } previous)
         {
@@ -464,9 +466,10 @@ public sealed class MailDraftFiler
     /// <summary>Settles a draft of a held account against its local drafts folder, issuing nothing to any server.</summary>
     /// <remarks>
     /// <para>
-    /// A given-up draft has its message erased and its record removed in one commit. A draft with no message is one whose
-    /// revision was written without it — the account became held after the revision, or its drafts folder could not be
-    /// reached then — and it is filed now from the message the revision stored. The copies a server holds of a draft
+    /// A given-up draft has its message erased and its record removed in one commit. A draft with no message, or one whose
+    /// message shows an earlier revision, is one whose current revision was written without filing it — the account became
+    /// held after the revision, or its drafts folder could not be reached then — and it is filed now from the message the
+    /// revision stored, erasing the earlier one in the same commit. The copies a server holds of a draft
     /// written while the account was mirrored are left to the drain, which empties the source they are in.
     /// </para>
     /// <para>
@@ -501,7 +504,7 @@ public sealed class MailDraftFiler
             return Result(draft, MailDraftFilingOutcome.Discarded);
         }
 
-        if (draft.FiledEmail is not null)
+        if (draft.FiledEmail is not null && draft.FiledRevision == draft.Revision)
         {
             return Result(draft, MailDraftFilingOutcome.AlreadySettled);
         }
@@ -515,7 +518,7 @@ public sealed class MailDraftFiler
         }
 
         var filed = await this.commitPolicy.CommitAsync(
-            (session, token) => this.FileLocallyAsync(session, draft.Id, copy, token),
+            (session, token) => this.FileLocallyAsync(session, draft.Id, draft.Revision, copy, token),
             cancellationToken);
 
         if (filed is null)

@@ -109,6 +109,9 @@ internal sealed class HeldLocalMailbox
         this.folderResolutions.Bind(this.Account.Id, folderAlias);
     }
 
+    /// <summary>Withdraws every role mapping, which is the arrangement of a folder the operator stopped mapping.</summary>
+    internal void UnmapRoles() => this.mappings = StubMailFolderMappings.Nothing;
+
     /// <summary>Builds the filer over this mailbox as it is mapped now.</summary>
     /// <param name="contents">The payload store, which is the one the calling harness reads back.</param>
     /// <returns>The filer.</returns>

@@ -298,8 +298,10 @@ A message MailFathom files itself on a held account — a draft revision, or the
 `Delivery:FileSentCopy` holds — is a `stored_emails` row with no occurrence: `UidValidity` and `Uid` are null, its
 content row is written in the same transaction, and its `MailFolderId` is the current binding of the source folder
 mapped to the role it is filed under, because a stored message always names a binding and that is where the source keeps
-the same kind of message. It is written with `rules_evaluated_at` already stamped, since nothing arrived, and a sent copy
-carries `FiledFromOutgoingEmailId`. The draft names the message it filed in `mail_drafts.FiledStoredEmailId`. When
+the same kind of message. A draft is written with `rules_evaluated_at` already stamped, since nothing arrived; a sent
+copy is left unstamped and carries `FiledFromOutgoingEmailId`, which is how the rule queue and the derivations recognise
+it. The draft names the message it filed in `mail_drafts.FiledStoredEmailId` and the revision it shows in
+`mail_drafts.FiledRevision`. When
 synchronization meets the provider's own copy of a filed send, the occurrence is carried onto that row rather than a
 second one being stored; `ix_stored_emails_filed_sent_copy` is how the question is answered.
 
@@ -1624,7 +1626,8 @@ twice mean something for a record that is not being sent at all.
 | `ComposedAt`, `RevisedAt` | When the draft was first written and when it last changed. The second is the order an account's drafts are read in |
 | `DiscardedAt` | When the draft was given up, null while it stands. It is written **before** anything is issued against the folder, which is what makes the removal resumable rather than a message nothing can name |
 | `PromotedToOutgoingEmailId` | The send this draft became, null until it becomes one. A plain column rather than a foreign key, deliberately: the send outlives the draft, and erasing an outgoing record must not take a draft with it |
-| `FiledStoredEmailId` | The stored message a held account filed the current revision as, in its local drafts folder, null while none is filed and on every mirrored account. A revision replaces it and a give-up erases what it names, both in the transaction that writes the change. A plain column rather than a foreign key, for the reason `PromotedToOutgoingEmailId` is one: the person may delete that message like any other, and neither erasure may refuse or take the other. A draft that names one is settled, so the pass does not read it again |
+| `FiledStoredEmailId` | The stored message a held account filed the current revision as, in its local drafts folder, null while none is filed and on every mirrored account. A revision replaces it and a give-up erases what it names, both in the transaction that writes the change. A plain column rather than a foreign key, for the reason `PromotedToOutgoingEmailId` is one: the person may delete that message like any other, and neither erasure may refuse or take the other. A draft that names one showing its current revision is settled, so the pass does not read it again |
+| `FiledRevision` | The revision the message `FiledStoredEmailId` names shows, null exactly when that column is. A revision written while its drafts folder could not be reached leaves it behind `Revision`, which makes the draft outstanding again, and the pass files the current revision and erases the earlier message in one commit |
 | `DivergenceReason`, `DivergenceObservedAt` | Why the tracked copy stopped being provably this deployment's own, and when that was seen. Both null while the record and the folder still follow each other |
 | `LastFailureCode` | The code the last attempt to settle the folder ended in, null while none has. The code and not the message, for the reason an outgoing record keeps only the code |
 | `xmin` | The concurrency token, as everywhere else |

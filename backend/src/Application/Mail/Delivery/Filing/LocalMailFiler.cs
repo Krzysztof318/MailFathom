@@ -143,6 +143,10 @@ public sealed class LocalMailFiler
 
     /// <summary>Prepares the sent copy of a delivered message, where its account is held and files one.</summary>
     /// <param name="record">The send that was accepted.</param>
+    /// <param name="cancellationToken">
+    /// Stops the preparation when the host is shutting down; a cancelled preparation is recorded as a filing failure like
+    /// any other.
+    /// </param>
     /// <returns>The prepared copy, or <see langword="null" /> where none is to be filed or none could be prepared.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="record" /> is <see langword="null" />.</exception>
     /// <remarks>
@@ -151,7 +155,7 @@ public sealed class LocalMailFiler
     /// prepared is recorded as the filing failure it is and the delivery commits without it.
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The delivery this copy belongs to has already reached its recipients, and recording it must not wait on a copy; every failure is recorded against the send's filing instead.")]
-    public async Task<LocalMailCopy?> PrepareSentCopyAsync(OutgoingEmailRecord record)
+    public async Task<LocalMailCopy?> PrepareSentCopyAsync(OutgoingEmailRecord record, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
 
@@ -162,13 +166,13 @@ public sealed class LocalMailFiler
 
         try
         {
-            if (!await this.HoldsAsync(record.Account, CancellationToken.None)
-                || await this.contents.FindOutgoingContentAsync(record.Id, CancellationToken.None) is not { } content)
+            if (!await this.HoldsAsync(record.Account, cancellationToken)
+                || await this.contents.FindOutgoingContentAsync(record.Id, cancellationToken) is not { } content)
             {
                 return null;
             }
 
-            if (await this.PrepareAsync(record.Account, OutgoingMailFiling.Sent, content.RawMime, CancellationToken.None)
+            if (await this.PrepareAsync(record.Account, OutgoingMailFiling.Sent, content.RawMime, cancellationToken)
                 is { } copy)
             {
                 return copy;

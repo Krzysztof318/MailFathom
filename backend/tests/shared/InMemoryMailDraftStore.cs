@@ -349,11 +349,12 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
         IPersistenceSession session,
         MailDraftId draftId,
         StoredEmailId filedEmail,
+        int revision,
         CancellationToken cancellationToken)
     {
         var draft = this.Require(draftId);
 
-        this.drafts[draftId] = draft with { FiledEmail = filedEmail };
+        this.drafts[draftId] = draft with { FiledEmail = filedEmail, FiledRevision = revision };
 
         return Task.FromResult(draft.FiledEmail is { } previous && previous != filedEmail ? previous : (StoredEmailId?)null);
     }

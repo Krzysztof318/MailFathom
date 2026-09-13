@@ -14,8 +14,9 @@ namespace MailFathom.TestSupport;
 
 /// <summary>Holds the MIME of drafts in memory, replacing a draft's message the way the real store does.</summary>
 /// <remarks>
-/// Everything but the draft half throws. A draft never stores arriving mail and never stores a send's payload, so a
-/// caller that reached one of those would be doing something this double must not answer for silently.
+/// Everything but the draft half, and a message filed into a local folder with no occurrence, throws. A draft never
+/// stores arriving mail and never stores a send's payload, so a caller that reached one of those would be doing something
+/// this double must not answer for silently; a filed message is kept, because filing a held account's draft stores one.
 /// </remarks>
 internal sealed class InMemoryMailDraftContentStore : IEmailContentStore
 {

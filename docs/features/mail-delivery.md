@@ -1139,8 +1139,10 @@ revision and that message are written in one transaction, so saving is one commi
 again writes the new message and erases the one it replaces in that same commit, with no `APPEND` and no withdrawal;
 and giving the draft up erases the message with the record. The message is bound to the source folder mapped to the
 drafts role, so an account that maps none keeps the draft with the destination reported as unavailable, and the pass
-that follows files it once the role is mapped. Clients are told of the new message, and of the one it replaced, once
-the commit lands.
+that follows files it once the role is mapped. The same holds for a revision saved while the role could not be reached:
+the folder goes on showing the earlier revision, the draft is outstanding again because what it filed is behind it, and
+the pass files the current revision and erases the earlier message in one commit. Clients are told of the new message,
+and of the one it replaced, once the commit lands.
 
 **Giving a draft up removes what this system put there and nothing else.** The record is marked before anything is
 issued and removed once the copies are settled, so a process that dies in between leaves a draft the pass finishes. A

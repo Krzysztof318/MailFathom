@@ -51,6 +51,7 @@ internal static class MailDraftRecordMapping
                 ? OutgoingEmailId.Create(promoted)
                 : null,
             FiledEmail = entity.FiledStoredEmailId is { } filed ? StoredEmailId.Create(filed) : null,
+            FiledRevision = entity.FiledRevision,
             Copies = [.. entity.Copies.Select(ToCopy).OrderByDescending(copy => copy.Revision)],
 
             // Ordered here rather than trusted from the collection, for the reason the recipients are: this is the

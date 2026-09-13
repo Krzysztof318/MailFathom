@@ -15,6 +15,12 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.AddColumn<int>(
+                name: "FiledRevision",
+                table: "mail_drafts",
+                type: "integer",
+                nullable: true);
+
             migrationBuilder.AddColumn<Guid>(
                 name: "FiledStoredEmailId",
                 table: "mail_drafts",
@@ -34,6 +40,10 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
             migrationBuilder.DropIndex(
                 name: "ix_stored_emails_filed_sent_copy",
                 table: "stored_emails");
+
+            migrationBuilder.DropColumn(
+                name: "FiledRevision",
+                table: "mail_drafts");
 
             migrationBuilder.DropColumn(
                 name: "FiledStoredEmailId",

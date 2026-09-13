@@ -143,18 +143,19 @@ public interface IEmailMetadataRepository
         OutgoingEmailId? filedFrom,
         CancellationToken cancellationToken);
 
-    /// <summary>Finds the sent copy MailFathom filed locally that carries one <c>Message-ID</c> and no occurrence yet.</summary>
+    /// <summary>Finds the sent copies MailFathom filed locally that carry one of a batch's <c>Message-ID</c> values and no occurrence yet.</summary>
     /// <param name="account">The account whose filed copies are searched.</param>
-    /// <param name="internetMessageId">The <c>Message-ID</c> a discovered message carries.</param>
+    /// <param name="internetMessageIds">The non-empty <c>Message-ID</c> values one discovered batch carries, bounded by that batch.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>The filed copy, or <see langword="null" /> where none stands for that identity.</returns>
+    /// <returns>The filed copy standing for each identity that has one, keyed by that identity.</returns>
     /// <remarks>
     /// Only a copy filed from an outgoing record answers, and only one whose payload is stored: the identity is the one this
     /// deployment minted for the send, which is what makes it safe to compare, and a copy whose payload is absent is no copy
-    /// the provider's may stand in for.
+    /// the provider's may stand in for. It is one read per batch, as the recognition of appended copies is, so a sent
+    /// folder the drain has not emptied yet costs one query per batch rather than one per message.
     /// </remarks>
-    Task<StoredEmailId?> FindFiledSentCopyAsync(
+    Task<IReadOnlyDictionary<string, StoredEmailId>> FindFiledSentCopiesAsync(
         MailAccountIdentity account,
-        string internetMessageId,
+        IReadOnlyCollection<string> internetMessageIds,
         CancellationToken cancellationToken);
 }

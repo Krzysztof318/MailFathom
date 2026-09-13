@@ -170,7 +170,7 @@ public sealed class MailDraftBook
 
                 filed = localCopy is null
                     ? null
-                    : await this.filer.FileLocallyAsync(session, written.Id, localCopy, attemptCancellationToken);
+                    : await this.filer.FileLocallyAsync(session, written.Id, written.Revision, localCopy, attemptCancellationToken);
 
                 return written;
             },
