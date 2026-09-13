@@ -607,19 +607,18 @@ internal sealed class UserRecordAdministration(
 
         // Resolved here rather than left to the next start, which refuses the whole deployment over it: a reference
         // that is well formed and names nothing retrievable binds cleanly, commits, and then stops the host for every
-        // user it serves until somebody corrects the row by hand. What the record already carried is not this write's
-        // to refuse, because refusing it would block every unrelated edit without making the next start any worse.
+        // user it serves until somebody corrects the row by hand. A write that leaves every mail account exactly as it
+        // was cannot have introduced one, because the walk reads nothing else, so refusing it would block every
+        // unrelated edit without making the next start any worse.
         var unusable = await secrets.FindUserMailAccountErrorsAsync(RecordPath, bound.MailAccounts, cancellationToken);
-        IReadOnlyList<string> held = unusable.Count == 0
-            ? []
-            : await this.FindUnusableSecretsHeldAsync(inForce.Json, cancellationToken);
+        var alreadyHeld = unusable.Count > 0 && LeavesEveryMailAccountAsItWas(inForce.Json, candidateJson);
 
-        if (unusable.Where(problem => !held.Contains(problem)).ToArray() is { Length: > 0 } newlyUnusable)
+        if (unusable.Count > 0 && !alreadyHeld)
         {
             return UserRecordWriteOutcome.Refused(
                 MailFathomErrorCode.ConfigurationCandidateInvalid,
                 inForce.Version,
-                newlyUnusable);
+                unusable);
         }
 
         await servedUsers.WaitForRosterPublicationAsync(cancellationToken);
@@ -650,26 +649,32 @@ internal sealed class UserRecordAdministration(
         }
     }
 
-    // ponytail: a problem matches only at the same path, so withdrawing an earlier mail account moves a later account's
-    // standing problem to a new position and it is refused as introduced; key by the account identifier if that bites.
-
-    /// <summary>Resolves the secrets of the record as it stands, so a write can tell what it introduced from what was already there.</summary>
+    /// <summary>Reports whether a candidate carries every mail account setting exactly as the record in force holds it.</summary>
     /// <remarks>
     /// <para>
-    /// Asked only once the candidate has already failed the walk, so an ordinary write resolves nothing twice. A row that
-    /// no longer binds contributes nothing, which leaves every problem the candidate carries refused as it was before.
+    /// Compared as settings rather than as the problems the walk reports, because a sentence names a path and a failure
+    /// and never the target behind it: a broken reference replaced by a different broken one reads the same, and only
+    /// the settings tell the two apart.
     /// </para>
     /// <para>
-    /// The sentences are compared rather than the secrets behind them, because they are what the walk reports and each
-    /// names the path it found the problem at.
+    /// The whole collection rather than the account a problem sits in, because a secret name is judged across every
+    /// account at once — renaming one secret can make an untouched account's name the repeated one.
     /// </para>
     /// </remarks>
-    private async Task<IReadOnlyList<string>> FindUnusableSecretsHeldAsync(
-        string standingJson,
-        CancellationToken cancellationToken) =>
-        binder.Bind(standingJson, UserRecordArrival.AlreadyHeld).User is { } standing
-            ? await secrets.FindUserMailAccountErrorsAsync(RecordPath, standing.MailAccounts, cancellationToken)
-            : [];
+    private static bool LeavesEveryMailAccountAsItWas(string standingJson, string candidateJson)
+    {
+        var standing = MailAccountSettingsOf(standingJson);
+        var candidate = MailAccountSettingsOf(candidateJson);
+
+        return standing.Count == candidate.Count
+            && standing.All(setting => candidate.TryGetValue(setting.Key, out var value)
+                && string.Equals(value, setting.Value, StringComparison.Ordinal));
+    }
+
+    private static Dictionary<string, string> MailAccountSettingsOf(string json) =>
+        RedactedDocumentSave.Flatten(json)
+            .Where(setting => setting.Key.StartsWith($"{nameof(UserAccountOptions.MailAccounts)}:", StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(setting => setting.Key, setting => setting.Value, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Says that a problem a committed record still carries was there before the write, and what clears it.</summary>
     private static string DescribeAsAlreadyHeld(string problem) =>

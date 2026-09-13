@@ -688,7 +688,7 @@ is between them. `mfctl user edit` opens that person's whole record in your `$VI
 saved as one change — set it up as `VISUAL="code --wait"` if your editor is a graphical one, since the command reads the
 file back when the editor exits. Empty the buffer to abandon the session, or save it unchanged, and nothing is written
 either way. Passwords read back as `(redacted)`, and a marker saved back leaves the credential beneath it alone. A
-password reference that had already stopped resolving does not block an edit elsewhere in the record: the change
+password reference that had already stopped resolving does not block an edit that leaves the mail accounts alone: the change
 commits and the command prints that problem after it, so you can correct it before the deployment next restarts —
 [the endpoint reference](../operations/admin-endpoint.md#users-and-their-records) holds the rule.
 

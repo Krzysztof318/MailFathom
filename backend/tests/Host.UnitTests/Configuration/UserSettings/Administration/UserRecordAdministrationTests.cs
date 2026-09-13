@@ -780,11 +780,38 @@ public sealed class UserRecordAdministrationTests
     }
 
     /// <summary>
-    /// What the record already carried excuses only itself: a second mailbox whose credential reaches nothing is this
-    /// write's own problem, and is refused naming it alone.
+    /// The walk's sentence names a path and a failure, never the target, so a broken reference replaced by a different
+    /// broken one at the same path reads the same — and is still this write's own problem, refused rather than
+    /// committed as though the record already carried it.
     /// </summary>
     [Fact]
-    public async Task AddMailAccountAsync_AnUnusableMailboxBesideOneAlreadyUnusable_IsRefusedNamingOnlyTheNewOne()
+    public async Task ApplyRecordAsync_ABrokenReferenceReplacedByAnotherBrokenOne_IsRefusedRatherThanReportedAsAlreadyHeld()
+    {
+        // Arrange
+        var standing = $$"""{ "Language": "English", "MailAccounts": [ {{AccountWhoseSecretReachesNothing("primary")}} ] }""";
+
+        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(SyntheticMailUser.Deployment, standing, version: 3);
+
+        // Act
+        var outcome = await harness.Records.ApplyRecordAsync(
+            SyntheticMailUser.Deployment,
+            standing.Replace("/primary-password", "/primary-passwrod", StringComparison.Ordinal),
+            expectedVersion: 3,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// What the record already carried excuses only a write that leaves the mail accounts alone: adding a second mailbox
+    /// whose credential reaches nothing is refused, naming it.
+    /// </summary>
+    [Fact]
+    public async Task AddMailAccountAsync_AnUnusableMailboxBesideOneAlreadyUnusable_IsRefusedNamingTheNewOne()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -802,7 +829,7 @@ public sealed class UserRecordAdministrationTests
 
         // Assert
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
-        Assert.Contains("MailAccounts:1", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        Assert.Contains(outcome.Messages, message => message.Contains("MailAccounts:1", StringComparison.Ordinal));
         await harness.Store.DidNotReceiveWithAnyArgs()
             .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
     }
