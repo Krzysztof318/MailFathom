@@ -528,7 +528,8 @@ Every write answers `mailErasureDeferred`, which is `true` only for an erasure t
 held as many erasure passes as it accepts: the folders are gone, and their mail stays stored and out of every listing
 until the account's next erasure queues a pass, which erases the mail of every folder the account has erased.
 
-**A name** is 1 to 255 characters after trimming, carries no control character and no `/`, is unique among its siblings
+**A name** is 1 to 255 characters after trimming, carries no control character, no format character such as a
+zero-width space or a bidirectional override, and no `/`, is unique among its siblings
 without regard to case, and is not `INBOX` at the top of the hierarchy. A hierarchy is at most 16 levels deep and an
 account holds at most 1000 live folders.
 
