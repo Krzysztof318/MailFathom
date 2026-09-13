@@ -70,7 +70,7 @@ internal static class SetUserOrganizationCommand
         (null, false) => throw new CliFailure(
             "The invocation names no organization. Pass '--organization' to move the user into one, or '--none' to take "
             + "them out of every organization."),
-        _ => new UserOrganizationRequest(organization),
+        _ => new UserOrganizationRequest(organization, none),
     };
 
     private static async Task<int> RunAsync(

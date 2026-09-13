@@ -141,12 +141,12 @@ public sealed class OrganizationAdministration
         Guid? organizationId,
         CancellationToken cancellationToken)
     {
+        this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
+
         if (!user.IsSpecified)
         {
             throw new ArgumentException("A user is moved between organizations by name.", nameof(user));
         }
-
-        this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
 
         return this.organizations.SetUserOrganizationAsync(user, organizationId, cancellationToken);
     }

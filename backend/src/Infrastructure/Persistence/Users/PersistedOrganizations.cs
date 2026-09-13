@@ -140,43 +140,42 @@ internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IO
 
     /// <inheritdoc />
     /// <remarks>
-    /// The statement deletes only an organization nobody belongs to, and the restricting foreign key refuses it too when a
-    /// member joined between the check and the delete; either way the count read afterwards is what the refusal names.
+    /// The organization row is locked before its members are counted, and the count and the delete commit together. A
+    /// move into it checks the restricting foreign key, which waits on that lock, and a move out that committed first is
+    /// already seen by the count — so the number a refusal names is the number that refused it, and a delete that goes
+    /// ahead leaves a concurrent move to meet a missing organization rather than a dangling member.
     /// </remarks>
     public async Task<OrganizationWriteResult> DeleteAsync(Guid organizationId, CancellationToken cancellationToken)
     {
-        try
-        {
-            var removed = await dbContext.Organizations
-                .Where(organization => organization.Id == organizationId
-                    && !dbContext.UserAccounts.Any(user => user.OrganizationId == organizationId))
-                .ExecuteDeleteAsync(cancellationToken);
+        await using var removal = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-            if (removed == 1)
-            {
-                return OrganizationWriteResult.Of(OrganizationWriteOutcome.Written);
-            }
-        }
-        catch (PostgresException violation) when (violation.SqlState == PostgresErrorCodes.ForeignKeyViolation)
-        {
-            // A member joined between the existence check and the delete; the count below names them.
-        }
+        await dbContext.Database.ExecuteSqlAsync(
+            $"""SELECT 1 FROM organizations WHERE "Id" = {organizationId} FOR UPDATE""",
+            cancellationToken);
 
-        if (!await dbContext.Organizations
-                .AsNoTracking()
-                .AnyAsync(organization => organization.Id == organizationId, cancellationToken))
+        if (!await dbContext.Organizations.AnyAsync(organization => organization.Id == organizationId, cancellationToken))
         {
             return OrganizationWriteResult.Of(OrganizationWriteOutcome.UnknownOrganization);
         }
 
         var members = await dbContext.UserAccounts
-            .AsNoTracking()
             .CountAsync(user => user.OrganizationId == organizationId, cancellationToken);
 
-        return new OrganizationWriteResult(
-            OrganizationWriteOutcome.StillHasMembers,
-            organizationId,
-            RemainingMembers: members);
+        if (members > 0)
+        {
+            return new OrganizationWriteResult(
+                OrganizationWriteOutcome.StillHasMembers,
+                organizationId,
+                RemainingMembers: members);
+        }
+
+        await dbContext.Organizations
+            .Where(organization => organization.Id == organizationId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await removal.CommitAsync(cancellationToken);
+
+        return OrganizationWriteResult.Of(OrganizationWriteOutcome.Written);
     }
 
     /// <inheritdoc />

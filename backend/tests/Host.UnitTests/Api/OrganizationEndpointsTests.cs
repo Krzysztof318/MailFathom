@@ -35,7 +35,7 @@ public sealed class OrganizationEndpointsTests
         // Act
         var result = await OrganizationEndpoints.SetUserOrganizationAsync(
             SyntheticMailUser.Deployment.Value,
-            new UserOrganizationRequest(OrganizationId),
+            new UserOrganizationRequest(OrganizationId, None: null),
             harness.Administration,
             TestContext.Current.CancellationToken);
 
@@ -43,6 +43,32 @@ public sealed class OrganizationEndpointsTests
         var problem = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status409Conflict, problem.StatusCode);
         Assert.Contains("'jan'", problem.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An empty object and a misspelled field both bind to a request naming nothing, and reading that as a move out would
+    /// change every login the user's passwords are typed as — so a body that states no decision reaches no store.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SetUserOrganizationAsync_ABodyStatingNeitherOrBothDecisions_IsRefusedWithoutMovingAnybody(bool both)
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+        var request = both ? new UserOrganizationRequest(OrganizationId, None: true) : new UserOrganizationRequest(null, None: null);
+
+        // Act
+        var result = await OrganizationEndpoints.SetUserOrganizationAsync(
+            SyntheticMailUser.Deployment.Value,
+            request,
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var problem = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
+        Assert.Empty(harness.Organizations.ReceivedCalls());
     }
 
     [Fact]
@@ -56,7 +82,7 @@ public sealed class OrganizationEndpointsTests
         // Act
         var result = await OrganizationEndpoints.SetUserOrganizationAsync(
             SyntheticMailUser.Deployment.Value,
-            new UserOrganizationRequest(null),
+            new UserOrganizationRequest(null, None: true),
             harness.Administration,
             TestContext.Current.CancellationToken);
 

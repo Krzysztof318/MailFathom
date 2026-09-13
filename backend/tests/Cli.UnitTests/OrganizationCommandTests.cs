@@ -81,9 +81,9 @@ public sealed class OrganizationCommandTests : IDisposable
             line => line.Contains($"{FakeOrganizationDeployment.ProvisionedOrganizationId:D}", StringComparison.Ordinal));
     }
 
-    /// <summary>The deployment reads an explicit null as the decision to belong to no organization, so that is what leaving one sends.</summary>
+    /// <summary>The deployment refuses a body stating no decision, so leaving every organization is sent as one rather than as a missing identifier.</summary>
     [Fact]
-    public async Task SetOrganization_None_SendsANullOrganization()
+    public async Task SetOrganization_None_SendsTheDecisionToBelongToNone()
     {
         // Arrange
         using var deployment = FakeOrganizationDeployment.Holding([User]);
@@ -98,6 +98,7 @@ public sealed class OrganizationCommandTests : IDisposable
         using var body = JsonDocument.Parse(move.ContentAsUtf8String());
 
         Assert.Equal(JsonValueKind.Null, body.RootElement.GetProperty("organizationId").ValueKind);
+        Assert.True(body.RootElement.GetProperty("none").GetBoolean());
     }
 
     /// <summary>An organization named beside the decision to belong to none contradicts itself, so it is answered rather than resolved to either.</summary>

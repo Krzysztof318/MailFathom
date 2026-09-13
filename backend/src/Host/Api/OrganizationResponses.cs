@@ -20,8 +20,14 @@ internal sealed record OrganizationDisplayNameRequest(string? DisplayName);
 internal sealed record OrganizationShortNameRequest(string? ShortName);
 
 /// <summary>What moving a user between organizations carries.</summary>
-/// <param name="OrganizationId">The organization to move the user into, or <see langword="null" /> to leave them in none.</param>
-internal sealed record UserOrganizationRequest(Guid? OrganizationId);
+/// <param name="OrganizationId">The organization to move the user into.</param>
+/// <param name="None"><see langword="true" /> to take the user out of every organization.</param>
+/// <remarks>
+/// Leaving every organization is stated rather than inferred from an absent identifier, so a body that carries no
+/// decision — an empty object, or a misspelled field the serializer binds to nothing — is refused rather than read as a
+/// move out, which would change every login the user's passwords are typed as.
+/// </remarks>
+internal sealed record UserOrganizationRequest(Guid? OrganizationId, bool? None);
 
 /// <summary>One organization as a listing publishes it.</summary>
 /// <param name="Id">The identifier every act on it names.</param>

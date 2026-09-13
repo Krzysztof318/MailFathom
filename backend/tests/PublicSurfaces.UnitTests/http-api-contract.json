@@ -8431,6 +8431,12 @@
       },
       "UserOrganizationRequest": {
         "properties": {
+          "none": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
           "organizationId": {
             "format": "uuid",
             "type": [
@@ -8440,7 +8446,8 @@
           }
         },
         "required": [
-          "organizationId"
+          "organizationId",
+          "none"
         ],
         "type": "object"
       },

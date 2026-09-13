@@ -222,19 +222,30 @@ internal static class OrganizationEndpoints
             return Refused("The request named no user.");
         }
 
-        if (request is null)
+        var leavesEveryOrganization = request?.None == true;
+
+        if (request?.OrganizationId is null && !leavesEveryOrganization)
         {
             return Refused("The request named neither an organization nor that the user should belong to none.");
         }
 
-        if (request.OrganizationId == Guid.Empty)
+        if (request?.OrganizationId is { } named && leavesEveryOrganization)
+        {
+            return Refused(
+                $"The request both named organization '{named}' and said the user should belong to none. Send one of "
+                + "the two.");
+        }
+
+        if (request?.OrganizationId == Guid.Empty)
         {
             return Refused("An organization is named by the identifier this deployment recorded it under.");
         }
 
+        var target = leavesEveryOrganization ? null : request?.OrganizationId;
+
         var result = await organizations.SetUserOrganizationAsync(
             MailUserId.Create(userId),
-            request.OrganizationId,
+            target,
             cancellationToken);
 
         return result.Outcome switch
@@ -246,7 +257,7 @@ internal static class OrganizationEndpoints
                 Detail = "This deployment holds no such user.",
             }),
             OrganizationWriteOutcome.UnknownOrganization => Refused(
-                $"This deployment holds no organization '{request.OrganizationId}'. List the organizations to read the "
+                $"This deployment holds no organization '{target}'. List the organizations to read the "
                 + "identifiers it does hold."),
             _ => TypedResults.Problem(
                 result.CollidingUsername is { } username

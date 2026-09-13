@@ -31,7 +31,9 @@ internal sealed record OrganizationShortNameRequest(
     [property: JsonPropertyName("shortName")] string ShortName);
 
 /// <summary>The organization one user belongs to from now on.</summary>
-/// <param name="OrganizationId">The organization, or <see langword="null" /> to leave the user in none.</param>
-/// <remarks>The null is written rather than omitted: the deployment reads an absent body as a request that named nothing, and an explicit null as the decision to belong to no organization.</remarks>
+/// <param name="OrganizationId">The organization to move the user into, or <see langword="null" /> when <paramref name="None" /> says they belong to none.</param>
+/// <param name="None">Whether the user is taken out of every organization.</param>
+/// <remarks>Leaving every organization is sent as a stated decision rather than as a missing identifier, because the deployment refuses a body that states neither.</remarks>
 internal sealed record UserOrganizationRequest(
-    [property: JsonPropertyName("organizationId")] Guid? OrganizationId);
+    [property: JsonPropertyName("organizationId")] Guid? OrganizationId,
+    [property: JsonPropertyName("none")] bool None);

@@ -48,6 +48,8 @@ public sealed class PersistedOrganizationsTests
         Assert.Contains("EXISTS", sql, StringComparison.Ordinal);
         Assert.Contains("\"UserId\" <> ", sql, StringComparison.Ordinal);
         Assert.Contains("\"Lookup\" = ", sql, StringComparison.Ordinal);
+        Assert.Matches(@"\w+\.""OrganizationId"" = @\w+", sql);
+        Assert.DoesNotMatch(@"\w+\.""OrganizationId"" = \w+\.""OrganizationId""", sql);
     }
 
     private static MailFathomDbContext DesignTimeContext() => new(

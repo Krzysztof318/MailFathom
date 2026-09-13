@@ -205,7 +205,7 @@ public sealed class UserPasswordAuthenticatorTests
         Assert.Equal(0, harness.PasswordHasher.VerificationCount);
 
         await harness.Credentials.DidNotReceiveWithAnyArgs()
-            .FindAsync(default, default, TestContext.Current.CancellationToken);
+            .FindPasswordAsync(default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>A name no username can be folded from is refused before any capacity is spent and before any hash is computed.</summary>
