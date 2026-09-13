@@ -35,6 +35,9 @@ export default defineConfig({
     ...(desktopDevelopmentPort === undefined
         ? {}
         : { server: { port: Number(desktopDevelopmentPort), strictPort: true } }),
+    // Relative, because the one bundle is loaded from two places: a deployment serves it beneath `/app/`, and the
+    // desktop shell loads it from the root of its own scheme. An absolute base would be right for exactly one of them.
+    base: './',
     plugins: [react(), tailwindcss()],
     define: {
         __MAILFATHOM_VERSION__: JSON.stringify(declaredVersion),

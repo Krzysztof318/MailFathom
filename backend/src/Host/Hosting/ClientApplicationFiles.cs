@@ -67,7 +67,9 @@ internal static class ClientApplicationFiles
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
-    /// The entry document answers the root of those listeners and every other file answers its own path. There is no
+    /// Everything is served beneath <see cref="ClientApplicationOptions.RequestPath" />: the entry document answers
+    /// that path, with the bare path redirected to its trailing-slash form so the bundle's relative references resolve,
+    /// and every other file answers its own path beneath it. There is no
     /// fallback mapping an unmatched path onto the entry document: the head navigates inside one document rather than
     /// by address, so a fallback would only turn a mistyped route on a shared socket into a page that loads and reports
     /// nothing, and on a socket shared with the MCP surface it would answer for that surface's own unmatched paths.
@@ -92,7 +94,7 @@ internal static class ClientApplicationFiles
             contentTypes.Mappings[extension] = contentType;
         }
 
-        var defaultDocuments = new DefaultFilesOptions();
+        var defaultDocuments = new DefaultFilesOptions { RequestPath = ClientApplicationOptions.RequestPath };
 
         defaultDocuments.DefaultFileNames.Clear();
         defaultDocuments.DefaultFileNames.Add(ClientApplicationOptions.EntryDocument);
@@ -101,6 +103,10 @@ internal static class ClientApplicationFiles
             context => clientListenerPorts.Contains(context.Connection.LocalPort),
             clientListener => clientListener
                 .UseDefaultFiles(defaultDocuments)
-                .UseStaticFiles(new StaticFileOptions { ContentTypeProvider = contentTypes }));
+                .UseStaticFiles(new StaticFileOptions
+                {
+                    RequestPath = ClientApplicationOptions.RequestPath,
+                    ContentTypeProvider = contentTypes,
+                }));
     }
 }

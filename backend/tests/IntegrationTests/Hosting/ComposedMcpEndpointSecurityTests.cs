@@ -302,7 +302,7 @@ public sealed class ComposedMcpEndpointSecurityTests
         using var mcpSocket = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
         using var administrativeSocket = await this.orchestration.OpenAdminEndpointClientAsync(
             TestContext.Current.CancellationToken);
-        var forged = new Uri("/attachments/AQIDBAUGBwgJCgsMDQ4PEA.ERITFBUWFxgZGhscHR4fIA", UriKind.Relative);
+        var forged = new Uri("/mcp/attachments/AQIDBAUGBwgJCgsMDQ4PEA.ERITFBUWFxgZGhscHR4fIA", UriKind.Relative);
 
         // Act
         using var onTheMcpSocket = await mcpSocket.GetAsync(forged, TestContext.Current.CancellationToken);

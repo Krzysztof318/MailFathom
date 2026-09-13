@@ -272,7 +272,7 @@ spec:
                 name: mailfathom
                 port:
                   number: 8080
-          - path: /
+          - path: /app
             pathType: Prefix
             backend:
               service:

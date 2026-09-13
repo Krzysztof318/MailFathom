@@ -153,7 +153,7 @@ public sealed class ServiceDefaultsTelemetryRedactionTests
     public void RedactAttachmentCapability_AttachmentDownload_ReplacesTheRecordedPathWithItsRouteTemplate()
     {
         // Arrange
-        using var activity = new Activity("GET /attachments/{capability}");
+        using var activity = new Activity("GET /mcp/attachments/{capability}");
         activity.SetTag("url.path", $"{EmailAttachmentDownloadEndpoint.RoutePrefix}/AQIDBAUGBwgJ.CgsMDQ4PEBES");
         var request = new DefaultHttpContext().Request;
         request.Path = $"{EmailAttachmentDownloadEndpoint.RoutePrefix}/AQIDBAUGBwgJ.CgsMDQ4PEBES";
@@ -170,7 +170,7 @@ public sealed class ServiceDefaultsTelemetryRedactionTests
     [Theory]
     [InlineData("/mcp")]
     [InlineData("/api/admin/embeddings/profiles")]
-    [InlineData("/attachmentsomething")]
+    [InlineData("/mcp/attachmentsomething")]
     public void RedactAttachmentCapability_AnyOtherRoute_LeavesTheRecordedPathAlone(string path)
     {
         // Arrange

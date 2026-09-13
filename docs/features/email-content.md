@@ -208,7 +208,7 @@ same rules; what differs is only what admitted the caller, and each admits the o
 
 ### What a download link is, and what bounds it
 
-A link is `https://<declared address>/attachments/<capability>`, where the capability is one opaque value carrying a
+A link is `https://<declared address>/mcp/attachments/<capability>`, where the capability is one opaque value carrying a
 format marker, the key it was signed with, the email, the attachment's position in the message's walk order, the expiry
 instant, and 128 bits of cryptographically secure randomness, followed by an HMAC-SHA256 tag over all of it. The tag is
 compared in constant time; the randomness is what makes two links for one file unrelated values rather than a function
@@ -240,7 +240,7 @@ prefetch would each spend it. The window is the control, not the count.
 
 ### Redeeming a link
 
-`GET /attachments/<capability>` is served on the MCP endpoint's own listeners and **requires no credential**. The
+`GET /mcp/attachments/<capability>` is served on the MCP endpoint's own listeners and **requires no credential**. The
 signature is the whole of the access control, deliberately: a link exists to be handed to whatever actually fetches
 files — a browser, a downloader, a client's HTTP stack — and none of those can attach an MCP credential, so requiring
 one would make the capability unusable by its only callers. What stands beside the signature is the ten-minute window,

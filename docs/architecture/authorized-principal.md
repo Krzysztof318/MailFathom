@@ -82,7 +82,7 @@ refuses work reached under no principal exactly as `RequireUser` does, because t
 admitted the work at all. `ContactBookOwnership` is the only reader, and [Contacts § A book belongs to one
 user](../features/contacts.md#a-book-belongs-to-one-user) is where what it decides is described.
 
-The signed capability is what `GET /attachments/{capability}` runs under. That route authenticates nobody by design: the
+The signed capability is what `GET /mcp/attachments/{capability}` runs under. That route authenticates nobody by design: the
 URL carries a ticket verified against the deployment's key ring, and what it names is one attachment of one email rather
 than a surface. So the capability *is* the authorization, already bounded to a single object and a lifetime, and the
 entrypoint behind that route admits that kind and asks for no permission beside it. It is a principal kind rather than

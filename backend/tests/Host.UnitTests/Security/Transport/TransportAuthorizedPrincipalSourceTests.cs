@@ -223,7 +223,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     {
         // Arrange
         var source = SourceOver(RequestBy(AuthenticatedCallerHolding(MailFathomPermission.MailRead)));
-        var capability = AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/attachments/an-object/0");
+        var capability = AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/mcp/attachments/an-object/0");
 
         // Act
         source.Assume(capability);

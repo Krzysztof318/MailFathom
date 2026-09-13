@@ -41,7 +41,7 @@ const credential = {
 
 /** Signs in with the credential the run provisioned, and waits for the client to have drawn its spaces. */
 async function signIn(page: Page): Promise<void> {
-    await page.goto('/');
+    await page.goto('/app/');
 
     // The page is served by the deployment it calls, so it asks for no address — the same claim the pull-request suite
     // makes about the web head, made here against a service rather than against a preview server.
