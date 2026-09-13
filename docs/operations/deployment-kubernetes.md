@@ -463,6 +463,11 @@ replica minted and honours its revocation the moment it is written;
 is [the backplane below](#signals-between-replicas), which is the one thing above one replica the chart refuses to
 install without.
 
+**A configuration change needs nothing either.** A change committed through `mfctl` — a persisted setting, or a user
+recorded, changed, or erased — reaches every replica within thirty seconds without a restart, and at once where the
+backplane is configured; [what reaches every replica](configuration-sources.md#what-reaches-every-replica) states the
+bound and what still needs one.
+
 ### What your load balancer owes the client's connection
 
 The signal channel is a WebSocket and it never negotiates a fallback, so whatever routes traffic to these pods owes it

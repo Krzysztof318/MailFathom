@@ -2584,8 +2584,10 @@ falls back to its five-minute refresh either way, but nothing an operator reads 
 **A RESP endpoint closes that gap, and it is optional.** Writing
 [`SignalBackplane`](configuration-endpoints.md#signalbackplane) makes every replica publish each statement to that
 endpoint and subscribe to what the others publish, so a signal raised anywhere reaches a connection held anywhere. A
-deployment running one replica writes nothing and loses nothing. A deployment serving no client surface connects to
-nothing whatever it wrote, because the backplane is registered inside the client surface's own composition.
+deployment running one replica writes nothing and loses nothing. A deployment serving no client surface fans out no
+signal whatever it wrote, because the hub's use of the backplane is registered inside the client surface's own
+composition; it still connects, to hear
+[a committed configuration change](configuration-sources.md#what-reaches-every-replica) announced.
 
 **The contract is the protocol, not a product.** MailFathom reaches the endpoint through StackExchange.Redis and asks
 it for `PUBLISH`, `SUBSCRIBE`, and `PSUBSCRIBE` and nothing else — no key is written, no key is read, and no command

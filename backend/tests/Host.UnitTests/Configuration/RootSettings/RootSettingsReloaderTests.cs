@@ -188,6 +188,48 @@ public sealed class RootSettingsReloaderTests
                 && message.Contains("version 3", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The version already in force is what every convergence between two changes reads, so it publishes nothing and
+    /// reports nothing: a line per replica per interval would bury the lines that matter.
+    /// </summary>
+    [Fact]
+    public async Task ReloadAsync_CandidateAtTheVersionInForce_PublishesNothingAndReportsNothing()
+    {
+        // Arrange
+        var provider = LoadedProvider();
+        var reader = ReaderReturning(new RootSettingsDocument("""{ "Layered": { "Setting": "reread" } }""", Version: 3));
+        var logger = new RecordingLogger<RootSettingsReloader>();
+
+        // Act
+        var published = await new RootSettingsReloader(provider, reader, logger).ReloadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(published);
+        provider.TryGet("Layered:Setting", out var effective);
+        Assert.Equal("inForce", effective);
+        Assert.Empty(logger.Messages);
+    }
+
+    /// <summary>A document rejected at one version is reported once, rather than again on every interval the same row is read.</summary>
+    [Fact]
+    public async Task ReloadAsync_TheSameRejectedVersionReadAgain_ReportsItOnce()
+    {
+        // Arrange
+        var provider = LoadedProvider();
+        var reader = ReaderReturning(new RootSettingsDocument("\"not settings\"", Version: 9));
+        var logger = new RecordingLogger<RootSettingsReloader>();
+        var reloader = new RootSettingsReloader(provider, reader, logger);
+
+        // Act
+        await reloader.ReloadAsync(TestContext.Current.CancellationToken);
+        var publishedOnTheSecondReading = await reloader.ReloadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(publishedOnTheSecondReading);
+        Assert.Equal(3, provider.Version);
+        Assert.Single(logger.Messages, message => message.Contains("version 9", StringComparison.Ordinal));
+    }
+
     /// <summary>Composes an object nested to the given depth, which PostgreSQL accepts and the JSON reader stops at.</summary>
     private static string NestedDocument(int depth) =>
         string.Concat(Enumerable.Repeat("""{ "Nested": """, depth))

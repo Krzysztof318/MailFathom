@@ -1,6 +1,6 @@
 # Configuration sources
 
-<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Users/**, backend/src/Cli/Commands/Configuration/**, backend/src/Cli/Editing/**, backend/src/Host/Hosting/Startup/ServedMailUsersStartupGate.cs, backend/src/Application/Access/DeploymentMailUserUnresolvedException.cs, backend/src/Application/Access/IMailUserLanguages.cs, backend/src/Domain/Access/MailUserLanguage.cs -->
+<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Users/**, backend/src/Cli/Commands/Configuration/**, backend/src/Cli/Editing/**, backend/src/Host/Hosting/Startup/ServedMailUsersStartupGate.cs, backend/src/Host/Hosting/Workers/ConfigurationConvergenceWorker.cs, backend/src/Host/Signals/ConfigurationChangeAnnouncements.cs, backend/src/Application/Access/DeploymentMailUserUnresolvedException.cs, backend/src/Application/Access/IMailUserLanguages.cs, backend/src/Domain/Access/MailUserLanguage.cs -->
 
 MailFathom reads its settings through the ordinary .NET configuration pipeline, plus two additions. A deployment may name a directory or a file of JSON configuration that it provisioned outside the application's own content root, which is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see. And the deployment's own persisted settings — one document in PostgreSQL, composed at startup like every other source — are layered in above those files, so a setting the deployment has persisted binds and validates exactly as one that came from a file. When an edit to that document takes effect is [its own section](#the-persisted-layer) below.
 
@@ -67,7 +67,7 @@ An existing but empty directory is permitted and contributes nothing. A ConfigMa
 
 **One read, not one query per setting.** The row is loaded as a single document snapshot, so reading a configuration property costs nothing at the database. That one statement is bounded by `Persistence:CommandTimeoutSeconds`, the same bound every other database command carries, because it runs before any endpoint is open and a server that accepts the connection and then answers nothing would otherwise hold the process at that line indefinitely with nothing able to report why.
 
-**The document is read at startup, and a row edited behind MailFathom's back takes effect at the next start.** Nothing watches `settings_root` and nothing polls it, so a row edited directly in the database — with `psql`, or by anything other than MailFathom — changes no setting in the running process. Restart the host to compose over it. A change made [through MailFathom](#changing-a-persisted-setting) is the other case and needs no restart: the process that committed it republishes the layer itself.
+**The document is read at startup, and every replica compares it with the row every thirty seconds.** A change made [through MailFathom](#changing-a-persisted-setting) needs no restart: the replica that committed it republishes the layer before the write answers, and every other replica republishes it within that interval, as [what reaches every replica](#what-reaches-every-replica) states. The comparison reads the row's version, so a row edited directly in the database — with `psql`, or by anything other than MailFathom — is picked up the same way only when the edit also raises `Version`; an edit that leaves it where it was changes no setting until the next start.
 
 ### What it may not carry
 
@@ -92,7 +92,7 @@ One entry exists in this release: the top-level `Accounts`, which is the collect
 
 A `settings_root` document carrying `Accounts`, or anything beneath it, is therefore **refused** under error code `12005`, naming the path. It is the same choice the refusal above makes and for the same reason: a row an operator wrote by hand is a mistake, and a mistake composed with the duplicate silently dropped is one they go on believing they fixed.
 
-**A row's document is bound at startup and after each accepted write through MailFathom, for every user the deployment holds.** Each row holds the mail accounts and the user-level settings that are one person's own, and it is the only place either is stated: no configuration source reaches a user, so no row is left unread and none is superseded.
+**A row's document is bound at startup and after each accepted write through MailFathom, for every user the deployment holds, on every replica.** Each row holds the mail accounts and the user-level settings that are one person's own, and it is the only place either is stated: no configuration source reaches a user, so no row is left unread and none is superseded.
 
 Binding is strict, so a property nothing binds is a refusal rather than a value dropped, and the record is then judged by every rule a mail account is declared under. The account identifier and the published name are unique *within the user*, which is the rule the document binder applies — and nothing narrows it across users, so two people may each name a mailbox `work`. What that still costs while an account's settings are resolved by the identifier alone is stated in [the users a deployment serves](#the-users-a-deployment-serves). The document may carry no secret material: a mailbox password is a `<scheme>:<target>` reference naming where the material is kept, exactly as `settings_root` requires, and a value carrying the material itself is refused. Runtime-created material is sealed in `stored_secrets` and the document carries only its `database:` reference. None of it is a configuration layer — the record shadows no deployment setting, and a value that would need to is a deployment setting written into the wrong document.
 
@@ -264,7 +264,7 @@ Synchronization being switched on changes nothing about that. A deployment whose
 Mail synchronization is switched on and no user this deployment serves records a mail account, so there is nothing to synchronize. Record one with 'mfctl user account add'.
 ```
 
-**A user recorded at runtime is served without a restart**, mailboxes and all: a committed record is published to the running roster by the write that committed it, so the next synchronization run picks the account up and every surface answers for that user from that moment.
+**A user recorded at runtime is served without a restart**, mailboxes and all: a committed record is published to the running roster by the write that committed it, so the next synchronization run picks the account up and every surface that replica serves answers for that user from that moment. Every other replica serves them within thirty seconds, or as soon as a [signal backplane](#what-reaches-every-replica) carries the announcement.
 
 **A deployment whose file still carries `MailSynchronization:Accounts` does not start.** Nothing imports what the section declared, so a start that quietly ignored it would leave an operator believing mail was being read that nothing was reading. The refusal names the section and the two commands that replace it:
 
@@ -361,7 +361,7 @@ whether the accounts map it, exactly as with the deployment's own key.
 
 ## Changing a persisted setting
 
-**`mfctl config` is the surface that drives the writer, and it is the only one.** No MCP tool changes a setting, and no agent can: the commands reach the administrative endpoint under a permission of their own, and [the commands](#reading-and-changing-settings-from-mfctl) below is what an operator runs. Editing the `settings_root` row by hand still works and still needs a restart, for the reason [the persisted layer](#the-persisted-layer) gives; what the commands add is that the change is proved before it commits and takes effect without one.
+**`mfctl config` is the surface that drives the writer, and it is the only one.** No MCP tool changes a setting, and no agent can: the commands reach the administrative endpoint under a permission of their own, and [the commands](#reading-and-changing-settings-from-mfctl) below is what an operator runs. Editing the `settings_root` row by hand still works, and is picked up without a restart only where the edit raises the row's version, for the reason [the persisted layer](#the-persisted-layer) gives; what the commands add is that the change is proved before it commits.
 
 **A setting is changed through one writer, and that writer proves the configuration before it commits.** Nothing in MailFathom assigns a configuration value in place: `configuration["key"] = value` mutates one process's copy, takes effect having been proved by nothing, and is gone at the next reload. What a change is instead is a sequence, and each step exists to keep the next from being reached with something it could not undo.
 
@@ -371,6 +371,8 @@ whether the accounts map it, exactly as with the deployment's own key.
 4. **The binding and the validators a start runs are run against it**, and they are literally the same ones: the same sections, the same strict binding, the same data annotations, the same custom validators. That includes the rules a start takes *before* its container exists — which sockets would be opened, whether any surface is served at all, and whether every declared mail rule compiles — because those refuse a start exactly as a validator does. A section deliberately outside the startup gate is outside this one too.
 5. **Only then does it commit**, as one statement guarded by the version the change was authored over.
 6. **Only after the commit is durable does the reload token rise.** Every options snapshot that reloads then observes one coherent version, and a version a failed commit was about to take back is never published. Two writes finish in whatever order their commits and their republishes interleave, which is not the order they committed in, so a republish carrying a version the process has already passed publishes nothing rather than stepping it back to the document it read.
+
+Those six steps run in the replica that received the write. Every other replica takes the committed version through the same republish, within the bound [what reaches every replica](#what-reaches-every-replica) states.
 
 **Two administrators editing at once: the second write is refused rather than applied.** A change states the version it was authored over, and a change composed over a version the document has already passed is refused under `12008`, naming the version now in force. Read the configuration as it stands and decide again against it — merging the two silently is the one outcome that would lose a change nobody was told about.
 
@@ -448,7 +450,7 @@ A `0` on a deployment that mounts a ConfigMap means the mount is empty or did no
 
 ## Reload
 
-This section is about the files. The persisted layer reloads on one event and no other: [a write MailFathom committed](#changing-a-persisted-setting) republishes it, and nothing watches or polls the row, so a row edited behind MailFathom's back takes effect at the next start as [the persisted layer](#the-persisted-layer) above states.
+Most of this section is about the files. The persisted layer and the users' records reload on a committed change instead, and [what reaches every replica](#what-reaches-every-replica) at its end says how that change arrives in a replica that did not commit it.
 
 What reloads is the **content of the files that existed when the host started**. Each of those gets a watched provider, so a setting group classified reloadable in [ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md) picks up an edited ConfigMap key without a restart, through the same validated-snapshot path every other source uses. A candidate snapshot that fails validation is rejected and the last known good one stays active.
 
@@ -460,6 +462,25 @@ Two caveats decide whether even a content change actually arrives, and neither i
 - **Change detection on a mounted volume needs polling.** `FileSystemWatcher` does not reliably observe the symbolic-link swap that an atomic update performs. Setting `DOTNET_USE_POLLING_FILE_WATCHER=1` makes the file provider poll every four seconds instead; the interval is not configurable. Microsoft documents this for container and network-share mounts generally, not only for Kubernetes.
 
 Two further properties belong to Kubernetes rather than to the watcher: an update reaches the container after the kubelet's sync period plus its cache TTL, up to about a minute by default, and an `immutable: true` ConfigMap never updates at all.
+
+### What reaches every replica
+
+**A change committed through MailFathom reaches every replica within thirty seconds, without a restart.** That holds for both stores a program writes: the deployment's persisted document in `settings_root`, and each user's record in `settings_accounts` — recording a user, changing their record, and erasing them. The replica that committed the change republishes it before the write answers. Every other replica compares the version it bound with the version each row holds every thirty seconds, and republishes a newer one through the same path a write takes, so it is bound, validated, and refused by version exactly as it was on the replica that committed it. The interval is fixed rather than a setting, because it is the bound this page promises.
+
+**Where a [signal backplane](configuration-endpoints.md#signalbackplane) is declared, a change arrives sooner.** The committing replica announces it over the backplane, and every replica listening compares the versions straight away rather than on its next interval. The announcement carries nothing — no setting, no user, no version — and losing it costs only the wait: a replica that missed one, and every replica of a deployment that declares no backplane, still converges on the interval. [ADR 0032](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md#amendment-2-a-configuration-change-is-announced-over-the-backplane) records that exception to what the backplane carries.
+
+**A replica that cannot take a change reports it exactly as the replica that committed it would, and keeps what it bound.** A persisted document that does not bind or validate there is [rejected by version](#startup-and-a-reload-that-fails) with the same record, and the version it last bound goes on serving. A user's record that does not bind is logged at `Error`, naming the user's label and the version, and that user goes on being served from the record bound before it. Neither is reported again on every interval while the row stays at that version. A deployment holding more users than one deployment may serve is logged at `Error` on every interval, and while it does, the replica takes no user's change at all — no newer record and no erasure — until the count is back within that bound, because a roster read short would drop whoever the reading left out. A reading that fails outright — a database out of reach — is logged at `Warning` and made again on the next interval:
+
+```
+This replica could not compare what it serves against the persisted configuration and the users' records, and reads them again in 00:00:30; what it bound stays in force.
+```
+
+**What still needs a restart:**
+
+- **A row edited in the database without raising its version.** The comparison reads `Version`, so an edit made behind MailFathom that leaves it where it was is never seen by a running replica.
+- **A setting classified restart-required**, and every setting [the persisted layer may not carry](#what-it-may-not-carry). A committed change republishes the layer, and what binds only at startup still binds only at startup.
+- **Which keys a ConfigMap holds**, as the section above states.
+- **A new label, on any replica.** Relabelling a user moves no record version and republishes nothing, so every replica — the one that relabelled them included — serves the label it last bound that user's record under until the record next changes or the replica restarts. The label is what an administrator selects a user by, and nothing a user is served changes with it.
 
 ## Kubernetes
 

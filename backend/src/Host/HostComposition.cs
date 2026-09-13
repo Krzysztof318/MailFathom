@@ -1174,6 +1174,17 @@ internal static class HostComposition
         // admit one for until this has run.
         builder.Services.AddHostedService<ServedMailUsersStartupGate>();
 
+        // Behind the gate above, because what it keeps current is the roster that gate settled, and what it reads is
+        // settings and records rather than mail, so nothing behind it waits on it. The persisted layer's reloader is
+        // asked for rather than required: a host composed without that layer has only a roster to keep current.
+        builder.Services.AddSingleton<ServedMailUsersConvergence>();
+        builder.Services.AddHostedService(provider => new ConfigurationConvergenceWorker(
+            provider.GetRequiredService<ConfigurationChangeAnnouncements>(),
+            provider.GetRequiredService<ServedMailUsersConvergence>(),
+            provider.GetService<RootSettingsReloader>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<ILogger<ConfigurationConvergenceWorker>>()));
+
         // Ahead of the workers for a different reason from the gate above, because the spam scanner does not fail
         // closed: a deployment whose daemon is absent would classify every message from its headers alone and look
         // perfectly healthy doing it. Proving it here is what keeps a switched-on scanner from being a line in a
@@ -1285,10 +1296,12 @@ internal static class HostComposition
         // Read beside the client surface because it is that surface's own second server, and registered whether or not
         // the surface is served: the startup gate that proves every declared credential resolves reads it from the
         // container, and a deployment that declared a backplane it never connects to is told about a broken reference
-        // rather than left to discover it on the day it enables the client. Whether anything is registered for it is
-        // AddClientSignalChannel's, which runs only where that surface is served.
+        // rather than left to discover it on the day it enables the client. The connection is registered wherever the
+        // section is declared, because a committed configuration change is announced over it whichever surfaces are
+        // served; the hub's use of it is AddClientSignalChannel's, which runs only where that surface is served.
         var signalBackplaneSettings = SignalBackplaneOptions.ReadFrom(builder.Configuration);
         builder.Services.AddSingleton(Options.Create(signalBackplaneSettings));
+        AddConfigurationChangeAnnouncements(builder, signalBackplaneSettings);
 
         // Read once, like the three sections above and for the same reason: it decides which sockets are opened and which
         // routes exist, both of which are settled while the application is being built. Bound strictly, so a misspelled key
@@ -1572,11 +1585,12 @@ internal static class HostComposition
     /// is listening.
     /// </para>
     /// <para>
-    /// <b>The backplane is registered here or nowhere</b>, which is what makes a deployment answering an agent alone
-    /// connect to no RESP endpoint however much is configured: the signals it would carry are this surface's, so a
-    /// process that serves none has nothing to fan out. Where the section is absent nothing is registered either, and a
-    /// deployment running one replica keeps exactly the behaviour it had before the section existed — one process, one
-    /// set of connections, and every signal delivered in memory.
+    /// <b>The hub's backplane is registered here or nowhere</b>, which is what makes a deployment answering an agent alone
+    /// fan no client signal out however much is configured: the signals it would carry are this surface's, so a process
+    /// that serves none has nothing to fan out. The connection itself is <see cref="AddConfigurationChangeAnnouncements" />'s,
+    /// because the one other thing the endpoint carries is not a client's. Where the section is absent nothing is
+    /// registered either, and a deployment running one replica keeps exactly the behaviour it had before the section
+    /// existed — one process, one set of connections, and every signal delivered in memory.
     /// </para>
     /// </remarks>
     private static void AddClientSignalChannel(WebApplicationBuilder builder, SignalBackplaneOptions backplaneSettings)
@@ -1590,14 +1604,39 @@ internal static class HostComposition
             return;
         }
 
-        builder.Services.AddSingleton<SignalBackplaneTelemetry>();
-
         // The endpoint is configured through the container rather than through the overload that takes a connection
         // string, because the string is behind a secret reference and resolving one is asynchronous: the factory
         // SignalBackplaneConnection installs runs when a connection is first wanted, which is where an await belongs,
         // and again only after an attempt that threw — so a credential rotated behind an unchanged reference is picked
         // up at the next start rather than at the next attempt.
-        builder.Services.AddSingleton<IConfigureOptions<RedisOptions>, SignalBackplaneConnection>();
+        builder.Services.AddSingleton<IConfigureOptions<RedisOptions>>(
+            static provider => provider.GetRequiredService<SignalBackplaneConnection>());
         signals.AddStackExchangeRedis();
+    }
+
+    /// <summary>Registers how a committed configuration change is announced to the other replicas, over the backplane where one is declared.</summary>
+    /// <remarks>
+    /// Registered whichever surfaces are served, because every replica reads one set of persisted settings and user
+    /// records, and an agent-only deployment of several replicas has as much to converge as one serving a client. The
+    /// announcements open a connection of their own rather than borrowing the hub's, which exists only where a client
+    /// surface is served. Where no backplane is declared the announcements do nothing and every replica converges on
+    /// <see cref="ConfigurationConvergenceWorker.Interval" /> alone.
+    /// </remarks>
+    private static void AddConfigurationChangeAnnouncements(WebApplicationBuilder builder, SignalBackplaneOptions backplaneSettings)
+    {
+        if (!backplaneSettings.IsConfigured)
+        {
+            builder.Services.AddSingleton(static provider => new ConfigurationChangeAnnouncements(
+                connect: null,
+                provider.GetRequiredService<ILogger<ConfigurationChangeAnnouncements>>()));
+
+            return;
+        }
+
+        builder.Services.AddSingleton<SignalBackplaneTelemetry>();
+        builder.Services.AddSingleton<SignalBackplaneConnection>();
+        builder.Services.AddSingleton(static provider => new ConfigurationChangeAnnouncements(
+            async () => (await provider.GetRequiredService<SignalBackplaneConnection>().ConnectAsync(TextWriter.Null)).GetSubscriber(),
+            provider.GetRequiredService<ILogger<ConfigurationChangeAnnouncements>>()));
     }
 }

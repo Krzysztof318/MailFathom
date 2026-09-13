@@ -9,6 +9,7 @@ using MailFathom.Application.StoredFiles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Administration;
+using MailFathom.Host.Signals;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.References;
@@ -54,7 +55,8 @@ internal sealed class UserRecordAdministration(
     UserAccountDocumentBinder binder,
     SecretConfigurationValidator secrets,
     ServedMailUsers servedUsers,
-    IStoredFileStore files)
+    IStoredFileStore files,
+    ConfigurationChangeAnnouncements announcements)
 {
     /// <summary>How many times a portrait link is composed again over a record another write moved underneath it.</summary>
     private const int MaximumRelinkAttempts = 3;
@@ -733,6 +735,7 @@ internal sealed class UserRecordAdministration(
                 unusable);
         }
 
+        UserRecordWriteOutcome? outcome;
         await servedUsers.WaitForRosterPublicationAsync(cancellationToken);
 
         try
@@ -740,25 +743,35 @@ internal sealed class UserRecordAdministration(
             if (await store.CommitAsync(user, candidateJson, inForce.Version, cancellationToken) is { } committed)
             {
                 servedUsers.UserDocumentPublished(user, inForce.DisplayName, bound, committed);
-
-                return UserRecordWriteOutcome.Committed(committed, [.. unusable.Select(DescribeAsAlreadyHeld)]);
+                outcome = UserRecordWriteOutcome.Committed(committed, [.. unusable.Select(DescribeAsAlreadyHeld)]);
             }
-
-            // The record moved while this candidate was being judged, or the user was erased under it. Which of the
-            // two is settled by reading rather than assumed, because the statement distinguishes neither.
-            return await documents.ReadAsync(user, cancellationToken) is { } current
-                ? UserRecordWriteOutcome.Refused(
-                    MailFathomErrorCode.ConfigurationVersionSuperseded,
-                    current.Version,
-                    [
-                        $"The change was composed over user record version {inForce.Version}, and version {current.Version} is in force. Read the record as it now stands and decide again against it.",
-                    ])
-                : null;
+            else
+            {
+                // The record moved while this candidate was being judged, or the user was erased under it. Which of the
+                // two is settled by reading rather than assumed, because the statement distinguishes neither.
+                outcome = await documents.ReadAsync(user, cancellationToken) is { } current
+                    ? UserRecordWriteOutcome.Refused(
+                        MailFathomErrorCode.ConfigurationVersionSuperseded,
+                        current.Version,
+                        [
+                            $"The change was composed over user record version {inForce.Version}, and version {current.Version} is in force. Read the record as it now stands and decide again against it.",
+                        ])
+                    : null;
+            }
         }
         finally
         {
             servedUsers.ReleaseRosterPublication();
         }
+
+        // Announced once the roster is released: nothing on this replica waits for the announcement, and a backplane
+        // slow to answer would otherwise hold every other roster write and the convergence reading behind it.
+        if (outcome is { IsCommitted: true })
+        {
+            await announcements.AnnounceAsync();
+        }
+
+        return outcome;
     }
 
     /// <summary>Reports whether a candidate carries every mail account setting exactly as the record in force holds it.</summary>

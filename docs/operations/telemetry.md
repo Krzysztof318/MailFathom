@@ -1510,6 +1510,12 @@ series: an endpoint this replica cannot dial is dialled again for every signal r
 reports nothing further until a `restored` has been counted — so the value to alert on is a `lost` without its pair
 rather than a rate.
 
+**A replica holds up to two connections to the endpoint, and the counter reports them as one.** One carries client
+signals and exists only where the client surface is served; the other carries the announcement that
+[a configuration change committed](configuration-sources.md#what-reaches-every-replica) and exists wherever a backplane
+is configured. Both report through one state held for the whole replica, so an outage that drops both counts a single
+`lost`, and the first of the two to come back counts the `restored`.
+
 **Every transition is also a log record at `Warning`**, on both sides. The backplane is silent while it works, which is
 what makes losing it worth a level an operator watching a deployment actually sees: nothing else in the process says
 so — the publisher on the raising replica swallows a signal it could not deliver, the client on the other side holds a

@@ -138,6 +138,7 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
 
     /// <summary>States the roster the startup gate established.</summary>
     /// <param name="users">Every user this deployment serves, each composed from their own record.</param>
+    /// <param name="documentVersions">The version each user's record was read at, which a later convergence compares the rows against. A user it names no version for is republished by the first convergence, from the record they are already served from.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="users" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// An empty roster is a state a start admits rather than refuses: a fresh database holds no user, an administrator
@@ -145,7 +146,9 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
     /// recorded. What absence still means is *the gate has not run*, which is why that is a null field
     /// rather than an empty list.
     /// </remarks>
-    internal void Resolved(IReadOnlyList<ServedMailUser> users)
+    internal void Resolved(
+        IReadOnlyList<ServedMailUser> users,
+        IReadOnlyDictionary<MailUserId, long>? documentVersions = null)
     {
         ArgumentNullException.ThrowIfNull(users);
 
@@ -153,9 +156,24 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
         {
             this.resolvedUsers = [.. users];
             this.publishedDocumentVersions.Clear();
+
+            foreach (var (user, version) in documentVersions ?? new Dictionary<MailUserId, long>())
+            {
+                this.publishedDocumentVersions[user] = version;
+            }
         }
 
         this.SignalReload();
+    }
+
+    /// <summary>Gets the version of a user's record this process last published, or nothing when it recorded none.</summary>
+    /// <param name="user">The user asked about.</param>
+    internal long? PublishedVersionOf(MailUserId user)
+    {
+        lock (this.mutex)
+        {
+            return this.publishedDocumentVersions.TryGetValue(user, out var version) ? version : null;
+        }
     }
 
     /// <summary>Publishes one user's committed document as the source new operations read their mail accounts from.</summary>

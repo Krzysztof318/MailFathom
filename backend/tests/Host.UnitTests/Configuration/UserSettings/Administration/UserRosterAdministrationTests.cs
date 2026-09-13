@@ -8,6 +8,8 @@ using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Configuration.UserSettings.Administration;
+using MailFathom.Host.Signals;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
@@ -118,6 +120,72 @@ public sealed class UserRosterAdministrationTests
             1,
             Arg.Any<CancellationToken>());
         Assert.Contains(harness.ServedUsers.Users, user => user.User == outcome.User);
+    }
+
+    /// <summary>
+    /// A recorded user is announced so a replica that did not record them serves them at once, and only once the roster
+    /// is released, so a backplane slow to answer holds no other roster write behind it.
+    /// </summary>
+    [Fact]
+    public async Task ProvisionAsync_ALabelTheDeploymentAccepts_AnnouncesTheChangeOnceTheRosterIsReleased()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
+        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+
+        // Act
+        await harness.Roster.ProvisionAsync("alex", TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([true], heard);
+    }
+
+    /// <summary>A refused provisioning recorded nobody, so no replica is asked to read anything again.</summary>
+    [Fact]
+    public async Task ProvisionAsync_ALabelAnotherUserAlreadyCarries_AnnouncesNothing()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(new MailUserRecord(SyntheticMailUser.Deployment, "alex"));
+        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+
+        // Act
+        await harness.Roster.ProvisionAsync("alex", TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(heard);
+    }
+
+    /// <summary>An erasure is announced so every other replica stops serving the user at once, once the roster is released.</summary>
+    [Fact]
+    public async Task EraseAsync_AUserThisDeploymentHolds_AnnouncesTheChangeOnceTheRosterIsReleased()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminErase);
+        harness.Serving(SyntheticMailUser.Deployment);
+        harness.Erasing(SyntheticMailUser.Deployment);
+        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+
+        // Act
+        await harness.Roster.EraseAsync(SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([true], heard);
+    }
+
+    /// <summary>Erasing a user the deployment does not hold removed nothing, so no replica is asked to read anything again.</summary>
+    [Fact]
+    public async Task EraseAsync_AUserThisDeploymentDoesNotHold_AnnouncesNothing()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminErase);
+        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+
+        // Act
+        await harness.Roster.EraseAsync(SyntheticMailUser.Another, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(heard);
     }
 
     /// <summary>A label is what an administrator selects a user by, so two users carrying one would leave nothing to select on.</summary>
@@ -612,10 +680,16 @@ public sealed class UserRosterAdministrationTests
                 new SeveralUserAdmission(
                     Options.Create(new McpEndpointOptions()),
                     Options.Create(clientEndpoint ?? new ClientEndpointOptions())),
+                new ConfigurationChangeAnnouncements(
+                    () => Task.FromResult(this.Backplane.Connect()),
+                    NullLogger<ConfigurationChangeAnnouncements>.Instance),
                 NullLogger<UserRosterAdministration>.Instance);
         }
 
         internal UserRosterAdministration Roster { get; }
+
+        /// <summary>Gets the backplane a roster change is announced over, which nobody hears until a test listens.</summary>
+        internal InMemoryBackplane Backplane { get; } = new();
 
         internal IMailUserDirectory Directory { get; }
 
