@@ -261,6 +261,27 @@ public sealed class InMemoryMailDraftStoreTests
         Assert.Null(found);
     }
 
+    /// <summary>A filed message replaces the one before it, and the answer names the one replaced so the caller can erase it.</summary>
+    [Fact]
+    public async Task RecordFiledAsync_ADraftFiledTwice_NamesTheMessageTheSecondFilingReplaced()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftStore();
+        var draft = await OpenAsync(store);
+        var first = StoredEmailId.Create(Guid.CreateVersion7(Moment));
+        var second = StoredEmailId.Create(Guid.CreateVersion7(Moment.AddMinutes(1)));
+
+        // Act
+        var replacedByFirst = await store.RecordFiledAsync(Session, draft.Id, first, draft.Revision, TestContext.Current.CancellationToken);
+        var replacedBySecond = await store.RecordFiledAsync(Session, draft.Id, second, draft.Revision, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(replacedByFirst);
+        Assert.Equal(first, replacedBySecond);
+        Assert.Equal(second, store.Peek(draft.Id)!.FiledEmail);
+        Assert.Equal(MailDraftStage.Filed, store.Peek(draft.Id)!.Stage);
+    }
+
     /// <summary>A draft names the send it became, and the mark is written once so a second promotion cannot rename it.</summary>
     [Fact]
     public async Task RecordPromotedAsync_ADraftPromotedTwice_KeepsTheRecordTheFirstPromotionWrote()

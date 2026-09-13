@@ -8,14 +8,18 @@ using System.Text;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Transmission;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Signals;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
 using MailFathom.Domain.Scheduling;
 using MailFathom.Domain.Transport;
 using MailFathom.TestSupport;
@@ -59,6 +63,149 @@ public sealed class MailOutboxDeliveryTests
         Assert.Empty(record.OutstandingRecipients);
         Assert.All(record.Recipients, outcome => Assert.Equal(OutgoingRecipientStatus.Accepted, outcome.Status));
         Assert.False(context.Store.IsLeased(claimed.Record.Id));
+    }
+
+    /// <summary>A message delivered from a held account is filed once into its local sent folder, in the commit that records the delivery.</summary>
+    [Fact]
+    public async Task DeliverAsync_HeldAccountThatFilesSentCopies_FilesOneLocalSentCopyOfTheSend()
+    {
+        // Arrange
+        var held = new HeldLocalMailbox(Account, new FakeTimeProvider(ClaimedAt));
+        held.MapRole(MailFolderSpecialUse.Sent, "sent");
+        var context = new DeliveryContext(localFiler: held.FilerOver);
+        var claimed = await context.ClaimAsync("anna@example.test");
+        context.Transmit = (request, envelope, _) =>
+        {
+            AcceptEveryRecipient(request, envelope);
+
+            return Task.FromResult(new MailTransmission(MailTransmissionOutcome.Accepted, 250));
+        };
+
+        // Act
+        var result = await context.DeliverAsync(claimed, TestContext.Current.CancellationToken);
+
+        // Assert
+        var filed = Assert.Single(held.Stored);
+        var placedIn = held.Folders.Folders.Single(folder => folder.Id == held.Folders.Placements[filed.Email]);
+
+        Assert.Equal(MailOutboxDeliveryOutcome.Sent, result.Outcome);
+        Assert.Equal(claimed.Record.Id, filed.FiledFrom);
+        Assert.Equal(AppendedMailFlags.Seen, filed.Flags);
+        Assert.Equal(MailFolderSpecialUse.Sent, placedIn.Role);
+    }
+
+    /// <summary>A sent copy filed for a held account is announced to its clients in the sent folder once the delivery commits.</summary>
+    [Fact]
+    public async Task DeliverAsync_HeldAccountThatFilesSentCopies_AnnouncesTheSentCopyInTheSentFolder()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider(ClaimedAt);
+        var held = new HeldLocalMailbox(Account, clock);
+        held.MapRole(MailFolderSpecialUse.Sent, "sent");
+        var channel = new RecordingClientSignalChannel();
+        await using var signals = new ClientSignals([channel], clock);
+        held.Publisher = signals;
+        var context = new DeliveryContext(localFiler: held.FilerOver);
+        var claimed = await context.ClaimAsync("anna@example.test");
+        context.Transmit = (request, envelope, _) =>
+        {
+            AcceptEveryRecipient(request, envelope);
+
+            return Task.FromResult(new MailTransmission(MailTransmissionOutcome.Accepted, 250));
+        };
+
+        // Act
+        await context.DeliverAsync(claimed, TestContext.Current.CancellationToken);
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var filed = Assert.Single(held.Stored);
+        var changed = Assert.Single(channel.Published, signal => signal.Kind == ClientSignalKind.MailChanged);
+
+        Assert.Equal(MailFolderAlias.Create("sent"), changed.Folder);
+        Assert.Equal([filed.Email], changed.Emails);
+    }
+
+    /// <summary>A held account that asked for no sent copy gets none, and its delivery is recorded all the same.</summary>
+    [Fact]
+    public async Task DeliverAsync_HeldAccountThatFilesNoSentCopy_FilesNothingLocally()
+    {
+        // Arrange
+        var held = new HeldLocalMailbox(Account, new FakeTimeProvider(ClaimedAt)) { FilesSentCopy = false };
+        held.MapRole(MailFolderSpecialUse.Sent, "sent");
+        var context = new DeliveryContext(localFiler: held.FilerOver);
+        var claimed = await context.ClaimAsync("anna@example.test");
+        context.Transmit = (request, envelope, _) =>
+        {
+            AcceptEveryRecipient(request, envelope);
+
+            return Task.FromResult(new MailTransmission(MailTransmissionOutcome.Accepted, 250));
+        };
+
+        // Act
+        var result = await context.DeliverAsync(claimed, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailOutboxDeliveryOutcome.Sent, result.Outcome);
+        Assert.Empty(held.Stored);
+        Assert.Empty(held.Folders.Placements);
+    }
+
+    /// <summary>A held account with no folder playing the sent role records the copy it owed, and its delivery is recorded all the same.</summary>
+    [Fact]
+    public async Task DeliverAsync_HeldAccountWithNoSentFolder_RecordsTheFilingAsHavingNowhereToGo()
+    {
+        // Arrange
+        var held = new HeldLocalMailbox(Account, new FakeTimeProvider(ClaimedAt));
+        var context = new DeliveryContext(localFiler: held.FilerOver);
+        var claimed = await context.ClaimAsync("anna@example.test");
+        context.Transmit = (request, envelope, _) =>
+        {
+            AcceptEveryRecipient(request, envelope);
+
+            return Task.FromResult(new MailTransmission(MailTransmissionOutcome.Accepted, 250));
+        };
+
+        // Act
+        var result = await context.DeliverAsync(claimed, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailOutboxDeliveryOutcome.Sent, result.Outcome);
+        Assert.Empty(held.Stored);
+        await held.Filings.Received(1).RecordFilingFailureAsync(
+            claimed.Record.Id,
+            MailFathomErrorCode.OutgoingEmailFilingDestinationUnavailable,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A held account whose sent folder's binding is gone by the time the delivery commits records the delivery without the copy, and the filing failure beside it.</summary>
+    [Fact]
+    public async Task DeliverAsync_HeldAccountWhoseSentBindingIsGoneAtTheCommit_RecordsTheDeliveryAndTheFilingFailure()
+    {
+        // Arrange
+        var held = new HeldLocalMailbox(Account, new FakeTimeProvider(ClaimedAt)) { BindingGoneAtFiling = true };
+        held.MapRole(MailFolderSpecialUse.Sent, "sent");
+        var context = new DeliveryContext(localFiler: held.FilerOver);
+        var claimed = await context.ClaimAsync("anna@example.test");
+        context.Transmit = (request, envelope, _) =>
+        {
+            AcceptEveryRecipient(request, envelope);
+
+            return Task.FromResult(new MailTransmission(MailTransmissionOutcome.Accepted, 250));
+        };
+
+        // Act
+        var result = await context.DeliverAsync(claimed, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailOutboxDeliveryOutcome.Sent, result.Outcome);
+        Assert.Equal(OutgoingEmailStage.Sent, context.Store.Read(claimed.Record.Id).Stage);
+        Assert.Empty(held.Folders.Placements);
+        await held.Filings.Received(1).RecordFilingFailureAsync(
+            claimed.Record.Id,
+            MailFathomErrorCode.OutgoingEmailFilingDestinationUnavailable,
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>A permanent refusal ends the send at the server's first answer, with nothing left to attempt.</summary>
@@ -587,7 +734,8 @@ public sealed class MailOutboxDeliveryTests
             MailDeliveryCapabilities? capabilities = null,
             bool storeContent = true,
             string? sender = "me@example.test",
-            TimeSpan? allowedLateness = null)
+            TimeSpan? allowedLateness = null,
+            Func<IEmailContentStore, LocalMailFiler>? localFiler = null)
         {
             this.Store = new InMemoryOutgoingEmailStore(timeProvider: this.clock);
             this.Session = new ScriptedMailDeliverySession(
@@ -619,6 +767,7 @@ public sealed class MailOutboxDeliveryTests
                 contentStore,
                 senderIdentities,
                 new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), this.clock),
+                localFiler?.Invoke(contentStore) ?? LocalMailFilers.HoldingNothing(this.clock),
                 MailOutboxSettings.Create(
                     maxDeliveriesPerPass: 10,
                     TimeSpan.FromMinutes(10),

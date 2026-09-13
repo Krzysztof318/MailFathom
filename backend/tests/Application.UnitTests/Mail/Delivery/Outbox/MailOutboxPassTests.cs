@@ -451,6 +451,7 @@ public sealed class MailOutboxPassTests
                     sessionFactory,
                     new PersistenceConcurrencyOptions(),
                     this.clock),
+                LocalMailFilers.HoldingNothing(this.clock),
                 this.settings,
                 this.clock);
         }

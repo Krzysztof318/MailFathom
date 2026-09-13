@@ -76,4 +76,17 @@ public interface ILocalMailFolderStore
         MailAccountIdentity account,
         int maxEmails,
         CancellationToken cancellationToken);
+
+    /// <summary>Erases one stored message of the account through the cascade a stored message's erasure runs.</summary>
+    /// <param name="session">The transaction the erasure commits in.</param>
+    /// <param name="account">The account the message belongs to.</param>
+    /// <param name="email">The message.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The alias of the folder binding the message was stored under, or <see langword="null" /> where the account holds no such message.</returns>
+    /// <remarks>A message already gone is not an error, because the act that erases it may be replaying one that already did.</remarks>
+    Task<MailFolderAlias?> EraseEmailAsync(
+        IPersistenceSession session,
+        MailAccountIdentity account,
+        StoredEmailId email,
+        CancellationToken cancellationToken);
 }

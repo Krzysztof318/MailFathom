@@ -38,6 +38,13 @@ public sealed class LocalMailFolderArrivals
         this.timeProvider = timeProvider;
     }
 
+    /// <summary>Reports whether MailFathom holds the account's mailbox alone, which is when its arrivals land in local folders.</summary>
+    /// <param name="account">The account.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns><see langword="true" /> when the account is held.</returns>
+    public async Task<bool> HoldsAsync(MailAccountIdentity account, CancellationToken cancellationToken) =>
+        await this.store.ReadAsync(account, cancellationToken) is { Phase: MailAccountCustodyPhase.Held };
+
     /// <summary>Places one stored message, inside the transaction that stored it.</summary>
     /// <param name="session">The transaction that stored the message.</param>
     /// <param name="account">The account the message arrived for.</param>

@@ -239,6 +239,12 @@ public sealed class MailboxSynchronizer
         var collection = this.contactCollection.OpenRun(account, folderRole);
         var arrivalSource = new LocalMailFolderArrivalSource(folder.Alias, folderRole, folder.RemotePath.ToHierarchyLevels()[^1]);
 
+        // A held account files its own sent copy locally, so the copy a provider files of the same send is recognized in
+        // the source's sent folder rather than drained in as a second message. The phase is read once per run and only
+        // for that folder, which leaves every other folder's run exactly what it was.
+        var recognizesFiledSentCopies = folderRole == MailFolderSpecialUse.Sent
+            && await this.localFolderArrivals.HoldsAsync(account, cancellationToken);
+
         var storedCount = 0;
 
         // What the run reports as arrived mail, decided here rather than by a query afterwards: the folder's role and
@@ -289,6 +295,11 @@ public sealed class MailboxSynchronizer
                     uidValidity,
                     batch,
                     cancellationToken);
+                var filedSentCopies = await this.ReadFiledSentCopiesInBatchAsync(
+                    account,
+                    recognizesFiledSentCopies,
+                    batch,
+                    cancellationToken);
 
                 var processedThroughUid = default(ImapUid?);
 
@@ -306,6 +317,14 @@ public sealed class MailboxSynchronizer
                             relocation.Request.Mutation,
                             relocation.Request.StoredEmailId,
                             relocation.Id));
+                        processedThroughUid = metadata.OccurrenceId.Uid;
+
+                        continue;
+                    }
+
+                    if (recognizesFiledSentCopies
+                        && await this.TryCarryFiledSentCopyAsync(account, metadata, filedSentCopies, cancellationToken))
+                    {
                         processedThroughUid = metadata.OccurrenceId.Uid;
 
                         continue;
@@ -778,6 +797,34 @@ public sealed class MailboxSynchronizer
             cancellationToken);
     }
 
+    /// <summary>Reads which of a batch's messages are the provider's copies of sends a held account filed locally.</summary>
+    /// <remarks>
+    /// Read once for the whole batch, for the reason the filings above are. A message whose <c>Message-ID</c> is absent
+    /// or empty is left out rather than compared: no identity this deployment mints is empty, and a server reporting one
+    /// as an empty string must not stop the folder's run at that message. The answer is a mutable copy because each
+    /// entry is taken out once it has been carried.
+    /// </remarks>
+    private async Task<Dictionary<string, StoredEmailId>> ReadFiledSentCopiesInBatchAsync(
+        MailAccountIdentity account,
+        bool recognizesFiledSentCopies,
+        RemoteEmailMetadataBatch batch,
+        CancellationToken cancellationToken)
+    {
+        string[] internetMessageIds = recognizesFiledSentCopies
+            ? [.. batch.Emails
+                .Select(static email => email.InternetMessageId)
+                .OfType<string>()
+                .Where(static internetMessageId => internetMessageId.Length > 0)
+                .Distinct(StringComparer.Ordinal)]
+            : [];
+
+        return internetMessageIds.Length == 0
+            ? new Dictionary<string, StoredEmailId>(StringComparer.Ordinal)
+            : new Dictionary<string, StoredEmailId>(
+                await this.metadataRepository.FindFiledSentCopiesAsync(account, internetMessageIds, cancellationToken),
+                StringComparer.Ordinal);
+    }
+
     /// <summary>Finds the copy this discovery is, if it is one MailFathom filed.</summary>
     /// <remarks>
     /// The placement is preferred over the message identity, because the placement is the server's own statement about
@@ -839,6 +886,60 @@ public sealed class MailboxSynchronizer
                 }
             },
             cancellationToken);
+
+        return carried;
+    }
+
+    /// <summary>Carries the sent copy a held account filed onto the provider's own copy of the same send, rather than storing a second one.</summary>
+    /// <returns><see langword="true" /> when the discovery was the provider's copy of a filed send and needs nothing further; otherwise, <see langword="false" />.</returns>
+    /// <remarks>
+    /// <para>
+    /// The copy is recognized by the <c>Message-ID</c> this deployment minted for the outgoing record, and only against a
+    /// local sent message filed from such a record whose payload is stored: that identity is MailFathom's own rather than
+    /// one it is guessing at. Where no such message stands — the account files no sent copy, or the filing has not
+    /// committed — nothing is recognized and the provider's copy is stored like any other arrival, so a send is never left
+    /// with no record of it.
+    /// </para>
+    /// <para>
+    /// It runs before the payload is fetched, for the reason a relocation is recognized there. The filed message keeps its
+    /// identity and its payload and gains the occurrence, which is what the drain then acts on.
+    /// </para>
+    /// <para>
+    /// A filed copy is carried onto one occurrence only. A send deferred after a partial acceptance is offered again under
+    /// the same <c>Message-ID</c>, so the provider can file two copies of it into one batch; the entry is taken out once
+    /// carried, and the second copy is stored as an arrival of its own rather than moving the filed message off the first.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> TryCarryFiledSentCopyAsync(
+        MailAccountIdentity account,
+        RemoteEmailMetadata metadata,
+        Dictionary<string, StoredEmailId> filedSentCopies,
+        CancellationToken cancellationToken)
+    {
+        if (metadata.InternetMessageId is not { Length: > 0 } internetMessageId
+            || !filedSentCopies.TryGetValue(internetMessageId, out var filedCopy))
+        {
+            return false;
+        }
+
+        var carried = false;
+
+        await this.concurrencyRetryPolicy.CommitAsync(
+            async (persistenceSession, attemptCancellationToken) =>
+            {
+                carried = await this.metadataRepository.TryCarryToOccurrenceAsync(
+                    persistenceSession,
+                    account.User,
+                    filedCopy,
+                    metadata.OccurrenceId,
+                    attemptCancellationToken);
+            },
+            cancellationToken);
+
+        if (carried)
+        {
+            filedSentCopies.Remove(internetMessageId);
+        }
 
         return carried;
     }

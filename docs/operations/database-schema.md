@@ -229,6 +229,11 @@ already serving:
   added columns are nullable with no default, which is a catalog change rather than a rewrite, and the table and GIN
   index it creates are both empty until an attachment is read.
 
+- **`FileHeldAccountDraftsAndSentCopiesLocally` reads `stored_emails` once to build an index that holds nothing.**
+  `ix_stored_emails_filed_sent_copy` is filtered to a sent copy filed locally that no server has returned yet, which no
+  earlier version wrote, so it is built empty — but building it still scans the message table under a lock that blocks
+  writes to it. The two columns the migration adds to `mail_drafts` are nullable with no default and rewrite nothing.
+
 - **A `CHECK` constraint added to a table that already holds rows is validated by scanning it.**
   `AddContentStorageBackendAndObjectLocator` adds one to each of the four tables that hold raw MIME, and
   `IndexObjectBackedContentAndRequireItsPayloadEmpty` replaces all four with a stricter form, so each table is scanned

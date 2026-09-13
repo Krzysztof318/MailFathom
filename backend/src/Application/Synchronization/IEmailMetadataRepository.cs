@@ -5,8 +5,11 @@
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Synchronization;
 
@@ -106,5 +109,57 @@ public interface IEmailMetadataRepository
         IPersistenceSession session,
         StoredEmailId storedEmailId,
         OutgoingEmailId outgoingEmailId,
+        CancellationToken cancellationToken);
+
+    /// <summary>Stores a message MailFathom filed itself into a held account's local folder, with no occurrence on any server.</summary>
+    /// <param name="session">The explicit persistence session this write participates in.</param>
+    /// <param name="account">The account the message is filed for.</param>
+    /// <param name="binding">The folder binding of the source folder playing the role the message is filed under.</param>
+    /// <param name="extractedMetadata">What was read out of the message's MIME, or <see langword="null" /> when nothing could be.</param>
+    /// <param name="sizeOctets">How large the message is.</param>
+    /// <param name="flags">The flags the message is filed with.</param>
+    /// <param name="filedFrom">The outgoing record a sent copy is filed from, or <see langword="null" /> for a draft.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The new stored email's identity, or <see langword="null" /> where <paramref name="binding" /> names a folder binding that is no longer stored.</returns>
+    /// <remarks>
+    /// <para>
+    /// A binding that is gone is answered rather than raised, because it was read before the transaction and the drain
+    /// removes exactly those source folders: the caller files nothing and says so, and the state the message was a copy of
+    /// still commits.
+    /// </para>
+    /// <para>
+    /// The row is written as a synchronized one is — the search document and the conversation are placed in the same
+    /// session — so a draft or a sent message is found and threaded exactly as the copy a server would have returned.
+    /// </para>
+    /// <para>
+    /// A stored message still names a folder binding, and a filed one names the binding of the source folder playing its
+    /// role: that is where the source keeps the same kind of message, and what a provider's own copy of a sent message is
+    /// later drained from.
+    /// </para>
+    /// </remarks>
+    Task<StoredEmailId?> StoreFiledEmailAsync(
+        IPersistenceSession session,
+        MailAccountIdentity account,
+        MailFolderResolutionId binding,
+        ExtractedEmailMetadata? extractedMetadata,
+        long sizeOctets,
+        AppendedMailFlags flags,
+        OutgoingEmailId? filedFrom,
+        CancellationToken cancellationToken);
+
+    /// <summary>Finds the sent copies MailFathom filed locally that carry one of a batch's <c>Message-ID</c> values and no occurrence yet.</summary>
+    /// <param name="account">The account whose filed copies are searched.</param>
+    /// <param name="internetMessageIds">The non-empty <c>Message-ID</c> values one discovered batch carries, bounded by that batch.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The filed copy standing for each identity that has one, keyed by that identity.</returns>
+    /// <remarks>
+    /// Only a copy filed from an outgoing record answers, and only one whose payload is stored: the identity is the one this
+    /// deployment minted for the send, which is what makes it safe to compare, and a copy whose payload is absent is no copy
+    /// the provider's may stand in for. It is one read per batch, as the recognition of appended copies is, so a sent
+    /// folder the drain has not emptied yet costs one query per batch rather than one per message.
+    /// </remarks>
+    Task<IReadOnlyDictionary<string, StoredEmailId>> FindFiledSentCopiesAsync(
+        MailAccountIdentity account,
+        IReadOnlyCollection<string> internetMessageIds,
         CancellationToken cancellationToken);
 }

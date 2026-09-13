@@ -10,6 +10,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Delivery.Filing;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
@@ -341,6 +342,21 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
         this.drafts[draftId] = draft with { PromotedTo = draft.PromotedTo ?? outgoingEmailId };
 
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task<StoredEmailId?> RecordFiledAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        StoredEmailId filedEmail,
+        int revision,
+        CancellationToken cancellationToken)
+    {
+        var draft = this.Require(draftId);
+
+        this.drafts[draftId] = draft with { FiledEmail = filedEmail, FiledRevision = revision };
+
+        return Task.FromResult(draft.FiledEmail is { } previous && previous != filedEmail ? previous : (StoredEmailId?)null);
     }
 
     /// <inheritdoc />

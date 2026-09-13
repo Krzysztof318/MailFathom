@@ -12,6 +12,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -66,6 +67,75 @@ public sealed class MailDraftPassTests
         Assert.Equal(MailDraftFilingOutcome.Filed, Assert.Single(results).Outcome);
         Assert.Equal(1, harness.AppendCount);
         Assert.Equal(MailDraftStage.Filed, harness.Drafts.Peek(draft.Id)!.Stage);
+    }
+
+    /// <summary>
+    /// A held account's draft that could not be filed when it was saved is filed locally by the pass that follows, once,
+    /// and nothing is appended to the drained source for it.
+    /// </summary>
+    [Fact]
+    public async Task SettleOutstandingAsync_DraftAHeldAccountCouldNotFileYet_FilesItLocallyOnceOnTheNextPass()
+    {
+        // Arrange
+        var harness = new MailDraftHarness(
+            new FakeTimeProvider(Moment),
+            new InMemoryOutgoingEmailStore(),
+            Settings());
+
+        harness.MapDraftsFolder(Account.Id);
+        var held = harness.HoldAccount(Account, mapsDraftsFolder: false);
+        var draft = await SaveAsync(harness, "first version");
+        Assert.Null(harness.Drafts.Peek(draft.Id)!.FiledEmail);
+
+        held.MapRole(MailFolderSpecialUse.Drafts, "drafts");
+        harness.BeginNewScope();
+
+        // Act
+        var results = await harness.Pass.SettleOutstandingAsync(Account, CancellationToken.None);
+        var nextResults = await harness.Pass.SettleOutstandingAsync(Account, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(MailDraftFilingOutcome.Filed, Assert.Single(results).Outcome);
+        Assert.Empty(nextResults);
+        Assert.Equal(Assert.Single(held.Stored).Email, harness.Drafts.Peek(draft.Id)!.FiledEmail);
+        Assert.Equal(0, harness.AppendCount);
+    }
+
+    /// <summary>
+    /// A held draft revised while its drafts folder could not be reached keeps showing the earlier revision only until the
+    /// next pass, which files the current revision and erases the earlier message in the same commit.
+    /// </summary>
+    [Fact]
+    public async Task SettleOutstandingAsync_HeldDraftRevisedWhileItsDraftsFolderWasUnmapped_FilesTheCurrentRevisionOverTheEarlierOne()
+    {
+        // Arrange
+        var harness = new MailDraftHarness(
+            new FakeTimeProvider(Moment),
+            new InMemoryOutgoingEmailStore(),
+            Settings());
+
+        harness.MapDraftsFolder(Account.Id);
+        var held = harness.HoldAccount(Account);
+        var draft = await SaveAsync(harness, "first version");
+
+        held.UnmapRoles();
+        harness.BeginNewScope();
+        var revised = await SaveAsync(harness, "second version", draft.Id);
+        Assert.Equal(MailDraftStage.Composed, revised.Stage);
+
+        held.MapRole(MailFolderSpecialUse.Drafts, "drafts");
+        harness.BeginNewScope();
+
+        // Act
+        var results = await harness.Pass.SettleOutstandingAsync(Account, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(MailDraftFilingOutcome.Filed, Assert.Single(results).Outcome);
+        Assert.Equal(2, held.Stored.Count);
+        Assert.Equal([held.Stored[0].Email], held.Folders.ErasedEmails);
+        Assert.Equal(held.Stored[1].Email, harness.Drafts.Peek(draft.Id)!.FiledEmail);
+        Assert.Equal(revised.Revision, harness.Drafts.Peek(draft.Id)!.FiledRevision);
+        Assert.Equal(0, harness.AppendCount);
     }
 
     /// <summary>A draft of another account is left to that account's own pass.</summary>
@@ -179,7 +249,7 @@ public sealed class MailDraftPassTests
         TimeSpan.FromHours(1),
         TimeSpan.FromHours(8));
 
-    private static Task<MailDraftRecord> SaveAsync(MailDraftHarness harness, string body) =>
+    private static Task<MailDraftRecord> SaveAsync(MailDraftHarness harness, string body, MailDraftId? revises = null) =>
         harness.Book.SaveAsync(
             Account,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
@@ -188,7 +258,7 @@ public sealed class MailDraftPassTests
                 "a draft",
                 InternetMessageId.Mint("example.test"),
                 Encoding.ASCII.GetBytes($"Subject: a draft\r\n\r\n{body}").AsMemory()),
-            revises: null,
+            revises,
             CancellationToken.None);
 
     private static MailDraftRecipient Recipient()

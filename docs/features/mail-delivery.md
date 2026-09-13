@@ -1061,8 +1061,27 @@ knows whether that copy reached the folder, so the record goes on reporting the 
 the copy was taken back out. A sent copy is withdrawn by one thing only, which is the provider having filed its own
 beside it; nothing else takes it back out, because it is what the user keeps.
 
+**An account whose mailbox MailFathom holds alone is filed locally, and nothing above reaches its server.** Its source
+is drained, so a copy appended there would be drained straight back, and filing would wait on IMAP for a message that
+already has one home. Where `Delivery:FileSentCopy` holds, the sent copy is written instead as a stored message in the
+account's local sent folder, in the same transaction that records the delivery — so a crash between the two is not a
+state the account can be in, and a delivery recorded once files once. The message is placed from the stored bytes and
+searched, threaded, and listed like any other; it is bound to the source folder mapped to the sent role, and an account
+that maps none, or whose binding of it is gone by the time the delivery commits, records the delivery and files
+nothing, with the reason on the filing. Such an account has no outbox
+mirror either, because its outgoing record is its outbox, and it withdraws nothing: a mirror or a sent copy appended
+while the account was still mirrored stays in the source until the drain removes it.
+
+**A copy the provider files on its own is recognised rather than stored a second time.** When synchronization meets a
+message in the held account's sent folder carrying the `Message-ID` this deployment minted for a send, and a local sent
+copy of that send is already filed with its payload stored, the occurrence is carried onto that copy: no second row and
+no second payload are written, and the payload is not fetched. Taking the provider's copy off the server is the drain's
+work, like any other message the source still holds.
+
 [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 is where appending became something MailFathom may do at all, and holds the authorization review that admitted it.
+[ADR 0034](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md)
+is where a held account's copies stopped being appended.
 
 ## A message that is written and not sent
 
@@ -1078,7 +1097,7 @@ is a message somebody is writing and is the message the user's own client shows 
 here: a draft is a message the user is meant to find in the mail client they already open, and one this deployment
 kept to itself would be a message prepared where its user never looks — with two places to look for the same thing,
 which is the divergence the arrangement exists to avoid. What that costs is a round trip to a mail server per revision,
-so a revision is what an author asks for rather than what a keystroke produces: a client saves when somebody says to
+on a mirrored account, so a revision is what an author asks for rather than what a keystroke produces: a client saves when somebody says to
 save, and the writing between those moments is the client's own.
 
 **Files are staged against the draft rather than sent with each edit.** An upload is taken in once and the draft keeps
@@ -1116,6 +1135,17 @@ is unreachable by construction rather than spared by a check. Where the tracked 
 deployment's — the role now resolves to another folder, the folder was recreated since the append, the server named no
 placement, an append was never answered — the message is left exactly where it is and the divergence is written onto
 the draft, which is what an operator reads instead of a message that quietly went missing.
+
+**A held account's draft is a stored message in its local drafts folder rather than a copy on a server, and none of
+the appending and withdrawing this section describes reaches its server.** The revision and that message are written
+in one transaction, so saving is one commit and issues no IMAP command; saving
+again writes the new message and erases the one it replaces in that same commit, with no `APPEND` and no withdrawal;
+and giving the draft up erases the message with the record. The message is bound to the source folder mapped to the
+drafts role, so an account that maps none keeps the draft with the destination reported as unavailable, and the pass
+that follows files it once the role is mapped. The same holds for a revision saved while the role could not be reached:
+the folder goes on showing the earlier revision, the draft is outstanding again because what it filed is behind it, and
+the pass files the current revision and erases the earlier message in one commit. Clients are told of the new message,
+and of the one it replaced, once the commit lands.
 
 **Giving a draft up removes what this system put there and nothing else.** The record is marked before anything is
 issued and removed once the copies are settled, so a process that dies in between leaves a draft the pass finishes. A

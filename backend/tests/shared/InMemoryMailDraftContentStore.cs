@@ -14,12 +14,14 @@ namespace MailFathom.TestSupport;
 
 /// <summary>Holds the MIME of drafts in memory, replacing a draft's message the way the real store does.</summary>
 /// <remarks>
-/// Everything but the draft half throws. A draft never stores arriving mail and never stores a send's payload, so a
-/// caller that reached one of those would be doing something this double must not answer for silently.
+/// Everything but the draft half, and a message filed into a local folder with no occurrence, throws. A draft never
+/// stores arriving mail and never stores a send's payload, so a caller that reached one of those would be doing something
+/// this double must not answer for silently; a filed message is kept, because filing a held account's draft stores one.
 /// </remarks>
 internal sealed class InMemoryMailDraftContentStore : IEmailContentStore
 {
     private readonly Dictionary<MailDraftId, byte[]> messages = [];
+    private readonly Dictionary<StoredEmailId, byte[]> filed = [];
 
     /// <summary>Gets how many revisions were stored, which is what proves an edit replaced rather than added.</summary>
     internal int WriteCount { get; private set; }
@@ -51,14 +53,28 @@ internal sealed class InMemoryMailDraftContentStore : IEmailContentStore
         return Task.FromResult(PlacedEmailContent.InDatabase(rawMime));
     }
 
+    /// <summary>Reads what is stored for one message a held account filed, without going through the port.</summary>
+    internal ReadOnlyMemory<byte> PeekFiled(StoredEmailId storedEmailId) =>
+        this.filed.TryGetValue(storedEmailId, out var stored) ? stored : ReadOnlyMemory<byte>.Empty;
+
     /// <inheritdoc />
+    /// <remarks>Only a message MailFathom filed itself is kept, which is the draft a held account files locally; arriving mail is refused.</remarks>
     public Task SaveContentAsync(
         IPersistenceSession session,
         StoredEmailId storedEmailId,
-        EmailOccurrenceId occurrenceId,
+        EmailOccurrenceId? occurrenceId,
         PlacedEmailContent placedContent,
-        CancellationToken cancellationToken) =>
-        throw new NotSupportedException("A draft never stores arriving mail.");
+        CancellationToken cancellationToken)
+    {
+        if (occurrenceId is not null)
+        {
+            throw new NotSupportedException("A draft never stores arriving mail.");
+        }
+
+        this.filed[storedEmailId] = placedContent.RawMime.ToArray();
+
+        return Task.CompletedTask;
+    }
 
     /// <inheritdoc />
     public Task<StoredEmailContent?> FindStoredContentAsync(

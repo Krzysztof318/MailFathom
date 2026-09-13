@@ -8,9 +8,11 @@ using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery;
@@ -25,6 +27,7 @@ using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Access;
 using MailFathom.Mcp.Tools.Drafts;
 using MailFathom.TestSupport;
@@ -217,8 +220,21 @@ internal sealed class DraftedMailDeployment
                 clock),
             transportSecurityPolicies);
 
+        var localFiler = new LocalMailFiler(
+            Substitute.For<ILocalMailFolderStore>(),
+            Substitute.For<IEmailMetadataRepository>(),
+            contents,
+            Substitute.For<IEmailMimeReader>(),
+            StubMailFolderMappings.Nothing,
+            folderResolutions,
+            Substitute.For<IOutgoingMailFilingPolicyReader>(),
+            Substitute.For<IOutgoingMailFilingStore>(),
+            ClientSignalPublishers.ReachingNobody,
+            clock);
+
         return new MailDraftFiler(
             new MailboxCopyAppender(writeSessions, destinations, contents, transportSecurityPolicies, clock),
+            localFiler,
             writeSessions,
             destinations,
             drafts,

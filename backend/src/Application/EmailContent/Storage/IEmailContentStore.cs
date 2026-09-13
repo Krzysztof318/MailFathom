@@ -64,7 +64,10 @@ public interface IEmailContentStore
     /// <summary>Saves raw MIME content idempotently for one locally stored email.</summary>
     /// <param name="session">The explicit persistence session this content write participates in.</param>
     /// <param name="storedEmailId">The stable local identifier of the corresponding metadata row.</param>
-    /// <param name="occurrenceId">The remote occurrence the payload was fetched from, which the row is checked against.</param>
+    /// <param name="occurrenceId">
+    /// The remote occurrence the payload was fetched from, which the row is checked against, or <see langword="null" /> for a
+    /// message MailFathom filed itself, whose row has to carry no occurrence.
+    /// </param>
     /// <param name="placedContent">What <see cref="PlaceContentAsync" /> answered for this payload.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes after durable storage.</returns>
@@ -72,7 +75,7 @@ public interface IEmailContentStore
     Task SaveContentAsync(
         IPersistenceSession session,
         StoredEmailId storedEmailId,
-        EmailOccurrenceId occurrenceId,
+        EmailOccurrenceId? occurrenceId,
         PlacedEmailContent placedContent,
         CancellationToken cancellationToken);
 

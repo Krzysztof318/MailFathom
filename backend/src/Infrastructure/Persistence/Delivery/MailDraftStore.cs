@@ -11,6 +11,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Delivery.Filing;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Emails;
@@ -157,6 +158,9 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
     /// else is true of it, a promoted draft owes its own give-up until delivery writes one, a revision nobody has
     /// appended owes an append, and a superseded copy still standing owes a removal. An append the server never
     /// answered is deliberately none of them — nothing appends it again, and nothing can remove what nobody can name.
+    /// A draft whose current revision a held account filed into its local drafts folder is deliberately none of them
+    /// either, because it owes no server anything; one whose filed message is behind its revision is outstanding, so the
+    /// pass files the current revision over it.
     /// </remarks>
     public async Task<IReadOnlyList<MailDraftRecord>> ReadOutstandingAsync(
         MailAccountIdentity account,
@@ -173,7 +177,8 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
                 && draft.MailboxAccountId == accountValue
                 && (draft.DiscardedAt != null
                     || draft.PromotedToOutgoingEmailId != null
-                    || (!draft.Copies.Any(copy => copy.Stage == MailDraftCopyStage.Issued)
+                    || (draft.FiledRevision != draft.Revision
+                        && !draft.Copies.Any(copy => copy.Stage == MailDraftCopyStage.Issued)
                         && (!draft.Copies.Any(copy => copy.Revision == draft.Revision)
                             || draft.Copies.Any(copy => copy.Revision != draft.Revision
                                 && copy.Stage == MailDraftCopyStage.Standing)))))
@@ -437,6 +442,27 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
         var entity = await RequireAsync(session, draftId, cancellationToken);
 
         entity.PromotedToOutgoingEmailId ??= outgoingEmailId.Value;
+    }
+
+    /// <inheritdoc />
+    public async Task<StoredEmailId?> RecordFiledAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        StoredEmailId filedEmail,
+        int revision,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        var entity = await RequireAsync(session, draftId, cancellationToken);
+        var previous = entity.FiledStoredEmailId;
+
+        entity.FiledStoredEmailId = filedEmail.Value;
+        entity.FiledRevision = revision;
+
+        return previous is { } replaced && replaced != filedEmail.Value
+            ? StoredEmailId.Create(replaced)
+            : null;
     }
 
     /// <inheritdoc />

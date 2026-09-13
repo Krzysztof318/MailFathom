@@ -136,7 +136,7 @@ internal sealed class EmailContentStore(
     public async Task SaveContentAsync(
         IPersistenceSession session,
         StoredEmailId storedEmailId,
-        EmailOccurrenceId occurrenceId,
+        EmailOccurrenceId? occurrenceId,
         PlacedEmailContent placedContent,
         CancellationToken cancellationToken)
     {
@@ -652,13 +652,17 @@ internal sealed class EmailContentStore(
         return row.ToStoredContent(retainedPayload) with { WasServedFromRetainedCopy = true };
     }
 
-    private static void EnsureOccurrenceMatches(StoredEmailEntity storedEmail, EmailOccurrenceId occurrenceId)
+    private static void EnsureOccurrenceMatches(StoredEmailEntity storedEmail, EmailOccurrenceId? occurrenceId)
     {
-        if (storedEmail.MailFolder.MailboxAccountId != occurrenceId.AccountId.Value
-            || storedEmail.MailFolder.Alias != occurrenceId.FolderResolutionId.Alias.Value
-            || storedEmail.MailFolder.ResolutionGeneration != occurrenceId.FolderResolutionId.Generation.Value
-            || storedEmail.UidValidity != occurrenceId.UidValidity.Value
-            || storedEmail.Uid != occurrenceId.Uid.Value)
+        var matches = occurrenceId is null
+            ? storedEmail.UidValidity is null
+            : storedEmail.MailFolder.MailboxAccountId == occurrenceId.AccountId.Value
+                && storedEmail.MailFolder.Alias == occurrenceId.FolderResolutionId.Alias.Value
+                && storedEmail.MailFolder.ResolutionGeneration == occurrenceId.FolderResolutionId.Generation.Value
+                && storedEmail.UidValidity == occurrenceId.UidValidity.Value
+                && storedEmail.Uid == occurrenceId.Uid.Value;
+
+        if (!matches)
         {
             throw new InvalidOperationException("Raw MIME occurrence identity does not match the corresponding stored email metadata.");
         }

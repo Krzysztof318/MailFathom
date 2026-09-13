@@ -251,6 +251,7 @@ internal sealed class MailDraftHarness
                 this.Contents,
                 this.transportSecurityPolicies,
                 this.clock),
+            this.Held?.FilerOver(this.Contents) ?? LocalMailFilers.HoldingNothing(this.clock),
             this.writeSessions,
             destinations,
             this.Drafts,
@@ -274,6 +275,27 @@ internal sealed class MailDraftHarness
             this.commitPolicy,
             this.clock,
             this.settings);
+    }
+
+    /// <summary>Gets the account MailFathom holds alone, once <see cref="HoldAccount" /> has said which one.</summary>
+    internal HeldLocalMailbox? Held { get; private set; }
+
+    /// <summary>Makes an account held, so its drafts are filed into its local drafts folder instead of appended.</summary>
+    /// <param name="account">The account.</param>
+    /// <param name="mapsDraftsFolder">Whether a bound source folder plays the drafts role, which a filing needs.</param>
+    /// <returns>The held mailbox, so a test can read what was filed.</returns>
+    internal HeldLocalMailbox HoldAccount(MailAccountIdentity account, bool mapsDraftsFolder = true)
+    {
+        this.Held = new HeldLocalMailbox(account, this.clock);
+
+        if (mapsDraftsFolder)
+        {
+            this.Held.MapRole(MailFolderSpecialUse.Drafts, "drafts");
+        }
+
+        this.BeginNewScope();
+
+        return this.Held;
     }
 
     /// <summary>Maps a folder to the drafts role and binds it, which is what makes a draft appendable at all.</summary>

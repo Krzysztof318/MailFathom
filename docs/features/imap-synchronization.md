@@ -1202,6 +1202,12 @@ its folder limit, or where neither name can be placed at the top of the hierarch
 carries it, or because it is `INBOX` — and no folder is created then. On a mirrored account nothing is placed and the
 run is what it was.
 
+One message from a held account's sent folder is not stored at all: the provider's own copy of a send MailFathom
+already [filed locally](mail-delivery.md#the-copy-in-the-accounts-own-folders). Where the message carries the
+`Message-ID` of a sent copy filed from an outgoing record, with its payload stored and no occurrence yet, the run
+carries the occurrence onto that copy in its own transaction and moves on, fetching no payload and writing no second
+row.
+
 ## Session resilience
 
 Two dependency classes cover an IMAP session, and each one is resolved for the account it belongs to, so one

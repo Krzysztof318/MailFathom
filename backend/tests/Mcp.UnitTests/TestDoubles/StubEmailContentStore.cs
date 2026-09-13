@@ -34,7 +34,7 @@ internal sealed class StubEmailContentStore(StoredEmailContent? storedContent = 
     public Task SaveContentAsync(
         IPersistenceSession session,
         StoredEmailId storedEmailId,
-        EmailOccurrenceId occurrenceId,
+        EmailOccurrenceId? occurrenceId,
         PlacedEmailContent placedContent,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException("Reading an email never stores content.");

@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Detection;
@@ -134,6 +135,11 @@ public sealed class MailDraftBook
             composed.RawMime,
             cancellationToken);
 
+        // On a held account the copy is filed in the transaction that writes the revision, so it is read and placed
+        // before that transaction for the reason the draft's own message is.
+        var localCopy = await this.filer.PrepareLocalCopyAsync(account, composed.RawMime, cancellationToken);
+        FiledLocalEmail? filed = null;
+
         var draft = await this.retryPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
@@ -162,11 +168,24 @@ public sealed class MailDraftBook
                     placedContent,
                     attemptCancellationToken);
 
+                filed = localCopy is null
+                    ? null
+                    : await this.filer.FileLocallyAsync(session, written.Id, written.Revision, localCopy, attemptCancellationToken);
+
                 return written;
             },
             cancellationToken);
 
-        await this.filer.SettleAsync(draft, cancellationToken);
+        // A revision filed locally replaced its previous message in the same commit, so nothing is owed a server; one that
+        // was not — a mirrored account, or a held one whose drafts folder could not be reached — is settled as before.
+        if (filed is not null)
+        {
+            this.filer.Announce(filed);
+        }
+        else
+        {
+            await this.filer.SettleAsync(draft, cancellationToken);
+        }
 
         return await this.drafts.FindAsync(draft.Id, cancellationToken) ?? draft;
     }

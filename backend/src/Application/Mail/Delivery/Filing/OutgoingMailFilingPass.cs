@@ -51,6 +51,7 @@ public sealed class OutgoingMailFilingPass
     private readonly IMailFolderMappingReader folderMappings;
     private readonly IOutgoingMailFilingPolicyReader filingPolicies;
     private readonly IOutgoingMailFilingStore filings;
+    private readonly LocalMailFiler localFiler;
     private readonly TimeProvider timeProvider;
     private readonly int maxMirroredSendsPerPass;
 
@@ -60,6 +61,7 @@ public sealed class OutgoingMailFilingPass
     /// <param name="folderMappings">Answers whether this account maps a folder to the outbox role at all.</param>
     /// <param name="filingPolicies">Answers whether this account files a copy of what it sends.</param>
     /// <param name="filings">Answers which filed sent copies the folder holds a second occurrence of.</param>
+    /// <param name="localFiler">Answers whether the account is held, whose copies are filed locally by the delivery instead.</param>
     /// <param name="timeProvider">Decides which sends are waiting rather than merely queued.</param>
     /// <param name="settings">Bounds how many waiting sends one pass mirrors.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
@@ -74,6 +76,7 @@ public sealed class OutgoingMailFilingPass
         IMailFolderMappingReader folderMappings,
         IOutgoingMailFilingPolicyReader filingPolicies,
         IOutgoingMailFilingStore filings,
+        LocalMailFiler localFiler,
         TimeProvider timeProvider,
         MailOutboxSettings settings)
     {
@@ -82,6 +85,7 @@ public sealed class OutgoingMailFilingPass
         ArgumentNullException.ThrowIfNull(folderMappings);
         ArgumentNullException.ThrowIfNull(filingPolicies);
         ArgumentNullException.ThrowIfNull(filings);
+        ArgumentNullException.ThrowIfNull(localFiler);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -90,6 +94,7 @@ public sealed class OutgoingMailFilingPass
         this.folderMappings = folderMappings;
         this.filingPolicies = filingPolicies;
         this.filings = filings;
+        this.localFiler = localFiler;
         this.timeProvider = timeProvider;
         this.maxMirroredSendsPerPass = settings.MaxDeliveriesPerPass;
     }
@@ -101,13 +106,13 @@ public sealed class OutgoingMailFilingPass
     /// <remarks>
     /// Only a send whose next attempt lies ahead is mirrored. A message the very next claim will take is gone in
     /// seconds, and appending a copy of it would put a message on somebody's mail server and take it away again for
-    /// every send this deployment makes.
+    /// every send this deployment makes. A held account has no outbox mirror at all: its outgoing record is its outbox.
     /// </remarks>
     public async Task<IReadOnlyList<OutgoingMailFilingResult>> MirrorWaitingSendsAsync(
         MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        if (!this.MapsOutboxFolder(account.Id))
+        if (!this.MapsOutboxFolder(account.Id) || await this.localFiler.HoldsAsync(account, cancellationToken))
         {
             return [];
         }
@@ -145,7 +150,8 @@ public sealed class OutgoingMailFilingPass
     /// It runs on the outbox pass rather than on the synchronization run that discovers the duplicate, because taking a
     /// message out of a folder is a write and no read path may obtain the session that makes one. The cost is one query
     /// per pass on an account whose sent folder holds no duplicate, which is every account whose provider files
-    /// nothing.
+    /// nothing. A held account withdraws nothing: its source is drained, and a copy appended there while it was still
+    /// mirrored is the drain's to remove.
     /// </para>
     /// <para>
     /// One pass withdraws no more copies than it delivers sends, for the reason the mirror is bounded by that same
@@ -158,7 +164,8 @@ public sealed class OutgoingMailFilingPass
         MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        if (!this.filingPolicies.WithdrawsDuplicateSentCopy(account.Id))
+        if (!this.filingPolicies.WithdrawsDuplicateSentCopy(account.Id)
+            || await this.localFiler.HoldsAsync(account, cancellationToken))
         {
             return [];
         }
@@ -204,12 +211,18 @@ public sealed class OutgoingMailFilingPass
     /// mirror taken out of the folder and nothing appended in its place, because the only copy such a message ever
     /// earned was the one that said it was waiting.
     /// </para>
+    /// <para>
+    /// A held account is settled with nothing issued at all. Its sent copy was filed into the local sent folder in the
+    /// commit that recorded the delivery, an append to a drained source would be drained straight back, and a mirror
+    /// appended while the account was still mirrored is left for the drain to remove rather than withdrawn over IMAP.
+    /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<OutgoingMailFilingResult>> SettleFiledCopiesAsync(
         OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken)
     {
-        if (await this.outgoingEmails.FindAsync(outgoingEmailId, cancellationToken) is not { IsTerminal: true } record)
+        if (await this.outgoingEmails.FindAsync(outgoingEmailId, cancellationToken) is not { IsTerminal: true } record
+            || await this.localFiler.HoldsAsync(record.Account, cancellationToken))
         {
             return [];
         }

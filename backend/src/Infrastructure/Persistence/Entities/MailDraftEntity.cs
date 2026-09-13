@@ -66,6 +66,17 @@ internal sealed class MailDraftEntity
     /// </remarks>
     public Guid? PromotedToOutgoingEmailId { get; set; }
 
+    /// <summary>Gets or sets the stored message a held account filed the current revision as, and <see langword="null" /> while none is filed.</summary>
+    /// <remarks>
+    /// No foreign key stands behind it either. The person may delete the message from their drafts folder like any other,
+    /// and that erasure must neither be refused because a draft names it nor take the draft with it; a pointer left naming
+    /// nothing is one the next revision replaces and a discard erases nothing through.
+    /// </remarks>
+    public Guid? FiledStoredEmailId { get; set; }
+
+    /// <summary>Gets or sets the revision <see cref="FiledStoredEmailId" /> shows, and <see langword="null" /> while none is filed.</summary>
+    public int? FiledRevision { get; set; }
+
     /// <summary>Gets or sets why the tracked copy stopped being one MailFathom may touch, and <see langword="null" /> while none has.</summary>
     public MailDraftDivergenceReason? DivergenceReason { get; set; }
 

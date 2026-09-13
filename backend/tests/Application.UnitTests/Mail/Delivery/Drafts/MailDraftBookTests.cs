@@ -10,13 +10,16 @@ using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent;
+using MailFathom.Application.Signals;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
+using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -103,6 +106,158 @@ public sealed class MailDraftBookTests
         Assert.Equal(MailDraftFilingOutcome.Discarded, result.Outcome);
         Assert.Equal([(ImapUidValidity.Create(1), ImapUid.Create(1))], harness.Withdrawn);
         Assert.Empty(harness.Drafts.Drafts);
+    }
+
+    /// <summary>A draft on an account MailFathom holds alone is filed into its local drafts folder, and nothing is appended.</summary>
+    [Fact]
+    public async Task SaveAsync_NewDraftOnAHeldAccount_FilesItIntoTheLocalDraftsFolderWithoutAnAppend()
+    {
+        // Arrange
+        var harness = Harness();
+        harness.MapDraftsFolder(Account.Id);
+        var held = harness.HoldAccount(Account);
+
+        // Act
+        var draft = await SaveAsync(harness, "first version");
+
+        // Assert
+        var filed = Assert.Single(held.Stored);
+        var placedIn = held.Folders.Folders.Single(folder => folder.Id == held.Folders.Placements[filed.Email]);
+
+        Assert.Equal(MailDraftStage.Filed, draft.Stage);
+        Assert.Equal(filed.Email, draft.FiledEmail);
+        Assert.Equal(AppendedMailFlags.Draft, filed.Flags);
+        Assert.Null(filed.FiledFrom);
+        Assert.Equal(MailFolderSpecialUse.Drafts, placedIn.Role);
+        Assert.False(harness.Contents.PeekFiled(filed.Email).IsEmpty);
+        Assert.Equal(0, harness.AppendCount);
+    }
+
+    /// <summary>Saving a held account's draft again replaces the filed message in the same save, with no append and no withdrawal.</summary>
+    [Fact]
+    public async Task SaveAsync_RevisionOnAHeldAccount_ReplacesTheFiledMessageWithoutAnAppendOrAWithdrawal()
+    {
+        // Arrange
+        var harness = Harness();
+        harness.MapDraftsFolder(Account.Id);
+        var held = harness.HoldAccount(Account);
+        var draft = await SaveAsync(harness, "first version");
+
+        // Act
+        var revised = await harness.Book.SaveAsync(
+            Account,
+            OutgoingEmailRequester.Command("mfctl-4f2a"),
+            Composed("second version"),
+            draft.Id,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, held.Stored.Count);
+        Assert.Equal(held.Stored[1].Email, revised.FiledEmail);
+        Assert.Equal([held.Stored[0].Email], held.Folders.ErasedEmails);
+        Assert.Equal([held.Stored[1].Email], held.Folders.Placements.Keys);
+        Assert.Equal(0, harness.AppendCount);
+        Assert.Empty(harness.Withdrawn);
+    }
+
+    /// <summary>Saving a held account's draft again tells its clients, once the commit lands, of the new message and of the one it replaced.</summary>
+    [Fact]
+    public async Task SaveAsync_RevisionOnAHeldAccount_AnnouncesTheNewMessageAndTheOneItReplaced()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider(Moment);
+        var harness = HarnessOn(clock);
+        harness.MapDraftsFolder(Account.Id);
+        var held = harness.HoldAccount(Account);
+        var channel = new RecordingClientSignalChannel();
+        await using var signals = new ClientSignals([channel], clock);
+        held.Publisher = signals;
+        harness.BeginNewScope();
+        var draft = await SaveAsync(harness, "first version");
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+        var announcedBefore = channel.Published.Count;
+
+        // Act
+        await harness.Book.SaveAsync(
+            Account,
+            OutgoingEmailRequester.Command("mfctl-4f2a"),
+            Composed("second version"),
+            draft.Id,
+            CancellationToken.None);
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var changed = Assert.Single(channel.Published.Skip(announcedBefore));
+
+        Assert.Equal(ClientSignalKind.MailChanged, changed.Kind);
+        Assert.Equal(2, changed.Emails.Count);
+        Assert.Contains(held.Stored[1].Email, changed.Emails);
+        Assert.Contains(held.Stored[0].Email, changed.Emails);
+    }
+
+    /// <summary>A revision filed after the drafts role moved to another source folder names the replaced message in a signal of its own rather than in the new folder's.</summary>
+    [Fact]
+    public async Task SaveAsync_RevisionOnAHeldAccountAfterTheDraftsRoleMoved_AnnouncesTheReplacedMessageOutsideTheNewFolder()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider(Moment);
+        var harness = HarnessOn(clock);
+        harness.MapDraftsFolder(Account.Id);
+        var held = harness.HoldAccount(Account);
+        var channel = new RecordingClientSignalChannel();
+        await using var signals = new ClientSignals([channel], clock);
+        held.Publisher = signals;
+        harness.BeginNewScope();
+        var draft = await SaveAsync(harness, "first version");
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+        var announcedBefore = channel.Published.Count;
+        var movedTo = MailFolderAlias.Create("drafts-moved");
+        held.UnmapRoles();
+        held.MapRole(MailFolderSpecialUse.Drafts, movedTo.Value);
+        harness.BeginNewScope();
+
+        // Act
+        await harness.Book.SaveAsync(
+            Account,
+            OutgoingEmailRequester.Command("mfctl-4f2a"),
+            Composed("second version"),
+            draft.Id,
+            CancellationToken.None);
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var changed = channel.Published
+            .Skip(announcedBefore)
+            .Where(signal => signal.Kind == ClientSignalKind.MailChanged)
+            .ToArray();
+
+        Assert.Equal(2, changed.Length);
+        Assert.Equal([held.Stored[1].Email], changed.Single(signal => signal.Folder == movedTo).Emails);
+        Assert.Equal([held.Stored[0].Email], changed.Single(signal => signal.Folder != movedTo).Emails);
+    }
+
+    /// <summary>Giving up a held account's draft erases the filed message and the record, and reaches no mail server.</summary>
+    [Fact]
+    public async Task DiscardAsync_DraftOnAHeldAccount_ErasesTheFiledMessageAndTheRecord()
+    {
+        // Arrange
+        var harness = Harness();
+        harness.MapDraftsFolder(Account.Id);
+        var held = harness.HoldAccount(Account);
+        var draft = await SaveAsync(harness, "first version");
+
+        // Act
+        var result = await harness.Book.DiscardAsync(draft.Id, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(MailDraftFilingOutcome.Discarded, result.Outcome);
+        Assert.Equal([held.Stored[0].Email], held.Folders.ErasedEmails);
+        Assert.Empty(harness.Drafts.Drafts);
+        Assert.Empty(harness.Withdrawn);
     }
 
     /// <summary>
