@@ -596,8 +596,8 @@ number to reach. So nothing gates on it, in four separate places rather than one
 `scripts/mutation-score.sh` passes `--break-at 0`, so the score never decides an
 exit status; `mutation-score.yml` sets `continue-on-error`, so whatever else this
 job does never decides the run's; neither verification script calls the
-script at all; and no pull-request workflow does either. It runs on the weekly channel —
-`weekly-diagnostics.yml` calls `mutation-score.yml`, which calls the script — where tens of
+script at all; and no pull-request workflow does either. It runs on the diagnostics channel, and only when somebody dispatches it —
+`diagnostics.yml` calls `mutation-score.yml`, which calls the script — where tens of
 minutes of runtime and a preview test runner's false positives cost nobody a
 merge. Read the score, act on what survived, and never enforce either. It is the
 same arrangement the hot-path benchmarks sit under in the same workflow, for the same
@@ -614,7 +614,7 @@ leaving it to whatever a test project happens to reference.
 The runner is Microsoft Testing Platform rather than Stryker's default. That is
 not a preference: `xunit.v3.mtp-v2` carries no VSTest adapter, so the default
 runner finds no tests here at all. Stryker calls its MTP runner preview and says
-so on every run, which is the second reason this is a weekly report and not a
+so on every run, which is the second reason this is a dispatched report and not a
 gate.
 
 No score fails anything, and a score is the only thing that cannot. Stryker

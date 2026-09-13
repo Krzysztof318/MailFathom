@@ -2,7 +2,7 @@
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 # Project repository: https://github.com/Krzysztof318/MailFathom
 
-name: Weekly diagnostics
+name: Diagnostics
 
 # The two measurements `Nightly` used to carry, on a channel of their own: the hot-path benchmarks and the
 # mutation score. Neither is a property of the image a nightly publishes — one says what the hot paths
@@ -10,16 +10,10 @@ name: Weekly diagnostics
 # was a gate they never needed, and a channel whose reason to exist is publishing an image is the wrong
 # home for two measurements that publish nothing.
 #
-# It runs at 02:00 UTC on Sundays, which is 04:00 in Europe/Warsaw under CEST and 03:00 under CET; GitHub
-# schedules are expressed in UTC only, and a run may start later than asked when the hosted queue is busy.
-# The schedule fires on `main` alone, which is what a measurement of the tree somebody deploys is, and a
-# manual dispatch measures the same head for a change that cannot wait for Sunday.
-#
-# **A week on which `main` has not moved still measures.** The nightly's skip was a decision about the
-# image it was about to publish, and this channel publishes nothing, so there is no state beside the run
-# to compare against and nothing to skip: a quiet week's run says the toolchain that produces the two
-# reports still works, which is the only fact such a week has left to say. Actions minutes are free for a
-# public repository, so the cost of the reprint is wall-clock on a runner nobody else is using.
+# **It runs only when somebody dispatches it.** Nothing waits on either report, so a run on a timer
+# produced a reprint nobody asked for — the `Application` mutation pass alone is past an hour — and a
+# dispatch is how the report is taken when somebody means to read it. It measures the head of the ref it
+# was dispatched on, which is `main` unless the dispatcher chose another branch.
 #
 # Nothing here gates anything, on the standing the two jobs carried on the nightly channel: neither job
 # waits on the other, and a failure marks the job failed without failing the run — a missing report is
@@ -29,14 +23,12 @@ name: Weekly diagnostics
 # `docs/operations/agent-workflow.md` § *The mutation score is read, never enforced* and
 # `backend/tests/AGENTS.md` § *Cost claims* hold the rest.
 on:
-  schedule:
-    - cron: '0 2 * * 0'
   workflow_dispatch:
 
 concurrency:
-  # A dispatch can land on the weekly run. The two measure independent checkouts of the same tree and
+  # A second dispatch can land on a run still in flight. The two measure independent checkouts and
   # collide on nothing, so the later one is not cancelled, and there is nothing to wait on in return.
-  group: weekly-diagnostics
+  group: diagnostics
   cancel-in-progress: false
 
 permissions:

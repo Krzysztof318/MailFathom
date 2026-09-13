@@ -9,7 +9,7 @@ name: Mutation score
 # coverage stopped answering — it changes the production code and reports which changes no test noticed — and that
 # answer says where the next test is worth writing.
 #
-# It belongs on the weekly diagnostics channel and on no pull request. The runtime is tens of minutes and the preview
+# It belongs on the manually dispatched diagnostics channel and on no pull request. The runtime is tens of minutes and the preview
 # runner's false positives would cost more than they return in front of a merge, and a gate on a score would turn a
 # diagnostic into a number to game.
 #
