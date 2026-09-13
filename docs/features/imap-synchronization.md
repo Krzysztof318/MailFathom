@@ -682,13 +682,12 @@ mechanism depends on.
 where a person's mail has been, when, and at whose instruction — so a deployment that never asked for it never
 accumulates one. An account turns it on and states how long it keeps entries:
 
-```yaml
-MailAccounts:
-  - EmailAddress: alex@example.test
-    DisplayName: Work mail
-    AuditTrail:
-      Enabled: true
-      Retention: 90.00:00:00
+```json
+{
+  "EmailAddress": "alex@example.test",
+  "DisplayName": "Work mail",
+  "AuditTrail": { "Enabled": true, "Retention": "90.00:00:00" }
+}
 ```
 
 The answer is resolved when a change is written down and travels on its record, so switching the trail on or off while a

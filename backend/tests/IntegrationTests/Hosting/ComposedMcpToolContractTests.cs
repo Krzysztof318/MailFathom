@@ -7,6 +7,7 @@ using System.Text.Json;
 using MailFathom.AppHost;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.IntegrationTests.Orchestration;
@@ -64,7 +65,8 @@ public sealed class ComposedMcpToolContractTests(MailFathomOrchestrationFixture 
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await this.SeedOneMessageAsync(cancellationToken);
+        var accountId = await orchestration.ComposedHostAccountIdAsync(cancellationToken);
+        await this.SeedOneMessageAsync(accountId, cancellationToken);
 
         using var client = await orchestration.OpenMcpEndpointClientAsync(cancellationToken);
         using var request = SearchEmailsCall();
@@ -99,7 +101,7 @@ public sealed class ComposedMcpToolContractTests(MailFathomOrchestrationFixture 
         // Named by its display name on the way in and reported by both names on the way out, which is the whole of what
         // the two spellings promise a client: either selects the mailbox, and the identifier is what later results are
         // matched against.
-        Assert.Equal(OrchestrationContract.ServedMailAccountId, seeded.GetProperty("accountId").GetString());
+        Assert.Equal(accountId.Value, seeded.GetProperty("accountId").GetString());
         Assert.Equal(
             OrchestrationContract.ServedMailAccountDisplayName,
             seeded.GetProperty("accountDisplayName").GetString());
@@ -117,11 +119,17 @@ public sealed class ComposedMcpToolContractTests(MailFathomOrchestrationFixture 
     }
 
     /// <summary>Stores one message the search reaches, through the production write path.</summary>
-    private async Task SeedOneMessageAsync(CancellationToken cancellationToken)
+    /// <remarks>Under the account the composed host serves, which is not the one the in-process services name by default.</remarks>
+    private async Task SeedOneMessageAsync(MailAccountId accountId, CancellationToken cancellationToken)
     {
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
-        var occurrenceId = SyntheticEmail.OccurrenceIn(binding, uid: 9801);
+        var binding = await OrchestratedFolderBinding.CommitAsync(
+            services,
+            MailAccountIdentity.Create(SyntheticMailAccount.User, accountId),
+            FolderAlias,
+            FolderAlias,
+            cancellationToken);
+        var occurrenceId = SyntheticEmail.OccurrenceIn(accountId, binding, uid: 9801);
 
         var commitResult = await services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(

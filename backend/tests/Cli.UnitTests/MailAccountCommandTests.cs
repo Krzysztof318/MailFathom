@@ -51,6 +51,23 @@ public sealed class MailAccountCommandTests : IDisposable
             line => line.Contains($"assigned to: {User:D}", StringComparison.Ordinal));
     }
 
+    /// <summary>A listing the deployment cut at its bound says so, so an operator does not take it for every account held.</summary>
+    [Fact]
+    public async Task List_ADeploymentHoldingMoreThanOneListingCarries_SaysOnlyTheFirstAreListed()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountDeployment.HoldingMoreThanOneListing();
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "account", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            "This deployment holds more than 1 mail accounts; only the first 1 are listed.",
+            this.harness.Console.Lines);
+    }
+
     [Fact]
     public async Task Show_AnAccountTheDeploymentHolds_PrintsItsDeclaration()
     {

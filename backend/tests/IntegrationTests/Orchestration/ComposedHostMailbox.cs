@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using MailFathom.AppHost;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.IntegrationTests.Orchestration;
 
@@ -40,13 +41,24 @@ internal static class ComposedHostMailbox
     /// </summary>
     private const string RecordedUserDisplayName = "user";
 
-    internal static async Task RecordAsync(Uri adminAddress, CancellationToken cancellationToken)
+    /// <summary>Records the mailbox, or finds the one an earlier start over this database recorded, and reports its identifier.</summary>
+    /// <remarks>
+    /// The identifier is the one the deployment generated, so it is read back rather than stated: a composed-host test
+    /// names the mailbox by it and seeds mail under it. An address is held by one account in the whole deployment, so an
+    /// account already assigned to the user for this address is reused rather than created again and refused.
+    /// </remarks>
+    internal static async Task<MailAccountId> RecordAsync(Uri adminAddress, CancellationToken cancellationToken)
     {
         using var client = new HttpClient { BaseAddress = adminAddress };
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", OrchestrationContract.AdminApiKey);
 
         var user = await ReadOrRecordSoleUserAsync(client, cancellationToken);
+
+        if (await FindAssignedAccountAsync(client, user, cancellationToken) is { } recorded)
+        {
+            return recorded;
+        }
 
         var requestBody = new JsonObject
         {
@@ -70,6 +82,40 @@ internal static class ComposedHostMailbox
                     " ",
                     outcome.RootElement.GetProperty("messages").EnumerateArray().Select(static message => message.GetString()))}].");
         }
+
+        return MailAccountId.Create(outcome.RootElement.GetProperty("accountId").GetGuid().ToString("D"));
+    }
+
+    private static async Task<MailAccountId?> FindAssignedAccountAsync(
+        HttpClient client,
+        Guid user,
+        CancellationToken cancellationToken)
+    {
+        using var response = await client.GetAsync(
+            new Uri("api/admin/mail-accounts", UriKind.Relative),
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        using var listing = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+
+        return listing.RootElement
+            .GetProperty("accounts")
+            .EnumerateArray()
+            .Where(account => account.GetProperty("users").EnumerateArray().Any(assigned => assigned.GetGuid() == user)
+                && DeclaresTheSendingAddress(account.GetProperty("declaration").GetString()))
+            .Select(static account => (MailAccountId?)MailAccountId.Create(account.GetProperty("id").GetGuid().ToString("D")))
+            .FirstOrDefault();
+    }
+
+    private static bool DeclaresTheSendingAddress(string? declaration)
+    {
+        using var document = JsonDocument.Parse(declaration ?? "{}");
+
+        return document.RootElement.TryGetProperty("EmailAddress", out var address)
+            && string.Equals(
+                address.GetString(),
+                OrchestrationContract.ComposedHostSendingAddress,
+                StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Composes the account exactly as a configuration file once stated it, with the address that tells it apart.</summary>

@@ -1828,7 +1828,7 @@ somebody's mail is not deciding which mailboxes are read for them.
 | `GET /api/client/record` | Hands over the signed-in user's record as redacted JSON, with the version it was read at |
 | `POST /api/client/record` | Commits that record back edited, as one change against the version it was opened over |
 | `POST /api/client/record/mail-accounts` | Creates one more mailbox, assigned to the signed-in user alone |
-| `POST /api/client/record/mail-accounts/removal` | Ends the signed-in user's assignment to one mailbox, named by its identifier, erasing it when nobody else is assigned it |
+| `POST /api/client/record/mail-accounts/removal` | Ends the signed-in user's assignment to one mailbox, named by its identifier, and erases the mail stored for it |
 | `POST /api/client/record/mail-accounts/folders` | Declares one more folder in one of those mailboxes |
 | `POST /api/client/record/mail-accounts/folders/replacement` | States one folder afresh, in place of the one carrying an alias |
 | `POST /api/client/record/mail-accounts/folders/removal` | Stops the mailbox declaring one folder, named by its alias |
@@ -1864,19 +1864,19 @@ no route through which any of them learns that the others exist. [The administra
 surface](admin-endpoint.md#users-and-their-records) is where a roster is read, and it is not reachable with a
 credential issued for this one.
 
-**A mailbox added here is the user's own, and an address somebody holds is refused without saying so.** The account
-is created assigned to the signed-in user and nobody else; only an administrator assigns an account to somebody else.
-One address is held by one account in the whole deployment, and an address already held — by anybody — is refused with
-a sentence that reveals neither whether nor by whom:
+**A mailbox added here is the user's own, and an address somebody holds is refused without saying whose.** The account
+is created assigned to the signed-in user and nobody else, and an account is served to one user at a time. One address
+is held by one account in the whole deployment, and an address already held — by anybody — is refused with the same
+sentence whoever holds it. It tells the caller the address cannot be added, and it never says who holds it:
 
 ```
 This mail account cannot be added for you. Ask whoever administers this deployment to add it.
 ```
 
-**Removing a mailbox nobody else is assigned erases its mail.** A removal ends the signed-in user's assignment. Where
-somebody else is still assigned the account, that is all it does, and the mail stays theirs. Where nobody else is, the
-account and every message, folder, and attachment this deployment holds for it are erased, because an account nobody is
-assigned to serves nobody.
+**Removing a mailbox erases its mail.** A removal ends the signed-in user's assignment and erases the mail this
+deployment stored for them under the account. An account nobody else is assigned to — which, with an account served to
+one user at a time, is every account a removal reaches — goes with it, together with every message, folder, and
+attachment this deployment holds for it, because an account nobody is assigned to serves nobody.
 
 **Nothing here reports a secret, and nothing here can overwrite one blindly.** A record is handed over with every
 password, token, and client secret replaced by the redaction marker; a save is read as the difference from what the row

@@ -1418,7 +1418,7 @@ internal sealed class AdminApiClient
             CliJsonContext.Default.MailAccountErasure,
             cancellationToken);
 
-    /// <summary>Assigns one mail account to one more user.</summary>
+    /// <summary>Assigns one mail account nobody holds to a user.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="accountId">The account.</param>
     /// <param name="request">The user.</param>

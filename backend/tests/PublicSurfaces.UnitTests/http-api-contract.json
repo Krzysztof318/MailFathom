@@ -4855,10 +4855,14 @@
               "$ref": "#/components/schemas/MailAccountResponse"
             },
             "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
           }
         },
         "required": [
-          "accounts"
+          "accounts",
+          "truncated"
         ],
         "type": "object"
       },

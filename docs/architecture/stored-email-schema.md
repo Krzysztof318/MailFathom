@@ -277,10 +277,9 @@ table can be reached or opened, and a deployment without the key ring refuses to
 
 **An account reference is the pair, not the identifier.** Every table that names a mail account carries `UserId`
 beside `MailboxAccountId`, and every index that used to lead with the identifier now leads with the two together. The
-identifier is the text form of the account's generated `settings_mail_accounts.Id`, and one account assigned to two
-people is read as two mailboxes, one per user, each holding its own copy of the mail. So a row that named the
-identifier alone would stop naming one mailbox the moment an account serves a second person, and a structure led by it
-alone would interleave two users' rows under one key. Reads follow the same order: a mail-reading or mail-writing query narrows on the user and
+identifier is the text form of the account's generated `settings_mail_accounts.Id`. An account is assigned to one user
+at a time, and the mail stored for it hangs on that user, so ending the assignment erases that user's rows under the
+identifier rather than handing them to anybody else. Reads follow the same order: a mail-reading or mail-writing query narrows on the user and
 then on the identifier, and it is given both by whoever resolved the account rather than by a join back to
 `mailbox_accounts`. `mailbox_accounts` is keyed by the pair as well, which is what makes that scope
 a guarantee the schema gives rather than a convention every reader has to keep.

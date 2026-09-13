@@ -8,7 +8,8 @@ namespace MailFathom.Host.Api;
 
 /// <summary>The mail accounts this deployment holds.</summary>
 /// <param name="Accounts">One entry per account, in the order they were created in.</param>
-internal sealed record MailAccountListResponse(IReadOnlyList<MailAccountResponse> Accounts);
+/// <param name="Truncated">Whether the deployment holds more accounts than one listing carries, so the entries are only the first of them.</param>
+internal sealed record MailAccountListResponse(IReadOnlyList<MailAccountResponse> Accounts, bool Truncated);
 
 /// <summary>One mail account as an administrator reads it.</summary>
 /// <param name="Id">The identifier the deployment generated for the account, which every other act names it by.</param>

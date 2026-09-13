@@ -10,6 +10,8 @@ using MailFathom.Host.Configuration.UserSettings.Administration;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.TestSupport;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.UserSettings.Administration;
@@ -67,9 +69,9 @@ public sealed class MailAccountAdministrationTests
         Assert.Null(created);
     }
 
-    /// <summary>An administrator told the address is held is told which, because assigning the account that holds it is what they do next.</summary>
+    /// <summary>An administrator told the address is held is told which, because finding the account that holds it is what they do next.</summary>
     [Fact]
-    public async Task CreateAsync_AnAddressAnotherAccountHolds_IsRefusedNamingTheAddressAndTheAssignCommand()
+    public async Task CreateAsync_AnAddressAnotherAccountHolds_IsRefusedNamingTheAddress()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
@@ -86,7 +88,6 @@ public sealed class MailAccountAdministrationTests
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, created!.Outcome.Refusal);
         var refusal = Assert.Single(created.Outcome.Messages);
         Assert.Contains("'SHARED@example.test'", refusal, StringComparison.Ordinal);
-        Assert.Contains("mfctl account assign", refusal, StringComparison.Ordinal);
         Assert.Single(deployment.MailAccountRecords.Accounts);
     }
 
@@ -187,9 +188,9 @@ public sealed class MailAccountAdministrationTests
                 TestContext.Current.CancellationToken));
     }
 
-    /// <summary>One mailbox shared by two people is one account assigned twice, and the assignment moves the version of the record it reaches.</summary>
+    /// <summary>An account is served to one user at a time, so one somebody already holds is not handed to a second person.</summary>
     [Fact]
-    public async Task AssignAsync_AnAccountAnotherUserIsAssigned_AssignsItToThisUserTooAndMovesTheirRecordsVersion()
+    public async Task AssignAsync_AnAccountAnotherUserIsAssigned_IsRefusedAndWritesNothing()
     {
         // Arrange
         var shared = Mailbox("shared@example.test", "shared");
@@ -201,11 +202,13 @@ public sealed class MailAccountAdministrationTests
         var outcome = await deployment.MailAccounts.AssignAsync(shared.Id, Alex, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(outcome!.IsCommitted);
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Equal(
+            "This mail account is already assigned to another user, and an account is served to one user at a time, so nothing was written.",
+            Assert.Single(outcome.Messages));
         var alex = deployment.MailAccountRecords.DocumentOf(Alex)!;
-        Assert.Equal([shared.Id], alex.MailAccounts.Select(account => account.Id));
-        Assert.Equal(6, alex.Version);
-        Assert.Equal([shared.Id], deployment.MailAccountRecords.DocumentOf(Sam)!.MailAccounts.Select(account => account.Id));
+        Assert.Empty(alex.MailAccounts);
+        Assert.Equal(5, alex.Version);
     }
 
     /// <summary>An account nobody is assigned any longer is erased with it, because mail nobody is served is mail nobody asked to keep.</summary>
@@ -304,6 +307,28 @@ public sealed class MailAccountAdministrationTests
         Assert.Equal(theirs, Assert.Single(deployment.MailAccountRecords.Accounts));
     }
 
+    /// <summary>An account erased while the change was composed is gone rather than moved on, so no re-read could settle a conflict and the change answers that there is nothing to change.</summary>
+    [Fact]
+    public async Task AddOwnFolderAsync_AnAccountErasedBeforeTheSave_ReportsNothingRatherThanASupersededVersion()
+    {
+        // Arrange
+        var erased = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"));
+        var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 3);
+        deployment.Documents.ReadAsync(Alex, Arg.Any<CancellationToken>())
+            .Returns(new UserSettingsDocument(Alex, "alex", LanguageOnlyRecord, 3) { MailAccounts = [erased] });
+
+        // Act
+        var outcome = await deployment.MailAccounts.AddOwnFolderAsync(
+            erased.Id.ToString("D"),
+            """{"Alias":"INBOX/PROJECTS","RemotePath":"INBOX/Projects"}""",
+            expectedVersion: 3,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(outcome);
+    }
+
     [Fact]
     public async Task ReplaceOwnFolderAsync_AnAliasTheAccountDoesNotDeclare_IsRefusedNamingIt()
     {
@@ -370,6 +395,48 @@ public sealed class MailAccountAdministrationTests
         Assert.Equal(
             [created!.AccountId!.Value.ToString("D")],
             Assert.Single(deployment.ServedUsers.Users).MailAccounts.Select(account => account.AccountId));
+    }
+
+    /// <summary>The rows are committed whether or not this replica can read them back, so a reading that failed after the commit does not turn the write into a reported failure.</summary>
+    [Fact]
+    public async Task CreateAsync_TheRosterUnreadableAfterTheCommit_AnswersTheCommittedWrite()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 4);
+        deployment.Documents.ReadVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new UserSettingsUnreadableException("The user records could not be read."));
+
+        // Act
+        var created = await deployment.MailAccounts.CreateAsync(
+            Alex,
+            Declaration("archive@example.test", "archive"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(created!.Outcome.IsCommitted);
+        Assert.Equal(created.AccountId, Assert.Single(deployment.MailAccountRecords.Accounts).Id);
+    }
+
+    /// <summary>A listing cut at its bound says so, because an administrator reading it would otherwise take it as every account the deployment holds.</summary>
+    [Fact]
+    public async Task ReadAllAsync_MoreAccountsThanOneListingReads_ListsTheFirstAndSaysTheListingWasCut()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
+        deployment.Holding(
+            Alex,
+            LanguageOnlyRecord,
+            version: 1,
+            [.. Enumerable.Range(0, MailAccountAdministration.MaximumListed + 1)
+                .Select(index => Mailbox($"box{index}@example.test", $"box{index}"))]);
+
+        // Act
+        var listing = await deployment.MailAccounts.ReadAllAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(listing.Truncated);
+        Assert.Equal(MailAccountAdministration.MaximumListed, listing.Accounts.Count);
     }
 
     /// <summary>A refused account changed nothing, so no replica is asked to read anything again.</summary>

@@ -42,6 +42,14 @@ internal static class FakeMailAccountDeployment
         Committed,
         """{"unassigned":true,"accountErased":false}""");
 
+    /// <summary>Builds a deployment holding more accounts than one listing carries, of which it lists the one.</summary>
+    /// <returns>The deployment.</returns>
+    internal static FakeHttpMessageHandler HoldingMoreThanOneListing() => Answering(
+        Committed,
+        Committed,
+        """{"unassigned":true,"accountErased":false}""",
+        truncated: true);
+
     /// <summary>Builds a deployment whose last assignment to the account is the one being ended.</summary>
     /// <returns>The deployment.</returns>
     internal static FakeHttpMessageHandler ErasingOnTheLastUnassignment() => Answering(
@@ -66,14 +74,19 @@ internal static class FakeMailAccountDeployment
         CultureInfo.InvariantCulture,
         $$"""{"committed":true,"version":{{AccountVersion + 1}},"code":null,"messages":[],"accountId":null}""");
 
-    private static FakeHttpMessageHandler Answering(string creationAnswer, string writeAnswer, string unassignment) =>
-        new((request, _) => Task.FromResult(Answer(request, creationAnswer, writeAnswer, unassignment)));
+    private static FakeHttpMessageHandler Answering(
+        string creationAnswer,
+        string writeAnswer,
+        string unassignment,
+        bool truncated = false) =>
+        new((request, _) => Task.FromResult(Answer(request, creationAnswer, writeAnswer, unassignment, truncated)));
 
     private static HttpResponseMessage Answer(
         HttpRequestMessage request,
         string creationAnswer,
         string writeAnswer,
-        string unassignment)
+        string unassignment,
+        bool truncated)
     {
         var path = request.RequestUri?.AbsolutePath ?? string.Empty;
 
@@ -83,7 +96,7 @@ internal static class FakeMailAccountDeployment
                 HttpStatusCode.OK,
                 $$"""{"users":[{"id":"{{User:D}}","displayName":"alex","served":true,"mcpEndpoint":true,"clientEndpoint":true}]}"""),
             AdminEndpointRoutes.MailAccountsPath => request.Method == HttpMethod.Get
-                ? FakeAdminEndpoint.Json(HttpStatusCode.OK, $$"""{"accounts":[{{Entry()}}]}""")
+                ? FakeAdminEndpoint.Json(HttpStatusCode.OK, $$"""{"accounts":[{{Entry()}}],"truncated":{{(truncated ? "true" : "false")}}}""")
                 : FakeAdminEndpoint.Json(HttpStatusCode.OK, creationAnswer),
             _ when path == AdminEndpointRoutes.MailAccountPath(Account) => AnswerAccount(request, writeAnswer),
             _ when path == AdminEndpointRoutes.MailAccountAssignmentsPath(Account) =>

@@ -175,9 +175,9 @@ display name that another account's identifier or display name already carries; 
 *own* identifier is fine, since both spellings then reach the same mailbox.
 
 **The display-name space belongs to each user's assigned set, and the address space to the deployment.** Two of one
-person's accounts may not share a display name, and two people's accounts may; an account assigned to several people
-has to fit each of their sets. The address is the opposite: one mailbox is held by one account in the whole deployment,
-so two people reading one mailbox are two assignments of one account rather than two accounts. Stored mail is keyed by
+person's accounts may not share a display name, and two people's accounts may. The address is the opposite: one mailbox
+is held by one account in the whole deployment, and an account is assigned to one user at a time, so one mailbox is one
+account held by one person. Stored mail is keyed by
 the user and the account identifier together, so an ad-hoc SQL statement still names both.
 
 A folder entry names `Alias` (required — your stable name for the folder) and **at least one** of `RemotePath` (the

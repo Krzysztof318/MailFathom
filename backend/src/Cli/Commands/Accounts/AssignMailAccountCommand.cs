@@ -9,8 +9,8 @@ using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Accounts;
 
-/// <summary>Assigns a mail account to one more user.</summary>
-/// <remarks>Only an administrator shares an account between users, and this is where it is done: the account is judged against the user's own accounts first, so one whose display name they already use is refused.</remarks>
+/// <summary>Assigns a mail account nobody holds to a user.</summary>
+/// <remarks>An account is served to one user at a time, so the deployment refuses one another user already holds; the account is judged against the user's own accounts first, so one whose display name they already use is refused too.</remarks>
 internal static class AssignMailAccountCommand
 {
     /// <summary>Builds the <c>account assign</c> command.</summary>
@@ -25,7 +25,7 @@ internal static class AssignMailAccountCommand
         var accountOption = MailAccountOptions.Account();
         var userOption = UserOptions.User();
 
-        Command command = new("assign", "Assign a mail account to one more user.")
+        Command command = new("assign", "Assign a mail account nobody holds to a user.")
         {
             accountOption,
             userOption,

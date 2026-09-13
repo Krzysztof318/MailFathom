@@ -4,7 +4,6 @@
 
 using System.Net;
 using System.Text.Json;
-using MailFathom.AppHost;
 using MailFathom.IntegrationTests.Orchestration;
 using Xunit;
 
@@ -73,13 +72,14 @@ public sealed class ComposedOutgoingMailToolContractTests(MailFathomOrchestratio
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
+        var accountId = (await orchestration.ComposedHostAccountIdAsync(cancellationToken)).Value;
 
         using var client = await orchestration.OpenMcpEndpointClientAsync(cancellationToken);
         using var sendRequest = McpToolCall.Of(
             "send_email",
             new
             {
-                account = OrchestrationContract.ServedMailAccountId,
+                account = accountId,
                 to = QueuedTo,
                 subject = "outgoing-mail-tool-contract",
                 plainTextBody = "This one is withdrawn before it leaves.",
@@ -115,7 +115,7 @@ public sealed class ComposedOutgoingMailToolContractTests(MailFathomOrchestratio
         // The identity the send answered with is what the other two calls name, which is the contract between them.
         Assert.Equal(outgoingEmailId, read.GetProperty("outgoingEmailId").GetString());
         Assert.Equal(outgoingEmailId, withdrawn.GetProperty("outgoingEmailId").GetString());
-        Assert.Equal(OrchestrationContract.ServedMailAccountId, read.GetProperty("accountId").GetString());
+        Assert.Equal(accountId, read.GetProperty("accountId").GetString());
 
         // Queued rather than sent, with the one attempt this deployment made on the record: the submission host it
         // offered the message to does not resolve, so nothing reached a mail server and the send stands exactly where a

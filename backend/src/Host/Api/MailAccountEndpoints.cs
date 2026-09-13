@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text.Json;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.UserSettings.Administration;
 using MailFathom.Host.Security.Endpoints;
@@ -36,7 +37,7 @@ internal static class MailAccountEndpoints
     /// <summary>The route one account is read, saved, and erased at.</summary>
     internal const string MailAccountRoute = $"{MailAccountsRoute}/{{accountId:guid}}";
 
-    /// <summary>The route an account is assigned to one more user at.</summary>
+    /// <summary>The route an account nobody holds is assigned to a user at.</summary>
     internal const string AssignmentsRoute = $"{MailAccountRoute}/assignments";
 
     /// <summary>The route one user's assignment is ended at.</summary>
@@ -78,16 +79,29 @@ internal static class MailAccountEndpoints
     /// <summary>Lists the accounts this deployment holds.</summary>
     /// <param name="administration">The account administration.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the accounts.</returns>
-    internal static async Task<Ok<MailAccountListResponse>> ReadAllAsync(
+    /// <returns><c>200</c> with the accounts, or <c>400</c> when an account's stored row is not a declaration of settings.</returns>
+    internal static async Task<Results<Ok<MailAccountListResponse>, ProblemHttpResult>> ReadAllAsync(
         [FromServices] MailAccountAdministration administration,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(administration);
 
-        var readings = await administration.ReadAllAsync(cancellationToken);
+        MailAccountListing listing;
 
-        return TypedResults.Ok(new MailAccountListResponse([.. readings.Select(MailAccountResponse.For)]));
+        try
+        {
+            listing = await administration.ReadAllAsync(cancellationToken);
+        }
+        catch (Exception refusal) when (refusal is FormatException or JsonException)
+        {
+            // The parser's own message names the offending token, the JSON path it stopped at, and a byte position,
+            // and the path is composed from the row's own key names — which for an account are its settings.
+            return Refusal(UnreadableAccount);
+        }
+
+        return TypedResults.Ok(new MailAccountListResponse(
+            [.. listing.Accounts.Select(MailAccountResponse.For)],
+            listing.Truncated));
     }
 
     /// <summary>Creates an account and assigns it to one user.</summary>
@@ -122,17 +136,30 @@ internal static class MailAccountEndpoints
     /// <param name="accountId">The account asked about.</param>
     /// <param name="administration">The account administration.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the account, or <c>404</c> when this deployment holds no such account.</returns>
-    internal static async Task<Results<Ok<MailAccountResponse>, NotFound<ProblemDetails>>> ReadAsync(
+    /// <returns><c>200</c> with the account, <c>404</c> when this deployment holds no such account, or <c>400</c> when its stored row is not a declaration of settings.</returns>
+    internal static async Task<Results<Ok<MailAccountResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> ReadAsync(
         Guid accountId,
         [FromServices] MailAccountAdministration administration,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(administration);
 
-        return await administration.ReadAsync(accountId, cancellationToken) is { } reading
-            ? TypedResults.Ok(MailAccountResponse.For(reading))
-            : NotFound(NoSuchAccount);
+        MailAccountReading? reading;
+
+        try
+        {
+            reading = await administration.ReadAsync(accountId, cancellationToken);
+        }
+        catch (Exception refusal) when (refusal is FormatException or JsonException)
+        {
+            // The parser's own message names the offending token, the JSON path it stopped at, and a byte position,
+            // and the path is composed from the row's own key names — which for an account are its settings.
+            return Refusal(UnreadableAccount);
+        }
+
+        return reading is null
+            ? NotFound(NoSuchAccount)
+            : TypedResults.Ok(MailAccountResponse.For(reading));
     }
 
     /// <summary>Takes back one account's declaration as an editing session saved it.</summary>
@@ -181,7 +208,7 @@ internal static class MailAccountEndpoints
         return TypedResults.Ok(new MailAccountErasureResponse(await administration.EraseAsync(accountId, cancellationToken)));
     }
 
-    /// <summary>Assigns an account to one more user.</summary>
+    /// <summary>Assigns an account nobody holds to a user.</summary>
     /// <param name="accountId">The account.</param>
     /// <param name="administration">The account administration.</param>
     /// <param name="request">The user.</param>
@@ -232,6 +259,9 @@ internal static class MailAccountEndpoints
     }
 
     private const string NoSuchAccount = "This deployment holds no such mail account.";
+
+    private const string UnreadableAccount =
+        "A mail account this deployment holds is not a declaration of settings, so it cannot be read or edited. Correct the row where it was written.";
 
     private static NotFound<ProblemDetails> NotFound(string detail) => TypedResults.NotFound(new ProblemDetails
     {

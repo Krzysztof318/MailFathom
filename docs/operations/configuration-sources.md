@@ -131,8 +131,7 @@ mfctl account add --user <id> --from-file alex-work.json
 
 The mailbox travels as a file rather than as a list of flags: a JSON object stating its `EmailAddress` and
 `DisplayName` beside the keys [one account](configuration-mail.md#one-account--a-mailbox-in-a-users-record) lists.
-`--user` may be left out on a deployment holding one person, and `mfctl account assign` gives the same account to
-another.
+`--user` may be left out on a deployment holding one person.
 
 At most **256** users may be recorded. A roster that long was generated rather than provisioned, which is worth stopping for on its own.
 
@@ -276,7 +275,7 @@ from your configuration.
 
 One bound holds while several users are served. Only one user may be served whenever an **user-facing** surface — the MCP endpoint or the client endpoint — admits a caller that names no user, because such a caller is composed against whichever user the deployment happens to hold, and a second user would leave that surface serving one person another person's mail. Every credential these two surfaces admit is a record naming the user it belongs to, whichever method presents it, so the one way a caller arrives naming nobody is a surface requiring no authentication at all. A deployment serving several with either of those surfaces in that state is refused, and the message names the correction: require a credential, or switch the surface off. **The administrative endpoint is deliberately outside that bound** — an administrator acts for the deployment rather than for a person, so a caller there is admitted for no user and every user-scoped route names the user it is for, which is what makes recording a second user something an operator can do at all.
 
-**One mailbox is one account, whoever it serves.** An account's identifier is generated rather than typed, and its address is unique across the deployment, so two users reading one mailbox are two assignments of one account rather than two accounts under a shared name. [Mail accounts and who they are assigned to](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) holds the rules. An account holding no address is not served, and a start reports it at `Warning`:
+**One mailbox is one account, whoever it serves.** An account's identifier is generated rather than typed, and its address is unique across the deployment, and an account is served to one user at a time, so one mailbox is one account held by one person. [Mail accounts and who they are assigned to](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) holds the rules. An account holding no address is not served, and a start reports it at `Warning`:
 
 ```
 The user labelled alex is assigned 1 mail accounts that hold no email address, so those mailboxes are not served. State each address with 'mfctl account edit'; 'mfctl account list' names the accounts.

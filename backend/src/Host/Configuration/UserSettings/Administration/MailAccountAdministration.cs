@@ -25,14 +25,17 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// </para>
 /// <para>
 /// An administrator names the account by the identifier this deployment generated and names users by theirs, and is the
-/// only caller that assigns an account to a second user. A user adds an account for themselves alone, withdraws one of
-/// their own, and changes the folders of one — and every one of those writes states the version of their own record,
-/// which is what every account write moves, so the version a client already holds is the one it composes against.
+/// only caller that assigns an account to a user. An account is served to one user at a time, so an assignment reaches
+/// only an account nobody holds: the mail graph is still stored per user, and serving one mailbox under two users would
+/// synchronize it, and apply every rule and mutation to it, once per assignee. A user adds an account for themselves
+/// alone, withdraws one of their own, and changes the folders of one — and every one of those writes states the version
+/// of their own record, which is what every account write moves, so the version a client already holds is the one it
+/// composes against.
 /// </para>
 /// <para>
 /// An address is held by one account in the whole deployment. An administrator told the address is held is told so by
-/// name, because assigning the account that holds it is what they would do next. A user is told only that the account
-/// cannot be added, so no caller learns through this surface which addresses somebody else's mail arrives at.
+/// name. A user is refused with one sentence whoever holds the address, so the refusal never says whose mailbox it is;
+/// it does tell them that the address is held, because a free address commits.
 /// </para>
 /// <para>
 /// A committed write is served by converging this replica's roster on the rows, which republishes every user whose record
@@ -63,13 +66,18 @@ internal sealed class MailAccountAdministration(
 
     /// <summary>Lists the accounts this deployment holds.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The accounts, redacted, in the order they were created in.</returns>
+    /// <returns>The first <see cref="MaximumListed" /> accounts, redacted, in the order they were created in, and whether more are held.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" />.</exception>
-    internal async Task<IReadOnlyList<MailAccountReading>> ReadAllAsync(CancellationToken cancellationToken)
+    /// <exception cref="FormatException">Thrown when an account's stored settings are JSON but not an object of settings.</exception>
+    /// <exception cref="JsonException">Thrown when an account's stored settings are not JSON the parser accepts.</exception>
+    /// <remarks>One more than the listing holds is read, so a deployment past the bound is told so rather than handed a listing that reads as complete.</remarks>
+    internal async Task<MailAccountListing> ReadAllAsync(CancellationToken cancellationToken)
     {
         authorization.RequirePermission(MailFathomPermission.AdminRead);
 
-        return [.. (await accounts.ReadAllAsync(MaximumListed, cancellationToken)).Select(ReadingOf)];
+        var held = await accounts.ReadAllAsync(MaximumListed + 1, cancellationToken);
+
+        return new MailAccountListing([.. held.Take(MaximumListed).Select(ReadingOf)], held.Count > MaximumListed);
     }
 
     /// <summary>Reads one account.</summary>
@@ -199,14 +207,18 @@ internal sealed class MailAccountAdministration(
         };
     }
 
-    /// <summary>Assigns an account to one more user.</summary>
+    /// <summary>Assigns an account nobody holds to a user.</summary>
     /// <param name="accountId">The account.</param>
     /// <param name="user">The user it is assigned to.</param>
     /// <param name="cancellationToken">Cancels the reads and the commit.</param>
     /// <returns>What the write did, its version the account's, or <see langword="null" /> when this deployment holds no such account or user.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
-    /// <remarks>The account is judged against the user's own set, so an account whose display name one of their accounts already carries is refused rather than served under a name that no longer tells two apart.</remarks>
+    /// <remarks>
+    /// An account another user already holds is refused, because an account is served to one user at a time. The account
+    /// is judged against the user's own set, so an account whose display name one of their accounts already carries is
+    /// refused rather than served under a name that no longer tells two apart.
+    /// </remarks>
     internal async Task<UserRecordWriteOutcome?> AssignAsync(
         Guid accountId,
         MailUserId user,
@@ -228,6 +240,15 @@ internal sealed class MailAccountAdministration(
             return UserRecordWriteOutcome.NothingToChange(
                 account.Version,
                 "The account is already assigned to this user, so nothing was written.");
+        }
+
+        // ponytail: one user per account until issue 1325 keys the mail graph by the account alone; lift this refusal there.
+        if (holding.Users.Count > 0)
+        {
+            return UserRecordWriteOutcome.Refused(
+                MailFathomErrorCode.ConfigurationCandidateInvalid,
+                account.Version,
+                ["This mail account is already assigned to another user, and an account is served to one user at a time, so nothing was written."]);
         }
 
         var judgement = await this.JudgeAsync(account, account.Document, [user], actingUser: null, cancellationToken);
@@ -512,11 +533,11 @@ internal sealed class MailAccountAdministration(
             MailFathomErrorCode.ConfigurationCandidateInvalid,
             version,
             [
-                $"Another mail account already holds '{emailAddress}', and one address is held by one account in this deployment. Assign that account to the user with 'mfctl account assign' instead.",
+                $"Another mail account already holds '{emailAddress}', and one address is held by one account in this deployment, so nothing was written.",
             ]);
 
     /// <summary>The refusal a user receives for an address somebody's account already holds.</summary>
-    /// <remarks>The same sentence whoever holds it, so the answer says nothing about which addresses this deployment serves for other people.</remarks>
+    /// <remarks>The same sentence whoever holds it, so the answer never names whose mailbox the address is; that the address is held is what a refusal of an otherwise acceptable account tells them.</remarks>
     private static UserRecordWriteOutcome AddressHeldForUser(long version) =>
         UserRecordWriteOutcome.Refused(
             MailFathomErrorCode.ConfigurationCandidateInvalid,
@@ -653,9 +674,14 @@ internal sealed class MailAccountAdministration(
         var write = await accounts.SaveAsync(candidate, cancellationToken);
         var version = await this.VersionOfAsync(record, cancellationToken);
 
-        return write.Result == MailAccountWriteResult.Committed
-            ? await this.ServedAsync(UserRecordWriteOutcome.Committed(version, judgement.StandingProblems), cancellationToken)
-            : Superseded(record.Version, version, "user record");
+        return write.Result switch
+        {
+            MailAccountWriteResult.Committed => await this.ServedAsync(
+                UserRecordWriteOutcome.Committed(version, judgement.StandingProblems),
+                cancellationToken),
+            MailAccountWriteResult.NotFound => null,
+            _ => Superseded(record.Version, version, "user record"),
+        };
     }
 
     /// <summary>Reads the signed-in user's record, and refuses a change composed over a version no longer in force.</summary>
@@ -758,6 +784,11 @@ internal sealed class MailAccountAdministration(
         try
         {
             await convergence.ConvergeAsync(cancellationToken);
+        }
+        catch (UserSettingsUnreadableException)
+        {
+            // The write is committed whether or not this reading succeeds, and this replica's next version poll
+            // converges on the rows like every other, so the caller is answered with what was committed.
         }
         finally
         {

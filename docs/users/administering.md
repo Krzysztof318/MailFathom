@@ -693,14 +693,13 @@ cannot change them from their own client. An endpoint you left requiring no cred
 it has nobody to keep off: give it a credential first.
 
 **Mailboxes are `mfctl account`, and they are records of their own.** `mfctl account add` creates one from a file and
-assigns it to a person, `mfctl account assign` gives the same mailbox to somebody else as well, and `mfctl account edit`
-changes its settings for everyone it is assigned to. One address is one account in the whole deployment, so adding a
-mailbox somebody already has is refused with the `assign` command to run instead.
+assigns it to a person, and `mfctl account edit` changes its settings. One address is one account in the whole
+deployment, and an account is served to one person at a time, so adding a mailbox somebody already has is refused, and
+so is assigning it to somebody else.
 
 ```console
 $ mfctl account add --user 7c02... --from-file work.json
 Created mail account 5b0c....
-$ mfctl account assign --account 5b0c... --user 3f1d...
 ```
 
 **Changing more than one thing about somebody at once is `mfctl user edit`.** It opens that person's whole record in your `$VISUAL` or `$EDITOR` and commits what you

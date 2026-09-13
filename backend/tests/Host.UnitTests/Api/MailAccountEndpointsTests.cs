@@ -5,6 +5,7 @@
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -114,6 +115,40 @@ public sealed class MailAccountEndpointsTests
 
         // Assert
         Assert.IsType<NotFound<ProblemDetails>>(result.Result);
+    }
+
+    /// <summary>One unreadable row is answered with what to correct rather than a fault, so the administrator can still reach it to repair it.</summary>
+    [Fact]
+    public async Task ReadAsync_AnAccountWhoseStoredSettingsAreNotADeclaration_IsRefused()
+    {
+        // Arrange
+        var unreadable = UnreadableAccount();
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
+        deployment.Holding(SyntheticMailUser.Deployment, """{"Language":"English"}""", version: 1, unreadable);
+
+        // Act
+        var result = await MailAccountEndpoints.ReadAsync(
+            unreadable.Id,
+            deployment.MailAccounts,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        AssertRefusal(result.Result);
+    }
+
+    /// <summary>An unreadable row refuses the listing with what to correct rather than faulting it.</summary>
+    [Fact]
+    public async Task ReadAllAsync_AnAccountWhoseStoredSettingsAreNotADeclaration_IsRefused()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
+        deployment.Holding(SyntheticMailUser.Deployment, """{"Language":"English"}""", version: 1, UnreadableAccount());
+
+        // Act
+        var result = await MailAccountEndpoints.ReadAllAsync(deployment.MailAccounts, TestContext.Current.CancellationToken);
+
+        // Assert
+        AssertRefusal(result.Result);
     }
 
     [Theory]
@@ -237,6 +272,10 @@ public sealed class MailAccountEndpointsTests
         // Assert
         Assert.False(result.Value!.Erased);
     }
+
+    /// <summary>An account whose stored settings are not JSON, which is what a row changed behind MailFathom looks like.</summary>
+    private static MailAccountRecord UnreadableAccount() =>
+        new(Guid.NewGuid(), "broken@example.test", "broken", "not a declaration", Version: 1);
 
     private static void AssertRefusal(IResult result)
     {
