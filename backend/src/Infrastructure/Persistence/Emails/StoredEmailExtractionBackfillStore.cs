@@ -291,7 +291,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
     public async Task<StaleDerivedDataCount> CountStaleDerivedDataAsync(CancellationToken cancellationToken)
     {
         // The same conditions the walk selects on — a message that is not tombstoned and whose raw MIME is stored —
-        // beside a document that holds derived body text whose stamp is not its own user's. A message with no document
+        // beside a document that holds derived body text whose stamp is not its own account's. A message with no document
         // at all is left out here and is not: it has never been derived, so it holds no under-redacted text, and it is
         // already outstanding for the reason the backfill has always existed.
         var derived = Derived(this.Stored());

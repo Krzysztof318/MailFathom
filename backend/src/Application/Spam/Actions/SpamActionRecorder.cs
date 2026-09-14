@@ -65,7 +65,7 @@ public sealed class SpamActionRecorder
     private readonly OptimisticConcurrencyRetryPolicy retryPolicy;
 
     /// <summary>Initializes the use case from the decisions it has to read and the submission it writes through.</summary>
-    /// <param name="settingsReader">Answers what the message's user asked to happen to their own junk.</param>
+    /// <param name="settingsReader">Answers what the message's account asked to happen to the junk in it.</param>
     /// <param name="occurrences">Reads where the classified email is and whether it is already read.</param>
     /// <param name="records">Answers whether this feature has already asked for a message to be filed.</param>
     /// <param name="submission">Records each change, or commits it where the account is held.</param>

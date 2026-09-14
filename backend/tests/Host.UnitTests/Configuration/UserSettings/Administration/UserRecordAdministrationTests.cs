@@ -659,6 +659,56 @@ public sealed class UserRecordAdministrationTests
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
     }
 
+    /// <summary>
+    /// An operator switching a scanner on deployment-wide after the accounts were recorded turns every stored block
+    /// asking for less into one that reads as a loosening. The account write route refuses such a block, and this one
+    /// must not: the record a user saves here carries no account block at all, so refusing it would leave them unable
+    /// to change their own display name or language with nothing they could correct.
+    /// </summary>
+    [Fact]
+    public async Task ApplyRecordAsync_AHeldAccountAskingLessThanTheDeploymentNowRequires_CommitsTheUsersOwnSave()
+    {
+        // Arrange
+        var scanning = new SensitiveContentOptions();
+        scanning.Secrets.Enabled = true;
+
+        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite, scanning: scanning);
+        harness.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 3, MailboxScanningForLessThanTheDeployment());
+
+        // Act
+        var outcome = await harness.Records.ApplyRecordAsync(
+            SyntheticMailUser.Deployment,
+            """{ "Language": "Polish" }""",
+            expectedVersion: 3,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+        Assert.Empty(outcome.Messages);
+        await harness.Store.Received(1).CommitAsync(
+            SyntheticMailUser.Deployment,
+            Arg.Is<string>(candidate => candidate!.Contains("Polish", StringComparison.Ordinal)),
+            Arg.Any<MailUserEndpointAccess>(),
+            3,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A mailbox whose own record switches off a scanner a deployment requiring it would refuse on the account route.</summary>
+    private static MailAccountRecord MailboxScanningForLessThanTheDeployment() =>
+        new(
+            Guid.Parse("0197a3c0-0000-7000-8000-0000000000a2"),
+            "work@example.test",
+            "work",
+            """
+            {
+              "Host": "imap.example.test",
+              "UserName": "mailfathom@example.test",
+              "Secrets": { "Password": { "Name": "work-password", "SecretReference": "file:secrets/work-password" } },
+              "SensitiveContent": { "Secrets": { "Enabled": false } }
+            }
+            """,
+            Version: 1);
+
     private static ServedMailUser Serving(MailUserId user, params string[] accountIds) =>
         new(
             user,

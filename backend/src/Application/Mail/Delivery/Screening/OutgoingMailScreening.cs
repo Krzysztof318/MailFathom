@@ -24,10 +24,10 @@ namespace MailFathom.Application.Mail.Delivery.Screening;
 /// It also screens what will actually be transmitted rather than what somebody typed.
 /// </para>
 /// <para>
-/// Nothing is parsed where nothing screens this author's mail. The screen answers whether it is active for them before
-/// the message is read back, so an opt-in nobody took costs a send no parse, no allocation, no document read, and no
-/// scan — and a user who added a category pays for one while the user beside them does not. That test is what keeps
-/// the attachment reading below out of the cost of an unscreened send entirely.
+/// Nothing is parsed where nothing screens the mail leaving this account. The screen answers whether it is active for
+/// that mailbox before the message is read back, so an opt-in nobody took costs a send no parse, no allocation, no
+/// document read, and no scan — and an account that added a category pays for one while the account beside it does
+/// not. That test is what keeps the attachment reading below out of the cost of an unscreened send entirely.
 /// </para>
 /// <para>
 /// <b>What the message attaches is screened with what it says</b>, and a document nothing here could read stops the act

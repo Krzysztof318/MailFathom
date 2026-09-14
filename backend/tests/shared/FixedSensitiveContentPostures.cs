@@ -117,16 +117,30 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
 
     /// <inheritdoc />
     /// <remarks>
-    /// The widest of the candidates rather than a composed union of them, because this double states postures instead
-    /// of building them and a union would need a redactor nothing here can construct. It answers the same posture the
-    /// composition does wherever one candidate already covers the others, which is every arrangement a suite writes:
-    /// a test that needs a genuinely composed answer states it as the deployment's own.
+    /// The candidate that already covers every other, rather than a union composed here: this double is handed built
+    /// postures instead of the ingredients of one, and a union of two would need a redactor running both their
+    /// scanners and a screening policy resolved from both their category lists, neither of which can be composed out
+    /// of the postures themselves. An arrangement no candidate covers is therefore refused rather than answered with
+    /// the widest of them — the real composition unions the scanners and the screening kinds alike, so the widest
+    /// would be a posture it would never produce, and a suite asserting redaction against one would be asserting
+    /// against an answer no deployment gives. A test that needs such a posture states the composed one as the
+    /// deployment's own.
     /// </remarks>
-    public SensitiveContentPosture AcrossAccountsOf(MailUserId user) => this.assignees
-        .Where(entry => entry.Value == user)
-        .Select(entry => this.byAccount[entry.Key])
-        .Append(this.fallback)
-        .MaxBy(posture => posture.Scanners.Count)!;
+    /// <exception cref="InvalidOperationException">Thrown when the user's accounts ask for things no one of their postures covers, which this double cannot compose.</exception>
+    public SensitiveContentPosture AcrossAccountsOf(MailUserId user)
+    {
+        var candidates = this.assignees
+            .Where(entry => entry.Value == user)
+            .Select(entry => this.byAccount[entry.Key])
+            .Append(this.fallback)
+            .ToArray();
+
+        return candidates.FirstOrDefault(candidate => candidates.All(other =>
+                other.Scanners.All(candidate.Runs)
+                && (candidate.ScreensAnything || !other.ScreensAnything)))
+            ?? throw new InvalidOperationException(
+                $"The accounts assigned to user {user.Value} ask for scanning no one of their postures covers, so the strictest of them is a union this double cannot build. State the composed posture as the deployment's own instead.");
+    }
 
     /// <inheritdoc />
     public bool RunsForAnyAccount(SensitiveContentScannerKind scanner) =>

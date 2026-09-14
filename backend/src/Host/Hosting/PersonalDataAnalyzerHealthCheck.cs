@@ -26,10 +26,10 @@ namespace MailFathom.Host.Hosting;
 /// answer requests it has already decided to refuse.
 /// </para>
 /// <para>
-/// <b>It asks whether anybody is scanned for before it asks the analyzer.</b> The scanner is switched on per user, so
-/// a deployment that stood the analyzer up without scanning its own users' mail with it is not made unready by that
-/// analyzer's silence — nothing is being refused — while one where a single user switched it on for their own mail is.
-/// Registration cannot decide this, because it happens before the roster the answer is composed from exists.
+/// <b>It asks whether any mailbox is scanned for before it asks the analyzer.</b> The scanner is switched on per mail
+/// account, so a deployment that stood the analyzer up without scanning any account's mail with it is not made unready
+/// by that analyzer's silence — nothing is being refused — while one where a single account switched it on for the mail
+/// in it is. Registration cannot decide this, because it happens before the roster the answer is composed from exists.
 /// </para>
 /// <para>
 /// It carries the readiness tag alone and must never reach the liveness probe. Restarting this process cannot start a

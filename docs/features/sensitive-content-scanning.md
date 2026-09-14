@@ -58,8 +58,9 @@ assigned a second one scans it under whatever that second account states.
 
 The block is part of the account document — the content of the record, not an overlay on the deployment's
 `SensitiveContent` section — and it is written under `SensitiveContent` in that record. No configuration source states
-it: a record is reached with `mfctl account edit`, or by the user the account is assigned to from the client. A **user**
-record naming either block is refused as a property nothing binds, exactly as any other unknown setting is.
+it: a record is reached with `mfctl account edit` and with nothing else, the client publishing no route that edits an
+existing mail account. A **user** record naming either block is refused as a property nothing binds, exactly as any
+other unknown setting is.
 
 ```jsonc
 {
@@ -112,8 +113,8 @@ mailbox switching a scanner on leaves every other mailbox's rows exactly where t
 than the mailbox — it hands out mail from whichever of their accounts matched, several layers below the point an
 account could still be named — so what redacts those values is the strictest of the postures across the accounts that
 user is assigned. That only ever redacts more than the message's own account asked for, which is the safe direction;
-every path that does hold one account, the outgoing screen and the attachment download among them, is judged by that
-mailbox alone.
+every path that does hold one account — the outgoing screen, the attachment download, and the passes that derive from
+one mailbox's own mail — is judged by that mailbox alone.
 
 ## The guarded egress points
 

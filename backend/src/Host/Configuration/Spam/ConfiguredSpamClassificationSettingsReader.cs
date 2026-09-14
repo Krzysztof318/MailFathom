@@ -63,9 +63,12 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
 
             var deployment = deploymentOptions.CurrentValue;
 
+            // Filtered before the folders are composed, because this property is read once per stored message and a
+            // folder graph built for an account that classifies nothing is allocated and then discarded.
             var classifying = this.DeclaredAccounts()
-                .Select(account => new { Settings = Compose(account), Folders = ConfiguredMailFolders.Of([account]).ToArray() })
+                .Select(account => new { Account = account, Settings = Compose(account) })
                 .Where(entry => entry.Settings.IsEnabled)
+                .Select(entry => new { entry.Settings, Folders = ConfiguredMailFolders.Of([entry.Account]).ToArray() })
                 .ToArray();
 
             return SpamClassificationScope.Create(

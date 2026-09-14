@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
 using Xunit;
@@ -19,50 +20,65 @@ public sealed class StubMailOwnershipTests
     private static readonly StoredEmailId Message = StoredEmailId.Create(Guid.NewGuid());
 
     [Fact]
-    public async Task ReadStoredEmailUserAsync_NothingArranged_AnswersWithTheDefaultUser()
+    public async Task ReadStoredEmailAccountAsync_NothingArranged_AnswersWithTheDefaultUser()
     {
         // Arrange
         var ownership = new StubMailOwnership();
 
         // Act
-        var user = await ownership.ReadStoredEmailUserAsync(Message, TestContext.Current.CancellationToken);
+        var account = await ownership.ReadStoredEmailAccountAsync(Message, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Deployment, user);
+        Assert.Equal(SyntheticMailUser.Deployment, account.User);
     }
 
     [Fact]
-    public async Task ReadStoredEmailUserAsync_AMessageArrangedToSomebodyElse_AnswersWithThatUser()
+    public async Task ReadStoredEmailAccountAsync_AMessageArrangedToSomebodyElse_AnswersWithThatUser()
     {
         // Arrange
         var ownership = new StubMailOwnership().Owns(Message, SyntheticMailUser.Another);
         var unarranged = StoredEmailId.Create(Guid.NewGuid());
 
         // Act
-        var user = await ownership.ReadStoredEmailUserAsync(Message, TestContext.Current.CancellationToken);
-        var fallback = await ownership.ReadStoredEmailUserAsync(unarranged, TestContext.Current.CancellationToken);
+        var account = await ownership.ReadStoredEmailAccountAsync(Message, TestContext.Current.CancellationToken);
+        var fallback = await ownership.ReadStoredEmailAccountAsync(unarranged, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Another, user);
-        Assert.Equal(SyntheticMailUser.Deployment, fallback);
+        Assert.Equal(SyntheticMailUser.Another, account.User);
+        Assert.Equal(SyntheticMailUser.Deployment, fallback.User);
+    }
+
+    /// <summary>The mailbox is what a posture is read against, so a test that is about one states it.</summary>
+    [Fact]
+    public async Task ReadStoredEmailAccountAsync_AMessageArrangedToOneMailbox_AnswersWithThatMailbox()
+    {
+        // Arrange
+        var scanned = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("scanned"));
+        var ownership = new StubMailOwnership().Owns(Message, scanned);
+
+        // Act
+        var account = await ownership.ReadStoredEmailAccountAsync(Message, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(scanned, account);
     }
 
     /// <summary>The default is the stub's own, so a suite serving somebody other than the deployment states it once.</summary>
     [Fact]
-    public async Task ReadStoredEmailUserAsync_AStatedDefault_IsWhatAnUnarrangedMessageAnswersWith()
+    public async Task ReadStoredEmailAccountAsync_AStatedDefault_IsWhatAnUnarrangedMessageAnswersWith()
     {
         // Arrange
         var ownership = new StubMailOwnership(SyntheticMailUser.Another);
 
         // Act
-        var user = await ownership.ReadStoredEmailUserAsync(Message, TestContext.Current.CancellationToken);
+        var account = await ownership.ReadStoredEmailAccountAsync(Message, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Another, user);
+        Assert.Equal(SyntheticMailUser.Another, account.User);
     }
 
     [Fact]
-    public async Task ReadStoredEmailUserAsync_ACancelledToken_IsObserved()
+    public async Task ReadStoredEmailAccountAsync_ACancelledToken_IsObserved()
     {
         // Arrange
         var ownership = new StubMailOwnership();
@@ -71,6 +87,6 @@ public sealed class StubMailOwnershipTests
 
         // Act, Assert
         await Assert.ThrowsAsync<OperationCanceledException>(
-            () => ownership.ReadStoredEmailUserAsync(Message, cancellation.Token));
+            () => ownership.ReadStoredEmailAccountAsync(Message, cancellation.Token));
     }
 }

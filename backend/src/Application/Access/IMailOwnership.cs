@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Access;
@@ -18,21 +18,23 @@ namespace MailFathom.Application.Access;
 /// </para>
 /// <para>
 /// Ownership hangs on the mail account, and a stored message inherits it from the folder it was synchronized into, so
-/// the answer is a column of the message's own row rather than a resolution through the account. There is no read of
-/// an account's user beside it, and there cannot be: an account is identified by its user and its identifier
-/// together, so a caller holding the identifier alone is not holding an account to ask about.
+/// the answer is a pair of columns of the message's own row rather than a resolution through the account. Both halves
+/// come back together because the work needs both and they cost one read: a spend ceiling is stated per user, and what
+/// a scanner redacts on the way out is the account's own posture.
 /// </para>
 /// </remarks>
 public interface IMailOwnership
 {
-    /// <summary>Reads the user one locally stored email belongs to.</summary>
-    /// <param name="storedEmailId">The stored email whose user is asked for.</param>
+    /// <summary>Reads the mail account one locally stored email belongs to, named by its user and its identifier.</summary>
+    /// <param name="storedEmailId">The stored email whose account is asked for.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The user the message belongs to.</returns>
+    /// <returns>The account the message belongs to.</returns>
     /// <exception cref="InvalidOperationException">Thrown when no message is stored under that identifier.</exception>
     /// <remarks>
     /// Asked once per message rather than per provider call, because the answer cannot change while a message is being
     /// worked on and the call it precedes costs orders of magnitude more than the read.
     /// </remarks>
-    Task<MailUserId> ReadStoredEmailUserAsync(StoredEmailId storedEmailId, CancellationToken cancellationToken);
+    Task<MailAccountIdentity> ReadStoredEmailAccountAsync(
+        StoredEmailId storedEmailId,
+        CancellationToken cancellationToken);
 }

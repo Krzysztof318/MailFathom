@@ -444,8 +444,14 @@ internal sealed class UserRecordAdministration(
         CancellationToken cancellationToken)
     {
         // Judged with the accounts assigned to the user composed back in, because that is the record a start serves them
-        // from: a language or a scanning posture is judged against the mailboxes it applies to.
-        var binding = binder.Bind(MailAccountRecordComposition.Compose(candidateJson, inForce.MailAccounts), arrival);
+        // from: a language is judged against the mailboxes it applies to. The blocks themselves arrive as records the
+        // deployment already holds, because this route cannot write one — a saved record naming MailAccounts is
+        // refused above — so judging them here would refuse a user's own record over a posture the account route is
+        // the only thing that could correct.
+        var binding = binder.Bind(
+            MailAccountRecordComposition.Compose(candidateJson, inForce.MailAccounts),
+            arrival,
+            UserRecordArrival.AlreadyHeld);
 
         if (binding.User is not { } bound)
         {

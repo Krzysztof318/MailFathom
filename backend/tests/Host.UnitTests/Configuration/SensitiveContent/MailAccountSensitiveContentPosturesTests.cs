@@ -122,19 +122,33 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
     /// <summary>
     /// The guard that redacts what leaves has only the person, so it reads every mailbox of theirs at once and takes
     /// the strictest — over-redacting one account's mail is the safe direction, and under-redacting another's is not.
+    /// Neither mailbox's answer contains the other's, so what comes back is a union rather than the wider of the two:
+    /// an account whose posture was merely the widest would leave the other's scanner off and the other's screening
+    /// unapplied, on the path that decides what a search hand-out is redacted by.
     /// </summary>
     [Fact]
-    public void AcrossAccountsOf_AUserAssignedTwoAccountsAskingDifferentThings_ReadsTheStrictestOfThem()
+    public void AcrossAccountsOf_AUserAssignedTwoAccountsAskingDifferentThings_ReadsTheUnionOfThem()
     {
         // Arrange
         var deployment = new SensitiveContentOptions();
-        deployment.Secrets.Enabled = true;
         deployment.PersonalDataAnalyzer.Endpoint = AnalyzerAddress;
+
+        Action<MailAccountSensitiveContentOptions> screeningSecrets = scanning =>
+        {
+            scanning.Secrets.Enabled = true;
+            scanning.ScreenOutgoingMailFor = ["Secrets"];
+        };
+
+        Action<MailAccountSensitiveContentOptions> screeningPersonalData = scanning =>
+        {
+            scanning.Pii.Enabled = true;
+            scanning.ScreenOutgoingMailFor = ["Pii"];
+        };
 
         var postures = this.PosturesOver(
             deployment,
-            (SyntheticMailUser.Deployment, Work, scanning => scanning.Pii.Enabled = true),
-            (SyntheticMailUser.Deployment, Archive, null));
+            (SyntheticMailUser.Deployment, Work, screeningSecrets),
+            (SyntheticMailUser.Deployment, Archive, screeningPersonalData));
 
         // Act
         var posture = postures.AcrossAccountsOf(SyntheticMailUser.Deployment);
@@ -143,6 +157,12 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
         Assert.Equal(
             [SensitiveContentScannerKind.Secrets, SensitiveContentScannerKind.Pii],
             posture.Scanners);
+        Assert.Equal(
+            SensitiveContentScannerKind.Secrets,
+            posture.Screening.StoppedBy(FindingIn("CloudKey", "aws-access-token")));
+        Assert.Equal(
+            SensitiveContentScannerKind.Pii,
+            posture.Screening.StoppedBy(FindingIn("PersonName", "person")));
     }
 
     /// <summary>
@@ -399,6 +419,15 @@ public sealed class MailAccountSensitiveContentPosturesTests : IDisposable
             this.permits,
             null!));
     }
+
+    /// <summary>Builds a finding a screening policy is asked about, which reads its category and nothing else.</summary>
+    private static SensitiveContentFinding FindingIn(string category, string rule) =>
+        SensitiveContentFinding.Create(
+            SensitiveContentRule.Create(SensitiveContentCategory.Create(category), rule),
+            SensitiveContentSpan.Create(0, 4),
+            confidence: 1,
+            SensitiveContentDetector.Create("stubbed", "1"),
+            DateTimeOffset.UnixEpoch);
 
     /// <summary>Builds the roster entry a user assigned these mailboxes arrives as.</summary>
     private static ServedMailUser Serving(

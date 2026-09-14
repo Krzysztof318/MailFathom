@@ -229,6 +229,9 @@ public sealed class StoredEmailStaleDerivedDataSelectionTests : IDisposable
     {
         var email = new StoredEmailEntity
         {
+            // Stated rather than left at the column's default, so a test asserting which message came back is asserting
+            // on an identity: two messages both answering Guid.Empty would make the selection's narrowing unfalsifiable.
+            Id = Guid.NewGuid(),
             UserId = SyntheticMailUser.Deployment.Value,
             MailboxAccountId = account.Value,
             MailFolder = new MailFolderEntity

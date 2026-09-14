@@ -61,7 +61,7 @@ public sealed class SpamClassificationPass
     /// <param name="classifications">Answers what an occurrence was already decided as, and under which terms.</param>
     /// <param name="classifier">Scores an occurrence and records the verdict.</param>
     /// <param name="actionRecorder">Applies the run's posture to a verdict, writing the changes down or only working them out.</param>
-    /// <param name="settingsReader">Answers whether the account's user classifies and what profile their mail runs under.</param>
+    /// <param name="settingsReader">Answers whether the account classifies and what profile the mail in it runs under.</param>
     /// <param name="commitPolicy">Commits the run's position and counts.</param>
     /// <param name="options">Bounds one pass.</param>
     /// <param name="timeProvider">Stamps the instant a run ends.</param>

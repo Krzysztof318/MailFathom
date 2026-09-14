@@ -5,6 +5,7 @@
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -151,6 +152,62 @@ public sealed class SensitiveContentEgressGuardTests
         // Assert
         Assert.True(guard.IsActive);
         Assert.Equal("the key is [redacted:CloudKey]", guarded);
+    }
+
+    /// <summary>
+    /// The scope a pass holding one mailbox opens. Two accounts of one user are scanned differently, so the account
+    /// scope has to read the one it names rather than the strictest of the pair, which is what the user scope answers
+    /// for a read that spans them.
+    /// </summary>
+    [Fact]
+    public async Task ActingFor_AnAccountOfAUserWhoseOtherMailboxIsScanned_ReadsTheAccountsOwnPosture()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+
+        var scanned = ScanningSensitiveContentEgress.Account;
+        var unscanned = MailAccountIdentity.Create(scanned.User, MailAccountId.Create("archive"));
+
+        var guard = new SensitiveContentEgressGuard(
+            FixedSensitiveContentPostures.Of(
+                SensitiveContentPosture.ScanningNothing,
+                (scanned.Id, egress.Postures.ForAccount(scanned.Id))),
+            new RecordingSensitiveContentEgressTelemetry(),
+            this.timeProvider);
+
+        // Act
+        string fromScannedMailbox;
+        string fromUnscannedMailbox;
+        string acrossBoth;
+
+        using (guard.ActingFor(scanned))
+        {
+            fromScannedMailbox = await guard.GuardAsync(
+                SensitiveContentEgressPoint.ChatPrompt,
+                $"the key is {Marker}",
+                TestContext.Current.CancellationToken);
+        }
+
+        using (guard.ActingFor(unscanned))
+        {
+            fromUnscannedMailbox = await guard.GuardAsync(
+                SensitiveContentEgressPoint.ChatPrompt,
+                $"the key is {Marker}",
+                TestContext.Current.CancellationToken);
+        }
+
+        using (guard.ActingFor(scanned.User))
+        {
+            acrossBoth = await guard.GuardAsync(
+                SensitiveContentEgressPoint.ChatPrompt,
+                $"the key is {Marker}",
+                TestContext.Current.CancellationToken);
+        }
+
+        // Assert
+        Assert.Equal("the key is [redacted:CloudKey]", fromScannedMailbox);
+        Assert.Equal($"the key is {Marker}", fromUnscannedMailbox);
+        Assert.Equal("the key is [redacted:CloudKey]", acrossBoth);
     }
 
     /// <summary>What a caller waits on is the operation, so every text guarded inside one is counted against it.</summary>

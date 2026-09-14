@@ -64,7 +64,7 @@ public sealed class EmailSpamClassifier
     /// <param name="headerReader">Reads the spam-relevant headers out of that content.</param>
     /// <param name="junkFolders">Answers whether the occurrence's folder is its account's junk folder.</param>
     /// <param name="deterministicClassifier">Reaches a verdict from what the message already carried.</param>
-    /// <param name="settingsReader">Answers what the occurrence's user decided about their own mail.</param>
+    /// <param name="settingsReader">Answers what the occurrence's account decided about the mail in it.</param>
     /// <param name="classificationStore">Records the classification.</param>
     /// <param name="chunkStore">Removes the passages and vectors of a message the verdict calls junk.</param>
     /// <param name="attachmentTextStore">Removes the attachment readings of a message the verdict calls junk.</param>
