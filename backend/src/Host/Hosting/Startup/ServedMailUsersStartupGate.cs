@@ -8,6 +8,7 @@ using MailFathom.Application.Rules.Conditions;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Records;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Persistence.Users;
@@ -38,10 +39,15 @@ namespace MailFathom.Host.Hosting.Startup;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
 internal sealed partial class ServedMailUsersStartupGate : IHostedService
 {
+    /// <summary>What a refusal about a user's own record names instead of a configuration key.</summary>
+    /// <remarks>A user read from their own record has no path in the operator's files, so every sentence about one names the document rather than a key nobody wrote.</remarks>
+    private const string RecordConfigurationPath = "document";
+
     private readonly IServiceScopeFactory scopeFactory;
     private readonly IConfiguration configuration;
     private readonly IMailRuleConditionCompiler ruleConditionCompiler;
     private readonly ServedMailUsers servedUsers;
+    private readonly HeldBackRecords heldBackRecords;
     private readonly HostStartupGates startupGates;
     private readonly SeveralUserAdmission admission;
     private readonly ILogger<ServedMailUsersStartupGate> logger;
@@ -51,6 +57,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// <param name="configuration">The configuration the synchronization switch and the declared rule set are read from.</param>
     /// <param name="ruleConditionCompiler">Reads each declared rule's condition, so a rule set is judged here by the rules composition judged it by.</param>
     /// <param name="servedUsers">The holder this gate publishes the roster into.</param>
+    /// <param name="heldBackRecords">Where a record this start refused is reported, so an operator meets it on the administrative surface rather than in the log alone.</param>
     /// <param name="startupGates">The tracker this gate reports its completion to, which is what the startup probe reads.</param>
     /// <param name="admission">The reading that decides whether this deployment's endpoints could tell one user's caller from another's.</param>
     /// <param name="logger">The startup logger.</param>
@@ -60,6 +67,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         IConfiguration configuration,
         IMailRuleConditionCompiler ruleConditionCompiler,
         ServedMailUsers servedUsers,
+        HeldBackRecords heldBackRecords,
         HostStartupGates startupGates,
         SeveralUserAdmission admission,
         ILogger<ServedMailUsersStartupGate> logger)
@@ -68,6 +76,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(ruleConditionCompiler);
         ArgumentNullException.ThrowIfNull(servedUsers);
+        ArgumentNullException.ThrowIfNull(heldBackRecords);
         ArgumentNullException.ThrowIfNull(startupGates);
         ArgumentNullException.ThrowIfNull(admission);
 
@@ -75,6 +84,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         this.configuration = configuration;
         this.ruleConditionCompiler = ruleConditionCompiler;
         this.servedUsers = servedUsers;
+        this.heldBackRecords = heldBackRecords;
         this.startupGates = startupGates;
         this.admission = admission;
         this.logger = logger;
@@ -102,8 +112,6 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
 
         this.RefuseSeveralUsersOnAUserFacingSurface(served);
 
-        await this.RefuseUnusableMailAccountSecretsAsync(scope, served, cancellationToken);
-
         this.servedUsers.Resolved(served, composed.ToDictionary(entry => entry.User.User, entry => entry.Version));
 
         this.Report(served);
@@ -116,8 +124,10 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
 
     /// <summary>Serves every user this deployment holds, each from the document their own row carries.</summary>
     /// <remarks>
-    /// Every held user is served and none is left out, because one source reaches all of them: a deployment that holds
-    /// a row it did not serve would be one holding somebody's mail and synchronizing nobody's.
+    /// Every held user is read and none is left out, because one source reaches all of them: a deployment that holds
+    /// a row it did not read would be one holding somebody's mail and synchronizing nobody's. A user whose own record
+    /// is not one is left out of the roster rather than taking the start down with them, which is the whole of why
+    /// this loop cannot raise: the alternative is one broken row costing every other user their mail.
     /// </remarks>
     private async Task<IReadOnlyList<(ServedMailUser User, long Version)>> ServeEveryHeldUserAsync(
         AsyncServiceScope scope,
@@ -128,7 +138,10 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
 
         foreach (var record in held)
         {
-            served.Add(await this.ServeFromTheOwnDocumentAsync(scope, record, cancellationToken));
+            if (await this.ServeFromTheOwnDocumentAsync(scope, record, cancellationToken) is { } entry)
+            {
+                served.Add(entry);
+            }
         }
 
         return served;
@@ -136,10 +149,13 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
 
     /// <summary>Serves one user from the document their row holds, which is the whole of what this deployment knows about them.</summary>
     /// <remarks>
+    /// <para>
     /// The document is put through the one binder both directions share, so what a user's record is judged by here is
-    /// what a write to it would be judged by. A record that will not bind stops the start rather than leaving that
-    /// user served with nothing: the alternative is a deployment quietly synchronizing none of the mailboxes their
-    /// record names while reporting itself started.
+    /// what a write to it would be judged by. What a refusal costs is bounded by the composition rather than by this
+    /// gate: a mail account that will not bind or names a secret this deployment cannot resolve is left out and
+    /// reported, and only a user whose own document is not a record at all leaves that user unserved. Neither stops
+    /// the start, because one operator's broken row must never be every other user's outage.
+    /// </para>
     /// <para>
     /// It is read as a record already held, which drops exactly two rules — see <see cref="UserRecordArrival" />. The
     /// scanning block a stored record carries is composed against the deployment's section rather than refused against
@@ -148,17 +164,22 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// accepted before it into a start this host cannot complete.
     /// </para>
     /// </remarks>
-    private async Task<(ServedMailUser User, long Version)> ServeFromTheOwnDocumentAsync(
+    private async Task<(ServedMailUser User, long Version)?> ServeFromTheOwnDocumentAsync(
         AsyncServiceScope scope,
         MailUserRecord record,
         CancellationToken cancellationToken)
     {
-        var document = await scope.ServiceProvider
+        // Absent when the user was erased between the roster statement and this read, which holds nothing back: the
+        // row the refusal would have named is gone, and the next start reads a roster that no longer lists them.
+        if (await scope.ServiceProvider
             .GetRequiredService<IUserSettingsDocumentReader>()
-            .ReadAsync(record.User, cancellationToken)
-            ?? throw DeploymentMailUserUnresolvedException.UserRecordUnusable(
-                record.DisplayName,
-                ["The row it was read from is no longer there."]);
+            .ReadAsync(record.User, cancellationToken) is not { } document)
+        {
+            this.heldBackRecords.Cleared(record.User);
+            this.LogUserRecordNoLongerHeld(record.DisplayName);
+
+            return null;
+        }
 
         var unaddressed = document.MailAccounts.Count(account => !MailAccountRecordComposition.IsServed(account));
 
@@ -167,19 +188,32 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
             this.LogMailAccountsHeldWithoutAnAddress(record.DisplayName, unaddressed);
         }
 
-        var binding = scope.ServiceProvider
-            .GetRequiredService<UserAccountDocumentBinder>()
-            .Bind(MailAccountRecordComposition.Compose(document.Json, document.MailAccounts), UserRecordArrival.AlreadyHeld);
+        var composed = scope.ServiceProvider
+            .GetRequiredService<ServedUserRecordComposition>()
+            .Compose(document, UserRecordArrival.AlreadyHeld);
 
-        if (binding.User is not { } bound)
+        var heldBack = new List<HeldBackRecord>(composed.HeldBack);
+
+        if (composed.Record is not { } bound)
         {
-            throw DeploymentMailUserUnresolvedException.UserRecordUnusable(record.DisplayName, binding.Refusals);
+            this.PublishHeldBack(record.User, heldBack);
+
+            return null;
         }
+
+        var usable = await this.MailAccountsWithUsableSecretsAsync(
+            scope,
+            document,
+            bound.MailAccounts,
+            heldBack,
+            cancellationToken);
+
+        this.PublishHeldBack(record.User, heldBack);
 
         var served = new ServedMailUser(
             record.User,
             record.DisplayName,
-            bound.MailAccounts,
+            usable,
             bound.ReadingLanguage ?? MailUserLanguage.English,
             bound.SpamClassification,
             bound.SensitiveContent);
@@ -187,32 +221,133 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         return (served, document.Version);
     }
 
-    /// <summary>Refuses a user whose own mail accounts carry a secret or a trust anchor this deployment cannot use.</summary>
+    /// <summary>Leaves out the mail accounts carrying a secret or a trust anchor this deployment cannot use.</summary>
     /// <remarks>
+    /// <para>
     /// A mailbox is a user's record rather than a configuration key, so no reading of the files walks one and without
     /// this a deployment would start clean and fail one connection at a time. It runs here because the roster is what
     /// says which accounts belong to whom, and the roster is what this gate establishes.
+    /// </para>
+    /// <para>
+    /// The whole set is resolved in one pass, which is the only pass a deployment whose secrets are in place ever
+    /// makes. What to do with what it reported is the method below.
+    /// </para>
     /// </remarks>
-    private async Task RefuseUnusableMailAccountSecretsAsync(
+    private async Task<IReadOnlyList<MailSynchronizationAccountOptions>> MailAccountsWithUsableSecretsAsync(
         AsyncServiceScope scope,
-        IReadOnlyList<ServedMailUser> served,
+        UserSettingsDocument document,
+        List<MailSynchronizationAccountOptions> accounts,
+        List<HeldBackRecord> heldBack,
         CancellationToken cancellationToken)
     {
-        var validator = scope.ServiceProvider.GetRequiredService<SecretConfigurationValidator>();
+        // A user read from their own record has no configuration path an operator could edit, so the refusal names
+        // the document their mailboxes live in rather than a key nobody wrote.
+        var errors = await scope.ServiceProvider
+            .GetRequiredService<SecretConfigurationValidator>()
+            .FindUserMailAccountErrorsAsync(RecordConfigurationPath, accounts, cancellationToken);
 
-        foreach (var user in served)
+        return errors.Count == 0
+            ? accounts
+            : MailAccountsTheErrorsLeaveUsable(
+                errors,
+                accounts,
+                document.MailAccounts.ToDictionary(account => account.Id, account => account.Version),
+                heldBack);
+    }
+
+    /// <summary>Sorts one user's mail accounts into those the secret errors name and those they leave alone.</summary>
+    /// <param name="errors">What the validator said about this user's mailboxes, which is never empty here.</param>
+    /// <param name="accounts">The declarations the record bound, in the order the paths in <paramref name="errors" /> index them by.</param>
+    /// <param name="versions">The version each declaration was recorded at, read by the identifier the composition put on it.</param>
+    /// <param name="heldBack">Collects a record for every account this refuses, in the order the accounts were declared.</param>
+    /// <returns>The accounts to serve, which is empty where an error named none of them.</returns>
+    /// <remarks>
+    /// <para>
+    /// Each error is attributed by the position its own path carries: every path the validator composes for a user's
+    /// mailboxes hangs under the account's index within the set, so the prefix names exactly one account and no message
+    /// has to be parsed further. An account with something against it is left out and reported; the rest of that user's
+    /// mailboxes keep synchronizing.
+    /// </para>
+    /// <para>
+    /// Separated from the resolution above so both endings can be judged without a validator, a secret scheme, or a
+    /// deployment. What this decides is which mailboxes a person's mail keeps flowing through, and the ending that
+    /// matters most is the one no deployment reaches while the validator and this method agree about paths.
+    /// </para>
+    /// </remarks>
+    internal static IReadOnlyList<MailSynchronizationAccountOptions> MailAccountsTheErrorsLeaveUsable(
+        IReadOnlyList<string> errors,
+        IReadOnlyList<MailSynchronizationAccountOptions> accounts,
+        IReadOnlyDictionary<Guid, long> versions,
+        List<HeldBackRecord> heldBack)
+    {
+        ArgumentNullException.ThrowIfNull(errors);
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(versions);
+        ArgumentNullException.ThrowIfNull(heldBack);
+
+        var usable = new List<MailSynchronizationAccountOptions>(accounts.Count);
+        var attributed = 0;
+
+        foreach (var (position, account) in accounts.Index())
         {
-            // A user read from their own record has no configuration path an operator could edit, so the refusal names
-            // the document their mailboxes live in rather than a key nobody wrote.
-            var errors = await validator.FindUserMailAccountErrorsAsync(
-                "document",
-                user.MailAccounts,
-                cancellationToken);
+            var declared = $"{RecordConfigurationPath}:{nameof(UserAccountOptions.MailAccounts)}:{position}:";
+            var own = errors.Where(error => error.StartsWith(declared, StringComparison.Ordinal)).ToArray();
 
-            if (errors.Count > 0)
+            if (own.Length == 0)
             {
-                throw DeploymentMailUserUnresolvedException.UserMailAccountsUnusable(user.DisplayName, errors);
+                usable.Add(account);
+
+                continue;
             }
+
+            attributed += own.Length;
+
+            var identity = IdentityOf(account);
+
+            heldBack.Add(new HeldBackRecord(
+                HeldBackRecordKind.MailAccount,
+                identity,
+                account.DisplayName ?? identity.ToString("D"),
+                versions.TryGetValue(identity, out var version) ? version : null,
+                own));
+        }
+
+        if (attributed == errors.Count)
+        {
+            return usable;
+        }
+
+        // The prefixes are mutually exclusive, so a shortfall means the validator reported something about this user's
+        // mailboxes under a path that names none of them — a validator this method no longer understands. Serving a
+        // mailbox whose secrets nothing proved is exactly what that resolution exists to prevent, so none of the
+        // remaining ones is served either and each is reported with everything that was said.
+        heldBack.AddRange(usable.Select(account => new HeldBackRecord(
+            HeldBackRecordKind.MailAccount,
+            IdentityOf(account),
+            account.DisplayName ?? IdentityOf(account).ToString("D"),
+            versions.TryGetValue(IdentityOf(account), out var version) ? version : null,
+            errors)));
+
+        return [];
+    }
+
+    /// <summary>Reads the identifier the composition put on a declaration, which is the generated one the row is keyed by.</summary>
+    private static Guid IdentityOf(MailSynchronizationAccountOptions account) =>
+        Guid.TryParse(account.AccountId, out var accountId) ? accountId : Guid.Empty;
+
+    /// <summary>Publishes what one user's row left refused, and says each of it once in the log.</summary>
+    private void PublishHeldBack(MailUserId user, IReadOnlyList<HeldBackRecord> heldBack)
+    {
+        this.heldBackRecords.Replace(user, heldBack);
+
+        foreach (var record in heldBack)
+        {
+            this.LogRecordHeldBack(
+                record.Kind,
+                record.Identity,
+                record.Label,
+                record.RejectedVersion,
+                string.Join(" ", record.Corrections));
         }
     }
 
@@ -327,4 +462,25 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         Level = LogLevel.Warning,
         Message = "A declared mail rule names something no record of a user this deployment serves provides, so the rule does nothing there until a record provides it or the rule is changed: {MailRuleClaim}")]
     private partial void LogMailRuleClaimUnanswered(string mailRuleClaim);
+
+    /// <remarks>Reached when a user is erased between the statement that listed the roster and the read of their record, which is an ordinary race rather than a record to correct.</remarks>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The user labelled {UserDisplayName} was erased while this start was reading the roster, so they are not served and nothing about them is held back.")]
+    private partial void LogUserRecordNoLongerHeld(string userDisplayName);
+
+    /// <remarks>
+    /// The corrections are carried rather than counted, because they are MailFathom's own sentences about settings: the
+    /// binder restates what the framework raised instead of handing it on, quotes a property name only where it is free
+    /// of control characters, and repeats no value, so a line here carries no secret, no mail content, and no address.
+    /// </remarks>
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "A {HeldBackRecordKind} record is held back by a document this build will not bind: {HeldBackRecordIdentity} labelled {HeldBackRecordLabel}, at version {RejectedVersion}. It is served from the last version that bound, where there is one, and every other record is unaffected. Correct it: {Corrections}")]
+    private partial void LogRecordHeldBack(
+        HeldBackRecordKind heldBackRecordKind,
+        Guid heldBackRecordIdentity,
+        string heldBackRecordLabel,
+        long? rejectedVersion,
+        string corrections);
 }

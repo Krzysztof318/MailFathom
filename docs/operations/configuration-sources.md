@@ -297,6 +297,26 @@ This deployment serves 3 users, each read from their own record; no configuratio
 
 Every user the deployment holds is served, in the order the rows were recorded in. A deployment holding none says so instead, in the line [a deployment that records no user](#a-deployment-that-records-no-user) above carries.
 
+### A record this deployment will not read
+
+Every record is judged before it is committed, so a stored one that no longer reads as a record was written by an older build, tightened by a newer one, edited in the database, or restored from a backup. **What such a record costs is exactly its own scope, and never anybody else's.**
+
+| The record | What a document this build will not read costs |
+| --- | --- |
+| A user | That user is not served: no mailbox of theirs is synchronized and no surface answers for them. A start completes without them and serves every other user unchanged; a running replica keeps serving them from the last version that bound, and adopts the next version that does. |
+| One of a user's mail accounts | That mailbox alone. The user's other mailboxes keep synchronizing, their record is published at the version the row holds, and everybody else is unaffected. |
+| An organization | The prefix its members type in front of their username. Every other organization is listed, renamed, and removed exactly as before, and the members of the affected one keep every credential that is not a password scoped to it. |
+
+**A conflict rejects the declaration that introduced it rather than both.** Two of one user's mail accounts cannot share a display name, so where a row holds two that do, the one recorded first is served and the second is what an operator is told to correct.
+
+A refused user record and a refused mail account declaration are each recorded at `Error` by the replica that read them, naming the kind of record, its identifier, the label it carries, the version refused, and the settings to correct. A start and a convergence write the same sentence, so one search finds both:
+
+```
+A MailAccount record is held back by a document this build will not bind: 0197a3c0-0000-7000-8000-000000000001 labelled work, at version 2. It is served from the last version that bound, where there is one, and every other record is unaffected. Correct it: The user record names 'Nonsense', which is not a setting a user's record carries. Remove it, or correct the spelling of the setting it was meant to be.
+```
+
+**An unreadable organization row is logged by nothing, and is met on the administrative surface alone.** No roster binds an organization — a replica reads one when somebody asks for the listing rather than while it settles who it serves — so there is no reading of it to report, and an operator watching logs for one would wait forever. [`GET /api/admin/records/held-back`](admin-endpoint.md#records-this-deployment-will-not-read) answers all three kinds grouped by kind, and [`mfctl organization list`](admin-endpoint.md#organizations) names the organization half beneath the listing. For the two kinds above it is the second way to meet them rather than the only one.
+
 ### Which source reaches a user
 
 **Every user is read from their own record, and no configuration source reaches any of them** — not the provisioned file, and not an environment variable or a command-line argument either. Their accounts are not configuration keys rather than merely losing precedence, so the precedence table at the top of this page has nothing to say about them. `mfctl` over the administrative port is what changes them, and a user's record is their own from the first moment [`mfctl user add`](admin-endpoint.md#users-and-their-records) records them.
@@ -481,7 +501,7 @@ Two further properties belong to Kubernetes rather than to the watcher: an updat
 
 **Where a [signal backplane](configuration-endpoints.md#signalbackplane) is declared, a change arrives sooner.** The committing replica announces it over the backplane, and every replica listening compares the versions straight away rather than on its next interval. The announcement carries nothing — no setting, no user, no version — and losing it costs only the wait: a replica that missed one, and every replica of a deployment that declares no backplane, still converges on the interval. [ADR 0032](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0032-reaching-a-client-from-any-replica-over-websockets-and-a-resp-backplane.md#amendment-2-a-configuration-change-is-announced-over-the-backplane) records that exception to what the backplane carries.
 
-**A replica that cannot take a change reports it exactly as the replica that committed it would, and keeps what it bound.** A persisted document that does not bind or validate there is [rejected by version](#startup-and-a-reload-that-fails) with the same record, and the version it last bound goes on serving. A user's record that does not bind is logged at `Error`, naming the user's label and the version, and that user goes on being served from the record bound before it. Neither is reported again on every interval while the row stays at that version. A deployment holding more users than one deployment may serve is logged at `Error` on every interval, and while it does, the replica takes no user's change at all — no newer record and no erasure — until the count is back within that bound, because a roster read short would drop whoever the reading left out. A reading that fails outright — a database out of reach — is logged at `Warning` and made again on the next interval:
+**A replica that cannot take a change reports it exactly as the replica that committed it would, and keeps what it bound.** A persisted document that does not bind or validate there is [rejected by version](#startup-and-a-reload-that-fails) with the same record, and the version it last bound goes on serving. A user's record that does not bind is logged at `Error` and reported on the administrative surface, naming the user's identifier, their label, the version, and the settings to correct, and that user goes on being served from the record bound before it; one mail account of theirs that does not bind is held back the same way and costs that mailbox alone, the rest of the record being republished at the version the row holds. Neither is reported again on every interval while the row stays at that version, and both stop being reported once the row is repaired. [A record this deployment will not read](#a-record-this-deployment-will-not-read) states what each kind costs. A deployment holding more users than one deployment may serve is logged at `Error` on every interval, and while it does, the replica takes no user's change at all — no newer record and no erasure — until the count is back within that bound, because a roster read short would drop whoever the reading left out. A reading that fails outright — a database out of reach — is logged at `Warning` and made again on the next interval:
 
 ```
 This replica could not compare what it serves against the persisted configuration and the users' records, and reads them again in 00:00:30; what it bound stays in force.

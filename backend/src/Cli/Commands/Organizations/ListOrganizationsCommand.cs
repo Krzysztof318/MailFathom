@@ -52,7 +52,11 @@ internal static class ListOrganizationsCommand
 
         var listing = await deployment.ReadOrganizationsAsync(profile.Token, cancellationToken);
 
-        if (listing.Organizations is not { Count: > 0 } organizations)
+        if (listing.Organizations is { Count: > 0 } organizations)
+        {
+            context.Console.Write(Draw(organizations));
+        }
+        else if (listing.Unreadable is not { Count: > 0 })
         {
             context.Console.WriteLine(
                 "This deployment holds no organizations. Record one with 'organization add', then move a user into it "
@@ -61,9 +65,45 @@ internal static class ListOrganizationsCommand
             return CliExitCode.Success;
         }
 
-        context.Console.Write(Draw(organizations));
+        ReportUnreadable(context, listing.Unreadable);
 
         return CliExitCode.Success;
+    }
+
+    /// <summary>Says which rows the deployment will not read as an organization, and what each must become.</summary>
+    /// <remarks>
+    /// <para>
+    /// Printed after the listing rather than mixed into it, because these rows are not organizations the deployment
+    /// serves: their members cannot type the prefix their login begins with, and every other organization is unaffected.
+    /// Nothing here is the stored short name — it is the value that failed every rule, so the identifier names the row
+    /// and the sentence says what to write with 'organization set-short-name'.
+    /// </para>
+    /// <para>
+    /// Both halves are reduced before they are written, as every other name and sentence a listing prints is: the
+    /// display name is whatever an operator recorded and nothing rejects a control character in one, and the sentence
+    /// arrived over the wire. A terminal acts on an escape sequence rather than printing it, so a name could otherwise
+    /// clear the screen or rewrite the line of the operator reading it.
+    /// </para>
+    /// </remarks>
+    private static void ReportUnreadable(CliContext context, IReadOnlyList<UnreadableOrganizationEntry>? unreadable)
+    {
+        if (unreadable is not { Count: > 0 })
+        {
+            return;
+        }
+
+        context.Console.WriteLine(string.Empty);
+        context.Console.WriteLine(
+            $"{unreadable.Count} organization rows are held back because their stored short name is not one this "
+            + "deployment reads. Their members cannot sign in with the prefix their login begins with; every other "
+            + "organization is unaffected. Repair each with 'organization set-short-name'.");
+
+        foreach (var organization in unreadable)
+        {
+            context.Console.WriteLine(
+                $"  {organization.Id:D} ({ConsoleSafeText.Sanitize(organization.DisplayName) ?? "unreported"}): "
+                + (ConsoleSafeText.Sanitize(organization.Correction) ?? "unreported"));
+        }
     }
 
     private static CliTable Draw(IReadOnlyList<OrganizationEntry> organizations)
@@ -74,8 +114,8 @@ internal static class ListOrganizationsCommand
         {
             listing.AddRow(
                 $"{organization.Id:D}",
-                organization.ShortName ?? "unreported",
-                organization.DisplayName ?? "unreported",
+                ConsoleSafeText.Sanitize(organization.ShortName) ?? "unreported",
+                ConsoleSafeText.Sanitize(organization.DisplayName) ?? "unreported",
                 organization.Members.ToString(CultureInfo.InvariantCulture),
                 $"{organization.CreatedAt:u}");
         }

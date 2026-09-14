@@ -5,9 +5,9 @@
 using System.Globalization;
 using System.Text;
 
-namespace MailFathom.Cli.Credentials.SecretStores;
+namespace MailFathom.Cli;
 
-/// <summary>Reduces text a secret-service provider reported to a form that is safe to put in front of an operator.</summary>
+/// <summary>Reduces text this command did not compose to a form that is safe to put in front of an operator.</summary>
 /// <remarks>
 /// <para>
 /// The message is the one useful thing a refusal carries — it separates a locked collection from a provider that is not
@@ -16,21 +16,22 @@ namespace MailFathom.Cli.Credentials.SecretStores;
 /// its character set, or whether it contains the escape sequences a terminal acts on rather than prints.
 /// </para>
 /// <para>
-/// It reaches a terminal by three routes — the failure a command exits with, the sentence <c>login</c> prints about
-/// where the credential ended up, and the warning <c>logout</c> prints about what it could not clear — so it is reduced
-/// here, once, where the message is built. Reducing rather than refusing keeps the diagnostic: a provider's own wording
-/// is what tells an operator which thing to unlock, so what is removed is the ability to move the cursor, break the
-/// line, or bury the rest of the output under bulk.
+/// It reaches a terminal by several routes — the failure a command exits with, the sentence <c>login</c> prints about
+/// where the credential ended up, the warning <c>logout</c> prints about what it could not clear, and every listing
+/// that prints a name or a sentence the deployment answered with — so it is reduced here, once, wherever such text is
+/// written. Reducing rather than refusing keeps the diagnostic: the wording is what tells an operator which thing to
+/// unlock or which row to repair, so what is removed is the ability to move the cursor, break the line, or bury the
+/// rest of the output under bulk.
 /// </para>
 /// </remarks>
-internal static class ProviderReportedText
+internal static class ConsoleSafeText
 {
     /// <summary>The longest message kept, past which it is truncated.</summary>
-    /// <remarks>Long enough for a sentence naming a collection and a reason, short enough that the failure it is embedded in stays one thing an operator reads rather than a screen they scroll.</remarks>
+    /// <remarks>Long enough for a sentence naming a collection, a row, and a reason, short enough that the line it is embedded in stays one thing an operator reads rather than a screen they scroll.</remarks>
     private const int MaximumLength = 200;
 
-    /// <summary>Reduces a provider-supplied message to printable, single-line text of bounded length.</summary>
-    /// <param name="reported">What the provider said, which may be anything.</param>
+    /// <summary>Reduces a message this command did not compose to printable, single-line text of bounded length.</summary>
+    /// <param name="reported">What the provider or the deployment said, which may be anything.</param>
     /// <returns>The reduced message, or <see langword="null" /> when nothing usable remained.</returns>
     internal static string? Sanitize(string? reported)
     {

@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Cli.Credentials.SecretStores;
 using Xunit;
 
 namespace MailFathom.Cli.UnitTests;
@@ -15,7 +14,7 @@ namespace MailFathom.Cli.UnitTests;
 /// desktop's own keyring. What these assert is the boundary: the diagnostic survives, and the ability to move a cursor,
 /// break a line, or bury the rest of the output does not.
 /// </remarks>
-public sealed class ProviderReportedTextTests
+public sealed class ConsoleSafeTextTests
 {
     [Fact]
     public void Sanitize_AnOrdinaryMessage_KeepsItWordForWord()
@@ -24,7 +23,7 @@ public sealed class ProviderReportedTextTests
         const string reported = "The name org.freedesktop.secrets was not provided by any .service files";
 
         // Act
-        var reduced = ProviderReportedText.Sanitize(reported);
+        var reduced = ConsoleSafeText.Sanitize(reported);
 
         // Assert
         Assert.Equal(reported, reduced);
@@ -35,7 +34,7 @@ public sealed class ProviderReportedTextTests
     public void Sanitize_TextCarryingAnEscapeSequence_KeepsTheTextAndNotTheEscape()
     {
         // Arrange, Act
-        var reduced = ProviderReportedText.Sanitize("\u001B[2Jlocked");
+        var reduced = ConsoleSafeText.Sanitize("\u001B[2Jlocked");
 
         // Assert
         Assert.Equal("[2Jlocked", reduced);
@@ -50,7 +49,7 @@ public sealed class ProviderReportedTextTests
     public void Sanitize_TextCarryingALineBreak_ReducesToOneLine(string reported)
     {
         // Arrange, Act
-        var reduced = ProviderReportedText.Sanitize(reported);
+        var reduced = ConsoleSafeText.Sanitize(reported);
 
         // Assert
         Assert.Equal("locked Signed in as root", reduced);
@@ -64,7 +63,7 @@ public sealed class ProviderReportedTextTests
         var reported = new string('x', 5000);
 
         // Act
-        var reduced = ProviderReportedText.Sanitize(reported);
+        var reduced = ConsoleSafeText.Sanitize(reported);
 
         // Assert
         Assert.Equal(200, reduced?.Length);
@@ -84,7 +83,7 @@ public sealed class ProviderReportedTextTests
         var reported = new string('x', 199) + " " + new string('y', 100_000);
 
         // Act
-        var reduced = ProviderReportedText.Sanitize(reported);
+        var reduced = ConsoleSafeText.Sanitize(reported);
 
         // Assert
         Assert.Equal(new string('x', 199), reduced);
@@ -99,7 +98,7 @@ public sealed class ProviderReportedTextTests
     public void Sanitize_TextCarryingAFormatCharacter_DropsItRatherThanCollapsingIt(string reported, string expected)
     {
         // Arrange, Act
-        var reduced = ProviderReportedText.Sanitize(reported);
+        var reduced = ConsoleSafeText.Sanitize(reported);
 
         // Assert
         Assert.Equal(expected, reduced);
@@ -113,7 +112,7 @@ public sealed class ProviderReportedTextTests
         var reported = new string(' ', 5000) + "locked";
 
         // Act
-        var reduced = ProviderReportedText.Sanitize(reported);
+        var reduced = ConsoleSafeText.Sanitize(reported);
 
         // Assert
         Assert.Equal("locked", reduced);
@@ -129,7 +128,7 @@ public sealed class ProviderReportedTextTests
     public void Sanitize_NothingUsable_ReportsNoMessageAtAll(string? reported)
     {
         // Arrange, Act
-        var reduced = ProviderReportedText.Sanitize(reported);
+        var reduced = ConsoleSafeText.Sanitize(reported);
 
         // Assert
         Assert.Null(reduced);

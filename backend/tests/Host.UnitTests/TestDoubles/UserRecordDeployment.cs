@@ -8,6 +8,7 @@ using MailFathom.Application.StoredFiles;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.Records;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Configuration.UserSettings.Administration;
@@ -135,6 +136,7 @@ internal sealed class UserRecordDeployment
             new ServedMailUsersConvergence(
                 UserRecordScopes.Resolving(this.Documents, binder),
                 this.ServedUsers,
+                new HeldBackRecords(),
                 new RecordingLogger<ServedMailUsersConvergence>()),
             new ConfigurationChangeAnnouncements(
                 () => Task.FromResult(this.Backplane.Connect()),

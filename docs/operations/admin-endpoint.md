@@ -230,13 +230,14 @@ what it was never granted is what the record exists to make visible.
 | `POST /api/admin/mail-accounts/{accountId}/assignments` | `mailfathom.admin.configuration.write` | Assigns an account nobody else is assigned to the user named by `userId`. An account somebody else holds is refused, because an account is served to one user at a time. |
 | `POST /api/admin/mail-accounts/{accountId}/assignments/removal` | `mailfathom.admin.erase` | Ends one user's assignment and erases the mail stored for them under the account. **Ending the last one erases the account and every message this deployment holds for it.** |
 | `POST /api/admin/users/{userId}/secrets` | `mailfathom.admin.configuration.write` | Seals the material carried in the body under the active data-encryption key and answers only with its `database:<uuid>` reference. Sending the same declared name for that user rotates the existing row and returns the same reference. It refuses when the user does not exist or the deployment configures no data-encryption key ring. |
-| `GET /api/admin/organizations` | `mailfathom.admin.read` | Reads [the organizations](#organizations) this deployment holds, ordered by short name and at most 1000, each with its display name, its short name, how many users belong to it, and when it was recorded. This is what `mfctl organization list` asks. |
+| `GET /api/admin/organizations` | `mailfathom.admin.read` | Reads [the organizations](#organizations) this deployment holds, ordered by short name and at most 1000, each with its display name, its short name, how many users belong to it, and when it was recorded. A row whose stored short name is not one this build reads is reported beside them under `unreadable`, by identifier, display name, and a `correction` naming what a short name may contain, rather than refusing the listing. The stored short name itself is never echoed. This is what `mfctl organization list` asks. |
 | `POST /api/admin/organizations` | `mailfathom.admin.configuration.write` | Records an organization from the display name and short name the body carries, and answers with the identifier it was minted under. It answers `409` for a short name another organization holds or for a deployment already holding 1000 organizations, and `400` naming what was wrong with either name. |
 | `PUT /api/admin/organizations/{organizationId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the name an operator reads the organization by. It answers `204`, `404` for an organization this deployment does not hold, and `400` for a name it does not accept. |
 | `PUT /api/admin/organizations/{organizationId}/short-name` | `mailfathom.admin.credentials.write` | Replaces the short name its members sign in under, which moves every member's login with it. It answers `204`, `404`, `409` for a short name another organization holds, and `400`. |
 | `DELETE /api/admin/organizations/{organizationId}` | `mailfathom.admin.configuration.write` | Removes an organization nobody belongs to. It answers `204`, `404`, and `409` naming how many members it still has. |
+| `GET /api/admin/records/held-back` | `mailfathom.admin.read` | Reads [the records this deployment will not read](#records-this-deployment-will-not-read), as three lists — `users`, `mailAccounts`, and `organizations` — each entry naming the record's identifier, the label it carries, the version refused where its kind has one, and one sentence per setting to correct. A deployment holding nothing back answers three empty lists. |
 | `PUT /api/admin/users/{userId}/organization` | `mailfathom.admin.credentials.write` | Moves the user into the organization the body's `organizationId` names, or out of every organization where the body says `"none": true`, re-scoping their passwords in the same transaction. A body stating neither, or both, is refused with `400` rather than read as a move out. This is what `mfctl user set-organization` sends. It answers `204`, `404` for a user this deployment does not hold, `400` for an organization it does not hold, and `409` naming the username the target already holds for another user. |
-| `GET /api/admin/users/{userId}/credentials` | `mailfathom.admin.read` | Reads one user's [credentials](#user-credentials), each with its method, what it grants, whether it still authenticates, and when its material was last replaced. It publishes what each is resolved by, except where that value is derived from the secret, and for a password the `login` a person types to sign in with it. |
+| `GET /api/admin/users/{userId}/credentials` | `mailfathom.admin.read` | Reads one user's [credentials](#user-credentials), each with its method, what it grants, whether it still authenticates, and when its material was last replaced. It publishes what each is resolved by, except where that value is derived from the secret, and for a password the `login` a person types to sign in with it. A credential whose method this build does not know, and one scoped to an organization whose short name it [will not read](#records-this-deployment-will-not-read), are left out rather than published without the login they would be typed as; the user's other credentials are listed as before. |
 | `POST /api/admin/users/{userId}/credentials` | `mailfathom.admin.credentials.write` | Provisions one of the four methods, from what that method needs. **This is one of the two routes that mint a way into somebody's mail**, and the one that answers with a minted key where the method mints one. It answers `409` where the value the credential resolves by is already taken — for a password within the user's organization, or among users in none, and for every other method across the deployment — and where the user already holds the hundred credentials one user may. |
 | `PUT /api/admin/users/{userId}/credentials/{credentialId}/material` | `mailfathom.admin.credentials.write` | Replaces what one credential's client presents, in a single statement, which stops the previous material working at that instant. **This is the other.** It is refused for a method holding no material to replace. |
 | `PUT /api/admin/users/{userId}/credentials/{credentialId}/enablement` | `mailfathom.admin.credentials.write` | Stops one credential authenticating, or lets it authenticate again, keeping everything else about it either way. |
@@ -1369,7 +1370,7 @@ provisioned before a deployment recorded an organization signs in exactly as it 
 
 | Command | What it does |
 | --- | --- |
-| `mfctl organization list` | Reads the organizations this deployment holds, with each one's short name, display name, member count, and when it was recorded |
+| `mfctl organization list` | Reads the organizations this deployment holds, with each one's short name, display name, member count, and when it was recorded, and names beneath them any row whose stored short name this deployment [will not read](#records-this-deployment-will-not-read) |
 | `mfctl organization add --short-name <name> --display-name <name>` | Records an organization, and reports the identifier it was minted under |
 | `mfctl organization rename --organization <id> --display-name <name>` | Replaces the name an operator reads it by |
 | `mfctl organization set-short-name --organization <id> --short-name <name>` | Replaces the short name its members sign in under |
@@ -1403,6 +1404,35 @@ users in none — already holds one of that user's usernames for somebody else, 
 
 **An organization with members is not removed.** The refusal says how many it still has, so an operator moves each of
 them out first rather than leaving users whose logins name a short name nobody holds.
+
+### Records this deployment will not read
+
+Every user record, mail account declaration, and organization row is judged before it is committed, so one this
+deployment will not read was written by an older build, tightened by a newer one, edited in the database, or restored
+from a backup. **Each of them costs its own scope and nothing else** — which is why nothing you would otherwise look at
+reports that it happened: the deployment starts, the other users keep receiving mail, and the other organizations keep
+listing.
+
+`GET /api/admin/records/held-back` is where you meet them, under `mailfathom.admin.read`. It answers three lists:
+
+| List | What is in it | What it costs |
+| --- | --- | --- |
+| `users` | A user whose own record does not read as the settings a user's document holds | That user is served nothing: no mailbox of theirs is synchronized, and no surface answers for them |
+| `mailAccounts` | One mail account declaration of a user whose record is otherwise readable | That mailbox alone is not synchronized; the user's other mailboxes and their record are served as usual |
+| `organizations` | An organization row whose stored short name is not one this build reads | Its members cannot type the prefix their login begins with; nobody else is affected |
+
+Each entry carries the record's `id`, the `label` an operator recorded it under, the `rejectedVersion` where the kind
+of record carries a version — an organization row carries none, so it reports `null` — and `corrections`, one sentence
+per setting to change. The identifier is what you pass to the command that repairs it: `mfctl user edit` for a user,
+`mfctl account edit` for a mail account, and `mfctl organization set-short-name` for an organization.
+
+**Nothing here repeats a value.** The corrections are MailFathom's own sentences about which settings are wrong, never
+the values beside them, and a short name this deployment will not read is never echoed at all — it is the one value that
+failed every rule about what a short name may contain. So the answer carries no secret, no mail content, and no address.
+
+**The first two lists are the answering replica's own reading and the third is read from the rows.** Every replica binds
+the same records and refuses the same documents, so reading one replica tells you what all of them did; a record
+repaired on any replica stops being reported here within one convergence interval of the repair.
 
 ### Mail accounts and who they are assigned to
 

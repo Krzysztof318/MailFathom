@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.Records;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings;
@@ -179,6 +180,7 @@ public sealed class ConfigurationConvergenceWorkerTests
                     clock,
                     Options.Create(new SensitiveContentOptions()))),
             roster,
+            new HeldBackRecords(),
             new RecordingLogger<ServedMailUsersConvergence>());
 
         return new ConfigurationConvergenceWorker(

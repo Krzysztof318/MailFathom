@@ -177,7 +177,7 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
         return
         [
             .. stored
-                .Where(credential => UserCredentialMethod.TryParse(credential.Method, out _))
+                .Where(credential => IsListable(credential.Method, credential.OrganizationShortName))
                 .Select(credential => new UserCredential(
                     credential.Id,
                     user,
@@ -473,6 +473,21 @@ internal sealed class PersistedUserCredentials(MailFathomDbContext dbContext, Ti
     /// </remarks>
     private static UserCredentialWriteOutcome OutcomeOf(int rowsWritten) =>
         rowsWritten == 1 ? UserCredentialWriteOutcome.Written : UserCredentialWriteOutcome.UnknownCredential;
+
+    /// <summary>Gets whether a stored credential row is one a listing can publish at all.</summary>
+    /// <param name="method">The method as the column holds it.</param>
+    /// <param name="organizationShortName">The short name of the organization the credential is scoped to, or <see langword="null" /> for one scoped to none.</param>
+    /// <returns><see langword="true" /> when both values read as what they name.</returns>
+    /// <remarks>
+    /// A row whose method this build does not know and one whose scope it will not read are left out on the same terms:
+    /// neither can be published without inventing what it says. The scope is the one that matters — an organization's
+    /// short name is half of the login a password is typed as, so publishing the credential without it would name a
+    /// deployment-wide login that does not exist, and raising over it would cost the user every other credential they
+    /// hold. The organization listing is where such a row is reported and repaired.
+    /// </remarks>
+    internal static bool IsListable(string method, string? organizationShortName) =>
+        UserCredentialMethod.TryParse(method, out _)
+        && (organizationShortName is null || OrganizationShortName.TryCreate(organizationShortName, out _));
 
     /// <summary>Reads a stored grant back into the permissions it names.</summary>
     /// <remarks>

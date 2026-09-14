@@ -4,6 +4,7 @@
 
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.Records;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -34,6 +35,20 @@ public sealed class ServedMailUsersConvergenceTests
         {
           "Host": "imap.example.test",
           "UserName": "alex@example.test",
+          "Secrets": { "Password": { "Name": "imap-password", "SecretReference": "systemd-credential:imap-password" } }
+        }
+        """,
+        Version: 1);
+
+    /// <summary>A second mailbox of Alex's, which is what makes "one declaration costs itself" observable.</summary>
+    private static readonly MailAccountRecord SpareMailbox = new(
+        new Guid("0197a3c0-0000-7000-8000-000000000002"),
+        "alex.spare@example.test",
+        "spare",
+        """
+        {
+          "Host": "imap.example.test",
+          "UserName": "alex.spare@example.test",
           "Secrets": { "Password": { "Name": "imap-password", "SecretReference": "systemd-credential:imap-password" } }
         }
         """,
@@ -118,7 +133,8 @@ public sealed class ServedMailUsersConvergenceTests
         var roster = ServingAlexAt(version: 2);
         var documents = Holding((Alex, """{"Language":"English","NothingBindsThis":true}""", 3));
         var log = new RecordingLogger<ServedMailUsersConvergence>();
-        var convergence = Convergence(documents, roster, log);
+        var heldBack = new HeldBackRecords();
+        var convergence = Convergence(documents, roster, log, heldBack);
 
         // Act
         await convergence.ConvergeAsync(TestContext.Current.CancellationToken);
@@ -126,7 +142,77 @@ public sealed class ServedMailUsersConvergenceTests
 
         // Assert
         Assert.Equal(2, roster.PublishedVersionOf(Alex));
-        Assert.Single(log.Messages, message => message.Contains("rejected at version 3", StringComparison.Ordinal));
+        Assert.Single(log.Messages, message => message.Contains("at version 3", StringComparison.Ordinal));
+        var refused = Assert.Single(heldBack.Current);
+        Assert.Equal(HeldBackRecordKind.User, refused.Kind);
+        Assert.Equal(Alex.Value, refused.Identity);
+        Assert.Equal(3, refused.RejectedVersion);
+    }
+
+    /// <summary>
+    /// One mail account this build will not bind costs that account alone: the rest of the user's mailboxes are
+    /// republished at the version the row holds, so a single broken declaration never freezes a user's whole record.
+    /// </summary>
+    [Fact]
+    public async Task ConvergeAsync_ARecordWhoseOneMailboxDoesNotBind_PublishesTheRestAtTheNewVersion()
+    {
+        // Arrange
+        var roster = ServingAlexAt(version: 2);
+        var heldBack = new HeldBackRecords();
+        var unbindable = SpareMailbox with
+        {
+            Document = """{"Host":"imap.example.test","NothingBindsThis":true}""",
+        };
+        var documents = Holding(
+            [new UserSettingsDocument(Alex, "alex", LanguageOnly, 3) { MailAccounts = [WorkMailbox, unbindable] }]);
+
+        // Act
+        await Convergence(documents, roster, heldBack: heldBack)
+            .ConvergeAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var served = Assert.Single(roster.Users);
+        Assert.Equal([WorkMailbox.Id.ToString("D")], served.MailAccounts.Select(account => account.AccountId));
+        Assert.Equal(3, roster.PublishedVersionOf(Alex));
+        Assert.Equal(unbindable.Id, Assert.Single(heldBack.Current).Identity);
+    }
+
+    /// <summary>A record repaired on another replica stops being held back here, so nobody is told to correct a row that is already correct.</summary>
+    [Fact]
+    public async Task ConvergeAsync_ARecordRepairedOnAnotherReplica_StopsHoldingItBack()
+    {
+        // Arrange
+        var roster = ServingAlexAt(version: 2);
+        var heldBack = new HeldBackRecords();
+
+        heldBack.Replace(Alex, [new HeldBackRecord(HeldBackRecordKind.User, Alex.Value, "alex", 3, ["stale"])]);
+
+        // Act
+        await Convergence(Holding((Alex, LanguageOnly, 4)), roster, heldBack: heldBack)
+            .ConvergeAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(4, roster.PublishedVersionOf(Alex));
+        Assert.Empty(heldBack.Current);
+    }
+
+    /// <summary>A user erased on another replica takes whatever was held back about them with them.</summary>
+    [Fact]
+    public async Task ConvergeAsync_AUserErasedOnAnotherReplica_StopsHoldingTheirRecordsBack()
+    {
+        // Arrange
+        var roster = ServingAlexAt(version: 2);
+        var heldBack = new HeldBackRecords();
+
+        heldBack.Replace(Alex, [new HeldBackRecord(HeldBackRecordKind.User, Alex.Value, "alex", 2, ["stale"])]);
+
+        // Act
+        await Convergence(Holding(), roster, heldBack: heldBack)
+            .ConvergeAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(roster.Users);
+        Assert.Empty(heldBack.Current);
     }
 
     /// <summary>A replica whose startup gate has not settled a roster reads nothing, because that gate composes the whole roster from the rows itself.</summary>
@@ -175,7 +261,8 @@ public sealed class ServedMailUsersConvergenceTests
     private static ServedMailUsersConvergence Convergence(
         IUserSettingsDocumentReader documents,
         ServedMailUsers roster,
-        RecordingLogger<ServedMailUsersConvergence>? log = null) =>
+        RecordingLogger<ServedMailUsersConvergence>? log = null,
+        HeldBackRecords? heldBack = null) =>
         new(
             UserRecordScopes.Resolving(
                 documents,
@@ -184,5 +271,6 @@ public sealed class ServedMailUsersConvergenceTests
                     new FakeTimeProvider(),
                     Options.Create(new SensitiveContentOptions()))),
             roster,
+            heldBack ?? new HeldBackRecords(),
             log ?? new RecordingLogger<ServedMailUsersConvergence>());
 }
