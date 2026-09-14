@@ -157,7 +157,9 @@ authorization request has to start with.
 }
 ```
 
-`acceptsPassword` is whether any configured entry accepts `password`. Each server is one
+`acceptsPassword` is whether any configured entry accepts `password`, and it is `true` where the endpoint is
+configured with no entry at all — such an endpoint requires no credential, so a password is a thing a client may
+present rather than one it may not. Each server is one
 `ClientEndpoint:Authentication:<n>:OAuth:AuthorizationServers:<m>` block that was written with a `ClientId`, in the
 order the configuration published them; a block without one goes on validating tokens and appears here not at all.
 `name` is what a client matches its provider marks against, `self` meaning the deployment's own identity provider;
@@ -3009,8 +3011,9 @@ what came back independently — so the three postures below are what a deployme
 | an `OAuth` entry whose servers carry a `ClientId`, and no `password` entry | A control per published server, and no form — which is what makes a token-only deployment a screen somebody can use rather than a form nobody can submit |
 | both | The `self` server's control at the top where one is published, the other servers beneath it, a divider, and the form under that |
 
-A deployment that publishes neither — every entry `api-key` or `public-key`, or a client endpoint requiring no
-credential at all — is told so on the screen rather than shown an inert form.
+A deployment that publishes neither — every entry `api-key` or `public-key` — is told so on the screen rather than
+shown an inert form. An endpoint configured with no entry at all is not that case: it publishes `acceptsPassword` true
+for the reason above, and the screen it draws is the password form.
 
 **The flow is an authorization code with PKCE and nothing else.** The client reads the server's own discovery document
 from its issuer, generates a verifier it keeps and a `S256` challenge it sends, and starts the request with the

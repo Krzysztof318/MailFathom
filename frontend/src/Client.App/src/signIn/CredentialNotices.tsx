@@ -16,10 +16,12 @@ import { useLocalization } from '../localization/useLocalization';
 // successfully signs in.
 
 /** What the client has to say about the credential this machine holds, whichever screen is on it when it says so. */
-export type CredentialNotice = 'credentialNoLongerAccepted' | 'sessionNotKept' | 'sessionNotRemoved';
+export type CredentialNotice =
+    'credentialNoLongerAccepted' | 'providerEndedTheSignIn' | 'sessionNotKept' | 'sessionNotRemoved';
 
 const noticeMessages: Readonly<Record<CredentialNotice, MessageKey>> = {
     credentialNoLongerAccepted: 'signIn.noLongerAccepted',
+    providerEndedTheSignIn: 'signIn.providerEnded',
     sessionNotKept: 'signIn.notKept',
     sessionNotRemoved: 'signIn.notRemoved',
 };

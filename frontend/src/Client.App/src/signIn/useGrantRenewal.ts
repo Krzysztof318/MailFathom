@@ -47,14 +47,30 @@ export function useGrantRenewal(
     }, [grant]);
 
     useEffect(() => {
-        if (grant === null || !online) {
+        if (grant === null) {
             return;
         }
 
         const renewIfDue = (): void => {
             const presented = held.current?.refreshToken ?? null;
 
-            if (presented === null || renewingFor.current !== null || !renewalIsDue(grant)) {
+            if (renewingFor.current !== null || !renewalIsDue(grant)) {
+                return;
+            }
+
+            if (presented === null) {
+                // The server issued no refresh token, so this grant ends with its access token and nothing here can
+                // replace it. Saying so is what puts the person back on the sign-in screen rather than in front of a
+                // frame waiting on a read the expired token would never be made with.
+                onEnded();
+
+                return;
+            }
+
+            // A renewal this machine cannot deliver is one worth not attempting; the tick after the network comes back
+            // is what makes it. The reading above is not gated on that, because a grant that has run out has run out
+            // whether or not anything can be reached.
+            if (!online) {
                 return;
             }
 

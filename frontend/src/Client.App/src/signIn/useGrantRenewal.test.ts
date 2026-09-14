@@ -206,15 +206,20 @@ describe('useGrantRenewal', () => {
         expect(running.renewed[0]?.authorization).toBe('Bearer a-fresh-token');
     });
 
-    it('attempts nothing for a grant with no refresh token to present, rather than retrying forever', async () => {
+    it('reports a grant with no refresh token to present as ended, rather than waiting on a renewal nothing can make', async () => {
         const { transport, asked } = answering({ body: issuedBody() });
         const running = driven(endingIn(0, null), transport);
 
         await running.settle();
-        await running.tick();
 
         expect(asked).toEqual([]);
-        expect(running.ended()).toBe(0);
+        expect(running.ended()).toBe(1);
+
+        // What ends the reading is the frame dropping what it holds, which is what it does with a grant reported ended.
+        running.hold(null);
+        await running.tick();
+
+        expect(running.ended()).toBe(1);
     });
 
     it('attempts nothing while this machine has no network to deliver a renewal over', async () => {

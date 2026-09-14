@@ -2,11 +2,13 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { StrictMode } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     sessionExchangeRoute,
     type ClientRequest,
+    type ClientResponse,
     type DeploymentAddress,
     type MailFathomTransport,
 } from '@mailfathom/client-backend';
@@ -15,6 +17,7 @@ import { LocalizationProvider } from '../localization/Localization';
 import type { CredentialNotice } from './CredentialNotices';
 import { SignIn } from './SignIn';
 import { longestCredentialPart } from './credentialEntry';
+import { startOAuthSignIn } from './oauthFlow';
 import type { KeptBeyondTheTab } from './credentialStore';
 import type { KeptSession } from './keptSession';
 import type { OAuthGrant } from './oauthGrant';
@@ -145,6 +148,31 @@ const resourceWithheld: MailFathomTransport = (request) =>
         ? Promise.resolve({ status: 500, body: '', headers: {} })
         : bothProviders(request);
 
+/** The same failure, mended by the time the document is asked for again, which is what a read asked for again is for. */
+function resourceWithheldOnce(): MailFathomTransport {
+    let withheld = false;
+
+    return (request) => {
+        if (request.path.includes('/.well-known/oauth-protected-resource') && !withheld) {
+            withheld = true;
+
+            return Promise.resolve({ status: 500, body: '', headers: {} });
+        }
+
+        return bothProviders(request);
+    };
+}
+
+/** A deployment that publishes a provider and takes no password, which is the case that leaves no form on the screen. */
+const providersOnly = published({
+    acceptsPassword: false,
+    authorizationServers: [{ name: 'keycloak', displayName: 'Keycloak', issuer, clientId: 'mailfathom-client' }],
+});
+
+/** A deployment that publishes its providers and never answers the exchange a password is presented to. */
+const exchangeUnanswered: MailFathomTransport = (request) =>
+    request.path.endsWith(sessionExchangeRoute) ? new Promise<ClientResponse>(() => undefined) : bothProviders(request);
+
 /** A head that receives a redirect, and what it was handed. */
 function redirectTo(handed: string[], answer: SignInRedirectAnswer | null = null): SignInRedirect {
     return {
@@ -158,6 +186,42 @@ function redirectTo(handed: string[], answer: SignInRedirectAnswer | null = null
         abandon: () => undefined,
         answerWaiting: () => null,
     };
+}
+
+/**
+ * An attempt written down by a run the authorization server's page replaced, which is what the web head comes back to.
+ *
+ * @returns The `state` that run generated, which is what the server echoes back and what the answer has to carry.
+ */
+async function attemptWaitingForItsAnswer(): Promise<string> {
+    window.sessionStorage.clear();
+
+    const handed: string[] = [];
+
+    void startOAuthSignIn({
+        deployment: knownDeployment,
+        server: { name: 'keycloak', displayName: 'Keycloak', issuer, clientId: 'mailfathom-client' },
+        resource: { resource: `${knownDeployment.baseAddress}/api/client`, scopes: ['mailfathom.read'] },
+        redirect: {
+            offered: true,
+            redirectUri: 'https://mail.example.invalid/',
+            hand: (address) => {
+                handed.push(address);
+
+                // Nothing settles, which is what the document being replaced looks like from here.
+                return new Promise<SignInRedirectAnswer | null>(() => undefined);
+            },
+            abandon: () => undefined,
+            answerWaiting: () => null,
+        },
+        transport: bothProviders,
+    });
+
+    await vi.waitFor(() => {
+        expect(handed).toHaveLength(1);
+    });
+
+    return new URL(handed[0] ?? '').searchParams.get('state') ?? '';
 }
 
 /** What every request the screen made carried as a credential, so a test sees where a password did and did not go. */
@@ -206,13 +270,14 @@ function renderScreen(
     clearTextPermitted: boolean | null = null,
     redirect: SignInRedirect = receivesNoRedirect,
     redirectAnswer: SignInRedirectAnswer | null = null,
+    strictly = false,
 ): Rendered {
     const presented: { deployment: DeploymentAddress; session: KeptSession; keptBeyondTheTab: boolean }[] = [];
     const granted: { deployment: DeploymentAddress; grant: OAuthGrant }[] = [];
     const attempts: AbortSignal[] = [];
     const pointedAway: boolean[] = [];
 
-    const { unmount } = render(
+    const screenUnder = (
         <LocalizationProvider>
             <SignIn
                 adopted={adopted}
@@ -236,8 +301,10 @@ function renderScreen(
                     pointedAway.push(true);
                 }}
             />
-        </LocalizationProvider>,
+        </LocalizationProvider>
     );
+
+    const { unmount } = render(strictly ? <StrictMode>{screenUnder}</StrictMode> : screenUnder);
 
     return { presented, granted, attempts, pointedAway, unmount };
 }
@@ -1035,13 +1102,13 @@ describe('SignIn', () => {
         expect(screen.getByLabelText('Password')).toBeDefined();
     });
 
-    // The other half of that, and the difference matters: one is permanent on this head and the other is worth trying
-    // again in a moment.
+    // The other half of that, and the difference matters: one is permanent on this head and the other is a read worth
+    // making again, which is what the control inside the notice is for.
     it('says a published provider went undrawn because the resource document could not be read', async () => {
         renderScreen(resourceWithheld, servingDeployment, 'inThisBrowser', [], null, redirectTo([]));
 
         expect((await screen.findByRole('alert')).textContent).toBe(
-            'This deployment offers a provider, and what a token has to be issued for could not be read just now. Try again in a moment.',
+            'This deployment offers a provider, and what a token has to be issued for could not be read just now.Ask again',
         );
     });
 
@@ -1109,6 +1176,114 @@ describe('SignIn', () => {
         expect(await screen.findByRole('button', { name: 'Sign in' })).toBeDefined();
         expect(screen.getByText('or with a password')).toBeDefined();
         expect(screen.queryByText('or another method')).toBeNull();
+    });
+
+    // A deployment taking no password whose providers this head cannot open leaves nothing on the screen to press, so
+    // the sentence names the heads that can rather than a password form that is not drawn.
+    it('says where to sign in instead where the deployment takes no password and no provider is drawn', async () => {
+        renderScreen(providersOnly, servingDeployment);
+
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            'This deployment offers a provider, which this version of the client cannot open, and it takes no password. Sign in from the desktop client or from a browser.',
+        );
+        expect(screen.queryByLabelText('Password')).toBeNull();
+    });
+
+    // The resource document failing is the one of those two reasons that is worth another read, so the notice carries
+    // the control that makes it rather than a sentence asking the person to do something the screen could do.
+    it('reads the documents again where the resource document is what failed, and draws the providers it answers with', async () => {
+        renderScreen(resourceWithheldOnce(), servingDeployment, 'inThisBrowser', [], null, redirectTo([]));
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Ask again' }));
+
+        expect(await screen.findByRole('button', { name: 'Continue to Keycloak' })).toBeDefined();
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    // A hand-over waits on somebody's browser for minutes, with every control on the screen disabled and the password
+    // form gone. Somebody who closed the provider window or pressed the wrong provider has to have something to press.
+    it('offers a way out of a hand-over nobody came back from, rather than holding the screen on it', async () => {
+        const handed: string[] = [];
+        const abandoned: number[] = [];
+        const redirect: SignInRedirect = {
+            offered: true,
+            redirectUri: 'https://mail.example.invalid/',
+            hand: (address) => {
+                handed.push(address);
+
+                return new Promise<SignInRedirectAnswer | null>(() => undefined);
+            },
+            abandon: () => {
+                abandoned.push(1);
+            },
+            answerWaiting: () => null,
+        };
+
+        renderScreen(bothProviders, servingDeployment, 'inThisBrowser', [], null, redirect);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue to Keycloak' }));
+
+        await vi.waitFor(() => {
+            expect(handed).toHaveLength(1);
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Stop trying' }));
+
+        expect(abandoned).toEqual([1]);
+        expect(window.sessionStorage.length).toBe(0);
+        expect(screen.getByRole('button', { name: 'Continue to Keycloak' })).toBeDefined();
+    });
+
+    // One attempt slot holds both ways in. A password attempt against a slow deployment that kept its controller when
+    // a hand-over took the slot would be unabortable, with the control that abandons it gone in the same render.
+    it('calls off a password attempt still running when a hand-over takes the slot it was in', async () => {
+        const { attempts } = renderScreen(
+            exchangeUnanswered,
+            servingDeployment,
+            'inThisBrowser',
+            [],
+            null,
+            redirectTo([]),
+        );
+
+        // The provider control is drawn from what the deployment published, so it is waited for before the password
+        // attempt starts — otherwise this test would press it before the screen had one.
+        const provider = await screen.findByRole('button', { name: 'Continue to Keycloak' });
+
+        typeCredential();
+        submit();
+
+        const presenting = attempts[attempts.length - 1];
+
+        fireEvent.click(provider);
+
+        expect(presenting?.aborted).toBe(true);
+    });
+
+    // The client is mounted in `StrictMode`, which runs an effect, its cleanup, and the effect again. The verifier is
+    // taken from storage as the answer is read, so a redemption entered twice spends the code on nothing and the
+    // second pass reports an answer belonging to no sign-in this client started.
+    it('redeems a waiting redirect once, under the doubled effects the client is mounted with', async () => {
+        const state = await attemptWaitingForItsAnswer();
+        const asked: ClientRequest[] = [];
+
+        const { granted } = renderScreen(
+            recording(asked, bothProviders),
+            servingDeployment,
+            'inThisBrowser',
+            [],
+            null,
+            redirectTo([]),
+            { answered: 'code', code: 'a-code', state },
+            true,
+        );
+
+        await waitFor(() => {
+            expect(granted).toHaveLength(1);
+        });
+
+        expect(asked.filter((request) => request.path.endsWith('/token'))).toHaveLength(1);
+        expect(screen.queryByRole('alert')).toBeNull();
     });
 
     it('redeems nothing for an answer carrying a state this client did not generate', async () => {

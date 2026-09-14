@@ -47,6 +47,36 @@ const issuedGrant: OAuthGrant = {
     person: 'K. Kowalska',
 };
 
+/**
+ * The deployment answering as it always does, beside the authorization server publishing where a token is withdrawn.
+ *
+ * The harness's own double answers every path with the accounts directory, which is enough for a test asserting that a
+ * discovery document was asked for and not enough for one asserting what was done with it.
+ */
+function alsoAnsweringTheProvider(): DeploymentTransport {
+    const deployment = deploymentAnswering();
+
+    return (signal) => (request) => {
+        if (!request.path.startsWith(issuedGrant.issuer)) {
+            return deployment(signal)(request);
+        }
+
+        asked.push(request);
+
+        return Promise.resolve(
+            complete({
+                status: 200,
+                body: JSON.stringify({
+                    issuer: issuedGrant.issuer,
+                    authorization_endpoint: `${issuedGrant.issuer}/authorize`,
+                    token_endpoint: `${issuedGrant.issuer}/token`,
+                    revocation_endpoint: `${issuedGrant.issuer}/revoke`,
+                }),
+            }),
+        );
+    };
+}
+
 // Signing in, signing out, and everything the credential store does or refuses to do along the way. The arrangement
 // is `App.harness`, which the rest of this family shares.
 
@@ -341,6 +371,41 @@ describe('App sign-in', () => {
 
         // Nobody was signed out, so what is on the screen is the frame waiting rather than the sign-in.
         expect(screen.queryByLabelText('Password')).toBeNull();
+    });
+
+    // A grant the server issued no refresh token for ends with its access token, and nothing in this client can
+    // replace it. Waiting on a read that expired token would never be made with is a frame nobody can leave.
+    it('puts somebody back on the sign-in screen where a grant that is due has no refresh token to renew with', async () => {
+        const spent: OAuthGrant = { ...issuedGrant, expiresAt: '2000-01-01T00:00:00.000Z', refreshToken: null };
+
+        renderApp(servedFrom, null, deploymentAnswering(), storeKeeping(), noTelemetry, spent);
+
+        expect(
+            await screen.findByText(
+                'Your provider ended this sign-in, so it has been cleared from this machine. Sign in again to carry on.',
+            ),
+        ).toBeDefined();
+        expect(screen.getByLabelText('Password')).toBeDefined();
+        expect(asked.map((request) => request.headers['Authorization'])).not.toContain(spent.authorization);
+    });
+
+    // A refresh token nobody withdrew outlives the sign-out at the server, which is a credential surviving the act
+    // that was supposed to end it.
+    it('asks the authorization server to withdraw the refresh token when somebody signs out', async () => {
+        renderApp(servedFrom, null, alsoAnsweringTheProvider(), storeKeeping(), noTelemetry, issuedGrant);
+
+        await framed();
+        await signOut();
+
+        // Asked and not waited on, so the request lands after the screen the sign-out produced rather than in it.
+        await waitFor(() => {
+            expect(asked.map((request) => request.path)).toContain(`${issuedGrant.issuer}/revoke`);
+        });
+
+        const withdrawal = asked.find((request) => request.path === `${issuedGrant.issuer}/revoke`);
+
+        expect(withdrawal?.body).toContain(`token=${issuedGrant.refreshToken ?? ''}`);
+        expect(withdrawal?.body).toContain('token_type_hint=refresh_token');
     });
 
     it('places focus on what it has to say about the credential, rather than on the field below it', async () => {

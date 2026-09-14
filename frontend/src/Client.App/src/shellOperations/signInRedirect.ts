@@ -166,8 +166,7 @@ function redirectedThroughTheShell(redirectUri: string): SignInRedirect {
  *
  * Read with the platform's own parser rather than by hand, because this is the application and not `Client.Backend`:
  * what a query is, and how a `+` and a percent escape in one decode, is the platform's answer rather than a second one
- * written here. The address is a fixed literal that nothing from the query reaches, so parsing against it can resolve
- * nothing but the parameters.
+ * written here. The query is read on its own, with no address involved at all.
  */
 function answerIn(query: string): SignInRedirectAnswer | null {
     const stated = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);

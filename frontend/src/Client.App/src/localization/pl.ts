@@ -95,8 +95,11 @@ export const pl: Catalogue = {
         'To wdrożenie nie udostępnia żadnej metody logowania. Sprawdź adres albo poproś osobę, która je prowadzi, o skonfigurowanie jednej.',
     'signIn.providersNotOnThisHead':
         'To wdrożenie udostępnia dostawcę, którego ta wersja klienta nie potrafi otworzyć. Zaloguj się tutaj hasłem albo skorzystaj z klienta na komputer lub z przeglądarki.',
+    'signIn.providersOnAnotherHeadOnly':
+        'To wdrożenie udostępnia dostawcę, którego ta wersja klienta nie potrafi otworzyć, i nie przyjmuje hasła. Zaloguj się z klienta na komputer albo z przeglądarki.',
     'signIn.providersUnread':
-        'To wdrożenie udostępnia dostawcę, a informacji o tym, na co ma zostać wystawiony token, nie udało się teraz odczytać. Spróbuj ponownie za chwilę.',
+        'To wdrożenie udostępnia dostawcę, a informacji o tym, na co ma zostać wystawiony token, nie udało się teraz odczytać.',
+    'signIn.readAgain': 'Zapytaj ponownie',
     'signIn.returning': 'Kończę logowanie u Twojego dostawcy…',
     'signIn.notAuthorized':
         'Dostawca nie dokończył logowania, więc nikt nie został zalogowany. Zacznij je jeszcze raz.',
@@ -125,6 +128,8 @@ export const pl: Catalogue = {
     'signIn.grantMissing': 'Wdrożenie przyjęło poświadczenie, ale nie zezwala mu na odczyt żadnej poczty.',
     'signIn.deploymentSilent': 'Wdrożenie nie odpowiedziało. Spróbuj ponownie za chwilę.',
     'signIn.providerSilent': 'Dostawca nie odpowiedział, więc nikt nie został zalogowany. Spróbuj ponownie za chwilę.',
+    'signIn.providerEnded':
+        'Twój dostawca zakończył to logowanie, więc zostało usunięte z tego komputera. Zaloguj się ponownie, aby kontynuować.',
     'signIn.noLongerAccepted': 'To wdrożenie przestało akceptować zapamiętane logowanie. Zaloguj się ponownie.',
     'signIn.notRemoved':
         'Wylogowanie nie usunęło zapamiętanego logowania z magazynu poświadczeń tej maszyny, więc nadal jest tam przechowywane. MailFathom został poproszony o zakończenie sesji, a ona i tak przestaje działać sama. Usuń wpis w samym magazynie, jeśli wolisz, żeby zniknął już teraz.',

@@ -82,6 +82,30 @@ function comingBackWith(answer: SignInRedirectAnswer | null): SignInRedirect & {
     };
 }
 
+/**
+ * The web head, which is replaced by the address it opens and therefore never answers at all.
+ *
+ * Distinct from a head answering `null`: that one is the shell saying it could not open the browser or that nobody came
+ * back, which ends the sign-in and the written attempt with it. This one has handed over and the answer arrives at the
+ * next start of the client.
+ */
+function replacingTheDocument(): SignInRedirect & { handed: string[] } {
+    const handed: string[] = [];
+
+    return {
+        handed,
+        offered: true,
+        redirectUri,
+        hand: (address) => {
+            handed.push(address);
+
+            return new Promise<SignInRedirectAnswer | null>(() => undefined);
+        },
+        abandon: () => undefined,
+        answerWaiting: () => null,
+    };
+}
+
 /** What one parameter of an authorization request says, read the way the server reading it would. */
 function statedIn(address: string, parameter: string): string {
     return new URL(address).searchParams.get(parameter) ?? '';
@@ -129,9 +153,13 @@ describe('startOAuthSignIn', () => {
     });
 
     it('writes the verifier down for the second half and states it nowhere in the address', async () => {
-        const redirect = comingBackWith(null);
+        const redirect = replacingTheDocument();
 
-        await startOAuthSignIn(starting({ redirect, transport: answering().transport }));
+        void startOAuthSignIn(starting({ redirect, transport: answering().transport }));
+
+        await vi.waitFor(() => {
+            expect(redirect.handed).toHaveLength(1);
+        });
 
         const written = JSON.parse(window.sessionStorage.getItem('mailfathom.signIn.attempt') ?? 'null') as {
             codeVerifier: string;
@@ -182,21 +210,29 @@ describe('startOAuthSignIn', () => {
         expect(redirect.handed).toEqual([]);
     });
 
+    // The shell could not open the browser, or nobody came back inside the wait it holds the redirect port for. The
+    // verifier goes with the sign-in rather than outliving it: the authorization request did reach the server, and a
+    // secret left behind is one a later run of this tab would find.
     it('puts somebody back on the sign-in screen where the head came back with nothing at all', async () => {
         const outcome = await startOAuthSignIn(
             starting({ redirect: comingBackWith(null), transport: answering().transport }),
         );
 
         expect(outcome).toEqual({ outcome: 'refused', refusal: 'unavailable' });
+        expect(window.sessionStorage.getItem('mailfathom.signIn.attempt')).toBeNull();
     });
 });
 
 describe('completeOAuthSignIn', () => {
-    /** Starts an attempt on a head that never comes back, so the second half can be driven on its own. */
+    /** Starts an attempt on the head that is replaced by what it opens, so the second half can be driven on its own. */
     async function attemptInFlight(): Promise<string> {
-        const redirect = comingBackWith(null);
+        const redirect = replacingTheDocument();
 
-        await startOAuthSignIn(starting({ redirect, transport: answering().transport }));
+        void startOAuthSignIn(starting({ redirect, transport: answering().transport }));
+
+        await vi.waitFor(() => {
+            expect(redirect.handed).toHaveLength(1);
+        });
 
         return statedIn(redirect.handed[0] ?? '', 'state');
     }

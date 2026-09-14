@@ -166,6 +166,10 @@ export function App({
     // Withheld from the reads rather than from `authorization`: nobody has been signed out, so the sign-in screen is
     // not what this draws. The frame waits the way it waits for any read that has not answered, and the renewal below
     // starts on its first effect.
+    //
+    // A grant the server issued no refresh token for never waits here: nothing could replace its token, so the renewal
+    // below reports it as ended on its first tick and this screen becomes the sign-in rather than a frame waiting on a
+    // read that will never be made.
     const presented = kept !== null || grant === null || !renewalIsDue(grant) ? authorization : null;
 
     // Who is signed in, taken from what was kept rather than out of the credential. A session token names nobody — the
@@ -233,25 +237,40 @@ export function App({
     //
     // It is held steady across renders because the connection below reads again whenever it changes, and a callback
     // rebuilt every render would be a read started every render.
-    const credentialRefused = useCallback(() => {
-        telemetry.happened('credential_no_longer_accepted');
-        setNotices(['credentialNoLongerAccepted']);
-        setKept(null);
-        setGrant(null);
-        revise(emptyWorkspace);
-        forgetListings();
-        forgetComposition();
+    const signInEnded = useCallback(
+        (notice: CredentialNotice) => {
+            telemetry.happened('credential_no_longer_accepted');
+            setNotices([notice]);
+            setKept(null);
+            setGrant(null);
+            revise(emptyWorkspace);
+            forgetListings();
+            forgetComposition();
 
-        if (baseAddress === null) {
-            return;
-        }
-
-        void credentials.forget({ baseAddress }).then((removed) => {
-            if (!removed) {
-                setNotices((shown) => [...shown, 'sessionNotRemoved']);
+            if (baseAddress === null) {
+                return;
             }
-        });
-    }, [baseAddress, credentials, revise, telemetry]);
+
+            void credentials.forget({ baseAddress }).then((removed) => {
+                if (!removed) {
+                    setNotices((shown) => [...shown, 'sessionNotRemoved']);
+                }
+            });
+        },
+        [baseAddress, credentials, revise, telemetry],
+    );
+
+    const credentialRefused = useCallback(() => {
+        signInEnded('credentialNoLongerAccepted');
+    }, [signInEnded]);
+
+    // The authorization server ended the grant — it refused the refresh token, or it issued none and the access token
+    // has expired. The deployment said nothing and is still accepting whatever it minted, so the sentence names the
+    // provider: a failure at one system reported as a failure at the other sends whoever reads it, and whoever they
+    // then go and ask, to the wrong place.
+    const grantEnded = useCallback(() => {
+        signInEnded('providerEndedTheSignIn');
+    }, [signInEnded]);
 
     // A renewed session replaces what is held and what is kept, in that order and in one place: holding it without
     // keeping it would leave the next start presenting a token this run has already replaced, which the deployment
@@ -292,7 +311,7 @@ export function App({
         [baseAddress, credentials],
     );
 
-    useGrantRenewal(grant, readMail, connection.online, grantRenewed, credentialRefused);
+    useGrantRenewal(grant, readMail, connection.online, grantRenewed, grantEnded);
 
     const deploymentSession = connection.session?.outcome === 'read' ? connection.session.value : null;
     const offeredSpaces = deploymentSession === null ? [] : spacesOffered(deploymentSession);

@@ -161,10 +161,15 @@ export async function startOAuthSignIn(start: OAuthSignInStart): Promise<OAuthSi
 
     // A shell that answered nothing could not open the browser, or nobody came back inside the wait it holds the
     // redirect port for. Both put the person back on the sign-in screen rather than in front of a control that never
-    // stops waiting.
-    return answer === null
-        ? { outcome: 'refused', refusal: 'unavailable' }
-        : completeOAuthSignIn(answer, start.transport);
+    // stops waiting, and both end the verifier with the sign-in: `completeOAuthSignIn` is what takes it on every other
+    // exit, and this is the one that never reaches it.
+    if (answer === null) {
+        discardWrittenAttempt();
+
+        return { outcome: 'refused', refusal: 'unavailable' };
+    }
+
+    return completeOAuthSignIn(answer, start.transport);
 }
 
 /**

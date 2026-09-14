@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
     ownProviderName,
     reachDeployment,
@@ -270,6 +270,15 @@ export function SignIn({
     const attempt = useRef<AbortController | null>(null);
     const started = useRef(false);
 
+    /** How many times the two documents have been asked for, which is what a read asked for again keys the effect on. */
+    const [reading, setReading] = useState(0);
+
+    /** Which answer has already been redeemed, so a re-run of the effect below does not spend the code twice. */
+    const redeeming = useRef<SignInRedirectAnswer | null>(null);
+
+    /** How that redemption reports, read when the answer arrives so that no dependency re-enters the redemption. */
+    const reporting = useRef<(outcome: OAuthSignInOutcome) => void>(() => undefined);
+
     // The view changed, so focus is placed rather than left wherever the previous screen had it: on what this screen
     // has to say about why it is back where there is something, and otherwise on the first thing the form is asking to
     // have filled. Moving focus is an imperative browser API, which is what an effect is for.
@@ -367,7 +376,7 @@ export function SignIn({
             window.clearTimeout(settling);
             running.abort();
         };
-    }, [askedAddress, handed, send]);
+    }, [askedAddress, handed, reading, send]);
 
     // What an OAuth sign-in ended as, in one place, because the two halves reach it from different runs of the client:
     // the shell head comes back out of the control that started it, and the web head out of a redirect that was
@@ -398,26 +407,29 @@ export function SignIn({
         [onSignedInWithGrant, telemetry],
     );
 
-    // A redirect that was waiting when this run started, redeemed once. The verifier it is redeemed with was written
-    // down by the run that started the attempt and is taken as it is read, so a second pass over the same answer finds
-    // nothing and is refused rather than redeeming a code twice.
+    // A redirect that was waiting when this run started, redeemed exactly once for the answer it carried.
+    //
+    // Once, and not once per run of the effect: the verifier is taken from the tab's own storage as it is read, so a
+    // second pass over the same answer has nothing left to redeem with and the code is spent for nothing. `StrictMode`
+    // runs every effect, its cleanup, and the effect again on mount, and this component's own callbacks change
+    // identity with the frame above it — so the ref is what makes the redemption one act rather than one per re-run,
+    // and the outcome is settled through a ref of its own so that no dependency of this effect is a reason to re-enter
+    // it. It is not abandonable for the same reason: an aborted redemption is an authorization code nothing can spend.
     useEffect(() => {
-        if (redirectAnswer === null) {
+        reporting.current = settleOAuth;
+    }, [settleOAuth]);
+
+    useEffect(() => {
+        if (redirectAnswer === null || redeeming.current === redirectAnswer) {
             return;
         }
 
-        const running = new AbortController();
+        redeeming.current = redirectAnswer;
 
-        void completeOAuthSignIn(redirectAnswer, send(running.signal)).then((outcome) => {
-            if (!running.signal.aborted) {
-                settleOAuth(outcome);
-            }
+        void completeOAuthSignIn(redirectAnswer, send(new AbortController().signal)).then((outcome) => {
+            reporting.current(outcome);
         });
-
-        return () => {
-            running.abort();
-        };
-    }, [redirectAnswer, send, settleOAuth]);
+    }, [redirectAnswer, send]);
 
     const shown = refusal === null ? null : shownFor(refusal, deployment);
     // Whether the choice between the tab and the device is a choice at all, which is what decides both that the
@@ -455,19 +467,28 @@ export function SignIn({
     const noMethods = offered?.methods != null && !acceptsPassword && publishedServers.length === 0;
 
     // The other half of that: the deployment published servers and this screen is drawing none of them. Which of the
-    // two reasons it is decides the sentence, because one is permanent on this head and the other is worth retrying.
+    // two reasons it is decides the sentence, because one is permanent on this head and the other is worth reading
+    // again — and whether a password form is standing under it decides which sentence, because one that names signing
+    // in with a password here names a way out that is not on the screen.
     const withheldServers: MessageKey | null =
         publishedServers.length === 0 || servers.length > 0
             ? null
             : redirect.offered
               ? 'signIn.providersUnread'
-              : 'signIn.providersNotOnThisHead';
+              : acceptsPassword
+                ? 'signIn.providersNotOnThisHead'
+                : 'signIn.providersOnAnotherHeadOnly';
 
     /** Hands somebody to one authorization server, and settles whatever this head came back with. */
     async function handOver(server: SignInAuthorizationServer): Promise<void> {
         if (asked === null || resource === null) {
             return;
         }
+
+        // Whatever was already in the slot goes first. A password attempt against a slow deployment is still running
+        // when somebody presses a provider control, and replacing its controller unannounced would leave it
+        // unabortable — with the control that abandons it gone from the screen in the same render.
+        attempt.current?.abort();
 
         const running = new AbortController();
         attempt.current = running;
@@ -668,6 +689,9 @@ export function SignIn({
     // with the only control on it disabled, which is a state nobody can leave. Abandoning frees the connection as well
     // as the screen, which is why it aborts the request rather than only ignoring what it says. Focus goes back to the
     // control this one stood beside, placed by the effect above, since this one is about to leave the document.
+    //
+    // It abandons a hand-over on the same terms and through the same slot, which is why the provider block draws it
+    // too: a hand-over waits on somebody's browser for minutes, and that is far longer than a deployment's silence.
     function abandon(): void {
         attempt.current?.abort();
     }
@@ -759,6 +783,13 @@ export function SignIn({
                 </div>
             )}
 
+            {/* The way out of a hand-over, which is the same control the password attempt draws and is here for the
+                same reason: the shell head holds its redirect port for minutes, and somebody who closed the provider
+                window or pressed the wrong provider would otherwise have nothing on the screen to press. */}
+            {handing?.stage === 'handingOff' ? (
+                <SecondaryButton label={translate('signIn.abandon')} shape="form" onActivate={abandon} />
+            ) : null}
+
             {/* What is under the divider decides what it says: the grid where there is one, and the password form
                 where the deployment's own server is the only one published. */}
             {own === null || (providers.length === 0 && !passwordOffered) ? null : (
@@ -792,8 +823,24 @@ export function SignIn({
             {noMethods ? <StatedNotice message={translate('signIn.noMethods')} /> : null}
 
             {/* What the deployment offers and this screen is not drawing, said as its own sentence: a person told that
-                a configured deployment offers nothing has been pointed at a fix nobody can make. */}
-            {withheldServers === null ? null : <StatedNotice message={translate(withheldServers)} />}
+                a configured deployment offers nothing has been pointed at a fix nobody can make. The document that
+                could not be read is the one case worth another read, so that notice carries the control rather than
+                asking somebody to produce the retry themselves. */}
+            {withheldServers === null ? null : (
+                <StatedNotice message={translate(withheldServers)}>
+                    {withheldServers === 'signIn.providersUnread' ? (
+                        <button
+                            className="shrink-0 self-start rounded-md border border-warning px-2.25 py-1 font-medium text-warning-text transition hover:bg-warning/10"
+                            type="button"
+                            onClick={() => {
+                                setReading((reads) => reads + 1);
+                            }}
+                        >
+                            {translate('signIn.readAgain')}
+                        </button>
+                    ) : null}
+                </StatedNotice>
+            )}
 
             <form
                 className="flex flex-col gap-4.5 workspace:gap-5"
@@ -1043,14 +1090,15 @@ export function SignIn({
  * Above the form rather than inside it, because neither is about something somebody typed: one says the deployment
  * offers no way in at all, and the other that it offers one this screen is not drawing.
  */
-function StatedNotice({ message }: { readonly message: string }) {
+function StatedNotice({ children, message }: { readonly children?: ReactNode; readonly message: string }) {
     return (
         <p
-            className="flex items-start gap-2.25 rounded-lg border border-warning bg-warning-soft px-3.25 py-2.75 text-xs leading-normal text-warning-text text-pretty"
+            className="flex flex-wrap items-start gap-2.25 rounded-lg border border-warning bg-warning-soft px-3.25 py-2.75 text-xs leading-normal text-warning-text text-pretty"
             role="alert"
         >
             <Icon name="report" className="mt-0.25 size-4 text-warning-text" />
             {message}
+            {children}
         </p>
     );
 }
