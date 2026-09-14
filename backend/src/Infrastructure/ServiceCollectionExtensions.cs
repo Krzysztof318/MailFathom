@@ -923,6 +923,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILocalMailFolderStore, LocalMailFolderStore>();
         services.AddScoped<ILocalMailFolderChangeAuditor, LoggedLocalMailFolderChangeAuditor>();
         services.AddScoped<LocalMailFolderEditor>();
+        services.AddScoped<MirroredMailFolderEditor>();
+        services.AddScoped<MailFolderEditor>();
         services.AddScoped<LocalMailFolderArrivals>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddScoped<MailFolderResolver>();
@@ -1197,6 +1199,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRemoteFolderCreator>(provider => new MailKitRemoteFolderCreator(
             provider.GetRequiredService<MailboxWriteConnectionPool>(),
             provider.GetRequiredService<ILogger<MailKitRemoteFolderCreator>>()));
+        services.AddScoped<IRemoteFolderEditor>(provider => new MailKitRemoteFolderEditor(
+            provider.GetRequiredService<MailboxWriteConnectionPool>(),
+            provider.GetRequiredService<ILogger<MailKitRemoteFolderEditor>>()));
     }
 
     /// <summary>Registers what a mutation is written down as before the session that acts on it is opened.</summary>

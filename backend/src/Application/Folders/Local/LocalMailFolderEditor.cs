@@ -109,7 +109,7 @@ public sealed class LocalMailFolderEditor
         LocalMailFolderId? parentId,
         string? name,
         CancellationToken cancellationToken) =>
-        this.EditAsync(account, LocalMailFolderChangeKind.Created, tree => tree.Create(this.MintId(), parentId, name), cancellationToken);
+        this.EditAsync(account, MailFolderChangeKind.Created, tree => tree.Create(this.MintId(), parentId, name), cancellationToken);
 
     /// <summary>Renames a folder.</summary>
     /// <param name="account">The caller's account.</param>
@@ -123,7 +123,7 @@ public sealed class LocalMailFolderEditor
         LocalMailFolderId folderId,
         string? name,
         CancellationToken cancellationToken) =>
-        this.EditAsync(account, LocalMailFolderChangeKind.Renamed, tree => tree.Rename(folderId, name), cancellationToken);
+        this.EditAsync(account, MailFolderChangeKind.Renamed, tree => tree.Rename(folderId, name), cancellationToken);
 
     /// <summary>Moves a folder, with everything beneath it, to another place in the hierarchy.</summary>
     /// <param name="account">The caller's account.</param>
@@ -137,7 +137,7 @@ public sealed class LocalMailFolderEditor
         LocalMailFolderId folderId,
         LocalMailFolderId? parentId,
         CancellationToken cancellationToken) =>
-        this.EditAsync(account, LocalMailFolderChangeKind.Moved, tree => tree.Move(folderId, parentId), cancellationToken);
+        this.EditAsync(account, MailFolderChangeKind.Moved, tree => tree.Move(folderId, parentId), cancellationToken);
 
     /// <summary>Deletes a folder: into the trash, or, where it is already there, out of existence with all of its mail.</summary>
     /// <param name="account">The caller's account.</param>
@@ -153,7 +153,7 @@ public sealed class LocalMailFolderEditor
         MailAccountId account,
         LocalMailFolderId folderId,
         CancellationToken cancellationToken) =>
-        this.EditAsync(account, LocalMailFolderChangeKind.MovedToTrash, tree => tree.Delete(folderId), cancellationToken);
+        this.EditAsync(account, MailFolderChangeKind.MovedToTrash, tree => tree.Delete(folderId), cancellationToken);
 
     private async Task<LocalMailFolderHolding?> SupplyProtectedFoldersAsync(
         IPersistenceSession session,
@@ -182,7 +182,7 @@ public sealed class LocalMailFolderEditor
 
     private async Task<LocalMailFolderEditOutcome> EditAsync(
         MailAccountId accountId,
-        LocalMailFolderChangeKind act,
+        MailFolderChangeKind act,
         Func<LocalMailFolderTree, LocalMailFolderEdit> decide,
         CancellationToken cancellationToken)
     {
@@ -207,7 +207,7 @@ public sealed class LocalMailFolderEditor
     private async Task<LocalMailFolderDecision> DecideAndSaveAsync(
         IPersistenceSession session,
         MailAccountIdentity account,
-        LocalMailFolderChangeKind act,
+        MailFolderChangeKind act,
         Func<LocalMailFolderTree, LocalMailFolderEdit> decide,
         CancellationToken cancellationToken)
     {
@@ -215,12 +215,12 @@ public sealed class LocalMailFolderEditor
 
         if (holding is null)
         {
-            return LocalMailFolderDecision.Refused(LocalMailFolderRefusal.AccountMissing);
+            return LocalMailFolderDecision.Refused(MailFolderActRefusal.AccountMissing);
         }
 
         if (holding.Phase != MailAccountCustodyPhase.Held)
         {
-            return LocalMailFolderDecision.Refused(LocalMailFolderRefusal.AccountNotHeld);
+            return LocalMailFolderDecision.Refused(MailFolderActRefusal.AccountNotHeld);
         }
 
         var found = holding.ToTree();
@@ -247,17 +247,17 @@ public sealed class LocalMailFolderEditor
 
     /// <summary>Names what the act did, from the act that was asked for rather than from what text changed.</summary>
     /// <remarks>A rename to the name a folder already carries is still a rename, and a move beneath the trash is the deletion it amounts to.</remarks>
-    private static LocalMailFolderChangeKind Classify(LocalMailFolderChangeKind act, LocalMailFolderTree before, LocalMailFolderEdit edit)
+    private static MailFolderChangeKind Classify(MailFolderChangeKind act, LocalMailFolderTree before, LocalMailFolderEdit edit)
     {
         if (edit.Erased.Count > 0)
         {
-            return LocalMailFolderChangeKind.Erased;
+            return MailFolderChangeKind.Erased;
         }
 
-        return act is LocalMailFolderChangeKind.Moved
+        return act is MailFolderChangeKind.Moved
             && edit.Folder!.ParentId is { } parent
             && before.IsInTrash(parent)
-                ? LocalMailFolderChangeKind.MovedToTrash
+                ? MailFolderChangeKind.MovedToTrash
                 : act;
     }
 
@@ -302,9 +302,9 @@ public sealed class LocalMailFolderEditor
 
     private LocalMailFolderId MintId() => LocalMailFolderId.Create(Guid.CreateVersion7(this.timeProvider.GetUtcNow()));
 
-    private sealed record LocalMailFolderDecision(LocalMailFolderEdit Edit, LocalMailFolderChangeKind? Kind)
+    private sealed record LocalMailFolderDecision(LocalMailFolderEdit Edit, MailFolderChangeKind? Kind)
     {
-        public static LocalMailFolderDecision Refused(LocalMailFolderRefusal refusal) =>
+        public static LocalMailFolderDecision Refused(MailFolderActRefusal refusal) =>
             new(LocalMailFolderEdit.Refused(refusal), Kind: null);
     }
 }

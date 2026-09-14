@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Folders.Local;
+using MailFathom.Domain.Folders;
 using Microsoft.Extensions.Logging;
 
 namespace MailFathom.Infrastructure.Folders;
@@ -32,7 +33,7 @@ internal sealed partial class LoggedLocalMailFolderChangeAuditor(ILogger<LoggedL
         Guid userId,
         string accountId,
         Guid folderId,
-        LocalMailFolderChangeKind changeKind,
+        MailFolderChangeKind changeKind,
         int erasedFolderCount,
         DateTimeOffset occurredAt);
 }

@@ -54,6 +54,152 @@ internal sealed partial class MailKitRemoteFolderCreator(
             cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task<RemoteFolderPath> CreateFolderBeneathAsync(
+        MailAccountId accountId,
+        MailFolderAlias folderAlias,
+        RemoteFolderPath? parentPath,
+        string name,
+        MailFolderSpecialUse? role,
+        MailTransportSecurityPolicy transportSecurityPolicy,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(transportSecurityPolicy);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        await using var lease = await connectionPool.LeaseForFolderManagementAsync(
+            accountId,
+            transportSecurityPolicy,
+            cancellationToken);
+
+        return await lease.Connection.ExecuteFolderManagementAsync(
+            (client, attemptToken) =>
+                this.CreateNamedFolderAsync(client, accountId, folderAlias, parentPath, name, role, attemptToken),
+            cancellationToken);
+    }
+
+    /// <summary>Creates one folder beneath a parent a person chose, carrying the role where the server takes one.</summary>
+    /// <remarks>
+    /// <para>
+    /// One level and one command. Nothing is walked here, because there is no configured path to walk: the parent is a
+    /// folder the account already declares, or the account's own personal namespace, and the name is one level a person
+    /// typed. Composing a path out of that name and splitting it again would be inventing a hierarchy nobody asked for
+    /// — a name carrying the server's delimiter is a name, and IMAP has no quoting that would make it two folders.
+    /// </para>
+    /// <para>
+    /// RFC 6154's <c>USE</c> argument is sent where the server advertises <c>CREATE-SPECIAL-USE</c> and left off where
+    /// it does not. A server that advertises it and then refuses the attribute is required by that RFC to refuse the
+    /// creation, and the refusal is reported rather than retried without the attribute: a folder created without the
+    /// role somebody asked for is not the folder they asked for.
+    /// </para>
+    /// </remarks>
+    private async Task<RemoteFolderPath> CreateNamedFolderAsync(
+        IImapClient client,
+        MailAccountId accountId,
+        MailFolderAlias alias,
+        RemoteFolderPath? parentPath,
+        string name,
+        MailFolderSpecialUse? role,
+        CancellationToken cancellationToken)
+    {
+        if (client.PersonalNamespaces.Count == 0)
+        {
+            throw new RemoteFolderCreationRefusedException(accountId, alias);
+        }
+
+        var parent = parentPath is { } path
+            ? await FindAdvertisedFolderAsync(client, path.Value, cancellationToken)
+                ?? throw new RemoteFolderCreationRefusedException(accountId, alias)
+            : client.GetFolder(client.PersonalNamespaces[0]);
+
+        var created = await this.CreateOneFolderAsync(client, parent, name, role, accountId, alias, cancellationToken);
+
+        if (created.Attributes.HasFlag(FolderAttributes.NoSelect) || created.Attributes.HasFlag(FolderAttributes.NonExistent))
+        {
+            throw new RemoteFolderCreationRefusedException(accountId, alias);
+        }
+
+        return RemoteFolderPath.TryCreate(
+            created.FullName,
+            NormalizeHierarchyDelimiter(created.DirectorySeparator),
+            out var advertisedPath)
+            ? advertisedPath
+            : throw new RemoteFolderCreationRefusedException(accountId, alias);
+    }
+
+    /// <summary>Issues the one <c>CREATE</c>, with the role where the server will take it, and treats a refusal as settled.</summary>
+    /// <remarks>
+    /// The one lookup that follows a refusal separates the race from the failure, exactly as it does for a configured
+    /// path: a folder now advertised at that name means another client created it between the attempt and the answer,
+    /// and the creation reads as success. A folder somebody else made carries whatever role they gave it, which is why
+    /// a creation that named a role reports the folder as it found it rather than asserting the role was set.
+    /// </remarks>
+    private async Task<IMailFolder> CreateOneFolderAsync(
+        IImapClient client,
+        IMailFolder parent,
+        string name,
+        MailFolderSpecialUse? role,
+        MailAccountId accountId,
+        MailFolderAlias alias,
+        CancellationToken cancellationToken)
+    {
+        var carriedRole = client.Capabilities.HasFlag(ImapCapabilities.CreateSpecialUse)
+            ? AdvertisableSpecialFolder(role)
+            : null;
+
+        try
+        {
+            var created = carriedRole is { } specialUse
+                ? await parent.CreateAsync(name, specialUse, cancellationToken)
+                : await parent.CreateAsync(name, isMessageFolder: true, cancellationToken);
+
+            // The library's contract permits no answer here, and a folder nothing describes is one nothing can be bound
+            // to, so it is the same refusal a server that would not create it produces.
+            if (created is null)
+            {
+                throw new RemoteFolderCreationRefusedException(accountId, alias);
+            }
+
+            this.LogFolderCreated(alias.Value, accountId.Value);
+            await this.SubscribeToCreatedFolderAsync(created, accountId, alias, cancellationToken);
+
+            return created;
+        }
+        catch (Exception refusal) when (refusal is CommandException or InvalidOperationException)
+        {
+            var advertised = await FindAdvertisedFolderAsync(client, PathBeneath(parent, name), cancellationToken);
+
+            return advertised ?? throw new RemoteFolderCreationRefusedException(accountId, alias, refusal);
+        }
+    }
+
+    /// <summary>Composes the path a name would sit at beneath a parent, for the one lookup a refusal is followed by.</summary>
+    /// <remarks>It uses the delimiter the parent itself reports rather than an assumed one, and a parent with no name is the namespace root, beneath which a name is the whole path.</remarks>
+    private static string PathBeneath(IMailFolder parent, string name) =>
+        string.IsNullOrEmpty(parent.FullName) || parent.DirectorySeparator == '\0'
+            ? name
+            : parent.FullName + parent.DirectorySeparator + name;
+
+    /// <summary>Reads the mail library's own name for a role, and nothing for the roles RFC 6154 publishes no attribute for.</summary>
+    /// <remarks>
+    /// The inbox is the folder RFC 3501 has every server hold already, and the outbox is MailFathom's own label with no
+    /// attribute behind it, so neither is a role a <c>CREATE</c> could carry. A creation naming one of them therefore
+    /// sends no <c>USE</c> argument rather than being refused here: the folder is still the folder that was asked for,
+    /// and the role is recorded in MailFathom's own declaration as it is on every server without the extension.
+    /// </remarks>
+    private static SpecialFolder? AdvertisableSpecialFolder(MailFolderSpecialUse? role) => role switch
+    {
+        MailFolderSpecialUse.Archive => SpecialFolder.Archive,
+        MailFolderSpecialUse.Drafts => SpecialFolder.Drafts,
+        MailFolderSpecialUse.Sent => SpecialFolder.Sent,
+        MailFolderSpecialUse.Junk => SpecialFolder.Junk,
+        MailFolderSpecialUse.Trash => SpecialFolder.Trash,
+        MailFolderSpecialUse.All => SpecialFolder.All,
+        MailFolderSpecialUse.Flagged => SpecialFolder.Flagged,
+        MailFolderSpecialUse.Important => SpecialFolder.Important,
+        _ => null,
+    };
+
     /// <summary>Walks the configured path level by level, creating each level the server does not already advertise.</summary>
     /// <remarks>
     /// Every level is a name the operator wrote, so nothing here creates a folder nobody named. Walking the path is one
@@ -248,7 +394,7 @@ internal sealed partial class MailKitRemoteFolderCreator(
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Created a folder on the path configured for alias {FolderAlias} of account {AccountId}.")]
+        Message = "Created a folder for alias {FolderAlias} of account {AccountId}.")]
     private partial void LogFolderCreated(string folderAlias, string accountId);
 
     [LoggerMessage(

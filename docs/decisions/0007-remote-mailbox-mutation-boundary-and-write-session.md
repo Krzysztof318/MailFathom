@@ -9,7 +9,7 @@ informed:
 
 # Write to the remote mailbox through a session type no read path can obtain, and scope the never-marks-read guarantee to retrieval
 
-<!-- describes: backend/src/Application/Mail/Mutations/**, backend/src/Application/Mail/Delivery/Filing/**, backend/src/Domain/Mutations/**, backend/src/Domain/Delivery/Filing/**, backend/src/Infrastructure/Mail/MailKit/Writes/**, backend/src/Infrastructure/Observability/** -->
+<!-- describes: backend/src/Application/Mail/Mutations/**, backend/src/Application/Mail/Delivery/Filing/**, backend/src/Application/Folders/MirroredMailFolderEditor.cs, backend/src/Application/Folders/IRemoteFolderEditor.cs, backend/src/Domain/Mutations/**, backend/src/Domain/Delivery/Filing/**, backend/src/Infrastructure/Mail/MailKit/Writes/**, backend/src/Infrastructure/Observability/** -->
 
 ## Context and Problem Statement
 
@@ -26,6 +26,8 @@ Recorded on issue 447, which is the gate for feature 452. No numbered specificat
 **Issue 864 reopened it a third time**, for who may author a change rather than for which change may be authored. Axes G and H settled that `\Flagged` and keywords are writable and left the requester where the record had always assumed it: a rule, or the spam verdict that behaves like one. What issue 862 then made visible is that all three values are readable, publishable, and filterable over the protocol surface, so a caller can find the starred mail and star nothing — and the act the tier's own driver describes, *something the mailbox user authored, carried by MailFathom on their behalf*, is exactly what an agent triaging mail for the user is doing. Axis I below is that reopening. The eight axes above are untouched by it, no mutation is added or removed, and the status is still `proposed`, so this is an amendment rather than a supersession.
 
 **Issue 739 reopened it a fourth time**, for the one message this record's closed set has no way to put anywhere: the one MailFathom composed itself. Issue 738 delivers a message through a submission server, and SMTP says nothing about the sender's own mailbox — a delivered message leaves no trace in the folder its user reads their sent mail in unless something appends one there. Every mutation this record permits acts on a message the server already holds, so under the set as written a deployment sends mail and the user's mail client shows they never did. The same gap covers the two other stages an outgoing message has: a draft the user is composing, and a message held until an instant still ahead, neither of which exists anywhere the user can see. Axis J below is that reopening and axis K is the one thing carrying it turns out to require; the nine axes above are untouched, and the status is still `proposed`, so this is an amendment rather than a supersession.
+
+**Issue 1999 reopened it a fifth time**, for the rest of the folder-management tier. Issue 1942 gave an account whose mailbox MailFathom holds a folder hierarchy of its own, which its user creates, renames, moves, and deletes; [ADR 0034](0034-holding-a-mailbox-mailfathom-alone-keeps.md) permitted that against a local hierarchy and left this record's refusal standing for a mirrored account, so the same person doing the same thing gets a working folder pane on one of their accounts and a read-only one on the next. Issue 1999 asks for one client folder surface that serves both, which means the acts this record refused whole — renaming a folder on the source server, deleting one, and creating one from the role it is to play — have to exist for a mirrored account or the surface is two surfaces wearing one name. Axes L, M, and N below are that reopening. The eleven axes above are untouched, no mutation on a *message* is added, and the status is still `proposed`, so this is an amendment rather than a supersession.
 
 ## Decision Drivers
 
@@ -113,9 +115,27 @@ The decision has eleven axes. The first four are independent — an option on on
 2. The flags the destination's role means: `\Draft` where the message has not left, `\Seen` where it has.
 3. Whatever the caller names, from the flags IMAP defines.
 
+**L — whether MailFathom may rename or delete a folder on a source server:**
+
+1. It may not; the rest of the folder-management tier stays refused whole.
+2. It may, for any folder of any account, at the request of anything that can reach a mutation.
+3. It may, only for a folder MailFathom's own configuration declares, on an account the requesting user owns, asked for by that user through the client surface under a permission of its own.
+
+**M — what deleting a folder through that surface does to the mail the source server holds in it:**
+
+1. It always issues `DELETE`, and the mail the source holds goes with the folder.
+2. It never reaches the source; the folder is only withdrawn from what MailFathom reads.
+3. Per account, as a setting beside the account's two existing deletion settings, defaulting to deleting on the source.
+
+**N — how a special folder an account has none of is created on a source server:**
+
+1. It is not. A role is how a folder is found and never how one is made, which is where axis E left it.
+2. With RFC 6154 `CREATE (USE (\Junk))` alone, refused on a server that does not advertise `CREATE-SPECIAL-USE`.
+3. With `CREATE-SPECIAL-USE` where the server advertises it and a plain `CREATE` at the role's standard English name where it does not, the role being recorded by MailFathom either way.
+
 ## Decision Outcome
 
-Chosen options: **A3**, **B1**, **C1**, **D1**, **E3**, **F3**, **G2**, **H2**, **I2**, **J3**, and **K2**.
+Chosen options: **A3**, **B1**, **C1**, **D1**, **E3**, **F3**, **G2**, **H2**, **I2**, **J3**, **K2**, **L3**, **M3**, and **N3**.
 
 ### MailFathom writes, and the mutations that exist are a closed set
 
@@ -127,9 +147,9 @@ Refused, and not by configuration:
 
 - **Sending anything.** Send, reply, forward, or any other message the user did not write themselves. The SMTP outbox owns that surface and its own authorization review, and nothing under feature 452 acquires it.
 - **`\Answered` and `\Draft`**, and every flag IMAP reserves for a client's own bookkeeping. Each states something about an act rather than about the message — that a reply was sent, that this is a message being composed — and MailFathom writing one asserts an act it did not perform. The `\Deleted` that is part of a delete or a fallback move stays what it was: a step of another mutation rather than a flag a rule may write.
-- **Folder management, other than creating a folder**: renaming one, deleting one, unsubscribing from one, and subscribing to one MailFathom did not itself create.
+- **Unsubscribing from a folder, and subscribing to one MailFathom did not itself create.** This is what is left of the folder-management tier. Issue 1999 took renaming and deleting out of it under axis L, and neither act carries a subscription with it: a server that drops a renamed folder's subscription leaves it dropped, and a deleted folder's subscription is the server's to forget.
 
-Naming the refused tiers is part of the decision rather than a note beside it. A later request for one of them reopens this record; it does not read a gap as permission. That has now happened twice. Creating a folder was refused above as well until issue 713 reopened the record, and [a folder the operator configured may be created](#a-folder-the-operator-configured-may-be-created-and-only-that-one) is what replaced that refusal; `\Flagged` and keywords were refused with the whole flag tier until issue 917 reopened it, and [what a rule may write on a message](#what-a-rule-may-write-on-a-message-and-what-it-may-not) is what replaced that. Both were reviewed against the driver that produced the refusal, both were narrowed to the case the request was actually about, and both left the rest of their tier refused in the bullets above. Creation remains the one permitted act here that configuration decides, which is the exception the heading above needs stated: every mutation carries out a change the mailbox user already authored, while a creation is an act MailFathom takes on its own initiative and therefore has to be authorized before it can be reached at all.
+Naming the refused tiers is part of the decision rather than a note beside it. A later request for one of them reopens this record; it does not read a gap as permission. That has now happened three times. Creating a folder was refused above as well until issue 713 reopened the record, and [a folder the operator configured may be created](#a-folder-the-operator-configured-may-be-created-and-only-that-one) is what replaced that refusal; `\Flagged` and keywords were refused with the whole flag tier until issue 917 reopened it, and [what a rule may write on a message](#what-a-rule-may-write-on-a-message-and-what-it-may-not) is what replaced that; renaming and deleting a folder were refused until issue 1999 reopened it, and [the folders of a mirrored account are managed by the person who owns them](#the-folders-of-a-mirrored-account-are-managed-by-the-person-who-owns-them) is what replaced that. Each was reviewed against the driver that produced the refusal, each was narrowed to the case the request was actually about, and each left the rest of its tier refused in the bullets above. Creation remains the one permitted act here that configuration decides, which is the exception the heading above needs stated: every mutation carries out a change the mailbox user already authored, while a creation is an act MailFathom takes on its own initiative and therefore has to be authorized before it can be reached at all.
 
 ### The read path is incapable of writing, as a property of the types
 
@@ -194,7 +214,31 @@ A reopened tier owes an authorization review against the driver that refused it,
 
 **The act destroys nothing and is bounded by the file.** A `CREATE` adds a name to the operator's own mailbox: it removes no mail, moves none, and changes no flag, and the operator undoes it in their own client with the same gesture they would have used to create the folder by hand. How many folders can be created is bounded by the mappings written down and the segments of their paths — a bounded list read from configuration — rather than by anything that happens per message, so no volume of mail and no rate of rule firings produces a second folder.
 
-**That is what separates it from the tiers that stay refused.** Renaming and deleting a folder displace or destroy mail the operator did not name in the act, and a rename additionally breaks every binding pointing at the old path. Sending is a surface an attacker steers by supplying content, which is the driver in its plainest form. Not one of those steps reads across to creating a folder from a path in a file, which is why this tier reopened and they did not.
+**That is what separates it from the tiers that stay refused.** Renaming and deleting a folder displace or destroy mail the operator did not name in the act, and a rename additionally breaks every binding pointing at the old path. Sending is a surface an attacker steers by supplying content, which is the driver in its plainest form. Not one of those steps reads across to creating a folder from a path in a file, which is why this tier reopened and they did not. Issue 1999 reopened renaming and deleting afterwards, against a requester the paragraph above did not have: see [the folders of a mirrored account are managed by the person who owns them](#the-folders-of-a-mirrored-account-are-managed-by-the-person-who-owns-them) below.
+
+### The folders of a mirrored account are managed by the person who owns them
+
+MailFathom renames and deletes a folder on a source server (option L3), and creates one for a role the account has no folder for (option N3), for exactly one requester: **the user the account belongs to, acting on their own mailbox through the client surface, under `mailfathom.mail.folders.write`**. That is the permission ADR 0034 allocated for the same four acts against a held account's local hierarchy, and it is deliberately the same one — the person is doing the same thing and should not need a second grant because of how their deployment stores the mail. No rule reaches these acts, no spam verdict does, no MCP tool does, and no model output does. Nothing reaches them from configuration binding either, which is what separates them from axis E: a creation under that axis happens because a file said so, and one under this tier happens because somebody asked for it.
+
+**The acts are the four the local hierarchy already has, and nothing more.** Create, rename, move, and delete. A move is a rename on IMAP, which is the same command against a different parent, so the protocol makes them one act and this record does not pretend otherwise. What is not here is everything else a mailbox's shape could be changed in: no unsubscribe, no subscribe to a folder MailFathom did not create, no act against a folder the account does not declare, and no act at all against the folder playing a role — the five protected roles cannot be renamed, moved, or deleted on a mirrored account any more than on a held one.
+
+**A folder the act creates is declared in the same act.** This is what the original refusal could not assume and is most of why the tier reopened. When the refusal was written, a folder's path lived in the operator's own file, which MailFathom reads and never writes — so a rename really did break every binding pointing at the old path, and there was nothing MailFathom could do about it but refuse. A folder the client surface manages is declared in the record MailFathom itself persists, so the act that renames the folder repoints its declaration in the same act, and the act that creates one adds a declaration for it rather than waiting for a pass to discover it. An operator's file is untouched by any of this: a folder declared there is still the operator's, and this surface refuses every act against one.
+
+**A creation for a role carries the role to the server where the server will take it.** RFC 6154's `CREATE (USE (\Junk))` is issued where the server advertises `CREATE-SPECIAL-USE`, and a plain `CREATE` at the role's standard English name — `Archive`, `Drafts`, `Sent`, `Junk`, `Trash` — where it does not. Option N2 was refused because refusing the whole act on a server without the capability leaves a person unable to make a trash folder for the reason that their provider is old, which is a feature difference of exactly the kind the drivers refuse. What makes N3 safe is the part axis E was right about and this does not undo: MailFathom invents no name. The role's standard name is a fixed, published, English word this record names, not a guess at what the user's provider calls the folder, and the role is recorded in MailFathom's own declaration either way, so a server that took the attribute and one that did not are the same folder to everything above the adapter.
+
+**Deleting a folder on the source is per account and defaults to deleting** (option M3). The account carries a setting beside the two it already has for mail: one value issues `DELETE` on the source, withdraws the folder's declaration, and removes the mail MailFathom stored from it; the other reaches the source not at all and only withdraws the declaration, which takes the folder out of the tree, out of what the account synchronizes, and — because a folder is readable by being declared rather than by not being mentioned — out of every mailbox query, exactly as a tombstoned message is out of one. It defaults to deleting on both sides because that is what the other deletion settings of an account are becoming (issue 2002) and because the value that matches the gesture is the one a person means when they delete a folder; an account that wants the safer reading says so in one line.
+
+### The authorization review the folder-management tier required
+
+The driver is unchanged: irreversible acts driven by attacker-influenced input are the thing to refuse. This tier is irreversible in one of its four acts and its input is not attacker-influenced at all, and both halves have to be said rather than one.
+
+**The input class is a signed-in person acting on their own mailbox.** An act arrives from the client surface, carrying a session this deployment issued to a user, against an account that user owns, under a permission that reading mail does not confer. Mail content names no folder here; a rule's destination alias reaches resolution and never this surface; an MCP tool argument reaches no part of it, because no tool carries `mailfathom.mail.folders.write` and none is added by this record; and model output reaches it only in the sense that a person may have been told what to type, which is true of every mail client ever written. That is a narrower input class than the one axis I already admitted for flags, where an agent may author the change; here nothing but the person may.
+
+**Three of the four acts destroy nothing.** A creation adds a name. A rename changes one, and the binding it would have broken is repointed in the same act. A move is that same rename. Each is undone in the person's own mail client with the gesture that would have made it, and each is bounded by folders a person acts on one at a time rather than by anything that happens per message — no volume of mail and no rate of rule firings reaches any of them.
+
+**The fourth destroys mail, and that is the decision rather than a risk to note.** A `DELETE` takes the folder and what the source holds in it, and where the account's setting says so MailFathom then removes its own copy as well. What makes it admissible is that it is the mailbox's own user deleting their own folder, which is the plainest case of *an act the mailbox user authored* this record has: refusing it would mean MailFathom's client can show a person their mail and not let them tidy it, while the mail client beside it can. What bounds it: the five protected roles are refused outright, so no act here can take away the place composing, sending, classifying, or deleting has to put something; a folder the operator's own file declares is refused, so nobody's deployment configuration is edited by a click; the client is required to confirm a deletion of a folder that holds mail and to say what happens to that mail (issue 1945); and the destructive half of it is a setting an account can turn off entirely.
+
+**A refusal is a refusal and never half an act.** The source is asked first and MailFathom's own declaration is written only once the source has answered, so a server that refuses leaves nothing changed anywhere — no repointed declaration, no folder in the tree that the source has never heard of. The reverse order would produce exactly the state issue 709 refuses: an alias resolving to nothing, with no way for a person to tell it from a typo.
 
 ### What a rule may write on a message, and what it may not
 
@@ -300,6 +344,13 @@ A reopened tier owes an authorization review against the driver that refused it,
 - Bad, because an append whose answer never arrived leaves a state nobody can settle: the copy may be in the folder or may not, and the record says exactly that rather than resolving it. Resolving it either way would mean a second copy or a permanent gap, and this is the honest one of the three.
 - Bad, because a copy that failed to be filed stays unfiled. The failure is recorded against the send, logged, and counted, but a settled send is claimed by nothing, so nothing comes back for the append the way a delivery pass comes back for a deferred send.
 - Bad, because whether a provider files the sent copy itself is a setting an operator has to get right. Leaving it on where the provider also files produces two copies of every sent message, and turning it off where the provider does not produces none — and no observation MailFathom can make distinguishes the two providers in time to decide for them.
+- Good, because a person's folder pane works the same on every account they own. Which storage mode an account uses stops being something the client has to know or the person has to learn, which is what issue 1999 set out to buy and what no arrangement short of this tier could have delivered.
+- Good, because a folder created through the surface is readable immediately. The declaration is written in the same act, so the folder is in the listing before the next synchronization pass rather than minutes later, and a person never makes a folder they cannot see.
+- Neutral, because MailFathom now issues three commands against a mailbox's structure rather than one. All three are bounded to folders the account declares, refused against the five protected roles and against anything the operator's own file declares, recorded through the auditor a binding already uses, and reached through a port no path that moves mail can obtain.
+- Bad, because MailFathom can now destroy mail on somebody's mail server that nobody named message by message. A folder deletion takes what the folder holds, and the default is to issue it. That is the gesture's own meaning and it is the account's to turn off, but it is a genuinely new class of loss in this record and it is reached from a single click in a client.
+- Bad, because a renamed folder may lose its subscription on servers that do not carry one across `RENAME`, and nothing here re-subscribes it. The subscription tier stays refused, so the repair is the person's own mail client. A folder MailFathom created and then renamed is the case this is most visible in.
+- Bad, because a role created on a server without `CREATE-SPECIAL-USE` exists as a role only inside MailFathom. Another mail client sees a folder named `Trash` with no `\Trash` attribute and will go on using whichever folder it had decided was the trash, so two clients can disagree about one mailbox until the person tidies it. Refusing the creation instead — option N2 — would have been the honest answer to a smaller question and the wrong one to the question actually asked.
+- Neutral, because a folder act now waits on a mail server. Every other thing the client's folder pane does answers from stored state, and on a mirrored account these four do not; the act is bounded by the same resilience budget every other write carries and reports a timeout as itself.
 
 ## Validation
 
@@ -319,8 +370,41 @@ A reopened tier owes an authorization review against the driver that refused it,
 - Configuration is asserted where it binds: an outbox role written without a path fails validation naming the key, the same role beside a path resolves to the folder the operator named, a folder merely named like an outbox plays no role, and an account that says nothing about the sent copy files one.
 - The integration suite appends a sent copy against the orchestrated server, reads it back through an ordinary synchronization run, and requires exactly one stored occurrence joined to the outgoing record and absent from the arrival queue a rule pass reads.
 - Folder creation is built by issue 714, and what it has to establish is stated here rather than there: a mapping without `CreateIfMissing` still refuses, tested beside one that creates so the refusal cannot quietly become a creation; `CreateIfMissing` on a `SpecialUse` mapping fails configuration binding; a `CREATE` against a folder that already exists reads as success, including where another client won the race between the listing and the attempt; a server reporting a delimiter other than `/` builds the same hierarchy from the same configured text; a refused `SUBSCRIBE` leaves the creation successful; and the integration suite creates a folder and files a message into it against a live server, which is where a real `CREATE` and the write connection meet.
+- The folder-management tier is proven by unit tests that read the commands the adapter issued rather than what it returned: a rename and a move issuing one `RENAME` each and no `DELETE` anywhere in the sequence; a deletion issuing `DELETE`; a creation for a role issuing `CREATE` with the `USE` argument against a server advertising `CREATE-SPECIAL-USE` and a plain `CREATE` at the role's standard English name against one that does not; and a server refusal on any of the three leaving MailFathom's own declaration exactly as it was, which is the *never half an act* rule asserted as the absence of a write rather than described.
+- The requester bound is asserted where the use case starts: each of the four acts asks for `mailfathom.mail.folders.write` before it reads anything, an act against a folder playing one of the five protected roles is refused without reaching the server, and an act against a folder the operator's own configuration declares is refused the same way.
+- The account setting is asserted at both of its values: deleting on the source issues `DELETE` and removes the stored mail, marking deleted only issues nothing to the source and leaves the folder and its mail there while the folder leaves the tree, what the account synchronizes, and every mailbox query. A value that is neither fails startup naming the key, as the account's other two deletion settings already do.
 
 ## Pros and Cons of the Options
+
+### L1 — the rest of the folder management tier stays refused whole
+
+- Good, because it changes nothing and keeps the one class of loss this record had refused outright off the source server.
+- Bad, because the same person doing the same thing gets a folder pane that works on a held account and one that is read-only on a mirrored one, and nothing in the client can explain the difference without publishing the storage mode — which is the fact issue 1999 exists to keep out of the contract.
+
+### L2 — any folder, at any caller's request
+
+- Good, because it needs no requester to be established and no permission of its own.
+- Bad, because it hands folder deletion to every input class this record refuses irreversible acts on — a rule matching crafted mail, a tool argument, a model's output — for the sake of a surface only a person ever uses.
+
+### M1 — a deletion always reaches the source
+
+- Good, because one behaviour is one thing to document and to test, and it is what the gesture means.
+- Bad, because a deployment that keeps a copy the source's retention would have lost now loses it to a person tidying their folder pane, with no setting to say otherwise.
+
+### M2 — a deletion never reaches the source
+
+- Good, because nothing on somebody's mail server is ever destroyed by this surface.
+- Bad, because deleting a folder would leave it on the server, so the person's other mail client still shows it and their next synchronization of a re-declared alias brings the mail back. A delete that does not delete is the defect an account setting exists to avoid having as the only behaviour.
+
+### N1 — a role is found and never created
+
+- Good, because it is where axis E left the question and it invents no name in anybody's mailbox.
+- Bad, because an account whose server advertises no junk or archive folder can never gain one through the client, so the surface has an act it must refuse for a reason a person cannot act on.
+
+### N2 — `CREATE-SPECIAL-USE` alone, refused where it is not advertised
+
+- Good, because every folder created for a role really carries the attribute, so no two clients can disagree about which folder plays it.
+- Bad, because which provider somebody uses becomes a feature difference, which is one of this record's own drivers. A server without the extension is ordinary rather than exotic, and the person is left unable to make a trash folder for a reason belonging to their provider.
 
 ### B2 — one session type with a write mode
 

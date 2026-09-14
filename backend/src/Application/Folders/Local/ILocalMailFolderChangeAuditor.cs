@@ -29,25 +29,6 @@ public interface ILocalMailFolderChangeAuditor
 public sealed record LocalMailFolderChange(
     MailAccountIdentity Account,
     LocalMailFolderId Folder,
-    LocalMailFolderChangeKind Kind,
+    MailFolderChangeKind Kind,
     int ErasedFolderCount,
     DateTimeOffset OccurredAt);
-
-/// <summary>What an act on a held account's folder did.</summary>
-public enum LocalMailFolderChangeKind
-{
-    /// <summary>The folder was created.</summary>
-    Created = 0,
-
-    /// <summary>The folder was given another name.</summary>
-    Renamed = 1,
-
-    /// <summary>The folder, with everything beneath it, was moved to another place in the hierarchy.</summary>
-    Moved = 2,
-
-    /// <summary>The folder was deleted, which moved it with everything beneath it into the trash.</summary>
-    MovedToTrash = 3,
-
-    /// <summary>The folder was deleted from the trash, which erases it, everything beneath it, and all of their mail.</summary>
-    Erased = 4,
-}

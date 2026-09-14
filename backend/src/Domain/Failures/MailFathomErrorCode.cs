@@ -260,6 +260,16 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode RemoteFolderCreationRefused { get; } = new(26001);
 
+    /// <summary>Gets subcategory 6, folder management: a mail server was asked to rename or delete a folder and refused.</summary>
+    /// <remarks>
+    /// It shares the subcategory with <see cref="RemoteFolderCreationRefused" /> because both are the shape of a
+    /// mailbox rather than a message in one, and it is a code of its own because the two reach different requesters. A
+    /// refused creation is reported to an operator reading configuration; a refused rename or deletion is reported to a
+    /// person who just asked for it in the client, and a surface that could not tell them apart would answer one with
+    /// the other's remedy.
+    /// </remarks>
+    public static MailFathomErrorCode RemoteFolderEditRefused { get; } = new(26002);
+
     /// <summary>Gets subcategory 7, delivery sessions: a submission server did not serve an operation within the resilience budget configured for it.</summary>
     /// <remarks>
     /// It is a subcategory of its own rather than a second <see cref="MailboxUnavailable" />, because the two name
@@ -1078,6 +1088,7 @@ public readonly record struct MailFathomErrorCode
         MailboxMutationFailedUnexpectedly,
         MailboxMutationDestinationMissing,
         RemoteFolderCreationRefused,
+        RemoteFolderEditRefused,
         MailDeliveryUnavailable,
         OutgoingEmailSenderUnconfigured,
         OutgoingEmailHeaderInjected,

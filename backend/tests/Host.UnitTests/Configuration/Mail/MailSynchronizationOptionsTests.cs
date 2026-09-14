@@ -1032,6 +1032,90 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Contains("EraseLocalCopy", result.ErrorMessage, StringComparison.Ordinal);
     }
 
+    /// <summary>Deleting a folder means deleting it, so an account that says nothing deletes on both sides.</summary>
+    [Fact]
+    public void GetAuthoredFolderDeleteDisposition_AccountConfiguringNothing_DeletesOnTheServer()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions().Serving(CreateAccount("primary"));
+
+        // Act
+        var disposition = options.Readers.AuthoredFolderDeleteDispositions
+            .GetAuthoredFolderDeleteDisposition(MailAccountId.Create("primary"));
+
+        // Assert
+        Assert.Equal(AuthoredFolderDeleteDisposition.DeleteOnServer, disposition);
+    }
+
+    [Fact]
+    public void GetAuthoredFolderDeleteDisposition_AccountsConfiguringDifferentDispositions_AnswersPerAccount()
+    {
+        // Arrange
+        var careful = CreateAccount("careful");
+        careful.AuthoredFolderDeleteDisposition = AuthoredFolderDeleteDisposition.MarkDeletedLocally;
+        var options = new MailSynchronizationOptions().Serving(careful, CreateAccount("primary"));
+
+        // Act
+        var dispositions = ConfiguredMailAccounts.CatalogOver(options).ServedAccounts
+            .Select(account => options.Readers.AuthoredFolderDeleteDispositions.GetAuthoredFolderDeleteDisposition(account.Id))
+            .ToArray();
+
+        // Assert
+        Assert.Equal(
+            [AuthoredFolderDeleteDisposition.MarkDeletedLocally, AuthoredFolderDeleteDisposition.DeleteOnServer],
+            dispositions);
+    }
+
+    [Fact]
+    public void Bind_AuthoredFolderDeleteDisposition_ReadsItByName()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MailAccounts:0:AccountId"] = "primary",
+                ["MailAccounts:0:DisplayName"] = "The primary mailbox",
+                ["MailAccounts:0:AuthoredFolderDeleteDisposition"] = "MarkDeletedLocally",
+            })
+            .Build();
+
+        // Act
+        var user = configuration.Get<UserAccountOptions>()!;
+
+        // Assert
+        Assert.Equal(
+            AuthoredFolderDeleteDisposition.MarkDeletedLocally,
+            Assert.Single(user.MailAccounts).AuthoredFolderDeleteDisposition);
+    }
+
+    /// <summary>This one decides whether a whole folder is destroyed on somebody's mail server, so a value naming nothing stops the start.</summary>
+    [Fact]
+    public void ValidateForSynchronization_AuthoredFolderDeleteDispositionNumberNoMemberCarries_IsRejected()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Language"] = "English",
+                ["MailAccounts:0:AccountId"] = "primary",
+                ["MailAccounts:0:DisplayName"] = "The primary mailbox",
+                ["MailAccounts:0:Host"] = "imap.example.test",
+                ["MailAccounts:0:UserName"] = "mailfathom@example.test",
+                ["MailAccounts:0:Secrets:Password:SecretReference"] = "systemd-credential:imap-primary-password",
+                ["MailAccounts:0:AuthoredFolderDeleteDisposition"] = "2",
+            })
+            .Build();
+        var user = configuration.Get<UserAccountOptions>()!;
+
+        // Act
+        var results = user.FindRefusals().ToArray();
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains("DeleteOnServer", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("MarkDeletedLocally", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
     /// <summary>Push holds a connection open per folder, so an account that says nothing keeps the schedule it already had.</summary>
     [Fact]
     public void Mode_AccountConfiguringNone_Polls()

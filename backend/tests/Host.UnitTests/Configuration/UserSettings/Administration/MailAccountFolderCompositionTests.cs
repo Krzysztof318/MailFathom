@@ -514,6 +514,82 @@ public sealed class MailAccountFolderCompositionTests
         Assert.False(written.ContainsKey("Folders"));
     }
 
+    /// <summary>A declaration the folder-management surface composes is held to the same rules a person's own declaration is.</summary>
+    [Fact]
+    public void WithFolderDeclared_AFolderTheMailServerNowAdvertises_DeclaresItSynchronizedAndCreatedIfMissing()
+    {
+        // Act
+        var candidate = MailAccountFolderComposition
+            .WithFolderDeclared("""{"Host":"mail.example.test"}""", "PROJECTS", "Archive/Projects", role: null)
+            .Candidate;
+
+        // Assert
+        Assert.Equal("PROJECTS", ReadFolderAlias(candidate, "0"));
+        Assert.Equal("Archive/Projects", JsonNode.Parse(candidate!)!["Folders"]!["0"]!["RemotePath"]!.GetValue<string>());
+        Assert.True(ReadFolderSwitch(candidate, "0", "Synchronize"));
+        Assert.True(ReadFolderSwitch(candidate, "0", "CreateIfMissing"));
+    }
+
+    [Fact]
+    public void WithFolderDeclared_AFolderPlayingARole_CarriesTheRoleBesideThePath()
+    {
+        // Act
+        var candidate = MailAccountFolderComposition
+            .WithFolderDeclared("{}", "Archive", "Archive", "Archive")
+            .Candidate;
+
+        // Assert
+        Assert.Equal("Archive", JsonNode.Parse(candidate!)!["Folders"]!["0"]!["SpecialUse"]!.GetValue<string>());
+    }
+
+    /// <summary>An alias is what the stored mail is keyed by, so a rename moves the path and leaves everything else where it was.</summary>
+    [Fact]
+    public void WithFolderRepointed_AFolderTheAccountDeclares_MovesThePathAndNothingElse()
+    {
+        // Arrange
+        const string account = """{"Folders":{"0":{"Alias":"PROJECTS","RemotePath":"Projects","Synchronize":true,"CreateIfMissing":true,"VisibleToTools":false}}}""";
+
+        // Act
+        var candidate = MailAccountFolderComposition.WithFolderRepointed(account, "PROJECTS", "Archive/Projects").Candidate;
+
+        // Assert
+        var folder = JsonNode.Parse(candidate!)!["Folders"]!["0"]!;
+
+        Assert.Equal("PROJECTS", folder["Alias"]!.GetValue<string>());
+        Assert.Equal("Archive/Projects", folder["RemotePath"]!.GetValue<string>());
+        Assert.False(folder["VisibleToTools"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void WithFolderRepointed_AFolderTheAccountDoesNotDeclare_MatchesNothing()
+    {
+        // Act
+        var change = MailAccountFolderComposition.WithFolderRepointed("""{"Folders":{"0":{"Alias":"INBOX"}}}""", "PROJECTS", "Projects");
+
+        // Assert
+        Assert.Null(change.Candidate);
+        Assert.Null(change.Refusal);
+    }
+
+    /// <summary>What the folder-management surface may act on is what this record declares, never what an operator's file fixed.</summary>
+    [Fact]
+    public void AliasesIn_AnAccountDeclaringFolders_ReadsTheAliasesItWrites()
+    {
+        // Act
+        var aliases = MailAccountFolderComposition.AliasesIn(
+            """{"Folders":{"0":{"Alias":"INBOX"},"1":{"Alias":" PROJECTS "},"2":{"RemotePath":"Nameless"}}}""");
+
+        // Assert
+        Assert.Equal(["INBOX", "PROJECTS"], aliases);
+    }
+
+    [Fact]
+    public void AliasesIn_AnAccountDeclaringNoFolder_ReadsNone()
+    {
+        // Act, Assert
+        Assert.Empty(MailAccountFolderComposition.AliasesIn("""{"Host":"mail.example.test"}"""));
+    }
+
     private static bool? ReadFolderSwitch(string? json, string position, string property) =>
         JsonNode.Parse(json!)!["Folders"]![position]![property]?.GetValue<bool>();
 

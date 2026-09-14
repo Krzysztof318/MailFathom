@@ -74,11 +74,11 @@ public sealed class LocalMailFolderTreeTests
     }
 
     [Theory]
-    [InlineData("projects", LocalMailFolderRefusal.NameTaken)]
-    [InlineData("inbox", LocalMailFolderRefusal.InboxNameAtTopLevel)]
-    [InlineData("A/B", LocalMailFolderRefusal.NameInvalid)]
-    [InlineData("", LocalMailFolderRefusal.NameInvalid)]
-    public void Create_ANameTheTopLevelCannotTake_IsRefusedForTheReason(string name, LocalMailFolderRefusal expected)
+    [InlineData("projects", MailFolderActRefusal.NameTaken)]
+    [InlineData("inbox", MailFolderActRefusal.InboxNameAtTopLevel)]
+    [InlineData("A/B", MailFolderActRefusal.NameInvalid)]
+    [InlineData("", MailFolderActRefusal.NameInvalid)]
+    public void Create_ANameTheTopLevelCannotTake_IsRefusedForTheReason(string name, MailFolderActRefusal expected)
     {
         // Arrange
         var tree = HeldTree(Ordinary("Projects"));
@@ -116,7 +116,7 @@ public sealed class LocalMailFolderTreeTests
         var edit = tree.Create(Mint(), Mint(), "Projects");
 
         // Assert
-        Assert.Equal(LocalMailFolderRefusal.ParentMissing, edit.Refusal);
+        Assert.Equal(MailFolderActRefusal.ParentMissing, edit.Refusal);
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public sealed class LocalMailFolderTreeTests
 
         // Assert
         Assert.Null(atLimit.Refusal);
-        Assert.Equal(LocalMailFolderRefusal.TooDeep, pastLimit.Refusal);
+        Assert.Equal(MailFolderActRefusal.TooDeep, pastLimit.Refusal);
     }
 
     [Fact]
@@ -148,7 +148,7 @@ public sealed class LocalMailFolderTreeTests
         var edit = tree.Create(Mint(), parentId: null, "One more");
 
         // Assert
-        Assert.Equal(LocalMailFolderRefusal.TooManyFolders, edit.Refusal);
+        Assert.Equal(MailFolderActRefusal.TooManyFolders, edit.Refusal);
     }
 
     [Theory]
@@ -166,9 +166,9 @@ public sealed class LocalMailFolderTreeTests
         var deleted = tree.Delete(folder.Id);
 
         // Assert
-        Assert.Equal(LocalMailFolderRefusal.ProtectedRole, renamed.Refusal);
-        Assert.Equal(LocalMailFolderRefusal.ProtectedRole, moved.Refusal);
-        Assert.Equal(LocalMailFolderRefusal.ProtectedRole, deleted.Refusal);
+        Assert.Equal(MailFolderActRefusal.ProtectedRole, renamed.Refusal);
+        Assert.Equal(MailFolderActRefusal.ProtectedRole, moved.Refusal);
+        Assert.Equal(MailFolderActRefusal.ProtectedRole, deleted.Refusal);
     }
 
     public static TheoryData<MailFolderSpecialUse> ProtectedRoleNames() => [.. LocalMailFolderTree.ProtectedRoles];
@@ -199,7 +199,7 @@ public sealed class LocalMailFolderTreeTests
         var edit = tree.Rename(projects.Id, "RECEIPTS");
 
         // Assert
-        Assert.Equal(LocalMailFolderRefusal.NameTaken, edit.Refusal);
+        Assert.Equal(MailFolderActRefusal.NameTaken, edit.Refusal);
     }
 
     [Fact]
@@ -212,7 +212,7 @@ public sealed class LocalMailFolderTreeTests
         var edit = tree.Rename(Mint(), "Projects");
 
         // Assert
-        Assert.Equal(LocalMailFolderRefusal.FolderMissing, edit.Refusal);
+        Assert.Equal(MailFolderActRefusal.FolderMissing, edit.Refusal);
     }
 
     [Fact]
@@ -243,8 +243,8 @@ public sealed class LocalMailFolderTreeTests
         var beneathDescendant = tree.Move(projects.Id, year.Id);
 
         // Assert
-        Assert.Equal(LocalMailFolderRefusal.NestedInItself, beneathItself.Refusal);
-        Assert.Equal(LocalMailFolderRefusal.NestedInItself, beneathDescendant.Refusal);
+        Assert.Equal(MailFolderActRefusal.NestedInItself, beneathItself.Refusal);
+        Assert.Equal(MailFolderActRefusal.NestedInItself, beneathDescendant.Refusal);
     }
 
     /// <summary>The depth a move reaches is the deepest folder it carries, not only the folder named.</summary>
@@ -261,7 +261,7 @@ public sealed class LocalMailFolderTreeTests
         var edit = tree.Move(projects.Id, chain[^1].Id);
 
         // Assert
-        Assert.Equal(LocalMailFolderRefusal.TooDeep, edit.Refusal);
+        Assert.Equal(MailFolderActRefusal.TooDeep, edit.Refusal);
     }
 
     [Fact]
@@ -276,7 +276,7 @@ public sealed class LocalMailFolderTreeTests
         var edit = tree.Move(nested.Id, parentId: null);
 
         // Assert
-        Assert.Equal(LocalMailFolderRefusal.NameTaken, edit.Refusal);
+        Assert.Equal(MailFolderActRefusal.NameTaken, edit.Refusal);
     }
 
     /// <summary>A deletion takes a folder out of the hierarchy rather than deeper into it, so the deepest legal hierarchy can still be deleted from its root.</summary>
@@ -363,7 +363,7 @@ public sealed class LocalMailFolderTreeTests
         var edit = tree.Delete(projects.Id);
 
         // Assert
-        Assert.Equal(LocalMailFolderRefusal.NameTaken, edit.Refusal);
+        Assert.Equal(MailFolderActRefusal.NameTaken, edit.Refusal);
     }
 
     [Theory]

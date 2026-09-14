@@ -103,17 +103,17 @@ public sealed class LocalMailFolderTree
     {
         if (this.folders.Count >= MaximumFolders)
         {
-            return LocalMailFolderEdit.Refused(LocalMailFolderRefusal.TooManyFolders);
+            return LocalMailFolderEdit.Refused(MailFolderActRefusal.TooManyFolders);
         }
 
         if (parentId is { } parent && !this.folders.ContainsKey(parent))
         {
-            return LocalMailFolderEdit.Refused(LocalMailFolderRefusal.ParentMissing);
+            return LocalMailFolderEdit.Refused(MailFolderActRefusal.ParentMissing);
         }
 
         if (!LocalMailFolderName.TryCreate(name, out var parsed))
         {
-            return LocalMailFolderEdit.Refused(LocalMailFolderRefusal.NameInvalid);
+            return LocalMailFolderEdit.Refused(MailFolderActRefusal.NameInvalid);
         }
 
         if (this.RefusePlacement(parsed, parentId, movingFolder: null) is { } refusal)
@@ -122,7 +122,7 @@ public sealed class LocalMailFolderTree
         }
 
         return this.LevelBeneath(parentId) > MaximumDepth
-            ? LocalMailFolderEdit.Refused(LocalMailFolderRefusal.TooDeep)
+            ? LocalMailFolderEdit.Refused(MailFolderActRefusal.TooDeep)
             : LocalMailFolderEdit.Saving(new LocalMailFolder(id, parentId, parsed, Role: null, SourceFolderAlias: null));
     }
 
@@ -141,7 +141,7 @@ public sealed class LocalMailFolderTree
 
         if (!LocalMailFolderName.TryCreate(name, out var parsed))
         {
-            return LocalMailFolderEdit.Refused(LocalMailFolderRefusal.NameInvalid);
+            return LocalMailFolderEdit.Refused(MailFolderActRefusal.NameInvalid);
         }
 
         return this.RefusePlacement(parsed, folder.ParentId, folder.Id) is { } placementRefusal
@@ -191,12 +191,12 @@ public sealed class LocalMailFolderTree
         {
             if (!this.folders.ContainsKey(parent))
             {
-                return LocalMailFolderEdit.Refused(LocalMailFolderRefusal.ParentMissing);
+                return LocalMailFolderEdit.Refused(MailFolderActRefusal.ParentMissing);
             }
 
             if (this.IsWithin(parent, id))
             {
-                return LocalMailFolderEdit.Refused(LocalMailFolderRefusal.NestedInItself);
+                return LocalMailFolderEdit.Refused(MailFolderActRefusal.NestedInItself);
             }
         }
 
@@ -206,7 +206,7 @@ public sealed class LocalMailFolderTree
         }
 
         return boundedByDepth && this.LevelBeneath(parentId) + this.HeightOf(id) - 1 > MaximumDepth
-            ? LocalMailFolderEdit.Refused(LocalMailFolderRefusal.TooDeep)
+            ? LocalMailFolderEdit.Refused(MailFolderActRefusal.TooDeep)
             : LocalMailFolderEdit.Saving(folder with { ParentId = parentId });
     }
 
@@ -283,27 +283,27 @@ public sealed class LocalMailFolderTree
             : namesake with { Role = role };
     }
 
-    private LocalMailFolderRefusal? RefuseActingOn(LocalMailFolderId id) =>
+    private MailFolderActRefusal? RefuseActingOn(LocalMailFolderId id) =>
         this.folders.GetValueOrDefault(id) switch
         {
-            null => LocalMailFolderRefusal.FolderMissing,
-            { IsProtected: true } => LocalMailFolderRefusal.ProtectedRole,
+            null => MailFolderActRefusal.FolderMissing,
+            { IsProtected: true } => MailFolderActRefusal.ProtectedRole,
             _ => null,
         };
 
-    private LocalMailFolderRefusal? RefusePlacement(
+    private MailFolderActRefusal? RefusePlacement(
         LocalMailFolderName name,
         LocalMailFolderId? parentId,
         LocalMailFolderId? movingFolder)
     {
         if (parentId is null && name.IsReservedAtTopLevel)
         {
-            return LocalMailFolderRefusal.InboxNameAtTopLevel;
+            return MailFolderActRefusal.InboxNameAtTopLevel;
         }
 
         return this.folders.Values.Any(folder =>
                 folder.ParentId == parentId && folder.Id != movingFolder && folder.Name.NamesSameFolderAs(name))
-            ? LocalMailFolderRefusal.NameTaken
+            ? MailFolderActRefusal.NameTaken
             : null;
     }
 

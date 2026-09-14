@@ -39,7 +39,7 @@ public sealed class LocalMailFolderEditorTests
         var outcome = await deployment.Editor.CreateAsync(Account.Id, parentId: null, "Projects", TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(LocalMailFolderChangeKind.Created, outcome.Kind);
+        Assert.Equal(MailFolderChangeKind.Created, outcome.Kind);
         Assert.Equal(
             ["Drafts", "INBOX", "Junk", "Projects", "Sent", "Trash"],
             deployment.Store.Folders.Select(folder => folder.Name.Value).Order(StringComparer.Ordinal));
@@ -58,7 +58,7 @@ public sealed class LocalMailFolderEditorTests
         var outcome = await deployment.Editor.CreateAsync(Account.Id, parentId: null, "Projects", TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(LocalMailFolderRefusal.AccountNotHeld, outcome.Refusal);
+        Assert.Equal(MailFolderActRefusal.AccountNotHeld, outcome.Refusal);
         Assert.Equal(0, deployment.Store.SaveCount);
         await deployment.Auditor.DidNotReceive().RecordAsync(Arg.Any<LocalMailFolderChange>(), Arg.Any<CancellationToken>());
     }
@@ -77,7 +77,7 @@ public sealed class LocalMailFolderEditorTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(LocalMailFolderRefusal.AccountMissing, outcome.Refusal);
+        Assert.Equal(MailFolderActRefusal.AccountMissing, outcome.Refusal);
     }
 
     [Fact]
@@ -106,7 +106,7 @@ public sealed class LocalMailFolderEditorTests
         var outcome = await deployment.Editor.RenameAsync(Account.Id, created.Id, "Clients", TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(LocalMailFolderChangeKind.Renamed, outcome.Kind);
+        Assert.Equal(MailFolderChangeKind.Renamed, outcome.Kind);
         Assert.Equal("Clients", outcome.Folder!.Name.Value);
     }
 
@@ -122,7 +122,7 @@ public sealed class LocalMailFolderEditorTests
         var outcome = await deployment.Editor.MoveAsync(Account.Id, clients.Id, projects.Id, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(LocalMailFolderChangeKind.Moved, outcome.Kind);
+        Assert.Equal(MailFolderChangeKind.Moved, outcome.Kind);
         Assert.Equal(projects.Id, outcome.Folder!.ParentId);
     }
 
@@ -140,7 +140,7 @@ public sealed class LocalMailFolderEditorTests
         var outcome = await deployment.Editor.MoveAsync(Account.Id, projects.Id, old.Id, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(LocalMailFolderChangeKind.MovedToTrash, outcome.Kind);
+        Assert.Equal(MailFolderChangeKind.MovedToTrash, outcome.Kind);
         Assert.Equal(old.Id, outcome.Folder!.ParentId);
     }
 
@@ -157,7 +157,7 @@ public sealed class LocalMailFolderEditorTests
         // Assert
         var trash = Assert.Single(deployment.Store.Folders, folder => folder.Role == MailFolderSpecialUse.Trash);
 
-        Assert.Equal(LocalMailFolderChangeKind.MovedToTrash, outcome.Kind);
+        Assert.Equal(MailFolderChangeKind.MovedToTrash, outcome.Kind);
         Assert.Equal(trash.Id, outcome.Folder!.ParentId);
         await deployment.Jobs.DidNotReceive().EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>());
     }
@@ -175,10 +175,10 @@ public sealed class LocalMailFolderEditorTests
         var outcome = await deployment.Editor.DeleteAsync(Account.Id, projects.Id, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(LocalMailFolderChangeKind.Erased, outcome.Kind);
+        Assert.Equal(MailFolderChangeKind.Erased, outcome.Kind);
         Assert.Equal([projects.Id], deployment.Store.Erased);
         await deployment.Auditor.Received(1).RecordAsync(
-            Arg.Is<LocalMailFolderChange>(change => change!.Kind == LocalMailFolderChangeKind.Erased
+            Arg.Is<LocalMailFolderChange>(change => change!.Kind == MailFolderChangeKind.Erased
                 && change.Folder == projects.Id
                 && change.ErasedFolderCount == 1),
             Arg.Any<CancellationToken>());
@@ -202,7 +202,7 @@ public sealed class LocalMailFolderEditorTests
         var outcome = await deployment.Editor.DeleteAsync(Account.Id, projects.Id, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(LocalMailFolderChangeKind.Erased, outcome.Kind);
+        Assert.Equal(MailFolderChangeKind.Erased, outcome.Kind);
         Assert.True(outcome.MailErasureDeferred);
     }
 
@@ -235,7 +235,7 @@ public sealed class LocalMailFolderEditorTests
         var outcome = await deployment.Editor.RenameAsync(Account.Id, projects.Id, " Projects ", TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(LocalMailFolderChangeKind.Renamed, outcome.Kind);
+        Assert.Equal(MailFolderChangeKind.Renamed, outcome.Kind);
     }
 
     /// <summary>A held account nobody has acted on yet still lists its inbox, drafts, sent, junk, and trash, and a second read writes nothing more.</summary>

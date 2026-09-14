@@ -151,6 +151,71 @@ internal static class MailAccountFolderComposition
             : MailAccountFolderChange.Composed(WithFolders(account, [.. folders.Where(entry => !NamesFolder(entry, alias))]));
     }
 
+    /// <summary>Produces the settings one folder the mail server now advertises would leave.</summary>
+    /// <param name="accountJson">The account's settings as they stand.</param>
+    /// <param name="alias">The alias to declare the folder under.</param>
+    /// <param name="remotePath">The path the server advertises the folder at.</param>
+    /// <param name="role">The role the folder plays, or <see langword="null" /> for an ordinary folder.</param>
+    /// <returns>The candidate settings, or the rule the declaration broke.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="accountJson" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="alias" /> or <paramref name="remotePath" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <exception cref="FormatException">Thrown when the settings are not a JSON object, or when the alias nests past the depth a folder may be declared at.</exception>
+    /// <exception cref="JsonException">Thrown when the settings are not JSON at all.</exception>
+    /// <remarks>
+    /// The folder-management surface composes a declaration rather than taking one, because the act it is writing down
+    /// has already happened on the server: what a person asked for was a folder, and the record of it is this
+    /// deployment's own to state.
+    /// </remarks>
+    public static MailAccountFolderChange WithFolderDeclared(
+        string accountJson,
+        string alias,
+        string remotePath,
+        string? role)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(alias);
+        ArgumentException.ThrowIfNullOrWhiteSpace(remotePath);
+
+        var folder = new JsonObject
+        {
+            [AliasProperty] = alias,
+            [RemotePathProperty] = remotePath,
+        };
+
+        if (role is { Length: > 0 })
+        {
+            folder[SpecialUseProperty] = role;
+        }
+
+        return WithFolderAdded(accountJson, folder.ToJsonString());
+    }
+
+    /// <summary>Produces the settings one folder pointed at the path it has been renamed or moved to would leave.</summary>
+    /// <param name="accountJson">The account's settings as they stand.</param>
+    /// <param name="alias">The alias the folder is declared under, which this leaves where it is.</param>
+    /// <param name="remotePath">The path the server now advertises the folder at.</param>
+    /// <returns>The candidate settings, the rule the change broke, or neither when the account declares no folder under that alias.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="accountJson" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="alias" /> or <paramref name="remotePath" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <exception cref="FormatException">Thrown when the settings are not a JSON object.</exception>
+    /// <exception cref="JsonException">Thrown when the settings are not JSON at all.</exception>
+    /// <remarks>Everything else the folder states is carried over untouched, which is what keeps a rename from being a way to restate the role a folder plays or the switches this surface fixes.</remarks>
+    public static MailAccountFolderChange WithFolderRepointed(string accountJson, string alias, string remotePath)
+    {
+        ArgumentNullException.ThrowIfNull(accountJson);
+        ArgumentException.ThrowIfNullOrWhiteSpace(alias);
+        ArgumentException.ThrowIfNullOrWhiteSpace(remotePath);
+
+        if (FoldersIn(AccountOf(accountJson)).FirstOrDefault(declared => NamesFolder(declared, alias)) is not { } standing)
+        {
+            return MailAccountFolderChange.NoSuchFolder;
+        }
+
+        var folder = FolderOf(standing.DeepClone());
+        folder[ExistingNameOf(folder, RemotePathProperty)] = remotePath;
+
+        return WithFolderReplaced(accountJson, alias, folder.ToJsonString());
+    }
+
     /// <summary>Holds every folder a whole mail account declares to the rules a folder route applies.</summary>
     /// <param name="accountJson">The account as the client declared it.</param>
     /// <returns>The settings the declaration would leave, or the rule one of its folders broke.</returns>
@@ -308,6 +373,30 @@ internal static class MailAccountFolderComposition
         RefuseAnAliasNestedTooDeep(folder);
 
         return folder;
+    }
+
+    /// <summary>Reads the aliases one account declares in its own record, which are the folders a person may act on.</summary>
+    /// <param name="accountJson">The account's settings as they stand.</param>
+    /// <returns>The aliases as they are written, empty where the account declares no folder.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="accountJson" /> is <see langword="null" />.</exception>
+    /// <exception cref="FormatException">Thrown when the settings are not a JSON object.</exception>
+    /// <exception cref="JsonException">Thrown when the settings are not JSON at all.</exception>
+    /// <remarks>
+    /// It answers about this record alone, which is what makes it the right question for the folder-management
+    /// surface: a folder the deployment's own configuration declares is the operator's and is refused there, and the
+    /// composed view every other reader gives could not tell the two apart.
+    /// </remarks>
+    public static IReadOnlyList<string> AliasesIn(string accountJson)
+    {
+        ArgumentNullException.ThrowIfNull(accountJson);
+
+        return
+        [
+            .. FoldersIn(AccountOf(accountJson))
+                .Select(static folder => ValueOf(folder as JsonObject ?? [], AliasProperty)?.Trim())
+                .Where(static alias => !string.IsNullOrEmpty(alias))
+                .Select(static alias => alias!),
+        ];
     }
 
     /// <summary>Reads the folders one account holds, in the order the configuration layer binds them.</summary>

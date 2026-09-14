@@ -252,6 +252,80 @@ public sealed class MailKitRemoteFolderCreatorTests
             () => harness.CreateFolderAsync(ArchiveAlias, "Archief"));
     }
 
+    /// <summary>RFC 6154's <c>USE</c> argument is what tells the server the folder plays a role, where the server takes one.</summary>
+    [Fact]
+    public async Task CreateFolderBeneathAsync_ServerAdvertisesCreateSpecialUse_CarriesTheRoleOnTheCreate()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.CreateSpecialUse };
+        var root = AdvertisedFolder(string.Empty);
+        var created = AdvertisedFolder("Archive");
+        root
+            .CreateAsync("Archive", SpecialFolder.Archive, Arg.Any<CancellationToken>())
+            .Returns(created);
+        PrepareMissingFolders(client, root);
+        await using var harness = CreateHarness(resilience, client, CreateWritableFolder());
+
+        // Act
+        var advertisedPath = await harness.CreateFolderBeneathAsync(
+            ArchiveAlias,
+            parentPath: null,
+            "Archive",
+            MailFolderSpecialUse.Archive);
+
+        // Assert
+        Assert.Equal("Archive", advertisedPath.Value);
+        await root.Received(1).CreateAsync("Archive", SpecialFolder.Archive, Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A server without the extension is sent a plain creation at the role's standard name, and MailFathom records the role itself.</summary>
+    [Fact]
+    public async Task CreateFolderBeneathAsync_ServerAdvertisesNoCreateSpecialUse_SendsAPlainCreate()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient();
+        var root = AdvertisedFolder(string.Empty);
+        AnswerCreationOf(root, "Archive", AdvertisedFolder("Archive"));
+        PrepareMissingFolders(client, root);
+        await using var harness = CreateHarness(resilience, client, CreateWritableFolder());
+
+        // Act
+        var advertisedPath = await harness.CreateFolderBeneathAsync(
+            ArchiveAlias,
+            parentPath: null,
+            "Archive",
+            MailFolderSpecialUse.Archive);
+
+        // Assert
+        Assert.Equal("Archive", advertisedPath.Value);
+        await root.Received(1).CreateAsync("Archive", Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await root.DidNotReceive().CreateAsync(Arg.Any<string>(), Arg.Any<SpecialFolder>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A folder a person asked for is one level beneath a parent the account already declares: nothing walks a path here.</summary>
+    [Fact]
+    public async Task CreateFolderBeneathAsync_AParentTheAccountDeclares_CreatesOneLevelBeneathIt()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient();
+        var root = AdvertisedFolder(string.Empty);
+        var parent = AdvertisedFolder("Archief");
+        AnswerCreationOf(parent, "2026", AdvertisedFolder("Archief/2026"));
+        PrepareMissingFolders(client, root);
+        client.FoldersByPath["Archief"] = parent;
+        await using var harness = CreateHarness(resilience, client, CreateWritableFolder());
+
+        // Act
+        var advertisedPath = await harness.CreateFolderBeneathAsync(ArchiveAlias, "Archief", "2026");
+
+        // Assert
+        Assert.Equal("Archief/2026", advertisedPath.Value);
+        await root.DidNotReceive().CreateAsync(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+    }
+
     /// <summary>Builds a folder the modelled server advertises, with the attributes and delimiter it reports for it.</summary>
     private static IMailFolder AdvertisedFolder(
         string fullName,

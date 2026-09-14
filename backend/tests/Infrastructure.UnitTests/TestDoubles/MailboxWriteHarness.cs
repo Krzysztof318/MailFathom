@@ -39,6 +39,9 @@ internal sealed class MailboxWriteHarness : IAsyncDisposable
         this.FolderCreator = new MailKitRemoteFolderCreator(
             pool,
             new MailKitImapWriteSessionTestContext.RecordingCategoryLogger<MailKitRemoteFolderCreator>(recordedLogs));
+        this.FolderEditor = new MailKitRemoteFolderEditor(
+            pool,
+            new MailKitImapWriteSessionTestContext.RecordingCategoryLogger<MailKitRemoteFolderEditor>(recordedLogs));
     }
 
     /// <summary>Gets the factory under test, which produces sessions over the pool below.</summary>
@@ -46,6 +49,9 @@ internal sealed class MailboxWriteHarness : IAsyncDisposable
 
     /// <summary>Gets the creator under test, which leases the same one connection per account the sessions do.</summary>
     internal IRemoteFolderCreator FolderCreator { get; }
+
+    /// <summary>Gets the editor under test, which leases the same one connection per account the creator does.</summary>
+    internal IRemoteFolderEditor FolderEditor { get; }
 
     /// <summary>Gets the pool the factory leases from, so a test can assert on connection reuse and expiry.</summary>
     internal MailboxWriteConnectionPool Pool { get; }
@@ -73,6 +79,45 @@ internal sealed class MailboxWriteHarness : IAsyncDisposable
             PrimaryAccount,
             alias,
             RemoteFolderPath.Create(configuredPath),
+            TlsOnConnectWithPlainPolicy,
+            CancellationToken.None);
+
+    /// <summary>Creates one folder beneath a parent a person chose, over the same account connection.</summary>
+    internal Task<RemoteFolderPath> CreateFolderBeneathAsync(
+        MailFolderAlias alias,
+        string? parentPath,
+        string name,
+        MailFolderSpecialUse? role = null) =>
+        this.FolderCreator.CreateFolderBeneathAsync(
+            PrimaryAccount,
+            alias,
+            parentPath is { } parent ? RemoteFolderPath.Create(parent) : null,
+            name,
+            role,
+            TlsOnConnectWithPlainPolicy,
+            CancellationToken.None);
+
+    /// <summary>Renames or moves one folder, which is the one command IMAP has for both.</summary>
+    internal Task<RemoteFolderPath> RenameFolderAsync(
+        MailFolderAlias alias,
+        string currentPath,
+        string? newParentPath,
+        string newName) =>
+        this.FolderEditor.RenameFolderAsync(
+            PrimaryAccount,
+            alias,
+            RemoteFolderPath.Create(currentPath),
+            newParentPath is { } parent ? RemoteFolderPath.Create(parent) : null,
+            newName,
+            TlsOnConnectWithPlainPolicy,
+            CancellationToken.None);
+
+    /// <summary>Deletes one folder on the account's mail server.</summary>
+    internal Task DeleteFolderAsync(MailFolderAlias alias, string path) =>
+        this.FolderEditor.DeleteFolderAsync(
+            PrimaryAccount,
+            alias,
+            RemoteFolderPath.Create(path),
             TlsOnConnectWithPlainPolicy,
             CancellationToken.None);
 

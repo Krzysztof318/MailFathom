@@ -32,6 +32,9 @@ internal sealed class MailSynchronizationSettingsReaders(MailSynchronizationOpti
     /// <summary>Gets what a delete this deployment itself authors does to the message.</summary>
     internal ConfiguredAuthoredDeleteEmailDispositionReader AuthoredDeleteEmailDispositions { get; } = new(settings);
 
+    /// <summary>Gets whether deleting a folder through the client reaches the account's mail server.</summary>
+    internal ConfiguredAuthoredFolderDeleteDispositionReader AuthoredFolderDeleteDispositions { get; } = new(settings);
+
     /// <summary>Gets which rule actions an operator admitted on an account.</summary>
     internal ConfiguredMailRuleActionPermissionReader RuleActionPermissions { get; } = new(settings);
 

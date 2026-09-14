@@ -61,4 +61,42 @@ public interface IRemoteFolderCreator
         RemoteFolderPath configuredPath,
         MailTransportSecurityPolicy transportSecurityPolicy,
         CancellationToken cancellationToken);
+
+    /// <summary>Creates one folder a person named, beneath a folder they chose or at the top of their own namespace.</summary>
+    /// <param name="accountId">The account whose mailbox gains the folder.</param>
+    /// <param name="folderAlias">The alias the folder is to be declared under, which is the name every failure reports.</param>
+    /// <param name="parentPath">The folder to create it beneath, or <see langword="null" /> for the top of the account's personal namespace.</param>
+    /// <param name="name">The folder's own name, which is one level and never a path.</param>
+    /// <param name="role">The role the folder is to play, or <see langword="null" /> for an ordinary folder.</param>
+    /// <param name="transportSecurityPolicy">The connection and authentication policy the implementation must obey.</param>
+    /// <param name="cancellationToken">Cancels waiting for the account's write connection, connecting, authenticating, and creating.</param>
+    /// <returns>The created folder as the server advertises it, with the hierarchy delimiter the server reported.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="transportSecurityPolicy" /> is <see langword="null" />.</exception>
+    /// <exception cref="RemoteFolderCreationRefusedException">Thrown when the mail server answered and refused to hold a folder there.</exception>
+    /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the creation within its configured resilience budget.</exception>
+    /// <remarks>
+    /// <para>
+    /// It differs from the method above in who composed the path, which is why it is a second method rather than the
+    /// same one called differently. There, the whole path is text an operator wrote and is used exactly as written;
+    /// here, a person named one level and the path is composed against the account's own personal namespace and the
+    /// delimiter the server reports, because neither is something a client could know. Nothing above this port ever
+    /// builds a remote path out of a name somebody typed.
+    /// </para>
+    /// <para>
+    /// A role is carried to the server with RFC 6154's <c>CREATE ... (USE (\Junk))</c> where the server advertises
+    /// <c>CREATE-SPECIAL-USE</c>, and left off where it does not — the folder is still created, at the role's standard
+    /// English name, and MailFathom records the role in its own declaration either way. A server that refuses the
+    /// attribute refuses the creation, which is what RFC 6154 requires of it and is reported as a refusal rather than
+    /// retried without the attribute: a folder created without the role somebody asked for is not the folder they asked
+    /// for.
+    /// </para>
+    /// </remarks>
+    Task<RemoteFolderPath> CreateFolderBeneathAsync(
+        MailAccountId accountId,
+        MailFolderAlias folderAlias,
+        RemoteFolderPath? parentPath,
+        string name,
+        MailFolderSpecialUse? role,
+        MailTransportSecurityPolicy transportSecurityPolicy,
+        CancellationToken cancellationToken);
 }

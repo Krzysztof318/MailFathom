@@ -922,169 +922,6 @@
         ],
         "type": "object"
       },
-      "ClientLocalMailFolderCreateRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "account": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "name": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "parentId": {
-            "format": "uuid",
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "type": "object"
-      },
-      "ClientLocalMailFolderDeleteRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "account": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "folderId": {
-            "format": "uuid",
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "type": "object"
-      },
-      "ClientLocalMailFolderEditResponse": {
-        "properties": {
-          "change": {
-            "type": "string"
-          },
-          "folder": {
-            "$ref": "#/components/schemas/ClientLocalMailFolderResponse"
-          },
-          "mailErasureDeferred": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "change",
-          "folder",
-          "mailErasureDeferred"
-        ],
-        "type": "object"
-      },
-      "ClientLocalMailFolderMoveRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "account": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "folderId": {
-            "format": "uuid",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "parentId": {
-            "format": "uuid",
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "type": "object"
-      },
-      "ClientLocalMailFolderRenameRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "account": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "folderId": {
-            "format": "uuid",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "name": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "type": "object"
-      },
-      "ClientLocalMailFolderResponse": {
-        "properties": {
-          "id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "parentId": {
-            "format": "uuid",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "role": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "parentId",
-          "name",
-          "role"
-        ],
-        "type": "object"
-      },
-      "ClientLocalMailFoldersResponse": {
-        "properties": {
-          "folders": {
-            "items": {
-              "$ref": "#/components/schemas/ClientLocalMailFolderResponse"
-            },
-            "type": "array"
-          },
-          "phase": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "phase",
-          "folders"
-        ],
-        "type": "object"
-      },
       "ClientMailAccountResponse": {
         "properties": {
           "behind": {
@@ -2797,6 +2634,185 @@
           "nextCursor",
           "previousCursor",
           "pageSize"
+        ],
+        "type": "object"
+      },
+      "ClientManagedMailFolderActResponse": {
+        "properties": {
+          "change": {
+            "type": "string"
+          },
+          "folder": {
+            "$ref": "#/components/schemas/ClientManagedMailFolderResponse"
+          },
+          "mailErasureDeferred": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "change",
+          "folder",
+          "mailErasureDeferred"
+        ],
+        "type": "object"
+      },
+      "ClientManagedMailFolderCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "role": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ClientManagedMailFolderDeleteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "folderId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ClientManagedMailFolderMoveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "folderId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ClientManagedMailFolderRenameRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "folderId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ClientManagedMailFolderResponse": {
+        "properties": {
+          "allowedActs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parentId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "role": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "parentId",
+          "name",
+          "role",
+          "allowedActs"
+        ],
+        "type": "object"
+      },
+      "ClientManagedMailFoldersResponse": {
+        "properties": {
+          "allowedActs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "creatableRoles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/ClientManagedMailFolderResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "allowedActs",
+          "creatableRoles",
+          "folders"
         ],
         "type": "object"
       },
@@ -13060,7 +13076,7 @@
         ]
       }
     },
-    "/api/client/local-folders": {
+    "/api/client/managed-folders": {
       "get": {
         "parameters": [
           {
@@ -13076,7 +13092,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ClientLocalMailFoldersResponse"
+                  "$ref": "#/components/schemas/ClientManagedMailFoldersResponse"
                 }
               }
             },
@@ -13097,7 +13113,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ClientLocalMailFolderCreateRequest"
+                "$ref": "#/components/schemas/ClientManagedMailFolderCreateRequest"
               }
             }
           },
@@ -13108,7 +13124,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ClientLocalMailFolderEditResponse"
+                  "$ref": "#/components/schemas/ClientManagedMailFolderActResponse"
                 }
               }
             },
@@ -13125,13 +13141,13 @@
         ]
       }
     },
-    "/api/client/local-folders/deletions": {
+    "/api/client/managed-folders/deletions": {
       "post": {
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ClientLocalMailFolderDeleteRequest"
+                "$ref": "#/components/schemas/ClientManagedMailFolderDeleteRequest"
               }
             }
           },
@@ -13142,7 +13158,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ClientLocalMailFolderEditResponse"
+                  "$ref": "#/components/schemas/ClientManagedMailFolderActResponse"
                 }
               }
             },
@@ -13159,13 +13175,13 @@
         ]
       }
     },
-    "/api/client/local-folders/moves": {
+    "/api/client/managed-folders/moves": {
       "post": {
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ClientLocalMailFolderMoveRequest"
+                "$ref": "#/components/schemas/ClientManagedMailFolderMoveRequest"
               }
             }
           },
@@ -13176,7 +13192,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ClientLocalMailFolderEditResponse"
+                  "$ref": "#/components/schemas/ClientManagedMailFolderActResponse"
                 }
               }
             },
@@ -13193,13 +13209,13 @@
         ]
       }
     },
-    "/api/client/local-folders/renames": {
+    "/api/client/managed-folders/renames": {
       "post": {
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ClientLocalMailFolderRenameRequest"
+                "$ref": "#/components/schemas/ClientManagedMailFolderRenameRequest"
               }
             }
           },
@@ -13210,7 +13226,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ClientLocalMailFolderEditResponse"
+                  "$ref": "#/components/schemas/ClientManagedMailFolderActResponse"
                 }
               }
             },

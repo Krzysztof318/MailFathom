@@ -51,6 +51,7 @@ public sealed class JobPayloadDocumentTests
         EraseLocalMailFolderMailJobPayload.For(
             Account,
             LocalMailFolderId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000002"))).Next(),
+        EraseWithdrawnMailFolderMailJobPayload.For(Account, MailFolderAlias.Create("projects")).Next(),
     ];
 
     /// <summary>
