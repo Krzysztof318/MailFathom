@@ -91,7 +91,9 @@ public sealed class MailFolderEditor
         this.ActAsync(
             account,
             holding => this.CreateLocallyAsync(account, holding, parentId, name, role, cancellationToken),
-            identity => this.mirrored.CreateAsync(identity, AliasOf(parentId), name, role, cancellationToken),
+            identity => TryReadParentAlias(parentId, out var parent)
+                ? this.mirrored.CreateAsync(identity, parent, name, role, cancellationToken)
+                : Task.FromResult(MailFolderActOutcome.Refused(MailFolderActRefusal.ParentMissing)),
             cancellationToken);
 
     /// <summary>Renames a folder, leaving it where it is.</summary>
@@ -131,7 +133,9 @@ public sealed class MailFolderEditor
             folder => TryReadParent(parentId, out var parent)
                 ? this.local.MoveAsync(account, folder, parent, cancellationToken)
                 : Task.FromResult(LocalMailFolderEditOutcome.Refused(MailFolderActRefusal.ParentMissing)),
-            (identity, alias) => this.mirrored.MoveAsync(identity, alias, AliasOf(parentId), cancellationToken),
+            (identity, alias) => TryReadParentAlias(parentId, out var parent)
+                ? this.mirrored.MoveAsync(identity, alias, parent, cancellationToken)
+                : Task.FromResult(MailFolderActOutcome.Refused(MailFolderActRefusal.ParentMissing)),
             cancellationToken);
 
     /// <summary>Deletes a folder, which means whatever the account's own rules make it mean.</summary>
@@ -250,12 +254,19 @@ public sealed class MailFolderEditor
             : MailFolderActOutcome.Refused(
                 outcome.Refusal ?? throw new InvalidOperationException("An edit outcome carried neither a folder nor a refusal."));
 
-    // A held account names a parent by identifier, so text that is not one names no folder at all. Reading it as the top
-    // of the hierarchy, which is what the absence of a parent means, would move or create the folder somewhere the
-    // request never asked for.
+    // Absence of a parent is what names the top of the hierarchy, so text that names no folder must not be read as it:
+    // the folder would be created or moved somewhere the request never asked for. The two readings differ only in what
+    // an identity looks like on each side — an identifier a held account issued, an alias a mirrored one declares.
     private static bool TryReadParent(string? parentId, out LocalMailFolderId? parent)
     {
         parent = LocalFolderOf(parentId);
+
+        return parent is not null || string.IsNullOrWhiteSpace(parentId);
+    }
+
+    private static bool TryReadParentAlias(string? parentId, out MailFolderAlias? parent)
+    {
+        parent = AliasOf(parentId);
 
         return parent is not null || string.IsNullOrWhiteSpace(parentId);
     }

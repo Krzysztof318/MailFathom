@@ -104,7 +104,7 @@ public sealed class MirroredMailFolderEditor
 
         return new MailFolderManagement(
             [MailFolderAct.Create],
-            [.. MailFolderRoleNaming.Creatable.Where(role => folders.All(folder => folder.SpecialUse != role))],
+            [.. MailFolderRoleNaming.Creatable.Where(role => IsCreatable(folders, role))],
             [
                 .. folders
                     .Select(folder => Describe(folder, folders, declared))
@@ -130,7 +130,7 @@ public sealed class MirroredMailFolderEditor
 
         var folders = this.mappings.FoldersOf(account.Id);
 
-        if (role is { } named && folders.Any(folder => folder.SpecialUse == named))
+        if (role is { } named && !IsCreatable(folders, named))
         {
             return MailFolderActOutcome.Refused(MailFolderActRefusal.RoleAlreadyPlayed);
         }
@@ -547,6 +547,17 @@ public sealed class MirroredMailFolderEditor
     /// other folder takes its own name, and a name another folder of the account already holds takes a number after it
     /// — an alias has to be unique within its account, and the one thing it must never do is move.
     /// </remarks>
+    // A role's folder is declared under the role's own name and under nothing else, so the role can be created only
+    // while that alias is free. An ordinary folder can be holding it — it was created under its own name, and a rename
+    // afterwards moves the path and leaves the alias where it is — and a second declaration under one alias would
+    // strand whichever of the two the account's record stopped resolving to, mail and all.
+    private static bool IsCreatable(IReadOnlyList<MailFolderMapping> folders, MailFolderSpecialUse role)
+    {
+        var alias = MailFolderAlias.Create(role.ToString());
+
+        return folders.All(folder => folder.SpecialUse != role && folder.Alias != alias);
+    }
+
     private static MailFolderAlias UnusedAlias(
         IReadOnlyList<MailFolderMapping> folders,
         MailFolderSpecialUse? role,

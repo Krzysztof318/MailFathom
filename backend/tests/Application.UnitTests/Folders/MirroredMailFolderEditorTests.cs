@@ -186,6 +186,34 @@ public sealed class MirroredMailFolderEditorTests
         Assert.Empty(deployment.Log);
     }
 
+    /// <summary>
+    /// An ordinary folder first created as <c>Trash</c> keeps that alias through every later rename, so the role's own
+    /// alias is taken and a second declaration under it would strand one of the two folders with its mail.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_ARoleWhoseAliasAnOrdinaryFolderHolds_IsRefusedAndIsNotOffered()
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment();
+        deployment.Declares(MailFolderMapping.ToRemotePath(
+            MailFolderAlias.Create("Trash"),
+            RemoteFolderPath.Create("Discarded", '/')));
+
+        // Act
+        var outcome = await deployment.Editor.CreateAsync(
+            Account,
+            parentAlias: null,
+            name: null,
+            MailFolderSpecialUse.Trash,
+            TestContext.Current.CancellationToken);
+        var management = await deployment.Editor.ReadAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFolderActRefusal.RoleAlreadyPlayed, outcome.Refusal);
+        Assert.DoesNotContain(MailFolderSpecialUse.Trash, management.CreatableRoles);
+        Assert.Empty(deployment.Log);
+    }
+
     /// <summary>The alias is what the stored mail and the checkpoints are keyed by, so a rename moves the path and nothing else.</summary>
     [Fact]
     public async Task RenameAsync_AFolderTheAccountDeclares_RenamesItOnTheServerAndLeavesTheAliasWhereItIs()

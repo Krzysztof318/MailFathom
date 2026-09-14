@@ -162,6 +162,24 @@ public sealed class MailFolderEditorTests
     }
 
     [Fact]
+    public async Task CreateAsync_AMirroredAccountAndAParentThisDeploymentNeverIssued_IsRefusedAsAMissingParent()
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Mirrored);
+
+        // Act
+        var outcome = await deployment.Editor.CreateAsync(
+            Account.Id,
+            "",
+            "Projects",
+            role: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFolderActRefusal.ParentMissing, outcome.Refusal);
+    }
+
+    [Fact]
     public async Task CreateAsync_AMirroredAccount_CreatesTheFolderOnItsMailServer()
     {
         // Arrange

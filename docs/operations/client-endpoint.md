@@ -534,7 +534,10 @@ answered `413` before the write is reached. It answers with the change made and 
 `Drafts`, `Sent`, `Junk`, and `Trash`, which is what `creatableRoles` publishes — and names neither a name nor a
 parent: the service gives such a folder the role's standard English name at the top of the hierarchy, so nobody is ever
 asked to name their own trash folder and the name is the same on every account of every deployment. A role the account
-already has a folder for is answered `RoleAlreadyPlayed`, and a role no folder may be created for is answered `400`. On
+already has a folder for is answered `RoleAlreadyPlayed`, and so is one whose place in the account's own record is
+taken — on a mirrored account a folder first created under the role's name keeps that name as its record of the folder
+however it is renamed afterwards, and `creatableRoles` stops offering the role while it does. A role no folder may be
+created for is answered `400`. On
 a mirrored account the role is carried to the server with `CREATE-SPECIAL-USE` ([RFC 6154](https://www.rfc-editor.org/rfc/rfc6154))
 where the server advertises it, and MailFathom records the role either way.
 
