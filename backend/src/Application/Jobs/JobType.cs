@@ -106,6 +106,15 @@ public readonly record struct JobType
     /// </remarks>
     public static JobType EraseLocalMailFolderMail { get; } = new("erase-local-mail-folder-mail");
 
+    /// <summary>Gets the type whose work is one bounded pass over the stored mail of a folder an account no longer declares.</summary>
+    /// <remarks>
+    /// Its payload contract is <see cref="EraseWithdrawnMailFolderMailJobPayload" />, which names the account and the
+    /// alias whose deletion asked for it. The folder leaves every listing and every mailbox query the moment its
+    /// declaration is withdrawn, because a folder is readable by being declared; what this removes afterwards is the
+    /// storage itself, a bounded pass at a time, each pass handing the rest to the next.
+    /// </remarks>
+    public static JobType EraseWithdrawnMailFolderMail { get; } = new("erase-withdrawn-mail-folder-mail");
+
     /// <summary>Gets every declared job type.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
     public static IReadOnlyList<JobType> All { get; } =
@@ -118,6 +127,7 @@ public readonly record struct JobType
         SendRecurringOccurrence,
         ReclaimContentObjects,
         EraseLocalMailFolderMail,
+        EraseWithdrawnMailFolderMail,
     ];
 
     /// <summary>Gets whether this value names a declared job type rather than the unusable struct default.</summary>

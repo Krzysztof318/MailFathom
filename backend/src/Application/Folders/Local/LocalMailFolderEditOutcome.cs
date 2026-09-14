@@ -17,12 +17,12 @@ namespace MailFathom.Application.Folders.Local;
 /// </param>
 public sealed record LocalMailFolderEditOutcome(
     LocalMailFolder? Folder,
-    LocalMailFolderChangeKind? Kind,
-    LocalMailFolderRefusal? Refusal,
+    MailFolderChangeKind? Kind,
+    MailFolderActRefusal? Refusal,
     bool MailErasureDeferred = false)
 {
     /// <summary>States a refusal.</summary>
     /// <param name="refusal">Why the act was refused.</param>
     /// <returns>The outcome.</returns>
-    public static LocalMailFolderEditOutcome Refused(LocalMailFolderRefusal refusal) => new(null, null, refusal);
+    public static LocalMailFolderEditOutcome Refused(MailFolderActRefusal refusal) => new(null, null, refusal);
 }

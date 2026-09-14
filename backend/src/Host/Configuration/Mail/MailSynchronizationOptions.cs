@@ -933,6 +933,23 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     public AuthoredDeleteEmailDisposition AuthoredDeleteEmailDisposition { get; set; } =
         AuthoredDeleteEmailDisposition.RetainLocalCopy;
 
+    /// <summary>Gets or sets what deleting one of this account's folders through the client does on its mail server.</summary>
+    /// <remarks>
+    /// <para>
+    /// It is a third deletion setting beside the two above and answers for a third act: those govern what becomes of
+    /// one message, and this governs what becomes of a folder and everything the server holds in it. Inheriting either
+    /// of them for it would settle a loss of a different size with a value chosen about messages.
+    /// </para>
+    /// <para>
+    /// It binds as one of the names <see cref="AuthoredFolderDeleteDisposition" /> declares, and a value that is none
+    /// of them fails startup for the reason the two settings above do: this decides whether mail is destroyed, and a
+    /// typo in it must never be the reason mail survives or does not. The default deletes the folder on the server,
+    /// which is what the gesture means and what every other deletion setting of an account is becoming.
+    /// </para>
+    /// </remarks>
+    public AuthoredFolderDeleteDisposition AuthoredFolderDeleteDisposition { get; set; } =
+        AuthoredFolderDeleteDisposition.DeleteOnServer;
+
     /// <summary>Gets or sets which changes a mail rule may make to this account's mailbox.</summary>
     /// <remarks>
     /// Omitting the block permits the three reversible actions and refuses deletion, which is what every account gets
@@ -1016,6 +1033,13 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
         // ErrorOnUnknownConfiguration does not catch that: it rejects unknown keys and failed conversions, and this
         // conversion succeeds. Left unchecked, an undefined value would reach reconciliation, which treats anything
         // that is not EraseLocalCopy as the tombstone — a destructive setting silently doing the other thing.
+        if (!Enum.IsDefined(this.AuthoredFolderDeleteDisposition))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the authored folder delete disposition must be one of {string.Join(", ", Enum.GetNames<AuthoredFolderDeleteDisposition>())}.",
+                [nameof(this.AuthoredFolderDeleteDisposition)]);
+        }
+
         if (!Enum.IsDefined(this.RemotelyDeletedEmailDisposition))
         {
             yield return new ValidationResult(

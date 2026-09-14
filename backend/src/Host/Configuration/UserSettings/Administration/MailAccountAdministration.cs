@@ -65,6 +65,10 @@ internal sealed class MailAccountAdministration(
     /// <summary>The path a refusal about an account's credentials names, which is the declaration rather than a file.</summary>
     private const string DeclarationPath = "declaration";
 
+    /// <summary>How many times a folder declaration is composed afresh over a record another write moved on.</summary>
+    /// <remarks>Bounded rather than persistent, because losing three times in a row is contention nothing here resolves by trying a fourth: the act is reported as superseded and the person asks again.</remarks>
+    private const int DeclarationWriteAttempts = 3;
+
     /// <summary>Lists the accounts this deployment holds.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The first <see cref="MaximumListed" /> accounts in the order they were created in, and whether more are held.</returns>
@@ -423,6 +427,7 @@ internal sealed class MailAccountAdministration(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
         ArgumentNullException.ThrowIfNull(folderJson);
+        authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
 
         return this.ChangeOwnFolderAsync(
             accountId,
@@ -452,6 +457,7 @@ internal sealed class MailAccountAdministration(
         ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
         ArgumentException.ThrowIfNullOrWhiteSpace(alias);
         ArgumentNullException.ThrowIfNull(folderJson);
+        authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
 
         return this.ChangeOwnFolderAsync(
             accountId,
@@ -478,6 +484,7 @@ internal sealed class MailAccountAdministration(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
         ArgumentException.ThrowIfNullOrWhiteSpace(alias);
+        authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
 
         return this.ChangeOwnFolderAsync(
             accountId,
@@ -485,6 +492,89 @@ internal sealed class MailAccountAdministration(
             document => MailAccountFolderComposition.WithFolderRemoved(document, alias),
             $"This mail account declares no folder '{alias}'.",
             cancellationToken);
+    }
+
+    /// <summary>Reads the aliases one of the signed-in user's accounts declares in the user's own record.</summary>
+    /// <param name="accountId">The account's identifier.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The aliases as the record writes them, empty where the record declares none or names no such account.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <remarks>The record's own layer rather than the composed view, because what the folder-management surface may act on is what this user declared and never what an operator's file fixed.</remarks>
+    internal async Task<IReadOnlyList<string>> AliasesOwnAccountDeclaresAsync(
+        string accountId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+        authorization.RequirePermission(MailFathomPermission.MailRead);
+
+        if (await documents.ReadAsync(authorization.RequireUser(), cancellationToken) is not { } record
+            || AssignedAccount(record, accountId) is not { } account)
+        {
+            return [];
+        }
+
+        try
+        {
+            return MailAccountFolderComposition.AliasesIn(account.Document);
+        }
+        catch (Exception unreadable) when (unreadable is FormatException or JsonException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>Writes one folder declaration of the signed-in user's, for an act the mail server has already carried out.</summary>
+    /// <param name="accountId">The account's identifier.</param>
+    /// <param name="compose">Composes the account's settings afresh out of the ones it holds.</param>
+    /// <param name="unmatched">The sentence a change matching no folder is refused with, absent where the change always matches.</param>
+    /// <param name="cancellationToken">Cancels the reads and the commit.</param>
+    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no record for the acting user.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="compose" /> is <see langword="null" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailFoldersWrite" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// It carries the grant the folder acts carry rather than the one an account's own settings carry, because the
+    /// person asking has not stated a mailbox: they have asked for a folder, and this is the record of the folder the
+    /// server made. The rules <see cref="MailAccountFolderComposition" /> fixes hold here exactly as they hold on the
+    /// three routes an account's own settings are written through.
+    /// </para>
+    /// <para>
+    /// The version is read here rather than supplied, because the act being recorded happened on the server before
+    /// this was called and a refusal would leave a folder nothing declares. So a record another write moved on is read
+    /// again and the change composed afresh over it, a bounded number of times; a write still losing after that is
+    /// reported as superseded like any other.
+    /// </para>
+    /// </remarks>
+    internal async Task<UserRecordWriteOutcome?> ChangeOwnFolderDeclarationAsync(
+        string accountId,
+        Func<string, MailAccountFolderChange> compose,
+        string? unmatched,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+        ArgumentNullException.ThrowIfNull(compose);
+        authorization.RequirePermission(MailFathomPermission.MailFoldersWrite);
+
+        UserRecordWriteOutcome? outcome = null;
+
+        for (var attempt = 0; attempt < DeclarationWriteAttempts; attempt++)
+        {
+            if (await documents.ReadAsync(authorization.RequireUser(), cancellationToken) is not { } record)
+            {
+                return null;
+            }
+
+            outcome = await this.ChangeOwnFolderAsync(accountId, record.Version, compose, unmatched, cancellationToken);
+
+            if (outcome?.Refusal != MailFathomErrorCode.ConfigurationVersionSuperseded)
+            {
+                return outcome;
+            }
+        }
+
+        return outcome;
     }
 
     private static MailAccountReading ReadingOf(MailAccountHolding holding) =>
@@ -677,8 +767,6 @@ internal sealed class MailAccountAdministration(
         string? unmatched,
         CancellationToken cancellationToken)
     {
-        authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
-
         if (await this.OpenOwnAsync(expectedVersion, cancellationToken) is not { } opened)
         {
             return null;

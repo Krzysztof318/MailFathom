@@ -849,7 +849,7 @@ Seven of the eleven publish a tool here. `mailfathom.mail.accounts.write`, `mail
 record routes](client-endpoint.md#the-record-routes), which is where a person maintains which mailboxes this deployment
 reads for them, the next two reach [its mutation routes](client-endpoint.md#the-mutation-routes), which is where they
 file mail into another folder and where they delete a message off the server outright, and the last reaches [its local
-folder routes](client-endpoint.md#the-local-folder-routes), which is where they arrange the folders of a mailbox
+folder routes](client-endpoint.md#the-folder-management-routes), which is where they arrange the folders of a mailbox
 MailFathom holds. Any of them is written on an
 entry of this surface only because the two endpoints draw grants from one vocabulary; a caller granted one here is
 offered nothing it did not already have, and an entry that means to reach those routes is one on `ClientEndpoint`.

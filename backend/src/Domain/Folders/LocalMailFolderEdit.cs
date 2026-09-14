@@ -21,12 +21,12 @@ public sealed record LocalMailFolderEdit
     public IReadOnlyList<LocalMailFolderId> Erased { get; private init; } = [];
 
     /// <summary>Gets why the act was refused, or <see langword="null" /> where it was not.</summary>
-    public LocalMailFolderRefusal? Refusal { get; private init; }
+    public MailFolderActRefusal? Refusal { get; private init; }
 
     /// <summary>States a refusal.</summary>
     /// <param name="refusal">Why the act was refused.</param>
     /// <returns>An edit that changes nothing.</returns>
-    public static LocalMailFolderEdit Refused(LocalMailFolderRefusal refusal) => new() { Refusal = refusal };
+    public static LocalMailFolderEdit Refused(MailFolderActRefusal refusal) => new() { Refusal = refusal };
 
     internal static LocalMailFolderEdit Saving(LocalMailFolder folder) => new() { Folder = folder, Saved = [folder] };
 

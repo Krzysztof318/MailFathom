@@ -133,7 +133,10 @@ Points worth knowing before you adapt it:
   into an archive folder you decided on needs, without a detour through a mail client. A mapping that also carries
   `Synchronize: false` gets its folder the first time something files mail into it. The switch defaults to
   `false`, so leaving it out keeps a mistyped path reporting itself as an alias that resolves to nothing rather than
-  becoming a folder named after the typo. Nothing else about your folders is ever changed: MailFathom never renames, deletes, or unsubscribes from one.
+  becoming a folder named after the typo. Nothing a run does changes anything else about your folders: synchronization
+  never renames, deletes, or unsubscribes from one. What does is you, asking for it in the client — creating, renaming,
+  moving, and deleting a folder is [one surface there](../operations/client-endpoint.md#the-folder-management-routes)
+  whatever holds the mailbox, and on a mirrored account each act runs on your own server.
   [A folder the mapping asked for is created](../features/imap-synchronization.md#a-folder-the-mapping-asked-for-is-created)
   states when it happens and what a server's refusal reports.
 - **The transport is TLS by default.** Port 993 with TLS-on-connect is the default posture, and every weakening —

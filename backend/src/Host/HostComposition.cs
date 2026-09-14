@@ -60,6 +60,7 @@ using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Jobs;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Mail.Readers;
+using MailFathom.Host.Configuration.Mail.Writers;
 using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Host.Configuration.Providers;
 using MailFathom.Host.Configuration.Records;
@@ -562,6 +563,10 @@ internal static class HostComposition
         builder.Services.AddScoped<IMailFolderParticipationReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.FolderParticipation);
         builder.Services.AddScoped<IJunkMailFolderCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.JunkFolderCatalog);
         builder.Services.AddScoped<IMailFolderMappingReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.FolderMappings);
+        builder.Services.AddScoped<IAuthoredFolderDeleteDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.AuthoredFolderDeleteDispositions);
+        // The one folder port that writes, so it is composed over the account administration a person's own record is
+        // written through rather than taken off the snapshot: what an operator's file declares is read-only here.
+        builder.Services.AddScoped<IMailFolderDeclarationWriter, ConfiguredMailFolderDeclarationWriter>();
         builder.Services.AddScoped<IContactCollectionSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.ContactCollection);
         builder.Services.AddScoped<ISpamClassificationSettingsReader, ConfiguredSpamClassificationSettingsReader>();
         builder.Services.AddScoped<ISpamActionSettingsReader, ConfiguredSpamActionSettingsReader>();
@@ -759,6 +764,9 @@ internal static class HostComposition
         // Registered on every deployment for the reason the reclamation is: a pass handed on before a restart has to
         // find its handler, and it erases nothing on an account that holds no erased folder.
         builder.Services.AddScoped<IJobHandler, LocalMailFolderMailErasureHandler>();
+        // Its mirrored counterpart, enqueued when a folder a mirrored account declared is withdrawn and its mail goes
+        // with it, and registered on the same reasoning.
+        builder.Services.AddScoped<IJobHandler, WithdrawnMailFolderMailErasureHandler>();
     }
 
     /// <summary>Declares the gates the startup probe waits on, and the validators that report before the workers run.</summary>

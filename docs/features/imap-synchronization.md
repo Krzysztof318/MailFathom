@@ -616,7 +616,7 @@ message ends up filed once whichever command the stop landed between.
 **An account whose mailbox MailFathom holds itself writes no record for most changes**, because there is no server to
 issue one to. A flag, a keyword, a move, or a delete into the local trash is made to the stored message in the
 transaction that authored it, beside its audit entry where the account keeps one, and the answer says `applied` rather than naming a record; the
-[client endpoint](../operations/client-endpoint.md#the-local-folder-routes) holds what each act does there. The exception
+[client endpoint](../operations/client-endpoint.md#the-folder-management-routes) holds what each act does there. The exception
 is a delete of a message already in the local trash: it erases the message and every row derived from it, so it is
 recorded like any delete and held for its withdrawal window, and once that window passes the account's run erases the
 message instead of opening a write session. The run does not tell such a delete from any other delete record: every
@@ -1205,7 +1205,7 @@ a list of what may not, which is what makes an account with no mapped folder rea
 ### Where an arrival lands on a held account
 
 On an account whose mailbox MailFathom holds, the transaction that stores a message also places it in one of the
-account's [local folders](../operations/client-endpoint.md#the-local-folder-routes). A message from a folder whose
+account's [local folders](../operations/client-endpoint.md#the-folder-management-routes). A message from a folder whose
 mapping carries the `Inbox`, `Drafts`, `Sent`, `Junk`, or `Trash` role lands in that protected local folder. A message
 from any other folder lands in the local folder corresponding to it, matched by the folder's alias and created the first
 time one arrives, named after the last level of the source folder's path or, where that cannot be a top-level name,

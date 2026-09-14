@@ -144,7 +144,7 @@ internal static class ClientApiEndpoints
         api.MapClientPortrait();
         api.MapClientMailAccounts();
         api.MapClientMailFolders();
-        api.MapClientLocalMailFolders();
+        api.MapClientManagedMailFolders();
         api.MapClientMailTimeline();
         api.MapClientMailSearch();
         api.MapClientMailSearchPhrasing();
