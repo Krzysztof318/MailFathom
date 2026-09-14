@@ -126,7 +126,13 @@ export function fixtureAnswer(
     // The one document published outside the client prefix, which RFC 9728 puts at the root with the prefix after it —
     // so it is matched on the whole path before anything slices the prefix off, which would leave nothing to match on.
     if (request.path.endsWith(protectedResourceMetadataRoute)) {
-        return answering(deployment.protectedResource);
+        // The identifier is composed from the address this was read at rather than stated by the corpus, because the
+        // client checks that the document names the deployment it came from — and where the fixture is served from is
+        // whatever port a development run took.
+        return answering({
+            ...deployment.protectedResource,
+            resource: `${request.path.slice(0, -protectedResourceMetadataRoute.length)}${clientRoutePrefix}`,
+        });
     }
 
     const surface = request.path.slice(request.path.indexOf(clientRoutePrefix) + clientRoutePrefix.length);

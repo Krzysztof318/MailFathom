@@ -4,7 +4,7 @@
 
 import { failed, read, type ClientResult } from './failure';
 import { asRecord } from './json';
-import { isSecureAddress, originOf } from './signInMethods';
+import { isSecureAddress, isSecureEndpoint, originOf } from './signInMethods';
 import { reported, spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
@@ -44,6 +44,25 @@ export const longestDiscoveryAnswer = 131_072;
 
 /** The most of a token answer this package reads. A token is a few kilobytes at the outside, and a refresh token less. */
 export const longestTokenAnswer = 32_768;
+
+/**
+ * The most either issued token may be, which is the bound on the values rather than on the document carrying them.
+ *
+ * Past every signed token a real server issues — a JWT carrying a group claim for each of somebody's teams is two or
+ * three kilobytes — and short of what the deployment would accept in a request header anyway. It is also what the
+ * client stores a grant under, so a token accepted here is one the next start can read back rather than one that signs
+ * somebody in for a run and is silently gone.
+ */
+export const longestIssuedToken = 8_192;
+
+/**
+ * The longest life this client will believe, in seconds, which is a year.
+ *
+ * `expires_in` is a number a server wrote and nothing else checks it. What is computed from it is an instant, and an
+ * instant past what a `Date` can hold is a `RangeError` out of the composition rather than a refusal — so the bound is
+ * here, and a server claiming more is read as having said nothing, which is the assumed hour.
+ */
+const longestTokenLifeSeconds = 31_536_000;
 
 /**
  * Reads an authorization server's own discovery document, given only the issuer the deployment published.
@@ -407,9 +426,12 @@ function parseMetadata(body: string, issuer: string): AuthorizationServerMetadat
  * server being used to point this client at an address the deployment never published — and the content security policy
  * the page is served under admits the issuer's origin and no other, so such an address would be refused before it left
  * anyway. Refusing it here is what turns that into a readable outcome rather than a request that silently never went.
+ *
+ * Read with {@link isSecureEndpoint} rather than with the check an issuer takes, because an endpoint is permitted a
+ * query of its own and a server publishing one means it — which is the case the separator below is composed for.
  */
 function endpointOn(value: unknown, issuer: string): string | null {
-    if (typeof value !== 'string' || !isSecureAddress(value)) {
+    if (typeof value !== 'string' || !isSecureEndpoint(value)) {
         return null;
     }
 
@@ -434,7 +456,7 @@ function parseIssuedToken(body: string): IssuedAccessToken | null {
     const expiresIn = document['expires_in'];
     const refreshToken = document['refresh_token'];
 
-    if (typeof accessToken !== 'string' || accessToken.length === 0 || accessToken.length > longestTokenAnswer) {
+    if (typeof accessToken !== 'string' || accessToken.length === 0 || accessToken.length > longestIssuedToken) {
         return null;
     }
 
@@ -447,9 +469,9 @@ function parseIssuedToken(body: string): IssuedAccessToken | null {
     return {
         accessToken,
         expiresInSeconds:
-            typeof expiresIn === 'number' && Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : null,
+            typeof expiresIn === 'number' && expiresIn > 0 && expiresIn <= longestTokenLifeSeconds ? expiresIn : null,
         refreshToken:
-            typeof refreshToken === 'string' && refreshToken.length > 0 && refreshToken.length <= longestTokenAnswer
+            typeof refreshToken === 'string' && refreshToken.length > 0 && refreshToken.length <= longestIssuedToken
                 ? refreshToken
                 : null,
     };

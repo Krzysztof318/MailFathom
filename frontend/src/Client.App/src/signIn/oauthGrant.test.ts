@@ -43,6 +43,21 @@ function server(token: Partial<ClientResponse>): (request: ClientRequest) => Pro
 }
 
 describe('readOAuthGrant', () => {
+    // A real authorization server issues a signed token of a thousand characters and more, while a session this
+    // deployment minted is eighty — so a grant read against a minted session's bound is a sign-in that works for the
+    // run it was made in and is silently gone at the next start, refresh token and all.
+    it('reads back a grant carrying a token the size an authorization server actually issues', () => {
+        const issued = { ...grant, authorization: `Bearer ${'a'.repeat(2000)}` };
+
+        expect(readOAuthGrant(writeOAuthGrant(issued))).toEqual(issued);
+    });
+
+    it('refuses a token past what any server issues, which is a store somebody filled by hand', () => {
+        const absurd = { ...grant, authorization: `Bearer ${'a'.repeat(9000)}` };
+
+        expect(readOAuthGrant(writeOAuthGrant(absurd))).toBeNull();
+    });
+
     it('reads back what was written, field for field', () => {
         expect(readOAuthGrant(writeOAuthGrant(grant))).toEqual(grant);
     });

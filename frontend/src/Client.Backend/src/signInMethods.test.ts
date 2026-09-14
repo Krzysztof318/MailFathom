@@ -14,6 +14,9 @@ import type { ClientRequest, ClientResponse, MailFathomTransport } from './trans
 
 const deployment = { baseAddress: 'https://mail.example.invalid' };
 
+/** What this deployment's own RFC 9728 document names, which is the address plus the prefix its routes answer under. */
+const ownResource = `${deployment.baseAddress}/api/client`;
+
 const server = {
     issuer: 'https://id.example.invalid',
     name: 'keycloak',
@@ -132,20 +135,43 @@ describe('readProtectedResource', () => {
     it('reads the resource and the scopes a token has to be asked for', async () => {
         const answer = await readProtectedResource(
             deployment,
-            publishing({ resource: deployment.baseAddress, scopes_supported: ['mailfathom.read'] }),
+            publishing({ resource: ownResource, scopes_supported: ['mailfathom.read'] }),
         );
 
         expect(answer).toEqual({
             outcome: 'read',
-            value: { resource: deployment.baseAddress, scopes: ['mailfathom.read'] },
+            value: { resource: ownResource, scopes: ['mailfathom.read'] },
         });
     });
 
     // The field is optional in RFC 9728, and a resource advertising none is a client asking for none.
     it('reads a document naming no scopes as a resource that asks for none', async () => {
-        const answer = await readProtectedResource(deployment, publishing({ resource: deployment.baseAddress }));
+        const answer = await readProtectedResource(deployment, publishing({ resource: ownResource }));
 
         expect(answer.outcome === 'read' && answer.value.scopes).toEqual([]);
+    });
+
+    // RFC 9728 has a client check that the document names the resource it was read for, and this is what that check is
+    // worth: the value becomes the `resource` on every authorization and token request, so a deployment naming
+    // somebody else's would have an honest authorization server issue a token audienced to them — which that
+    // deployment could then replay there. Refused rather than read, exactly as a discovery document naming another
+    // issuer is.
+    it('refuses a document naming a resource somewhere other than the deployment it was read from', async () => {
+        const answer = await readProtectedResource(
+            deployment,
+            publishing({ resource: 'https://victim.example.invalid/api/client' }),
+        );
+
+        expect(answer.outcome === 'failed' && answer.failure.reason).toBe('unreadable');
+    });
+
+    it('reads the resource without regard to the case the host was written in', async () => {
+        const answer = await readProtectedResource(
+            deployment,
+            publishing({ resource: 'https://Mail.Example.Invalid/api/client' }),
+        );
+
+        expect(answer.outcome).toBe('read');
     });
 
     it('reports a deployment publishing no such document as nothing to read', async () => {

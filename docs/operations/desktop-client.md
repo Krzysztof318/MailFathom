@@ -82,7 +82,9 @@ head is, in full, is that record; how one is built is
   saying the tab can be closed. That loopback address is what an operator registers at the authorization server for
   this head; [what a sign-in screen is offered](client-endpoint.md#what-a-sign-in-screen-is-offered) is the rest of it.
   A second window already signing in finds the port taken and says so instead of opening a browser whose answer would
-  arrive somewhere else, and what comes back is kept in the same credential store the password goes to.
+  arrive somewhere else, and what comes back is kept in the same credential store the password goes to. Giving up on the
+  sign-in — pointing the client at another deployment, or leaving the screen — gives the port back at once rather than
+  holding it for the rest of that wait.
 - **A link in a message opens in your own browser**, not in the application's window. The shell asks the desktop for
   `http`, `https`, and `mailto` addresses and for nothing else, which is the whole of what the window may ask the
   opener for; a window that navigated to a sender's page would have replaced the client with it.

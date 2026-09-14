@@ -28,6 +28,16 @@ describe('providerMark', () => {
         expect(providerMark(name)).toBeUndefined();
     });
 
+    // The name is a string the deployment published and the lookup is an object with a prototype behind it, so each of
+    // these is an already-lowercase name that answers with something rather than with nothing — and what a screen then
+    // draws is an empty square where the credential symbol belongs.
+    it.each(['constructor', '__proto__', 'toString'])(
+        'carries nothing for %s, which is the prototype and not a mark',
+        (name) => {
+            expect(providerMark(name)).toBeUndefined();
+        },
+    );
+
     // The family is exported with no colour of its own, so what keeps nine brands from being drawn as nine grey marks
     // is the colour the token layer declares for each of them.
     it('draws a mark in the brand colour declared for that provider rather than in the text colour', () => {

@@ -33,6 +33,19 @@ import {
     type Answer,
 } from './App.harness';
 import { writeKeptSession } from './signIn/keptSession';
+import type { OAuthGrant } from './signIn/oauthGrant';
+import { noTelemetry } from './telemetry/clientTelemetry';
+
+/** A grant an authorization server issued, which is the other thing a start may already be holding. */
+const issuedGrant: OAuthGrant = {
+    authorization: 'Bearer mfo_appsignin.YXBwLXNpZ24taW4tcHJvb2Y',
+    expiresAt: '2126-08-31T21:41:00.000Z',
+    refreshToken: 'a-refresh-token',
+    issuer: 'https://id.example.invalid',
+    clientId: 'mailfathom-client',
+    resource: `${servingAddress.baseAddress}/api/client`,
+    person: 'K. Kowalska',
+};
 
 // Signing in, signing out, and everything the credential store does or refuses to do along the way. The arrangement
 // is `App.harness`, which the rest of this family shares.
@@ -299,6 +312,35 @@ describe('App sign-in', () => {
                 'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. MailFathom was asked to end the session, and it stops working on its own in any case. Remove the entry in the store itself if you would rather it were gone now.',
             ),
         ).toBeDefined();
+    });
+
+    // A start against a grant last used yesterday holds an expired access token beside a refresh token that still
+    // works. Presenting the expired one draws an `unauthenticated` from the deployment, which this frame acts on by
+    // clearing the sign-in — the refresh token with it — at exactly the moment the renewal was about to replace it.
+    it('asks the deployment with a grant whose token is still good', async () => {
+        renderApp(servedFrom, null, deploymentAnswering(), storeKeeping(), noTelemetry, issuedGrant);
+
+        await waitFor(() => {
+            expect(asked.map((request) => request.headers['Authorization'])).toContain(issuedGrant.authorization);
+        });
+    });
+
+    it('renews an access token whose renewal is already due rather than presenting it', async () => {
+        const expired: OAuthGrant = { ...issuedGrant, expiresAt: '2000-01-01T00:00:00.000Z' };
+
+        renderApp(servedFrom, null, deploymentAnswering(), storeKeeping(), noTelemetry, expired);
+
+        // The renewal starts on the frame's first effect, which is what says the token was read rather than ignored.
+        await waitFor(() => {
+            expect(asked.map((request) => request.path)).toContain(
+                `${expired.issuer}/.well-known/oauth-authorization-server`,
+            );
+        });
+
+        expect(asked.map((request) => request.headers['Authorization'])).not.toContain(expired.authorization);
+
+        // Nobody was signed out, so what is on the screen is the frame waiting rather than the sign-in.
+        expect(screen.queryByLabelText('Password')).toBeNull();
     });
 
     it('places focus on what it has to say about the credential, rather than on the field below it', async () => {

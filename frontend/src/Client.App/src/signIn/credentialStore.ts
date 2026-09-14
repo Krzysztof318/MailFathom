@@ -230,6 +230,13 @@ function storeOver(device: DeviceStore): CredentialStore {
             const deviceForgot = await device.forget(entryFor(deployment));
             const grantForgot = await device.forget(grantEntryFor(deployment));
 
+            // The name the shell was handed before this client named its own entries, which was the deployment address
+            // itself. A desktop installation that signed in under an earlier release holds the password under that
+            // name, nothing else in the application would ever ask for it again, and a credential no sign-out deletes
+            // is exactly what this store says must not happen — the entry outlives uninstalling the application. Its
+            // answer is not reported: an installation that never held one has not failed to sign out.
+            await device.forget(deployment.baseAddress);
+
             return removeStorage(entryFor(deployment)) && deviceForgot && grantForgot;
         },
     };

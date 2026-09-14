@@ -20,8 +20,13 @@
 // the ordinary state of a grant that was last used yesterday, and the refresh token beside it is what turns it back
 // into a working one without anybody typing. So the instant is read and never refused on.
 
-import { readAuthorizationServer, refreshAccessToken, type MailFathomTransport } from '@mailfathom/client-backend';
-import { isPresentableSessionCredential, longestCredentialPart, resolveSessionCredential } from './credentialEntry';
+import {
+    longestIssuedToken,
+    readAuthorizationServer,
+    refreshAccessToken,
+    type MailFathomTransport,
+} from '@mailfathom/client-backend';
+import { isPresentableIssuedCredential, longestCredentialPart, resolveSessionCredential } from './credentialEntry';
 
 /** The header value, when it stops working, and everything renewing it needs. */
 export interface OAuthGrant {
@@ -47,11 +52,8 @@ export interface OAuthGrant {
     readonly person: string;
 }
 
-/** The most a stored document may be before it is refused unread, which is well past what a token and two names are. */
-const longestKeptGrant = 8192;
-
-/** The most either token may be, which is far past a signed token and short of a store somebody filled by hand. */
-const longestToken = 4096;
+/** The most a stored document may be before it is refused unread, which holds both tokens at their own bound and the names beside them. */
+const longestKeptGrant = 2 * longestIssuedToken + 2048;
 
 /**
  * How long an access token is assumed to last where the server said nothing about it.
@@ -114,7 +116,9 @@ export function readOAuthGrant(stored: string | null): OAuthGrant | null {
     const expiresAt = kept['expiresAt'];
     const refreshToken = kept['refreshToken'];
 
-    if (typeof authorization !== 'string' || !isPresentableSessionCredential(authorization)) {
+    // Against the bound an issued token is accepted under rather than the one a minted session is: what is behind the
+    // scheme here came from an authorization server, and a session's bound would refuse every real one.
+    if (typeof authorization !== 'string' || !isPresentableIssuedCredential(authorization, longestIssuedToken)) {
         return null;
     }
 
@@ -258,5 +262,5 @@ function named(value: unknown): string | null {
 
 /** Whether a stored token is one worth presenting, which bounds it and refuses whitespace a request body would carry. */
 function isToken(value: string): boolean {
-    return value.length > 0 && value.length <= longestToken && !/\s/u.test(value);
+    return value.length > 0 && value.length <= longestIssuedToken && !/\s/u.test(value);
 }

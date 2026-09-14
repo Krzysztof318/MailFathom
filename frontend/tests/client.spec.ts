@@ -117,8 +117,11 @@ async function servedByADeployment(page: Page): Promise<void> {
     // password and no provider, so this is the screen every other check below is about.
     await page.route('**/api/client/sign-in-methods', (route) => answering(route, deployment.signInMethods));
 
+    // The identifier the corpus states is composed onto the address the document was read at, because the client checks
+    // that an RFC 9728 document names the deployment it came from — and the deployment here is whatever port the
+    // preview server took.
     await page.route('**/.well-known/oauth-protected-resource/**', (route) =>
-        answering(route, deployment.protectedResource),
+        answering(route, { ...deployment.protectedResource, resource: resourceReadAt(route.request().url()) }),
     );
 
     // The exchange and the revocation beside it, which is what signing in and signing out actually reach. The glob
@@ -164,6 +167,17 @@ async function servedByADeployment(page: Page): Promise<void> {
             }),
         );
     });
+}
+
+/**
+ * What a deployment reached at this address states as the identifier a token has to be issued for.
+ *
+ * RFC 9728 has a client check that the document names the address it was read from, so the identifier is composed onto
+ * the origin this run actually took rather than written in the corpus, where the port is not known until the preview
+ * server has one.
+ */
+function resourceReadAt(address: string): string {
+    return `${new URL(address).origin}/api/client`;
 }
 
 /** One value of the corpus put on the wire as the deployment behind the preview server would answer with it. */
@@ -568,7 +582,7 @@ test('signs a person in through a published provider, and presents the token it 
     expect(asked.get('response_type')).toBe('code');
     expect(asked.get('client_id')).toBe('mailfathom-client');
     expect(asked.get('code_challenge_method')).toBe('S256');
-    expect(asked.get('resource')).toBe(deployment.protectedResource.resource);
+    expect(asked.get('resource')).toBe(resourceReadAt(page.url()));
     expect(asked.get('scope')).toBe(deployment.protectedResource.scopes_supported.join(' '));
     expect(asked.get('nonce')).not.toBeNull();
 

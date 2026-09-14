@@ -344,6 +344,7 @@ export {
 export {
     authorizationRequestAddress,
     discoveryAddresses,
+    longestIssuedToken,
     readAuthorizationServer,
     redeemAuthorizationCode,
     refreshAccessToken,

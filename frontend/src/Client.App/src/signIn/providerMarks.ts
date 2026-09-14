@@ -58,5 +58,11 @@ const marks: Readonly<Record<string, ProviderMark | undefined>> = Object.fromEnt
  * @returns The mark, or `undefined` where nothing in the bundle carries one.
  */
 export function providerMark(name: string): ProviderMark | undefined {
-    return marks[name.toLowerCase()];
+    const committed = name.toLowerCase();
+
+    // Asked of the object's own entries rather than of the object, because the name is a string the deployment
+    // published and the lookup would otherwise reach `Object.prototype`: `constructor` and `__proto__` are both already
+    // lowercase and both answer with something that is not `undefined`, which is a mark this bundle does not carry
+    // drawn as an empty square instead of as the credential symbol.
+    return Object.hasOwn(marks, committed) ? marks[committed] : undefined;
 }

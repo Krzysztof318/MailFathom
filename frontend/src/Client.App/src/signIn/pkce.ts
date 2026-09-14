@@ -41,15 +41,27 @@ export interface AuthorizationAttempt {
 /**
  * Generates the secrets one authorization request is started with.
  *
- * @returns The attempt, whose verifier the caller keeps until the code it started is redeemed or discarded.
+ * @returns The attempt, or `null` where this head has no digest to compute the challenge with.
  */
-export async function beginAuthorizationAttempt(): Promise<AuthorizationAttempt> {
+export async function beginAuthorizationAttempt(): Promise<AuthorizationAttempt | null> {
+    // `crypto.subtle` is declared as always present and is absent outside a secure context, which this client reaches
+    // for real: a deployment somebody permitted clear text for serves the bundle over plain HTTP, and the document is
+    // then an insecure context where `getRandomValues` still works and the digest is gone. Answering nothing is what
+    // turns that into a refusal the screen can say something about, rather than a rejected promise escaping a caller
+    // whose declared answer is an outcome. Development never meets it: `localhost` is a secure context.
+    const digests: SubtleCrypto | undefined = crypto.subtle;
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- The reason is the comment above: the DOM library declares `subtle` as always present and an insecure context is where it is not.
+    if (digests === undefined) {
+        return null;
+    }
+
     const codeVerifier = randomValue();
 
     return {
         state: randomValue(),
         codeVerifier,
-        codeChallenge: await challengeFor(codeVerifier),
+        codeChallenge: await challengeFor(codeVerifier, digests),
         nonce: randomValue(),
     };
 }
@@ -60,8 +72,8 @@ function randomValue(): string {
 }
 
 /** The `S256` challenge: the SHA-256 of the verifier's ASCII octets, in the same alphabet. */
-async function challengeFor(codeVerifier: string): Promise<string> {
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codeVerifier));
+async function challengeFor(codeVerifier: string, digests: SubtleCrypto): Promise<string> {
+    const digest = await digests.digest('SHA-256', new TextEncoder().encode(codeVerifier));
 
     return base64Url(new Uint8Array(digest));
 }

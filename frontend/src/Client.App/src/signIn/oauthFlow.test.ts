@@ -77,6 +77,7 @@ function comingBackWith(answer: SignInRedirectAnswer | null): SignInRedirect & {
 
             return Promise.resolve(answer === null ? null : { ...answer, state: statedIn(address, 'state') });
         },
+        abandon: () => undefined,
         answerWaiting: () => null,
     };
 }
@@ -204,7 +205,7 @@ describe('completeOAuthSignIn', () => {
         const state = await attemptInFlight();
         const { transport, asked } = answering();
 
-        const outcome = await completeOAuthSignIn({ answered: 'code', code: 'a-code', state }, deployment, transport);
+        const outcome = await completeOAuthSignIn({ answered: 'code', code: 'a-code', state }, transport);
 
         expect(outcome.outcome).toBe('signedIn');
         expect(new URLSearchParams(asked.find((request) => request.path.endsWith('/token'))?.body).get('code')).toBe(
@@ -218,7 +219,6 @@ describe('completeOAuthSignIn', () => {
 
         const outcome = await completeOAuthSignIn(
             { answered: 'code', code: 'a-code', state: 'somebody-else' },
-            deployment,
             transport,
         );
 
@@ -232,9 +232,9 @@ describe('completeOAuthSignIn', () => {
         const state = await attemptInFlight();
         const answer = { answered: 'code', code: 'a-code', state } as const;
 
-        await completeOAuthSignIn(answer, deployment, answering().transport);
+        await completeOAuthSignIn(answer, answering().transport);
 
-        expect(await completeOAuthSignIn(answer, deployment, answering().transport)).toEqual({
+        expect(await completeOAuthSignIn(answer, answering().transport)).toEqual({
             outcome: 'refused',
             refusal: 'unexpectedAnswer',
         });
@@ -244,7 +244,7 @@ describe('completeOAuthSignIn', () => {
     it('reads a server that refused the authorization as nobody having authorized it', async () => {
         const state = await attemptInFlight();
 
-        expect(await completeOAuthSignIn({ answered: 'refused', state }, deployment, answering().transport)).toEqual({
+        expect(await completeOAuthSignIn({ answered: 'refused', state }, answering().transport)).toEqual({
             outcome: 'refused',
             refusal: 'notAuthorized',
         });
@@ -254,7 +254,7 @@ describe('completeOAuthSignIn', () => {
         const state = await attemptInFlight();
         const { transport } = answering({ token: { status: 400, body: '{"error":"invalid_grant"}' } });
 
-        expect(await completeOAuthSignIn({ answered: 'code', code: 'a-code', state }, deployment, transport)).toEqual({
+        expect(await completeOAuthSignIn({ answered: 'code', code: 'a-code', state }, transport)).toEqual({
             outcome: 'refused',
             refusal: 'refused',
         });
@@ -266,7 +266,7 @@ describe('completeOAuthSignIn', () => {
         const state = await attemptInFlight();
         const { transport } = answering({ whoTheyAre: { status: 401, body: '' } });
 
-        expect(await completeOAuthSignIn({ answered: 'code', code: 'a-code', state }, deployment, transport)).toEqual({
+        expect(await completeOAuthSignIn({ answered: 'code', code: 'a-code', state }, transport)).toEqual({
             outcome: 'refused',
             refusal: 'notAUser',
         });
@@ -278,7 +278,7 @@ describe('completeOAuthSignIn', () => {
         const state = await attemptInFlight();
         const { transport } = answering({ whoTheyAre: { status: 503, body: '' } });
 
-        const outcome = await completeOAuthSignIn({ answered: 'code', code: 'a-code', state }, deployment, transport);
+        const outcome = await completeOAuthSignIn({ answered: 'code', code: 'a-code', state }, transport);
 
         expect(outcome.outcome === 'signedIn' && outcome.grant.person).toBe('Keycloak');
     });

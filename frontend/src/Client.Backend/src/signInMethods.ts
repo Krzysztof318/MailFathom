@@ -158,7 +158,7 @@ export function readProtectedResource(
             return failed(failureReasonForStatus(response.status), response.status);
         }
 
-        const resource = parseProtectedResource(response.body);
+        const resource = parseProtectedResource(response.body, deployment);
 
         return resource === null ? failed('unreadable', response.status) : read(resource);
     });
@@ -219,7 +219,7 @@ function parseAuthorizationServer(entry: unknown): SignInAuthorizationServer | n
     return isSecureAddress(issuer) ? { issuer, name, displayName, clientId } : null;
 }
 
-function parseProtectedResource(body: string): ProtectedResource | null {
+function parseProtectedResource(body: string, deployment: DeploymentAddress): ProtectedResource | null {
     const document = readDocument(body);
 
     if (document === null) {
@@ -229,7 +229,13 @@ function parseProtectedResource(body: string): ProtectedResource | null {
     const resource = publishedValue(document['resource']);
     const published = document['scopes_supported'];
 
-    if (resource === null) {
+    // The document has to name the address it was read from, which RFC 9728 requires of a client and which this is the
+    // whole of the enforcement of. What the field becomes is the `resource` on every authorization and token request
+    // this client makes, so a deployment naming somebody else's address would have an honest authorization server
+    // issue a token audienced to *them* — which that deployment could then replay there. It is the same check
+    // `oauthSignIn.ts` makes on a discovery document's `issuer`, against the other document read from an origin
+    // nobody has trusted yet.
+    if (resource === null || !namesTheDeployment(resource, deployment)) {
         return null;
     }
 
@@ -258,6 +264,17 @@ function parseProtectedResource(body: string): ProtectedResource | null {
     return { resource, scopes };
 }
 
+/**
+ * Whether a published resource identifier is the one this deployment's own document may name.
+ *
+ * The address a client reaches is the scheme and the authority, and the endpoint's routes answer under one prefix — so
+ * the identifier a token is issued for is those two written together, and the deployment refuses to start where it is
+ * configured as anything else. Compared without case because a host is case-insensitive and the prefix is a literal.
+ */
+function namesTheDeployment(resource: string, deployment: DeploymentAddress): boolean {
+    return resource.toLowerCase() === `${deployment.baseAddress}${clientRoutePrefix}`.toLowerCase();
+}
+
 function readDocument(body: string): Readonly<Record<string, unknown>> | null {
     try {
         return asRecord(JSON.parse(body));
@@ -284,14 +301,26 @@ export function isSecureAddress(value: string): boolean {
 }
 
 /**
+ * Whether the value is an absolute `https` endpoint with no credential and no fragment, and a query it may keep.
+ *
+ * The difference from {@link isSecureAddress} is the query, and it is the whole difference: RFC 6749 §3.1 permits an
+ * authorization endpoint to carry one, and a server that publishes one means it — while an *issuer* carrying one is not
+ * an identifier a discovery document can be derived from. So an endpoint out of a document is read with this and an
+ * issuer with the other.
+ */
+export function isSecureEndpoint(value: string): boolean {
+    return /^https:\/\/[^\s/?#@]+(\/[^\s?#]*)?(\?[^\s#]*)?$/u.test(value);
+}
+
+/**
  * The scheme, host, and port an address names, which is what a content security policy and a same-server check read.
  *
- * @param address An address {@link isSecureAddress} has accepted.
+ * @param address An address {@link isSecureAddress} or {@link isSecureEndpoint} has accepted.
  * @returns The origin, with no trailing separator.
  */
 export function originOf(address: string): string {
     const authority = address.slice('https://'.length);
-    const separated = authority.indexOf('/');
+    const separated = authority.search(/[/?]/u);
 
     return `https://${separated < 0 ? authority : authority.slice(0, separated)}`;
 }

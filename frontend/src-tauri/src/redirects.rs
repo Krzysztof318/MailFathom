@@ -17,10 +17,11 @@
 // a code here is a browser on this machine; the port is fixed because a redirect URI is registered at the authorization
 // server exactly as written, and a port chosen at run time could not be registered in advance.
 //
-// It carries no capability file of its own, and nothing here is a plugin's command: what the webview may ask of the
-// opener is already narrowed by `capabilities/open-a-link.json` to the schemes this shell hands to a browser, and the
-// authorization address is one of them. Opening it is done here rather than from the page so that the listener is
-// bound before the browser is started — a browser that reached the redirect first would find nothing answering.
+// It carries no capability file of its own, and nothing here is a plugin's command. That is also why the address is
+// checked here: `capabilities/open-a-link.json` narrows what the *webview* may ask the opener for, and this call is
+// made from Rust inside a command the capability system does not gate, so that file's scheme scope never applies on
+// this path. Opening it is done here rather than from the page so that the listener is bound before the browser is
+// started — a browser that reached the redirect first would find nothing answering.
 
 /// Where an authorization server sends the person back, which an operator registers exactly as written.
 ///
@@ -51,13 +52,17 @@ pub async fn follow(_address: String) -> Option<String> {
     None
 }
 
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn abandon() {}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub use desktop::follow;
+pub use desktop::{abandon, follow};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod desktop {
     use std::io::{Read, Write};
     use std::net::TcpListener;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::{Duration, Instant};
 
     /// The address the listener binds, which is the authority half of [`super::REDIRECT_URI`].
@@ -66,9 +71,10 @@ mod desktop {
     /// How long the listener waits for the browser to come back before it gives the port up.
     ///
     /// It is a person authenticating rather than a machine answering, so the wait is minutes: a first sign-in of the
-    /// day carries a password, a second factor, and a consent screen. What the bound is for is the other direction —
-    /// somebody who closed the browser instead of signing in leaves nothing holding this port, and the next attempt
-    /// binds it rather than reporting that one is already running.
+    /// day carries a password, a second factor, and a consent screen. What the bound is for is a browser nobody ever
+    /// came back from — a tab closed on another machine, a laptop suspended mid-sign-in — where nothing in the
+    /// application is left to say so. A sign-in the person abandoned in front of the client is not that case and does
+    /// not wait this out: [`abandon`] is what the screen calls, and the port is back within one look.
     const LONGEST_WAIT: Duration = Duration::from_secs(300);
 
     /// How often the listener looks for a connection while it waits, which is what makes the bound above reachable.
@@ -79,6 +85,18 @@ mod desktop {
 
     /// How long one connection has to send its request line once it is accepted.
     const LONGEST_READ: Duration = Duration::from_secs(5);
+
+    /// Whether the sign-in being waited for has been given up on, which is what ends the wait before its deadline.
+    ///
+    /// One flag rather than one per attempt, because one attempt is all there can be: the port is what serializes them,
+    /// and a second `follow` while one is waiting finds it bound and answers nothing. It is cleared by whichever
+    /// attempt binds the port, so an abandonment can only end the wait it was asked about.
+    static ABANDONED: AtomicBool = AtomicBool::new(false);
+
+    /// Gives up on the hand-over being waited for, so the next attempt binds the port instead of finding it held.
+    pub fn abandon() {
+        ABANDONED.store(true, Ordering::Relaxed);
+    }
 
     /// What the browser is left looking at, which is the only document this shell ever serves.
     const COMPLETION_PAGE: &str = concat!(
@@ -112,7 +130,14 @@ mod desktop {
             return None;
         };
 
-        if tauri_plugin_opener::open_url(address, None::<&str>).is_err() {
+        ABANDONED.store(false, Ordering::Relaxed);
+
+        // The address arrived over IPC from the WebView, and this call is not the one `capabilities/open-a-link.json`
+        // narrows — that file scopes what the *page* may ask the plugin for, and this asks it from Rust. So the scheme
+        // is checked here, and it is the one an authorization endpoint may be reached at: everything a discovery
+        // document names is `https` by the time `Client.Backend` has read it, and handing the desktop's own opener
+        // anything else would be this shell launching whatever a scheme is registered to.
+        if !address.starts_with("https://") || tauri_plugin_opener::open_url(address, None::<&str>).is_err() {
             return None;
         }
 
@@ -136,6 +161,10 @@ mod desktop {
         let deadline = Instant::now() + LONGEST_WAIT;
 
         while Instant::now() < deadline {
+            if ABANDONED.load(Ordering::Relaxed) {
+                return None;
+            }
+
             let Ok((mut connection, _)) = listener.accept() else {
                 std::thread::sleep(BETWEEN_LOOKS);
 
@@ -166,23 +195,29 @@ mod desktop {
         None
     }
 
-    /// The query of the request line, or nothing where the request carried none.
+    /// The query of the request line, or nothing where the request carried no answer to the flow.
     ///
     /// The request line is `GET /path?query HTTP/1.1`, and only its middle field is read. It is bounded by the buffer
     /// above and by the space that ends the target, so nothing here walks past what one request line can be.
     ///
     /// Read lossily rather than fallibly: a byte no text can hold belongs to a header this never looks at, and
     /// refusing the whole request over one would leave somebody who has already authorized waiting out the deadline.
+    ///
+    /// A query is an answer only where it names `code` or `error`, which is the least this can ask and still be sure
+    /// the wait is over: anything on this machine may reach a loopback port — another page, an extension probing it, a
+    /// scanner — and a request carrying any query at all would otherwise end the wait, drop the listener, and leave the
+    /// authorization server's real redirect arriving at a closed port after the person has already authorized. Which
+    /// of the two it is, and what the state has to match, stay the client's reading rather than becoming a second one.
     fn query_of(request: &[u8]) -> Option<String> {
         let request = String::from_utf8_lossy(request);
         let line = request.lines().next()?;
         let target = line.split(' ').nth(1)?;
         let query = target.split_once('?')?.1;
 
-        if query.is_empty() {
-            None
-        } else {
-            Some(query.to_owned())
-        }
+        let answers = query
+            .split('&')
+            .any(|stated| matches!(stated.split('=').next(), Some("code" | "error")));
+
+        answers.then(|| query.to_owned())
     }
 }

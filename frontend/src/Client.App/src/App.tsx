@@ -81,7 +81,7 @@ import { useCoarsePointer, useDesktopComposition, useTwoPanes, useWideWorkspace 
 import { CredentialNotices, type CredentialNotice } from './signIn/CredentialNotices';
 import type { CredentialStore } from './signIn/credentialStore';
 import { writeKeptSession, type KeptSession } from './signIn/keptSession';
-import { writeOAuthGrant, type OAuthGrant } from './signIn/oauthGrant';
+import { renewalIsDue, writeOAuthGrant, type OAuthGrant } from './signIn/oauthGrant';
 import { useGrantRenewal } from './signIn/useGrantRenewal';
 import { useSessionRenewal } from './signIn/useSessionRenewal';
 import { SignIn } from './signIn/SignIn';
@@ -156,6 +156,18 @@ export function App({
     const [grant, setGrant] = useState(signedInWithGrant);
     const authorization = kept?.authorization ?? grant?.authorization ?? null;
 
+    // What is actually presented, which is the credential above unless it is an access token whose renewal is already
+    // due. A cold start against a grant last used yesterday holds an expired token and a refresh token that still
+    // works; presenting the first is an `unauthenticated` from the deployment, which this frame acts on by clearing the
+    // sign-in — the refresh token with it — at exactly the moment the renewal below was about to replace it. The
+    // renewal needs two round trips to the authorization server against the connection read's one, so it loses that
+    // race in the ordinary case rather than in a rare one.
+    //
+    // Withheld from the reads rather than from `authorization`: nobody has been signed out, so the sign-in screen is
+    // not what this draws. The frame waits the way it waits for any read that has not answered, and the renewal below
+    // starts on its first effect.
+    const presented = kept !== null || grant === null || !renewalIsDue(grant) ? authorization : null;
+
     // Who is signed in, taken from what was kept rather than out of the credential. A session token names nobody — the
     // Basic header it replaced carried the name inside it — so the name travels beside it, and it is not a secret.
     const person = kept?.person ?? grant?.person ?? null;
@@ -176,15 +188,15 @@ export function App({
     // Built once per address and credential rather than per render, because it is what the message read below depends
     // on: a fresh object every render would restart that read every render.
     const session = useMemo(
-        () => (baseAddress === null || authorization === null ? null : { baseAddress, authorization }),
-        [baseAddress, authorization],
+        () => (baseAddress === null || presented === null ? null : { baseAddress, authorization: presented }),
+        [baseAddress, presented],
     );
 
     // Who the deployment is read for, which is the identity above and whatever is being presented for them now. It is
     // built per render rather than memoized because nothing keys on the object: the hook keys on the identity inside
     // it and reads the header when a request actually goes out.
     const signedInCaller =
-        signedInAs === null || authorization === null ? null : { identity: signedInAs, authorization };
+        signedInAs === null || presented === null ? null : { identity: signedInAs, authorization: presented };
 
     // The transport those reads are made through, built once for the same reason. It carries a signal nothing ever
     // fires: the tree, the reading pane, and the body renderer each discard the answer to a read they stopped listening

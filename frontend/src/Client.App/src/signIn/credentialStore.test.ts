@@ -145,6 +145,45 @@ describe('a credential kept nowhere', () => {
         });
     });
 
+    // Before this client named its own entries the shell was handed the deployment address itself, so an installation
+    // that signed in under an earlier release holds the password under that bare name — and nothing else in the
+    // application would ever ask for it again. A credential no sign-out deletes outlives uninstalling the application.
+    it('asks the shell to forget the bare-address entry an earlier release wrote, beside its own', async () => {
+        const asked = shellAnswering({
+            credential_arrangement: 'keptInTheStore',
+            forget_credential: true,
+        });
+        const store = await credentialStore();
+
+        await store.forget(deployment);
+
+        expect(asked).toContainEqual({
+            command: 'forget_credential',
+            argument: { entry: deployment.baseAddress },
+        });
+    });
+
+    // An installation that never held one has not failed to sign out, so that answer is not what is reported.
+    it('reports a sign-out as complete where only the entry no earlier release wrote was refused', async () => {
+        const answers: Record<string, unknown> = { credential_arrangement: 'keptInTheStore' };
+        const global = window as unknown as Record<string, unknown>;
+
+        global['__TAURI__'] = {
+            core: {
+                invoke: (command: string, argument?: Readonly<Record<string, unknown>>) =>
+                    Promise.resolve(
+                        command === 'forget_credential'
+                            ? argument?.['entry'] !== deployment.baseAddress
+                            : answers[command],
+                    ),
+            },
+        };
+
+        const store = await credentialStore();
+
+        expect(await store.forget(deployment)).toBe(true);
+    });
+
     it('reports the credential as still there where the shell would not remove it', async () => {
         shellAnswering({ credential_arrangement: 'notKeptKeyInvalidated', forget_credential: false });
         const store = await credentialStore();

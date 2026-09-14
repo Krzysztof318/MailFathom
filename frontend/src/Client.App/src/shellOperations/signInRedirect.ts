@@ -44,6 +44,16 @@ export interface SignInRedirect {
      */
     hand(address: string): Promise<SignInRedirectAnswer | null>;
 
+    /**
+     * Gives up on a hand-over nobody is waiting for any more, where waiting holds something a later one needs.
+     *
+     * The shell head binds its loopback port before it opens the browser and holds it for the whole deadline, so a
+     * sign-in somebody walked away from leaves every attempt inside that window unable to bind — which reaches the
+     * screen as a deployment that did not answer. Where nothing is held, this does nothing: the web head has already
+     * been replaced by the address it opened, and a head that receives no redirect never started one.
+     */
+    abandon(): void;
+
     /** The answer that was already waiting when this run started, which is the web head's whole way of answering. */
     answerWaiting(): SignInRedirectAnswer | null;
 }
@@ -53,6 +63,7 @@ export const receivesNoRedirect: SignInRedirect = {
     offered: false,
     redirectUri: '',
     hand: () => Promise.resolve(null),
+    abandon: () => undefined,
     answerWaiting: () => null,
 };
 
@@ -98,10 +109,13 @@ function redirectedBackToThisPage(): SignInRedirect {
             return new Promise(() => undefined);
         },
 
-        answerWaiting: () => {
-            const answer = answerIn(window.location.search);
+        abandon: () => undefined,
 
-            if (answer === null) {
+        answerWaiting: () => {
+            const query = window.location.search;
+            const carried = new URLSearchParams(query);
+
+            if (carried.get('code') === null && carried.get('error') === null) {
                 return null;
             }
 
@@ -109,9 +123,14 @@ function redirectedBackToThisPage(): SignInRedirect {
             // reason this clears rather than only reads: an authorization code left there travels into every later
             // referrer, into the session history the person can scroll back through, and into whatever a bookmark or a
             // reload would replay it with.
+            //
+            // Cleared on the presence of either parameter rather than on a complete answer, because an incomplete one
+            // is where a code most needs taking out of the bar: a redirect carrying a code and no state — a server
+            // that omitted it, or a link somebody was sent — is refused by the reader below and would otherwise leave
+            // the code sitting there with nothing having read it.
             window.history.replaceState(null, '', `${window.location.pathname}${window.location.hash}`);
 
-            return answer;
+            return answerIn(query);
         },
     };
 }
@@ -132,6 +151,10 @@ function redirectedThroughTheShell(redirectUri: string): SignInRedirect {
             const query = await window.__TAURI__?.core.invoke('follow_sign_in_redirect', { address }).catch(() => null);
 
             return typeof query === 'string' ? answerIn(query) : null;
+        },
+
+        abandon: () => {
+            void window.__TAURI__?.core.invoke('abandon_sign_in_redirect').catch(() => null);
         },
 
         answerWaiting: () => null,

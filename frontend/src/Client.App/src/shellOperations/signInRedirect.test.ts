@@ -105,6 +105,26 @@ describe('the web head', () => {
 
         expect((await signInRedirectForThisApplication()).answerWaiting()).toBeNull();
     });
+
+    // An incomplete answer is where a code most needs taking out of the bar rather than least: the answer is refused,
+    // so nothing else ever reads that query again and the code would sit there for every later referrer and reload.
+    it('clears a code it refused to read, which is the case a complete answer never reaches', async () => {
+        arrivedAt('?code=a-code#mail');
+
+        const redirect = await signInRedirectForThisApplication();
+
+        expect(redirect.answerWaiting()).toBeNull();
+        expect(window.location.search).toBe('');
+        expect(window.location.hash).toBe('#mail');
+    });
+
+    it('leaves an address carrying neither a code nor a refusal exactly as it was', async () => {
+        arrivedAt('?something=else');
+
+        (await signInRedirectForThisApplication()).answerWaiting();
+
+        expect(window.location.search).toBe('?something=else');
+    });
 });
 
 describe('the shell head', () => {

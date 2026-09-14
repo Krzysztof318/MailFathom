@@ -32,7 +32,13 @@ import { resolveCredentialEntry, resolveSessionCredential, type CredentialEntryR
 import type { KeptSession } from './keptSession';
 import { CredentialNotices, type CredentialNotice } from './CredentialNotices';
 import { offersMoreThanTheTab, type KeptBeyondTheTab } from './credentialStore';
-import { completeOAuthSignIn, startOAuthSignIn, type OAuthSignInOutcome, type OAuthSignInRefusal } from './oauthFlow';
+import {
+    completeOAuthSignIn,
+    discardWrittenAttempt,
+    startOAuthSignIn,
+    type OAuthSignInOutcome,
+    type OAuthSignInRefusal,
+} from './oauthFlow';
 import type { OAuthGrant } from './oauthGrant';
 import { ProviderMark } from './ProviderMark';
 import type { SignInRedirect, SignInRedirectAnswer } from '../shellOperations/signInRedirect';
@@ -57,7 +63,20 @@ import type { SignInRedirect, SignInRedirectAnswer } from '../shellOperations/si
 
 /** Everything this screen can be stopped by, whether it was decided here, by the deployment, or by the wire. */
 type SignInScreenRefusal =
-    DeploymentEntryRefusal | CredentialEntryRefusal | SignInRefusal | OAuthSignInRefusal | ClientFailureReason;
+    | DeploymentEntryRefusal
+    | CredentialEntryRefusal
+    | SignInRefusal
+    | OAuthSignInRefusal
+    | ClientFailureReason
+
+    /**
+     * The one refusal this screen names itself, because no other reader of `unavailable` needs it separated.
+     *
+     * An OAuth `unavailable` is the *authorization server* not answering, and `shownFor` below folds every other
+     * `unavailable` into a sentence about the deployment — which would point whoever reads it, and whoever they go and
+     * ask, at the wrong system entirely.
+     */
+    | 'providerUnavailable';
 
 /** Which controls a refusal is about, so the fields that have to change are the ones marked as needing it. */
 type RefusedControl = 'address' | 'userName' | 'password';
@@ -95,6 +114,7 @@ const refusals: Readonly<Record<SignInScreenRefusal, Refusal>> = {
     unexpectedAnswer: { message: 'signIn.unexpectedAnswer', controls: [] },
     refused: { message: 'signIn.providerRefused', controls: [] },
     notAUser: { message: 'signIn.notAUser', controls: [] },
+    providerUnavailable: { message: 'signIn.providerSilent', controls: [] },
 
     // `unauthenticated` is the answer `credentialRefused` already is — a 401 whose challenge did prove MailFathom
     // wrote it, a 401 that did not being an unreadable answer instead — so it reads as a refused credential and marks
@@ -146,6 +166,15 @@ const fieldInput =
     'min-h-13 min-w-0 flex-1 bg-transparent text-xl text-text outline-none workspace:min-h-11 workspace:text-md';
 
 const fieldLabel = 'text-sm font-medium text-text-soft';
+
+/**
+ * How long a typed address is left alone before the two documents are read for it.
+ *
+ * Every keystroke that happens to resolve to an address is otherwise a request to a host somebody is halfway through
+ * naming, which is both noise and a disclosure. An address this screen was handed waits for none of this: it was
+ * settled before the screen was drawn.
+ */
+const typedAddressSettles = 600;
 
 /** What a deployment published about signing in, and which address it was published for. */
 interface Published {
@@ -282,47 +311,79 @@ export function SignIn({
         }
     }, [presenting]);
 
+    // Which deployment this screen is composed for, which is the one it was handed or the one being typed once what
+    // has been typed is an address at all. A typed one counts because the controls a deployment offers have to be
+    // composed before a credential is presented rather than after one was accepted: every client nobody handed an
+    // address to, and everybody who used *Change the server*, reaches this screen with nothing adopted, and a
+    // deployment that takes no password and publishes its own provider would otherwise be unreachable from there.
+    const named = deployment === null ? resolveDeploymentEntry(entry, clearTextPermitted) : null;
+    const asked: DeploymentAddress | null = deployment ?? (named?.outcome === 'resolved' ? named.deployment : null);
+    const askedAddress = asked?.baseAddress ?? null;
+
+    /** Whether the address was handed to this screen rather than typed into it, which is what decides it waits. */
+    const handed = deployment !== null;
+
     // What the deployment says it offers, asked as soon as there is a deployment to ask and carrying no credential.
     // Both documents are read together because a screen needs both before it draws a provider control at all — one
     // says which servers are offered and the other what a token has to be issued for — and a deployment answering
     // neither is an older one that still signs somebody in with a password.
     useEffect(() => {
-        if (deployment === null) {
+        if (askedAddress === null) {
             return;
         }
 
         const running = new AbortController();
-        const asking = send(running.signal);
 
-        void Promise.all([readSignInMethods(deployment, asking), readProtectedResource(deployment, asking)]).then(
-            ([methods, resource]) => {
-                if (running.signal.aborted) {
-                    return;
-                }
+        const ask = (): void => {
+            const at = { baseAddress: askedAddress };
+            const asking = send(running.signal);
 
-                setPublished({
-                    address: deployment.baseAddress,
-                    methods: methods.outcome === 'read' ? methods.value : null,
-                    resource: resource.outcome === 'read' ? resource.value : null,
-                });
-            },
-        );
+            void Promise.all([readSignInMethods(at, asking), readProtectedResource(at, asking)]).then(
+                ([methods, resource]) => {
+                    if (running.signal.aborted) {
+                        return;
+                    }
+
+                    setPublished({
+                        address: askedAddress,
+                        methods: methods.outcome === 'read' ? methods.value : null,
+                        resource: resource.outcome === 'read' ? resource.value : null,
+                    });
+                },
+            );
+        };
+
+        if (handed) {
+            ask();
+
+            return () => {
+                running.abort();
+            };
+        }
+
+        const settling = window.setTimeout(ask, typedAddressSettles);
 
         return () => {
+            window.clearTimeout(settling);
             running.abort();
         };
-    }, [deployment, send]);
+    }, [askedAddress, handed, send]);
 
     // What an OAuth sign-in ended as, in one place, because the two halves reach it from different runs of the client:
     // the shell head comes back out of the control that started it, and the web head out of a redirect that was
     // already waiting when this run began.
     const settleOAuth = useCallback(
-        (outcome: OAuthSignInOutcome, reached: DeploymentAddress): void => {
+        (outcome: OAuthSignInOutcome): void => {
             setHanding(null);
 
             if (outcome.outcome === 'refused') {
-                setRefusal(outcome.refusal);
-                telemetry.happened('sign_in_refused', { 'mailfathom.client.refusal': outcome.refusal });
+                // An authorization server that did not answer is said as that rather than as the deployment's silence,
+                // which is what every other `unavailable` on this screen reads as. A failure at the provider reported
+                // as a failure at MailFathom sends whoever reads it, and whoever they ask, to the wrong system.
+                const refused = outcome.refusal === 'unavailable' ? 'providerUnavailable' : outcome.refusal;
+
+                setRefusal(refused);
+                telemetry.happened('sign_in_refused', { 'mailfathom.client.refusal': refused });
 
                 return;
             }
@@ -332,7 +393,7 @@ export function SignIn({
                 'mailfathom.client.method': 'authorizationServer',
             });
 
-            onSignedInWithGrant(reached, outcome.grant);
+            onSignedInWithGrant(outcome.deployment, outcome.grant);
         },
         [onSignedInWithGrant, telemetry],
     );
@@ -341,22 +402,22 @@ export function SignIn({
     // down by the run that started the attempt and is taken as it is read, so a second pass over the same answer finds
     // nothing and is refused rather than redeeming a code twice.
     useEffect(() => {
-        if (deployment === null || redirectAnswer === null) {
+        if (redirectAnswer === null) {
             return;
         }
 
         const running = new AbortController();
 
-        void completeOAuthSignIn(redirectAnswer, deployment, send(running.signal)).then((outcome) => {
+        void completeOAuthSignIn(redirectAnswer, send(running.signal)).then((outcome) => {
             if (!running.signal.aborted) {
-                settleOAuth(outcome, deployment);
+                settleOAuth(outcome);
             }
         });
 
         return () => {
             running.abort();
         };
-    }, [deployment, redirectAnswer, send, settleOAuth]);
+    }, [redirectAnswer, send, settleOAuth]);
 
     const shown = refusal === null ? null : shownFor(refusal, deployment);
     // Whether the choice between the tab and the device is a choice at all, which is what decides both that the
@@ -366,14 +427,18 @@ export function SignIn({
     // What this deployment offers, read during render from what was published for the address on the screen. An answer
     // published for a different address is not read at all, and a deployment that published nothing is an older one —
     // which offers a password, because that is what every deployment before this route offered.
-    const offered = published !== null && published.address === deployment?.baseAddress ? published : null;
+    const offered = published !== null && published.address === askedAddress ? published : null;
     const acceptsPassword = offered?.methods?.acceptsPassword ?? true;
+
+    // What the deployment said it offers, which is read apart from what this head can actually draw a control for: the
+    // two answer different questions, and the sentences below say so separately.
+    const publishedServers = offered?.methods?.authorizationServers ?? [];
 
     // A server is offerable where three things hold at once: the deployment published it, the deployment said what a
     // token has to be issued for, and this head receives a redirect at all. The last is why the Android head draws no
     // provider control rather than one that goes nowhere.
     const servers: readonly SignInAuthorizationServer[] =
-        redirect.offered && offered?.resource != null ? (offered.methods?.authorizationServers ?? []) : [];
+        redirect.offered && offered?.resource != null ? publishedServers : [];
 
     // The deployment's own is drawn as the one primary control above everything else, and every other server in the
     // grid below it. That is the design's split between `showSso` and `showOauth`, and what decides it is the reserved
@@ -383,30 +448,74 @@ export function SignIn({
     const resource = offered?.resource ?? null;
 
     // Nothing is offered at all, which is a deployment somebody has to go and configure rather than a screen to keep
-    // trying on. It is read off what was published rather than off the absence of one, so a deployment that answered
-    // nothing still draws the password form.
-    const noMethods = offered?.methods != null && !acceptsPassword && servers.length === 0;
+    // trying on. It is read off what the deployment *published* rather than off what is drawable here, because the two
+    // things that empty `servers` — a head that receives no redirect, and a resource document that could not be read —
+    // say nothing whatever about what the deployment offers, and telling somebody to go and configure one that is
+    // already configured names a fix nobody can make.
+    const noMethods = offered?.methods != null && !acceptsPassword && publishedServers.length === 0;
+
+    // The other half of that: the deployment published servers and this screen is drawing none of them. Which of the
+    // two reasons it is decides the sentence, because one is permanent on this head and the other is worth retrying.
+    const withheldServers: MessageKey | null =
+        publishedServers.length === 0 || servers.length > 0
+            ? null
+            : redirect.offered
+              ? 'signIn.providersUnread'
+              : 'signIn.providersNotOnThisHead';
 
     /** Hands somebody to one authorization server, and settles whatever this head came back with. */
     async function handOver(server: SignInAuthorizationServer): Promise<void> {
-        if (deployment === null || resource === null) {
+        if (asked === null || resource === null) {
             return;
         }
+
+        const running = new AbortController();
+        attempt.current = running;
+
+        // What a hand-over that was called off has to undo, hung on the signal for the reason the password attempt's
+        // is: it holds however the attempt was abandoned, including a deployment changed underneath it while the
+        // person was away in their browser for minutes. The shell head is holding its redirect port for the whole of
+        // that wait, and the verifier written down for the attempt is a secret with the life of one sign-in.
+        running.signal.addEventListener(
+            'abort',
+            () => {
+                redirect.abandon();
+                discardWrittenAttempt();
+
+                if (attempt.current === running) {
+                    attempt.current = null;
+                    setHanding(null);
+                }
+            },
+            { once: true },
+        );
 
         setRefusal(null);
         setHanding({ stage: 'handingOff', provider: server.displayName });
 
-        settleOAuth(
-            await startOAuthSignIn({
-                deployment,
-                server,
-                resource,
-                redirect,
-                transport: send(new AbortController().signal),
-            }),
-            deployment,
-        );
+        const outcome = await startOAuthSignIn({
+            deployment: asked,
+            server,
+            resource,
+            redirect,
+            transport: send(running.signal),
+        });
+
+        // An abandoned hand-over has no answer, exactly as an abandoned password attempt has none: the screen is
+        // already back where the person left it, and signing them in to a deployment they pointed away from would
+        // write a grant into the store that was just asked to clear one.
+        if (running.signal.aborted) {
+            return;
+        }
+
+        attempt.current = null;
+        settleOAuth(outcome);
     }
+
+    // The password form stands down while a hand-over does. Somebody coming back from an authorization server meets
+    // this screen while the code is still being redeemed, and a complete form with an enabled control on it is a second
+    // sign-in they can start against the same deployment while the first one is in flight.
+    const passwordOffered = acceptsPassword && handing === null;
 
     // The two credential fields are described by where the sign-in is kept, and that sentence is the checkbox's
     // own hint where the choice is offered and the standing paragraph where it is not. Naming an element that is
@@ -606,6 +715,19 @@ export function SignIn({
 
             <CredentialNotices notices={notices} ref={notified} />
 
+            {/* The wait somebody coming back from an authorization server meets, in the place the answer will appear.
+                Nothing else on this screen is drawn for it: the two documents have not been read yet at that moment,
+                so there is no provider control standing to carry a spinner of its own. */}
+            {handing?.stage === 'returning' ? (
+                <p
+                    className="flex items-center gap-2.25 rounded-lg border border-line bg-panel px-3.25 py-2.75 text-sm text-text-soft"
+                    role="status"
+                >
+                    <Spinner />
+                    {translate('signIn.returning')}
+                </p>
+            ) : null}
+
             {/* Each of the three is drawn from what the deployment published and from nothing else, which is what lets
                 a deployment offering one of them draw one control rather than one control and two empty spaces. The
                 deployment's own provider stands above everything, as the design draws it, and every other server is a
@@ -637,8 +759,12 @@ export function SignIn({
                 </div>
             )}
 
-            {own === null || (providers.length === 0 && !acceptsPassword) ? null : (
-                <Divider label={translate('signIn.orAnotherMethod')} />
+            {/* What is under the divider decides what it says: the grid where there is one, and the password form
+                where the deployment's own server is the only one published. */}
+            {own === null || (providers.length === 0 && !passwordOffered) ? null : (
+                <Divider
+                    label={translate(providers.length === 0 ? 'signIn.orWithPassword' : 'signIn.orAnotherMethod')}
+                />
             )}
 
             {providers.length === 0 ? null : (
@@ -661,17 +787,13 @@ export function SignIn({
                 </div>
             )}
 
-            {providers.length === 0 || !acceptsPassword ? null : <Divider label={translate('signIn.orWithPassword')} />}
+            {providers.length === 0 || !passwordOffered ? null : <Divider label={translate('signIn.orWithPassword')} />}
 
-            {noMethods ? (
-                <p
-                    className="flex items-start gap-2.25 rounded-lg border border-warning bg-warning-soft px-3.25 py-2.75 text-xs leading-normal text-warning-text text-pretty"
-                    role="alert"
-                >
-                    <Icon name="report" className="mt-0.25 size-4 text-warning-text" />
-                    {translate('signIn.noMethods')}
-                </p>
-            ) : null}
+            {noMethods ? <StatedNotice message={translate('signIn.noMethods')} /> : null}
+
+            {/* What the deployment offers and this screen is not drawing, said as its own sentence: a person told that
+                a configured deployment offers nothing has been pointed at a fix nobody can make. */}
+            {withheldServers === null ? null : <StatedNotice message={translate(withheldServers)} />}
 
             <form
                 className="flex flex-col gap-4.5 workspace:gap-5"
@@ -730,7 +852,7 @@ export function SignIn({
                     `maxLength`, deliberately: it truncates a paste without saying so, and a password silently
                     shortened is refused by the deployment and read back as a wrong password.
                     `resolveCredentialEntry` refuses what is too long by name instead. */}
-                {acceptsPassword ? (
+                {passwordOffered ? (
                     <>
                         <div className="flex flex-col gap-1.5">
                             <label className={fieldLabel} htmlFor="sign-in-user-name">
@@ -850,7 +972,7 @@ export function SignIn({
                     </p>
                 )}
 
-                {acceptsPassword ? (
+                {passwordOffered ? (
                     <div className="flex items-center gap-3">
                         <button
                             className="flex min-h-13 flex-1 items-center justify-center gap-2.25 rounded-full bg-accent px-4.5 text-lg font-semibold text-on-accent transition hover:bg-accent-strong disabled:opacity-70 workspace:min-h-11.5 workspace:rounded-xl workspace:text-md"
@@ -912,6 +1034,24 @@ export function SignIn({
                 </p>
             ) : null}
         </section>
+    );
+}
+
+/**
+ * What this screen has to say about the deployment rather than about a field, in the one shape both such sentences take.
+ *
+ * Above the form rather than inside it, because neither is about something somebody typed: one says the deployment
+ * offers no way in at all, and the other that it offers one this screen is not drawing.
+ */
+function StatedNotice({ message }: { readonly message: string }) {
+    return (
+        <p
+            className="flex items-start gap-2.25 rounded-lg border border-warning bg-warning-soft px-3.25 py-2.75 text-xs leading-normal text-warning-text text-pretty"
+            role="alert"
+        >
+            <Icon name="report" className="mt-0.25 size-4 text-warning-text" />
+            {message}
+        </p>
     );
 }
 

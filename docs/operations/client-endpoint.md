@@ -3019,6 +3019,14 @@ published client identifier, the `resource` the protected-resource document name
 server is an OpenID provider. No client secret exists anywhere, which is why the identifier above is publishable: the
 verifier is what the redemption proves, and it is never stated in any address.
 
+**The protected-resource document is read against the deployment being signed in to.** A document naming a `resource`
+other than that deployment's own `/api/client` is refused and no provider control is drawn, which is RFC 9728 §3.3 — so
+the `Resource` an operator writes is the absolute address clients reach this endpoint at, exactly as the setting's own
+validation says. **And the flow needs TLS in front of the page**: a document served over plain HTTP is an insecure
+context, where the browser offers no digest to compute the PKCE challenge with, so a deployment somebody permitted
+clear text for offers the password form and reports the provider as unreachable rather than drawing a control that
+goes nowhere.
+
 **Register the redirect address before anybody signs in**, because each is compared exactly by the authorization
 server. The web head comes back to the address of the page itself — `https://mail.example.test/app/` where a
 deployment serves the bundle — and the desktop head comes back to `http://127.0.0.1:8766/`, a loopback address its own

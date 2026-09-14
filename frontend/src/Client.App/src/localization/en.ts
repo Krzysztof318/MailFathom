@@ -95,6 +95,11 @@ export const en = {
     'signIn.continueToProvider': 'Continue to {provider}',
     'signIn.noMethods':
         'This deployment offers no sign-in method. Check the address, or ask whoever runs it to configure one.',
+    'signIn.providersNotOnThisHead':
+        'This deployment offers a provider, which this version of the client cannot open. Sign in with a password here, or use the desktop client or a browser.',
+    'signIn.providersUnread':
+        'This deployment offers a provider, and what a token has to be issued for could not be read just now. Try again in a moment.',
+    'signIn.returning': 'Finishing the sign-in with your provider…',
     'signIn.notAuthorized': 'The provider did not finish the sign-in, so nothing was signed in. Start it again.',
     'signIn.unexpectedAnswer':
         'That answer belongs to no sign-in this client started. Start one from this screen rather than from a link.',
@@ -119,6 +124,7 @@ export const en = {
         'This deployment does not accept a login and a password. Whoever runs it has to enable that before you can sign in here.',
     'signIn.grantMissing': 'This deployment accepted the credential, but it is allowed to read no mail.',
     'signIn.deploymentSilent': 'The deployment did not answer. Try again in a moment.',
+    'signIn.providerSilent': 'The provider did not answer, so nothing was signed in. Try again in a moment.',
     'signIn.noLongerAccepted': 'This deployment has stopped accepting the sign-in that was kept. Sign in again.',
     'signIn.notRemoved':
         'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. MailFathom was asked to end the session, and it stops working on its own in any case. Remove the entry in the store itself if you would rather it were gone now.',

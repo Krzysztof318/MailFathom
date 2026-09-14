@@ -133,6 +133,37 @@ describe('readAuthorizationServer', () => {
         expect(answer.outcome === 'failed' && answer.failure.reason).toBe('unreadable');
     });
 
+    // RFC 6749 §3.1 permits an authorization endpoint to carry a query of its own, and the composition below is
+    // written for exactly that case — so a document publishing one has to be read rather than refused, or that
+    // provider's control can never be followed at all.
+    it('reads an endpoint that carries a query of its own, which the specification permits', async () => {
+        const answer = await readAuthorizationServer(
+            issuer,
+            discovering({
+                issuer,
+                authorization_endpoint: `${issuer}/authorize?realm=mail`,
+                token_endpoint: `${issuer}/token`,
+            }),
+        );
+
+        expect(answer.outcome === 'read' && answer.value.authorizationEndpoint).toBe(`${issuer}/authorize?realm=mail`);
+    });
+
+    // The query is permitted and the origin check is not relaxed by it: an address whose authority ends at a `?` is
+    // still read for the authority rather than for everything up to the first slash.
+    it('refuses an endpoint carrying a query whose own origin is somewhere else', async () => {
+        const answer = await readAuthorizationServer(
+            issuer,
+            discovering({
+                issuer,
+                authorization_endpoint: 'https://elsewhere.example.invalid?realm=mail',
+                token_endpoint: `${issuer}/token`,
+            }),
+        );
+
+        expect(answer.outcome).toBe('failed');
+    });
+
     it('refuses an endpoint that sits on another origin than the issuer', async () => {
         const answer = await readAuthorizationServer(
             issuer,
@@ -280,6 +311,37 @@ describe('redeemAuthorizationCode', () => {
             outcome: 'issued',
             token: { accessToken: 'a-token', expiresInSeconds: 3600, refreshToken: 'a-refresh-token' },
         });
+    });
+
+    // What the caller computes from this is an instant, and an instant past what a `Date` can hold throws where it is
+    // composed rather than being refused. A life no server would mean is read as a server having said nothing, which
+    // is the assumed hour.
+    it.each([
+        ['a life longer than a year', 60 * 60 * 24 * 400],
+        ['a life no arithmetic can hold', Number.MAX_SAFE_INTEGER],
+        ['something that is not a number at all', Number.NaN],
+    ])('reads %s as the server having stated no life', async (_, expiresIn) => {
+        const answer = await redeemAuthorizationCode(
+            redemption,
+            answering({
+                body: JSON.stringify({ access_token: 'a-token', token_type: 'Bearer', expires_in: expiresIn }),
+            }),
+        );
+
+        expect(answer.outcome === 'issued' && answer.token.expiresInSeconds).toBeNull();
+    });
+
+    // The bound is what the client can store a grant under and what a deployment would accept in a request header, so
+    // an answer past it is a token nothing downstream could present anyway.
+    it('refuses a token past what any authorization server issues', async () => {
+        const answer = await redeemAuthorizationCode(
+            redemption,
+            answering({
+                body: JSON.stringify({ access_token: 'a'.repeat(9000), token_type: 'Bearer' }),
+            }),
+        );
+
+        expect(answer).toEqual({ outcome: 'failed', failure: { reason: 'unreadable' } });
     });
 
     // RFC 6749 answers a refused grant with `400` and a client it could not authenticate with `401`. Both are the same

@@ -53,7 +53,21 @@ export type OAuthSignInRefusal =
 // start. So the handing-off a screen draws is a state it entered before it called rather than an outcome it was given.
 /** What came of an OAuth sign-in. */
 export type OAuthSignInOutcome =
-    | { readonly outcome: 'signedIn'; readonly grant: OAuthGrant }
+    | {
+          readonly outcome: 'signedIn';
+
+          /**
+           * The deployment the grant was issued for, which the run that started the attempt wrote down.
+           *
+           * It travels with the outcome rather than being what the caller already had, because on the web head the two
+           * halves are two runs of the client: the second one starts with nothing in memory, and the address it would
+           * otherwise resolve for itself is whatever `adoptedDeployment.ts` answers now — the origin that served the
+           * page, where somebody had pointed the client somewhere else before they were handed over.
+           */
+          readonly deployment: DeploymentAddress;
+
+          readonly grant: OAuthGrant;
+      }
     | { readonly outcome: 'refused'; readonly refusal: OAuthSignInRefusal };
 
 /** Where one attempt in flight is written down, which is one entry because one tab has one sign-in in flight. */
@@ -66,6 +80,10 @@ const longestAttempt = 4096;
 interface WrittenAttempt {
     readonly state: string;
     readonly codeVerifier: string;
+
+    /** The deployment the token is being obtained for, which is who is asked whose it is once one exists. */
+    readonly baseAddress: string;
+
     readonly issuer: string;
     readonly clientId: string;
     readonly resource: string;
@@ -101,9 +119,17 @@ export async function startOAuthSignIn(start: OAuthSignInStart): Promise<OAuthSi
 
     const attempt = await beginAuthorizationAttempt();
 
+    if (attempt === null) {
+        // A head with no digest cannot compute the PKCE challenge, so there is no request to make. It is the same
+        // outcome as a server that could not be read: the sign-in could not be started, and the screen says so rather
+        // than standing behind a spinner nothing will settle.
+        return { outcome: 'refused', refusal: 'unavailable' };
+    }
+
     const written: WrittenAttempt = {
         state: attempt.state,
         codeVerifier: attempt.codeVerifier,
+        baseAddress: start.deployment.baseAddress,
         issuer: start.server.issuer,
         clientId: start.server.clientId,
         resource: start.resource.resource,
@@ -138,7 +164,7 @@ export async function startOAuthSignIn(start: OAuthSignInStart): Promise<OAuthSi
     // stops waiting.
     return answer === null
         ? { outcome: 'refused', refusal: 'unavailable' }
-        : completeOAuthSignIn(answer, start.deployment, start.transport);
+        : completeOAuthSignIn(answer, start.transport);
 }
 
 /**
@@ -148,13 +174,11 @@ export async function startOAuthSignIn(start: OAuthSignInStart): Promise<OAuthSi
  * secret outliving the one code it was for, and an answer that arrives twice must redeem nothing the second time.
  *
  * @param answer What the redirect carried back.
- * @param deployment The deployment being signed in to, which is who is asked whose token this is.
  * @param transport How the requests go out.
- * @returns The grant, or why there is none.
+ * @returns The grant and the deployment it was obtained for, or why there is none.
  */
 export async function completeOAuthSignIn(
     answer: SignInRedirectAnswer,
-    deployment: DeploymentAddress,
     transport: MailFathomTransport,
 ): Promise<OAuthSignInOutcome> {
     const attempt = takeWrittenAttempt();
@@ -203,7 +227,7 @@ export async function completeOAuthSignIn(
         person: attempt.displayName,
     });
 
-    return whoTheDeploymentSaysThisIs(grant, deployment, transport);
+    return whoTheDeploymentSaysThisIs(grant, { baseAddress: attempt.baseAddress }, transport);
 }
 
 /**
@@ -229,12 +253,26 @@ async function whoTheDeploymentSaysThisIs(
     );
 
     if (known.outcome === 'read') {
-        return { outcome: 'signedIn', grant: { ...grant, person: known.value.displayName } };
+        return { outcome: 'signedIn', deployment, grant: { ...grant, person: known.value.displayName } };
     }
 
     return known.failure.reason === 'unauthenticated'
         ? { outcome: 'refused', refusal: 'notAUser' }
-        : { outcome: 'signedIn', grant };
+        : { outcome: 'signedIn', deployment, grant };
+}
+
+/**
+ * Discards the attempt written down for a hand-over nobody is waiting for any more.
+ *
+ * The verifier is what redeems the code, and a sign-in abandoned halfway leaves one behind that nothing will ever use:
+ * the module's own rule is that it is a secret with the life of one sign-in, so giving up on the sign-in ends it too.
+ */
+export function discardWrittenAttempt(): void {
+    try {
+        window.sessionStorage.removeItem(attemptEntry);
+    } catch {
+        // A store that will not answer is a store holding nothing, which is the outcome this was asking for.
+    }
 }
 
 /** Whether the attempt is written down, which storage a browser refuses answers `false` rather than throwing on. */
@@ -276,7 +314,16 @@ function takeWrittenAttempt(): WrittenAttempt | null {
     }
 
     const written = parsed as Record<string, unknown>;
-    const fields = ['state', 'codeVerifier', 'issuer', 'clientId', 'resource', 'redirectUri', 'displayName'] as const;
+    const fields = [
+        'state',
+        'codeVerifier',
+        'baseAddress',
+        'issuer',
+        'clientId',
+        'resource',
+        'redirectUri',
+        'displayName',
+    ] as const;
 
     for (const field of fields) {
         const value = written[field];

@@ -27,6 +27,7 @@ import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import type { CredentialStore, KeptBeyondTheTab } from './signIn/credentialStore';
 import type { KeptSession } from './signIn/keptSession';
+import type { OAuthGrant } from './signIn/oauthGrant';
 import { noTelemetry, TelemetryContext, type ClientEvent, type ClientTelemetry } from './telemetry/clientTelemetry';
 import { ThemeProvider } from './theme/Theme';
 import { ToastsProvider } from './toasts/Toasts';
@@ -638,6 +639,7 @@ export function renderApp(
     send: DeploymentTransport = deploymentAnswering(),
     credentials: CredentialStore = storeKeeping(),
     telemetry: ClientTelemetry = noTelemetry,
+    signedInWithGrant: OAuthGrant | null = null,
 ): void {
     render(
         <StrictMode>
@@ -661,7 +663,7 @@ export function renderApp(
                                                         send={send}
                                                         signalSchedule={neverReopens}
                                                         signedInWith={signedInWith}
-                                                        signedInWithGrant={null}
+                                                        signedInWithGrant={signedInWithGrant}
                                                     />
                                                 </Containment>
                                             </TelemetryContext>

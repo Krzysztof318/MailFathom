@@ -97,6 +97,22 @@ export function isPresentableSessionCredential(authorization: string): boolean {
     return authorization.length <= longestPresentedCredential && presentableSession.test(authorization);
 }
 
+/**
+ * Whether a value read back out of a store is a bearer credential carrying a token an authorization server issued.
+ *
+ * The same shape {@link isPresentableSessionCredential} checks against a bound its caller states, and the bound is the
+ * whole difference: a session this deployment minted is eighty characters, and an access token a real authorization
+ * server issues is a signed document routinely past a thousand. Reading a grant against a session's bound is a sign-in
+ * that works for the run it was made in and is silently gone at the next start, with the refresh token beside it.
+ *
+ * @param authorization What the store answered with.
+ * @param longestToken The most the token behind the scheme may be, which is the bound whoever stored it wrote it under.
+ * @returns Whether it is a bearer credential this client will present.
+ */
+export function isPresentableIssuedCredential(authorization: string, longestToken: number): boolean {
+    return authorization.length <= 'Bearer '.length + longestToken && presentableSession.test(authorization);
+}
+
 /** What `btoa` needs: one octet of the UTF-8 encoding per character, rather than the string's own code points. */
 function base64(text: string): string {
     const encoded = new TextEncoder().encode(text);
