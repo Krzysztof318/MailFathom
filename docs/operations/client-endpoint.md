@@ -1870,6 +1870,28 @@ configuration file's is, so an alias that is not a valid one, a remote path that
 writer moved on in the meantime are each refused with the sentence saying what to correct — as is a replacement or a
 removal naming an alias the account does not declare.
 
+**Part of a folder declaration is the service's rather than the person's, and stating it otherwise is refused rather
+than quietly overwritten.** A folder declared on this surface is always synchronized, so `Synchronize` is written as
+`true` whatever the request left out, and a request stating it as anything else is refused naming the switch. A folder
+naming a `RemotePath` also carries `CreateIfMissing` as `true`, so a folder a dialog declares is created where the
+server advertises none at that path; a folder found instead by the role it plays carries no such switch, because a
+folder that does not exist advertises no role, and a request stating one on such a folder is refused naming
+`RemotePath`. `GenerateEmbeddings`, `VisibleToTools`, and `RemotePath` stay the person's on every folder, special ones
+included — which is what lets a folder declared against the wrong place on the server be corrected rather than started
+over. A declared mailbox carries its folders, so the same rules hold over the folders in a request to
+`POST /api/client/record/mail-accounts`; the record route carries no mailbox at all and is therefore no way around
+them.
+
+**A folder's role is stated when the folder is declared and never afterwards, and the folder playing one stays.** The
+folder carrying a `SpecialUse` is named after the role it plays — `Inbox`, `Drafts`, `Sent`, `Junk`, `Trash`, and the
+rest of the roles [a folder may be given](configuration-mail.md) — so a declaration naming a role under any other alias
+is refused. Through the folder routes a replacement may not withdraw a role, swap one for another, or give one to a
+folder declared without it, and a removal may not withdraw the folder playing a role at all: filing needs its drafts
+and sent folders, and a mailbox with two inboxes has no inbox. An account holds at most one folder per role either way,
+which is the rule a configuration file is bound by as well. Whoever administers the deployment states a whole account
+rather than an act against one, so none of this binds
+[the administrative surface](admin-endpoint.md#users-and-their-records) or an operator's own configuration.
+
 **No route here names a user, and that is the whole of the isolation.** The record acted on is the one belonging to
 the credential that authenticated, resolved from the request rather than read out of the body or the path, so there is
 no identifier a client could put in a request to reach somebody else's record. It follows that a request naming another

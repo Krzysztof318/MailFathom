@@ -393,6 +393,182 @@ public sealed class MailAccountAdministrationTests
         Assert.DoesNotContain("INBOX/OLD", Assert.Single(deployment.MailAccountRecords.Accounts).Document, StringComparison.Ordinal);
     }
 
+    /// <summary>Both switches are the service's rather than the person's, so a folder declared through this route arrives carrying them.</summary>
+    [Fact]
+    public async Task AddOwnFolderAsync_AFolderNamingARemotePath_SavesItSynchronizedAndCreatedIfMissing()
+    {
+        // Arrange
+        var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"));
+        var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+
+        // Act
+        var outcome = await deployment.MailAccounts.AddOwnFolderAsync(
+            work.Id.ToString("D"),
+            """{"Alias":"INBOX/PROJECTS","RemotePath":"INBOX/Projects"}""",
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+
+        var saved = Assert.Single(deployment.MailAccountRecords.Accounts).Document;
+
+        Assert.Contains("\"Synchronize\":true", saved, StringComparison.Ordinal);
+        Assert.Contains("\"CreateIfMissing\":true", saved, StringComparison.Ordinal);
+    }
+
+    /// <summary>A switch this surface sets is refused rather than silently overwritten, so the client can say what was not taken.</summary>
+    [Fact]
+    public async Task AddOwnFolderAsync_AFolderAskingNotToBeSynchronized_IsRefusedWithoutSavingIt()
+    {
+        // Arrange
+        var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"));
+        var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+
+        // Act
+        var outcome = await deployment.MailAccounts.AddOwnFolderAsync(
+            work.Id.ToString("D"),
+            """{"Alias":"INBOX/PROJECTS","RemotePath":"INBOX/Projects","Synchronize":false}""",
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains("Synchronize", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        Assert.Equal(work, Assert.Single(deployment.MailAccountRecords.Accounts));
+    }
+
+    /// <summary>A mailbox with two inboxes has no inbox, so the second folder claiming a role the account already has is refused where it is written.</summary>
+    [Fact]
+    public async Task AddOwnFolderAsync_ASecondFolderClaimingARoleTheAccountAlreadyHas_IsRefusedWithoutSavingIt()
+    {
+        // Arrange
+        var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"), folderAlias: "JUNK", folderRole: "Junk");
+        var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+
+        // Act
+        var outcome = await deployment.MailAccounts.AddOwnFolderAsync(
+            work.Id.ToString("D"),
+            """{"Alias":"JUNK","SpecialUse":"Junk","RemotePath":"Spam"}""",
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains(outcome.Messages, message => message.Contains("at most one folder per role", StringComparison.Ordinal));
+        Assert.Equal(work, Assert.Single(deployment.MailAccountRecords.Accounts));
+    }
+
+    /// <summary>Correcting a folder declared against the wrong place on the server is what this route is for, special folders included.</summary>
+    [Fact]
+    public async Task ReplaceOwnFolderAsync_ASpecialFoldersRemotePath_SavesIt()
+    {
+        // Arrange
+        var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"), folderAlias: "JUNK", folderRole: "Junk");
+        var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+
+        // Act
+        var outcome = await deployment.MailAccounts.ReplaceOwnFolderAsync(
+            work.Id.ToString("D"),
+            "JUNK",
+            """{"Alias":"JUNK","SpecialUse":"Junk","RemotePath":"[Gmail]/Spam"}""",
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+        Assert.Contains("[Gmail]/Spam", Assert.Single(deployment.MailAccountRecords.Accounts).Document, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReplaceOwnFolderAsync_TheRoleWithdrawnFromASpecialFolder_IsRefusedWithoutSavingIt()
+    {
+        // Arrange
+        var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"), folderAlias: "JUNK", folderRole: "Junk");
+        var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+
+        // Act
+        var outcome = await deployment.MailAccounts.ReplaceOwnFolderAsync(
+            work.Id.ToString("D"),
+            "JUNK",
+            """{"Alias":"JUNK","RemotePath":"Spam"}""",
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains("Junk", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        Assert.Equal(work, Assert.Single(deployment.MailAccountRecords.Accounts));
+    }
+
+    /// <summary>Filing needs its drafts and sent folders, so a dialog cannot leave an account without the folder playing a role.</summary>
+    [Fact]
+    public async Task RemoveOwnFolderAsync_AFolderPlayingARole_IsRefusedWithoutWithdrawingIt()
+    {
+        // Arrange
+        var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"), folderAlias: "DRAFTS", folderRole: "Drafts");
+        var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+
+        // Act
+        var outcome = await deployment.MailAccounts.RemoveOwnFolderAsync(
+            work.Id.ToString("D"),
+            "DRAFTS",
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains("Drafts", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        Assert.Equal(work, Assert.Single(deployment.MailAccountRecords.Accounts));
+    }
+
+    /// <summary>A declared account carries its folders, so it is a folder route by another name rather than the way around the three.</summary>
+    [Fact]
+    public async Task AddOwnAsync_ADeclarationWhoseFolderAsksNotToBeSynchronized_IsRefusedAndCreatesNothing()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 1);
+
+        // Act
+        var outcome = await deployment.MailAccounts.AddOwnAsync(
+            DeclarationWithFolder("""{"Alias":"INBOX","RemotePath":"INBOX","Synchronize":false}"""),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains("Synchronize", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        Assert.Empty(deployment.MailAccountRecords.Accounts);
+    }
+
+    /// <summary>The rules bind the client surface alone: an administrator states a whole account rather than an act against one.</summary>
+    [Fact]
+    public async Task SaveAsync_AnAdministratorWithdrawingASpecialFolder_Commits()
+    {
+        // Arrange
+        var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"), folderAlias: "DRAFTS", folderRole: "Drafts");
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite], Alex);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+
+        // Act
+        var outcome = await deployment.MailAccounts.SaveAsync(
+            work.Id,
+            Declaration("work@example.test", "work", ProvisionedFor(Alex, "work")),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+        Assert.DoesNotContain("DRAFTS", Assert.Single(deployment.MailAccountRecords.Accounts).Document, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// A committed account is served on this replica before it is announced, so a replica that hears the announcement
     /// finds this one's roster free rather than still being written, and this replica serves the account at once.
@@ -763,19 +939,32 @@ public sealed class MailAccountAdministrationTests
                  """;
     }
 
+    /// <summary>A declaration carrying one folder, which is the shape that makes an account route a folder route as well.</summary>
+    private static string DeclarationWithFolder(string folderJson) =>
+        $$"""
+          {
+            "EmailAddress": "new@example.test",
+            "DisplayName": "new",
+            {{Settings("new", "new@example.test", ProvisionedFor(Alex, "new"))}},
+            "Folders": [ {{folderJson}} ]
+          }
+          """;
+
     /// <summary>A mailbox already held, as its own record holds it.</summary>
     private static MailAccountRecord Mailbox(
         string emailAddress,
         string displayName,
         string? secretReference = null,
-        string? folderAlias = null)
+        string? folderAlias = null,
+        string? folderRole = null)
     {
         var secretName = emailAddress.Split('@')[0];
+        var role = folderRole is null ? string.Empty : $$""", "SpecialUse": "{{folderRole}}" """;
         var folders = folderAlias is null
             ? string.Empty
             : $$"""
                 ,
-                "Folders": [ { "Alias": "{{folderAlias}}", "RemotePath": "{{folderAlias}}" } ]
+                "Folders": [ { "Alias": "{{folderAlias}}", "RemotePath": "{{folderAlias}}"{{role}} } ]
                 """;
 
         return new MailAccountRecord(

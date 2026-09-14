@@ -105,6 +105,49 @@ public sealed class UserRecordAdministrationTests
     }
 
     /// <summary>
+    /// The record a person saves carries no mail account, so it is no way around the rules the folder routes hold a
+    /// declaration to: what it names instead is the route that does change one.
+    /// </summary>
+    [Fact]
+    public async Task ApplyOwnRecordAsync_ASavedRecordNamingMailAccounts_IsRefusedWithoutCommitting()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 1);
+
+        // Act
+        var outcome = await harness.Records.ApplyOwnRecordAsync(
+            """{"Language":"English","MailAccounts":{"0":{"DisplayName":"primary","Folders":[{"Alias":"INBOX","Synchronize":false}]}}}""",
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains("record of its own", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>The record a person reads back is the one they may save back, so saving it unchanged is settled rather than refused.</summary>
+    [Fact]
+    public async Task ApplyOwnRecordAsync_TheRecordSavedBackUnchanged_IsSettledWithoutCommitting()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
+        harness.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 1);
+
+        // Act
+        var outcome = await harness.Records.ApplyOwnRecordAsync(
+            LanguageOnlyRecord,
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsSettled);
+        Assert.Equal(1, outcome.Version);
+    }
+
+    /// <summary>
     /// A committed record is announced so a replica that did not commit it reads it at once, and only once the roster is
     /// released, so a backplane slow to answer holds no other roster write behind it.
     /// </summary>
