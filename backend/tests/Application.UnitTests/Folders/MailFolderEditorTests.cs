@@ -120,6 +120,47 @@ public sealed class MailFolderEditorTests
         Assert.Equal(MailFolderActRefusal.RoleAlreadyPlayed, outcome.Refusal);
     }
 
+    /// <summary>
+    /// Absence of a parent is what names the top of the hierarchy, so text that names no folder must not be read as it:
+    /// the folder would be created somewhere the request never asked for.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_AHeldAccountAndAParentThisDeploymentNeverIssued_IsRefusedAsAMissingParent()
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
+
+        // Act
+        var outcome = await deployment.Editor.CreateAsync(
+            Account.Id,
+            "not-an-identifier",
+            "Projects",
+            role: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFolderActRefusal.ParentMissing, outcome.Refusal);
+        Assert.DoesNotContain("Projects", deployment.Store.Folders.Select(folder => folder.Name.Value));
+    }
+
+    [Fact]
+    public async Task MoveAsync_AHeldAccountAndAParentThisDeploymentNeverIssued_IsRefusedAsAMissingParent()
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
+        var created = await deployment.Editor.CreateAsync(Account.Id, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken);
+
+        // Act
+        var outcome = await deployment.Editor.MoveAsync(
+            Account.Id,
+            created.Folder!.Id,
+            "not-an-identifier",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFolderActRefusal.ParentMissing, outcome.Refusal);
+    }
+
     [Fact]
     public async Task CreateAsync_AMirroredAccount_CreatesTheFolderOnItsMailServer()
     {

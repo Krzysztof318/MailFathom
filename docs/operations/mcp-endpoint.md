@@ -848,9 +848,9 @@ Seven of the eleven publish a tool here. `mailfathom.mail.accounts.write`, `mail
 `mailfathom.mail.delete`, and `mailfathom.mail.folders.write` publish none: the first reaches [the client endpoint's
 record routes](client-endpoint.md#the-record-routes), which is where a person maintains which mailboxes this deployment
 reads for them, the next two reach [its mutation routes](client-endpoint.md#the-mutation-routes), which is where they
-file mail into another folder and where they delete a message off the server outright, and the last reaches [its local
-folder routes](client-endpoint.md#the-folder-management-routes), which is where they arrange the folders of a mailbox
-MailFathom holds. Any of them is written on an
+file mail into another folder and where they delete a message off the server outright, and the last reaches [its
+folder-management routes](client-endpoint.md#the-folder-management-routes), which is where they arrange the folders of
+any mailbox they hold an account for — on their own server where it is mirrored from one. Any of them is written on an
 entry of this surface only because the two endpoints draw grants from one vocabulary; a caller granted one here is
 offered nothing it did not already have, and an entry that means to reach those routes is one on `ClientEndpoint`.
 

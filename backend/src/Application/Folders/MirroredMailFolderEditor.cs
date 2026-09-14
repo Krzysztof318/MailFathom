@@ -250,7 +250,11 @@ public sealed class MirroredMailFolderEditor
         }
 
         var parentPath = parentAlias is { } parent ? PathOf(acting.Folders, parent) : null;
-        var folderName = LocalMailFolderName.Create(acting.Path.ToHierarchyLevels()[^1]);
+
+        if (!LocalMailFolderName.TryCreate(acting.Path.ToHierarchyLevels()[^1], out var folderName))
+        {
+            return MailFolderActOutcome.Refused(MailFolderActRefusal.NameInvalid);
+        }
 
         if (parentPath is { } destination && IsWithin(destination, acting.Path))
         {

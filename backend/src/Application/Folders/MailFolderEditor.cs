@@ -128,7 +128,9 @@ public sealed class MailFolderEditor
         this.ActOnFolderAsync(
             account,
             folderId,
-            folder => this.local.MoveAsync(account, folder, LocalFolderOf(parentId), cancellationToken),
+            folder => TryReadParent(parentId, out var parent)
+                ? this.local.MoveAsync(account, folder, parent, cancellationToken)
+                : Task.FromResult(LocalMailFolderEditOutcome.Refused(MailFolderActRefusal.ParentMissing)),
             (identity, alias) => this.mirrored.MoveAsync(identity, alias, AliasOf(parentId), cancellationToken),
             cancellationToken);
 
@@ -204,7 +206,12 @@ public sealed class MailFolderEditor
             return MailFolderActOutcome.Refused(MailFolderActRefusal.RoleAlreadyPlayed);
         }
 
-        return Describe(await this.local.CreateAsync(account, LocalFolderOf(parentId), name, cancellationToken), holding);
+        if (!TryReadParent(parentId, out var parent))
+        {
+            return MailFolderActOutcome.Refused(MailFolderActRefusal.ParentMissing);
+        }
+
+        return Describe(await this.local.CreateAsync(account, parent, name, cancellationToken), holding);
     }
 
     private MailAccountIdentity Identify(MailAccountId account) =>
@@ -242,6 +249,16 @@ public sealed class MailFolderEditor
             ? new MailFolderActOutcome(Describe(folder, holding.Phase), kind, Refusal: null, outcome.MailErasureDeferred)
             : MailFolderActOutcome.Refused(
                 outcome.Refusal ?? throw new InvalidOperationException("An edit outcome carried neither a folder nor a refusal."));
+
+    // A held account names a parent by identifier, so text that is not one names no folder at all. Reading it as the top
+    // of the hierarchy, which is what the absence of a parent means, would move or create the folder somewhere the
+    // request never asked for.
+    private static bool TryReadParent(string? parentId, out LocalMailFolderId? parent)
+    {
+        parent = LocalFolderOf(parentId);
+
+        return parent is not null || string.IsNullOrWhiteSpace(parentId);
+    }
 
     private static LocalMailFolderId? LocalFolderOf(string? folderId) =>
         Guid.TryParse(folderId, out var parsed) && parsed != Guid.Empty ? LocalMailFolderId.Create(parsed) : null;

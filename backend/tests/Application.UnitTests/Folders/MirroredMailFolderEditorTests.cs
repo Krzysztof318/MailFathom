@@ -190,6 +190,28 @@ public sealed class MirroredMailFolderEditorTests
         Assert.Empty(deployment.Log);
     }
 
+    /// <summary>
+    /// A server delimited by something other than a slash may advertise a folder whose own name carries one, and a move
+    /// keeps that name. It is refused as the invalid name it is rather than thrown out of the act.
+    /// </summary>
+    [Fact]
+    public async Task MoveAsync_AFolderTheServerNamesWithAHierarchyDelimiter_IsRefusedAndReachesNoServer()
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment();
+        deployment.Declares(
+            MailFolderMapping.ToRemotePath(Projects, RemoteFolderPath.Create("Team/Notes", '.')),
+            MailFolderMapping.ToRemotePath(Archive, RemoteFolderPath.Create("Archive", '.')));
+        deployment.Declarations.Declared.Add(Projects);
+
+        // Act
+        var outcome = await deployment.Editor.MoveAsync(Account, Projects, Archive, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFolderActRefusal.NameInvalid, outcome.Refusal);
+        Assert.Empty(deployment.Log);
+    }
+
     /// <summary>Deleting on the server takes the folder away on both sides, and the mail stored from it goes with it.</summary>
     [Fact]
     public async Task DeleteAsync_TheAccountDeletesOnTheServer_DeletesItThereWithdrawsItAndQueuesItsMail()
