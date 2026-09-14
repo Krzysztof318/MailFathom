@@ -1219,7 +1219,11 @@ belongs between an agent and a recipient.
 than as an agent**, under the same two grants and with the same meaning: composing, listing, opening, revising, giving
 up, and attaching are `mailfathom.mail.drafts.write`, and promoting one is `mailfathom.mail.send`. Every route there is
 scoped to the caller's own user, as every draft tool on the MCP surface is, so a draft another user holds answers
-exactly as one nobody holds — and because a
+exactly as one nobody holds. **That bounds the draft and the acts on it rather than the copy in the mailbox.** The
+drafts folder belongs to the account, so on a mailbox assigned to more than one person the others meet the unsent
+revision there through ordinary folder and message reads exactly as they meet every other message the mailbox holds,
+while the draft itself stays unreachable to them by identifier. Withholding the copy would take the draft out of the
+mail client the person writes in, which is the whole reason it is filed. And because a
 draft is a row, a stored message, and a copy in the user's folder rather than anything a client keeps, the one
 somebody started in the browser is the one the desktop shell opens and the one their phone's mail client shows.
 [The outbox routes](../operations/client-endpoint.md#the-outbox-routes) beside them are where that client watches what

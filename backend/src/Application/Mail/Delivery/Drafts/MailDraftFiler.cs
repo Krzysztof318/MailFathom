@@ -45,6 +45,12 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// never answered — the copy is left exactly where it is and the divergence is written onto the draft.
 /// </para>
 /// <para>
+/// <b>The copy is the mailbox's mail, whoever wrote the draft.</b> The drafts folder belongs to the account, so a
+/// revision filed into it is read by every user the account is assigned to, while the draft record behind it stays its
+/// author's alone. That is the limit of what the author term buys, and it is stated here because this is what writes
+/// the copy; <see cref="MailDraftBook" /> carries the reasoning.
+/// </para>
+/// <para>
 /// Nothing here raises for a copy that could not be settled. The draft itself is unharmed by any of it, and a failure
 /// that ended the pass would leave the drafts beside this one unsettled over something that says nothing about them.
 /// </para>

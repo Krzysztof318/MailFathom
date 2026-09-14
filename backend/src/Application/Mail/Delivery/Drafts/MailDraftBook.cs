@@ -25,8 +25,8 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// crash between them leaves neither rather than half of a draft.
 /// </para>
 /// <para>
-/// Being the one way in is also what makes it the place the grant is asked for. A draft is written into the user's own
-/// mailbox and reaches nobody else, so it is admitted under the grant that says exactly that: a caller holding
+/// Being the one way in is also what makes it the place the grant is asked for. A draft is what one person is writing
+/// and has not sent, so it is admitted under the grant that says exactly that: a caller holding
 /// <see cref="MailFathomPermission.MailDraftsWrite" /> for a command, and MailFathom's own identity for a rule. That is
 /// asked with no transport in the picture, so a second entrypoint added later meets it whatever it did first. What it
 /// deliberately is not is <see cref="MailFathomPermission.MailSend" />: a caller that may draft and may not send is the
@@ -37,6 +37,17 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// The mailbox is brought into step once the write has committed, and never before it. A crash in between leaves a
 /// draft the pass will settle; a crash the other way round would leave a message in somebody's drafts folder that
 /// nothing here can name.
+/// </para>
+/// <para>
+/// <b>The author term bounds the draft record and the three acts on it, not the message the mailbox holds.</b>
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+/// keeps the author beside the account so a draft is read, revised, discarded, and promoted by its author alone among
+/// the account's assigned users, and that is what is enforced here. What the filer then puts into the account's drafts
+/// folder is the mailbox's own mail: a folder read and a message read narrow by assigned accounts and carry no author
+/// term, so on a mailbox assigned to more than one user the others meet the unsent revision there exactly as they meet
+/// every other message the mailbox holds. Withholding the copy instead would take the draft out of the mail client the
+/// person is writing in, which is the whole reason it is filed, and would buy a confidentiality a shared mailbox
+/// offers nowhere else.
 /// </para>
 /// </remarks>
 public sealed class MailDraftBook

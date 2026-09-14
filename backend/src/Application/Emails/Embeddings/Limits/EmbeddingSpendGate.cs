@@ -4,7 +4,6 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Emails.Embeddings.Limits;
@@ -21,16 +20,16 @@ namespace MailFathom.Application.Emails.Embeddings.Limits;
 /// wrong exactly when it matters — after a restart, or while a second worker is spending against the same period.
 /// </para>
 /// <para>
-/// Two readings exist because two callers ask different questions. Work embedding somebody's mail asks where that
-/// user stands against both ceilings; an administrative surface acts for nobody's mail and asks where the deployment
-/// stands, which is the only question a caller with no user can be answered.
+/// Two readings exist because two callers ask different questions, and the mailbox's is the one background work
+/// asks. Mail belongs to the account, so a pass holds an account and never a person, while the per-user ceiling
+/// still has to mean something: ADR 0014 settles it by counting a shared mailbox in full against every user assigned
+/// to it, so work proceeds only while every one of them is under their ceiling, and one call's characters are
+/// charged to each. That fan-out lives here rather than in each pass, so the reading and the charge cannot come to
+/// disagree about who a mailbox is for.
 /// </para>
 /// <para>
-/// A mailbox is the third question, and it is the one background work actually asks. Mail belongs to the account, so
-/// a pass holds an account and never a person, while the per-user ceiling still has to mean something: ADR 0014
-/// settles it by counting a shared mailbox in full against every user assigned to it, so work proceeds only while
-/// every one of them is under their ceiling, and one call's characters are charged to each. That fan-out lives here
-/// rather than in each pass, so the reading and the charge cannot come to disagree about who a mailbox is for.
+/// The deployment's is the other, and it is what an administrative surface asks: it acts for nobody's mail, so where
+/// the deployment stands is the only question it can be answered.
 /// </para>
 /// <para>
 /// The deployment's figure is not the sum of those per-user charges and is never derived from them. Counting a shared
@@ -142,6 +141,11 @@ public sealed class EmbeddingSpendGate
     /// spend is a record of an event rather than a running apportionment. The deployment's own figure is charged once
     /// by the same write, so a mailbox assigned to nobody still moves it and a mailbox three people share moves it by
     /// what was sent rather than by three times it.
+    /// <para>
+    /// A deployment with no ceiling is charged exactly as one with a ceiling is. The count is what an operator watches
+    /// to decide whether to declare a ceiling at all, so leaving it unwritten would make the figure appear only once it
+    /// was already too late to be useful.
+    /// </para>
     /// </remarks>
     public Task RecordAccountSpendAsync(
         IPersistenceSession session,
@@ -160,29 +164,6 @@ public sealed class EmbeddingSpendGate
             cancellationToken);
     }
 
-    /// <summary>Reads where one user stands in the current period, which is what work consults before it spends.</summary>
-    /// <param name="user">The user whose mail is about to be embedded.</param>
-    /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The period, what the user and the deployment have consumed, and what each still admits.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
-    public async Task<EmbeddingSpendAdmission> ReadCurrentPeriodForAsync(
-        MailUserId user,
-        CancellationToken cancellationToken)
-    {
-        if (!user.IsSpecified)
-        {
-            throw new ArgumentException("Embedding spend is charged to a named user.", nameof(user));
-        }
-
-        var periodStart = this.CurrentPeriodStart();
-        var consumed = await this.ledger.ReadConsumedInputCharactersAsync(periodStart, user, cancellationToken);
-
-        return new EmbeddingSpendAdmission(
-            this.PeriodOf(periodStart, consumed.UserConsumedInputCharacterCount, this.budget.MaxInputCharactersPerPeriodPerUser),
-            this.PeriodOf(periodStart, consumed.DeploymentConsumedInputCharacterCount, this.budget.MaxInputCharactersPerPeriod));
-    }
-
     /// <summary>Reads where the deployment stands in the current period, whatever any one user has spent of it.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The period, its consumption across every user, and what it still admits.</returns>
@@ -197,39 +178,6 @@ public sealed class EmbeddingSpendGate
         var consumed = await this.ledger.ReadDeploymentConsumedInputCharactersAsync(periodStart, cancellationToken);
 
         return this.PeriodOf(periodStart, consumed, this.budget.MaxInputCharactersPerPeriod);
-    }
-
-    /// <summary>Charges one provider call to the period it happened in and the user it was made for.</summary>
-    /// <param name="session">The session committing the vectors that call produced.</param>
-    /// <param name="user">The user whose mail the call was embedding.</param>
-    /// <param name="inputCharacterCount">The characters the call sent.</param>
-    /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>A task that completes when the charge has been issued inside the caller's transaction.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when the count is negative.</exception>
-    /// <remarks>
-    /// A deployment with no ceiling is charged exactly as one with a ceiling is. The count is what an operator watches
-    /// to decide whether to declare a ceiling at all, so leaving it unwritten would make the figure appear only once it
-    /// was already too late to be useful.
-    /// </remarks>
-    public Task RecordSpendAsync(
-        IPersistenceSession session,
-        MailUserId user,
-        long inputCharacterCount,
-        CancellationToken cancellationToken)
-    {
-        if (!user.IsSpecified)
-        {
-            throw new ArgumentException("Embedding spend is charged to a named user.", nameof(user));
-        }
-
-        return this.ledger.RecordSpendAsync(
-            session,
-            this.CurrentPeriodStart(),
-            [user],
-            inputCharacterCount,
-            cancellationToken);
     }
 
     // Exhaustion first, because that is what decides whether the work proceeds at all, and the characters still

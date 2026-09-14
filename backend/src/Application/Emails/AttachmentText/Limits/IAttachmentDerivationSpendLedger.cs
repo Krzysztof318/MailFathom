@@ -32,7 +32,7 @@ namespace MailFathom.Application.Emails.AttachmentText.Limits;
 /// </remarks>
 public interface IAttachmentDerivationSpendLedger
 {
-    /// <summary>Reads what one period has consumed on one step, for one user and for every user together.</summary>
+    /// <summary>Reads what one period has consumed on one step, for one user and for the deployment.</summary>
     /// <param name="periodStart">The period's start, as the budget places it.</param>
     /// <param name="derivationStep">The step whose unit is being counted.</param>
     /// <param name="user">The user whose own consumption is asked for beside the deployment's.</param>

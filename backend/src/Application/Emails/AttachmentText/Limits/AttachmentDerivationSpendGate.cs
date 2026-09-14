@@ -4,7 +4,6 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Emails.AttachmentText.Limits;
@@ -17,16 +16,16 @@ namespace MailFathom.Application.Emails.AttachmentText.Limits;
 /// writer another.
 /// </para>
 /// <para>
-/// Two readings exist because two callers ask different questions. A pass reading somebody's mail asks where that user
-/// stands against both ceilings; an administrative surface acts for nobody's mail and asks where the deployment stands,
-/// which is the only question a caller with no user can be answered.
+/// Two readings exist because two callers ask different questions, and the mailbox's is the one a pass asks. Mail
+/// belongs to the account, so a walk holds an account and never a person, while the per-user ceiling still has to
+/// mean something: ADR 0014 counts a shared mailbox in full against every user assigned to it, so reading it
+/// proceeds only while every one of them is under their ceiling, and what it consumed is charged to each. That
+/// fan-out lives here rather than in the pass, so the reading and the charge cannot come to disagree about who a
+/// mailbox is for.
 /// </para>
 /// <para>
-/// A mailbox is the third question, and it is the one a pass actually asks. Mail belongs to the account, so a walk
-/// holds an account and never a person, while the per-user ceiling still has to mean something: ADR 0014 counts a
-/// shared mailbox in full against every user assigned to it, so reading it proceeds only while every one of them is
-/// under their ceiling, and what it consumed is charged to each. That fan-out lives here rather than in the pass, so
-/// the reading and the charge cannot come to disagree about who a mailbox is for.
+/// The deployment's is the other, and it is what an administrative surface asks: it acts for nobody's mail, so where
+/// the deployment stands is the only question it can be answered.
 /// </para>
 /// <para>
 /// The deployment's figure is not the sum of those per-user charges and is never derived from them. Counting a shared
@@ -141,6 +140,11 @@ public sealed class AttachmentDerivationSpendGate
     /// changes: consumption is a record of an event rather than a running apportionment. The deployment's own figure
     /// is charged once by the same write, so a mailbox assigned to nobody still moves it and a mailbox three people
     /// share moves it by what was read rather than by three times it.
+    /// <para>
+    /// A deployment with no ceiling is charged exactly as one with a ceiling is. The count is what an operator watches
+    /// to decide whether to declare a ceiling at all, so leaving it unwritten would make the figure appear only once it
+    /// was already too late to be useful.
+    /// </para>
     /// </remarks>
     public Task RecordAccountSpendAsync(
         IPersistenceSession session,
@@ -161,31 +165,6 @@ public sealed class AttachmentDerivationSpendGate
             cancellationToken);
     }
 
-    /// <summary>Reads where one user stands on one step in the current period, which is what a pass consults before it reads.</summary>
-    /// <param name="derivationStep">The step about to be taken.</param>
-    /// <param name="user">The user whose mail is about to be read.</param>
-    /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The period, what the user and the deployment have consumed, and what each still admits.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
-    public async Task<AttachmentDerivationAdmission> ReadCurrentPeriodForAsync(
-        AttachmentDerivationStep derivationStep,
-        MailUserId user,
-        CancellationToken cancellationToken)
-    {
-        if (!user.IsSpecified)
-        {
-            throw new ArgumentException("Attachment derivation is charged to a named user.", nameof(user));
-        }
-
-        var periodStart = this.CurrentPeriodStart();
-        var consumed = await this.ledger.ReadConsumedAsync(periodStart, derivationStep, user, cancellationToken);
-
-        return new AttachmentDerivationAdmission(
-            this.PeriodOf(derivationStep, periodStart, consumed.UserConsumedUnitCount, this.budget.CeilingFor(derivationStep, forUser: true)),
-            this.PeriodOf(derivationStep, periodStart, consumed.DeploymentConsumedUnitCount, this.budget.CeilingFor(derivationStep, forUser: false)));
-    }
-
     /// <summary>Reads where the deployment stands on one step, whatever any one user has consumed of it.</summary>
     /// <param name="derivationStep">The step being reported on.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
@@ -203,42 +182,6 @@ public sealed class AttachmentDerivationSpendGate
         var consumed = await this.ledger.ReadDeploymentConsumedAsync(periodStart, derivationStep, cancellationToken);
 
         return this.PeriodOf(derivationStep, periodStart, consumed, this.budget.CeilingFor(derivationStep, forUser: false));
-    }
-
-    /// <summary>Charges what reading one message consumed to the period, step, and user it happened for.</summary>
-    /// <param name="session">The session committing the readings that work produced.</param>
-    /// <param name="derivationStep">The step the units belong to.</param>
-    /// <param name="user">The user whose mail was read.</param>
-    /// <param name="unitCount">What the work consumed, in that step's own unit.</param>
-    /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>A task that completes when the charge has been issued inside the caller's transaction.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when the count is negative.</exception>
-    /// <remarks>
-    /// A deployment with no ceiling is charged exactly as one with a ceiling is. The count is what an operator watches
-    /// to decide whether to declare a ceiling at all, so leaving it unwritten would make the figure appear only once it
-    /// was already too late to be useful.
-    /// </remarks>
-    public Task RecordSpendAsync(
-        IPersistenceSession session,
-        AttachmentDerivationStep derivationStep,
-        MailUserId user,
-        long unitCount,
-        CancellationToken cancellationToken)
-    {
-        if (!user.IsSpecified)
-        {
-            throw new ArgumentException("Attachment derivation is charged to a named user.", nameof(user));
-        }
-
-        return this.ledger.RecordSpendAsync(
-            session,
-            this.CurrentPeriodStart(),
-            derivationStep,
-            [user],
-            unitCount,
-            cancellationToken);
     }
 
     // Exhaustion first, because that is what decides whether the work proceeds at all, and the units still admitted

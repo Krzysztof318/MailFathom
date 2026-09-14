@@ -413,7 +413,9 @@ rather than saving again.
 **A draft belongs to whoever wrote it, not to the mailbox.** All four tools are scoped to the user the call is acting
 for, so on a mailbox two people are assigned, a draft the other person wrote answers exactly as a draft that never
 existed: `update_draft`, `delete_draft`, and `send_draft` each refuse it that way rather than saying it is somebody
-else's.
+else's. **The copy in the Drafts folder is the mailbox's, though.** The folder belongs to the account, so on a shared
+mailbox the other person reads the unsent message there as they read everything else it holds, while the draft itself
+stays out of reach to them. Write somewhere else what nobody assigned the mailbox may see.
 
 **These are the only calls here that wait on your mail server**, and for one round trip: the draft is written down
 first and the copy is then put into your Drafts folder, or taken back out of it, while whoever asked is still there.
