@@ -258,7 +258,12 @@ case "$command" in
     for saved in "$@"; do
       # A file past the 256 KiB per-call cap comes back as several windows, and they are appended
       # in the order they are named — which is the order a session read them in.
+      # A window that hit the cap ends with the server's own note saying so, after the blank line
+      # the wrapper adds. It is a message about the read rather than a line of the file, so it goes
+      # before the blank does — left in, it lands in the middle of the screen source at every window
+      # boundary, which `record` then reports as a byte count nobody can place.
       awk 'NR == 1 { next } /^<\/untrusted-project-content>$/ { exit } { print }' "$saved" \
+        | sed -e '${/bytes truncated at read_file/d}' \
         | sed -e '${/^$/d}' \
         | sed -e 's/&lt;/</g' -e 's/&gt;/>/g' -e 's/&amp;/\&/g' \
         >>"$target"
