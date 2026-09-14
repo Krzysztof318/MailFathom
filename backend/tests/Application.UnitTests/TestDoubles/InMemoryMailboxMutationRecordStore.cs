@@ -277,6 +277,27 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
+        MailAccountIdentity account,
+        MailboxMutation mutation,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
+
+        IReadOnlyList<OutstandingMailboxMutation> outstanding =
+        [
+            .. this.OutstandingOf(account.Id)
+                .Where(record => record.Request.Mutation == mutation)
+                .OrderBy(record => record.RecordedAt)
+                .Take(limit)
+                .Select(record => new OutstandingMailboxMutation(record, this.BindingOf(record))),
+        ];
+
+        return Task.FromResult(outstanding);
+    }
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<MailboxMutationLifecycleCount>> ReadLifecycleCountsAsync(
         MailAccountIdentity account,
         CancellationToken cancellationToken)

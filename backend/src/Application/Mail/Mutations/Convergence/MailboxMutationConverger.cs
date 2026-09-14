@@ -113,21 +113,24 @@ public sealed class MailboxMutationConverger
         MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        var outstanding = await this.store.ReadOutstandingAsync(
-            account,
-            this.options.MaxMutationsPerPass,
-            cancellationToken);
+        var isHeld = await this.localFolders.ReadAsync(account, cancellationToken) is { Phase: MailAccountCustodyPhase.Held };
+
+        // A held account issues no IMAP command, so a record of any other change opened before the hold is work no pass on
+        // it can do. Reading only its deletes keeps those records out of the page instead of letting them fill it ahead of
+        // the erasures behind them; they stay pending in the lifecycle counts, which is what they are.
+        var outstanding = isHeld
+            ? await this.store.ReadOutstandingAsync(account, MailboxMutation.Delete, this.options.MaxMutationsPerPass, cancellationToken)
+            : await this.store.ReadOutstandingAsync(account, this.options.MaxMutationsPerPass, cancellationToken);
 
         if (outstanding.Count == 0)
         {
             // Nothing outstanding is nothing to count: the lifecycle read answers over the same rows, so an account with
-            // no unfinished mutation — which is nearly every account on nearly every run — costs one query rather than two.
+            // no unfinished mutation — which is nearly every account on nearly every run — spares that query.
             return new MailboxConvergenceReport(0, 0, 0, 0, []);
         }
 
         var transportSecurityPolicy = this.transportSecurityPolicyReader.GetPolicy(account.Id);
         var tally = new ConvergenceTally();
-        var isHeld = await this.localFolders.ReadAsync(account, cancellationToken) is { Phase: MailAccountCustodyPhase.Held };
 
         foreach (var candidate in outstanding)
         {
@@ -160,13 +163,14 @@ public sealed class MailboxMutationConverger
             outstandingCounts);
     }
 
-    /// <summary>Takes one record of a held account in hand, running every delete record whose window has passed as an erasure.</summary>
+    /// <summary>Runs one delete record of a held account whose window has passed as an erasure.</summary>
     /// <remarks>
     /// A held account writes no record for anything but an erasure, so this issues no IMAP command at all. It does not
     /// tell an erasure apart from a delete recorded before the account became held: every delete record is erased, whatever
-    /// disposition it carries, and #2007 owns telling the two apart. A record of another kind is one left from before the
-    /// account became held; it is left where it is rather than carried to a source that is no longer the truth. The
-    /// isolation is the one a remote change gets, for the same reason.
+    /// disposition it carries, and #2007 owns telling the two apart. A record of another kind left from before the account
+    /// became held never reaches here, because the pass reads only a held account's deletes; it stays where it is rather
+    /// than being carried to a source that is no longer the truth. The isolation is the one a remote change gets, for the
+    /// same reason.
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A pass isolates one erasure's failure so the account's remaining records are still taken in hand; the record stays outstanding and the next pass tries it again.")]
     private async Task EraseHeldAsync(
@@ -174,13 +178,6 @@ public sealed class MailboxMutationConverger
         ConvergenceTally tally,
         CancellationToken cancellationToken)
     {
-        if (candidate.Record.Request.Mutation != MailboxMutation.Delete)
-        {
-            tally.DeferredCount++;
-
-            return;
-        }
-
         try
         {
             var erased = await this.commitPolicy.CommitAsync(

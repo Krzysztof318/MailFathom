@@ -508,6 +508,13 @@ public sealed class SetMailFlagsToolTests
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
+        public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
+            MailAccountIdentity account,
+            MailboxMutation mutation,
+            int limit,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<IReadOnlyList<MailboxMutationLifecycleCount>> ReadLifecycleCountsAsync(
             MailAccountIdentity account,
             CancellationToken cancellationToken) =>

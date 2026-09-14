@@ -117,22 +117,44 @@ public sealed class MailboxMutationConvergerTests
         Assert.Empty(states.Erased);
     }
 
+    /// <summary>Inherited records of other changes never fill a held account's page ahead of the deletes behind them.</summary>
+    [Fact]
+    public async Task ConvergeAsync_AHeldAccountWithAPageOfInheritedMovesAheadOfADelete_ErasesTheDelete()
+    {
+        // Arrange
+        var context = new ConvergerContext(
+            maxMutationsPerPass: 2,
+            localFolders: new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held),
+            states: new InMemoryLocalEmailStateStore(Account));
+        await context.LeaveOutstandingAsync(RelocationRequest(uid: 50U), record => record);
+        await context.LeaveOutstandingAsync(RelocationRequest(uid: 51U), record => record);
+        var delete = await context.LeaveOutstandingAsync(DeleteRequest(uid: 52U), record => record);
+
+        // Act
+        var report = await context.Converger.ConvergeAsync(Account, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, report.CompletedCount);
+        Assert.Equal(MailboxMutationStage.Completed, context.Store.RecordOf(delete).Stage);
+    }
+
     /// <summary>A record a held account inherited from before it was held is left where it is rather than carried to a source that is no longer the truth.</summary>
     [Fact]
-    public async Task ConvergeAsync_AHeldAccountsInheritedMove_IsDeferredAndReachesNoServer()
+    public async Task ConvergeAsync_AHeldAccountsInheritedMove_IsLeftOutstandingAndReachesNoServer()
     {
         // Arrange
         var states = new InMemoryLocalEmailStateStore(Account);
         var context = new ConvergerContext(
             localFolders: new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held),
             states: states);
-        await context.LeaveOutstandingAsync(RelocationRequest(), record => record);
+        var move = await context.LeaveOutstandingAsync(RelocationRequest(), record => record);
 
         // Act
         var report = await context.Converger.ConvergeAsync(Account, CancellationToken.None);
 
         // Assert
-        Assert.Equal((0, 1), (report.CompletedCount, report.DeferredCount));
+        Assert.Equal((0, 0), (report.CompletedCount, report.DeferredCount));
+        Assert.NotEqual(MailboxMutationStage.Completed, context.Store.RecordOf(move).Stage);
         Assert.Empty(states.Erased);
         await context.WriteSessionFactory.DidNotReceive().OpenForWritingAsync(
             Arg.Any<MailAccountId>(),
@@ -449,9 +471,9 @@ public sealed class MailboxMutationConvergerTests
         ImapUidValidity.Create(7U),
         ImapUid.Create(uid));
 
-    private static MailboxMutationRequest RelocationRequest() => MailboxMutationRequest.Relocate(
+    private static MailboxMutationRequest RelocationRequest(uint uid = 42U) => MailboxMutationRequest.Relocate(
         StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailUser.Deployment,
-        Occurrence(42U),
+        Occurrence(uid),
         MailboxMutationRequester.Rule("file-newsletters", "3"),
         ArchivePath);
 

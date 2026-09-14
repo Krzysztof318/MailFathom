@@ -622,7 +622,9 @@ recorded like any delete and held for its withdrawal window, and once that windo
 message instead of opening a write session. The run does not tell such a delete from any other delete record: every
 outstanding delete record on a held account is run as an erasure once its window has passed, including one opened
 before the account became held, whatever local disposition it was authored with. A record of any other change opened
-before then is left where it is rather than issued, because the server it named is no longer the mailbox's truth.
+before then is left where it is rather than issued, because the server it named is no longer the mailbox's truth: the
+run reads only a held account's delete records, so however many such records wait, none of them stands ahead of an
+erasure, and each stays counted as pending.
 
 **A change somebody asked for also ends the account's wait** — a change recorded by the client's mutation routes or by
 `set_mail_flags`, and not the other two origins above. What issues any of them is the account's ordinary

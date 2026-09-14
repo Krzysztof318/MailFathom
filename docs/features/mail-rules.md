@@ -444,7 +444,9 @@ On a held account every other action is made to the stored email as the pass com
 the rule's decision, rather than written down for a server: a move files into the local folder the destination's role
 or source folder corresponds to, and a delete moves the message into the local trash. A delete meeting a message already
 in the trash does nothing: erasing it is a person's act, taken with the window a person can withdraw it in, and never a
-rule's.
+rule's. The rule's history records each such action as requested with no mutation identifier, because the change was
+committed rather than recorded: there is no mutation behind it and no mutation trail to follow, so a requested action
+without one is done.
 
 ## The facts a condition can read
 

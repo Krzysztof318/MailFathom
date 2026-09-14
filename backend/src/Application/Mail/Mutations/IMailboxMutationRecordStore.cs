@@ -40,7 +40,7 @@ public interface IMailboxMutationRecordStore
     /// A hold is what makes a change withdrawable for a stated stretch after it was asked for, and it belongs to the
     /// record rather than to whoever asked: a client that closes, loses its network, or is put to sleep costs the
     /// mailbox nothing, because the window elapses and the record is taken in hand exactly as it would have been. It
-    /// is honoured by <see cref="ReadOutstandingAsync" /> and lifted by <see cref="ReleaseAsync" />, and a record that
+    /// is honoured by <see cref="ReadOutstandingAsync(MailAccountIdentity, int, CancellationToken)" /> and lifted by <see cref="ReleaseAsync" />, and a record that
     /// already exists under this identity keeps the hold it was opened with rather than taking this call's.
     /// </para>
     /// </remarks>
@@ -239,13 +239,31 @@ public interface IMailboxMutationRecordStore
         int limit,
         CancellationToken cancellationToken);
 
+    /// <summary>Reads the mutations of one account that have not completed and ask for one change, with the folder binding each was recorded against.</summary>
+    /// <param name="account">The account whose mutations are read.</param>
+    /// <param name="mutation">The change every returned record asks for.</param>
+    /// <param name="limit">The greatest number of records to return.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The outstanding records asking for <paramref name="mutation" />, oldest first, at most <paramref name="limit" /> of them.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is not positive.</exception>
+    /// <remarks>
+    /// The same answer as the unfiltered read, narrowed for a pass that can do only one kind of work: a held account
+    /// erases its deletes and issues nothing else, so a record of another change is left out of its page for the reason
+    /// a record inside its hold is — a page spent on records the pass cannot act on is a page its real backlog does not get.
+    /// </remarks>
+    Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
+        MailAccountIdentity account,
+        MailboxMutation mutation,
+        int limit,
+        CancellationToken cancellationToken);
+
     /// <summary>Counts one account's uncompleted mutations by kind and by where in its lifecycle each one stands.</summary>
     /// <param name="account">The account whose mutations are counted.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>One entry per kind and lifecycle that has at least one record, in no particular order.</returns>
     /// <remarks>
     /// <para>
-    /// It is an aggregate rather than a count of what <see cref="ReadOutstandingAsync" /> returned, because that read is
+    /// It is an aggregate rather than a count of what <see cref="ReadOutstandingAsync(MailAccountIdentity, int, CancellationToken)" /> returned, because that read is
     /// bounded and a bounded count is wrong exactly when it matters — the moment an account has more stuck changes than
     /// one pass looks at is the moment somebody needs the real number.
     /// </para>

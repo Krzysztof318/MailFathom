@@ -336,8 +336,23 @@ internal sealed class MailboxMutationRecordStore(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
+    public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
         MailAccountIdentity account,
+        int limit,
+        CancellationToken cancellationToken) =>
+        this.ReadOutstandingOfAsync(account, mutationName: null, limit, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
+        MailAccountIdentity account,
+        MailboxMutation mutation,
+        int limit,
+        CancellationToken cancellationToken) =>
+        this.ReadOutstandingOfAsync(account, mutation.Name, limit, cancellationToken);
+
+    private async Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingOfAsync(
+        MailAccountIdentity account,
+        string? mutationName,
         int limit,
         CancellationToken cancellationToken)
     {
@@ -359,6 +374,7 @@ internal sealed class MailboxMutationRecordStore(
                 mutation.MailboxAccountId == accountValue &&
                 mutation.Stage != MailboxMutationStage.Completed &&
                 mutation.Stage != MailboxMutationStage.Cancelled &&
+                (mutationName == null || mutation.Mutation == mutationName) &&
 
                 // A record still inside its withdrawal window is not work this pass can do, so it is left out of the
                 // page rather than read and skipped — a page spent on records nothing may touch is a page the account's
