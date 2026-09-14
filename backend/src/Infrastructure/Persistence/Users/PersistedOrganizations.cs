@@ -30,31 +30,64 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 internal sealed class PersistedOrganizations(MailFathomDbContext dbContext) : IOrganizationStore
 {
     /// <inheritdoc />
-    public async Task<IReadOnlyList<Organization>> ReadAsync(CancellationToken cancellationToken)
+    /// <remarks>
+    /// The short name is read rather than asserted. Every route that writes one judges it first, so a row this build
+    /// will not read was written by an older one, edited in the database, or restored from a backup — and asserting it
+    /// here would turn that one row into an unreadable listing, which is the listing an operator repairs it from. It is
+    /// named apart instead, and its members lose exactly what the organization decides: the prefix their login begins
+    /// with, and nothing of anybody else's.
+    /// </remarks>
+    public async Task<OrganizationListing> ReadAsync(CancellationToken cancellationToken)
     {
         var stored = await dbContext.Organizations
             .AsNoTracking()
             .OrderBy(organization => organization.ShortName)
             .Take(Organization.MaximumListed)
-            .Select(organization => new
-            {
+            .Select(organization => new StoredOrganizationRow(
                 organization.Id,
                 organization.DisplayName,
                 organization.ShortName,
-                Members = dbContext.UserAccounts.Count(user => user.OrganizationId == organization.Id),
-                organization.CreatedAt,
-            })
+                dbContext.UserAccounts.Count(user => user.OrganizationId == organization.Id),
+                organization.CreatedAt))
             .ToArrayAsync(cancellationToken);
 
-        return
-        [
-            .. stored.Select(organization => new Organization(
-                organization.Id,
-                organization.DisplayName,
-                OrganizationShortName.Create(organization.ShortName),
-                organization.Members,
-                organization.CreatedAt)),
-        ];
+        return ListingOf(stored);
+    }
+
+    /// <summary>Splits the rows the listing statement read into the ones this build serves and the ones it will not.</summary>
+    /// <param name="stored">The rows as the statement selected them.</param>
+    /// <returns>The listing.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="stored" /> is <see langword="null" />.</exception>
+    /// <remarks>Composed apart from the statement so that an unreadable row costing exactly itself is assertable without a server.</remarks>
+    internal static OrganizationListing ListingOf(IReadOnlyList<StoredOrganizationRow> stored)
+    {
+        ArgumentNullException.ThrowIfNull(stored);
+
+        var read = stored
+            .Select(organization => (Row: organization, Readable: OrganizationShortName.TryCreate(
+                organization.ShortName,
+                out var shortName), ShortName: shortName))
+            .ToArray();
+
+        return new OrganizationListing(
+            [
+                .. read
+                    .Where(entry => entry.Readable)
+                    .Select(entry => new Organization(
+                        entry.Row.Id,
+                        entry.Row.DisplayName,
+                        entry.ShortName,
+                        entry.Row.Members,
+                        entry.Row.CreatedAt)),
+            ],
+            [
+                .. read
+                    .Where(entry => !entry.Readable)
+                    .Select(entry => new UnreadableOrganization(
+                        entry.Row.Id,
+                        entry.Row.DisplayName,
+                        OrganizationShortName.DescribeAcceptedForm())),
+            ]);
     }
 
     /// <inheritdoc />

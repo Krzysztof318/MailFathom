@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Domain.Access;
+using MailFathom.Host.Configuration.Records;
 using MailFathom.Infrastructure.Persistence.Users;
 
 namespace MailFathom.Host.Configuration.UserSettings;
@@ -30,7 +31,9 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// A record that does not bind is not published, the version this replica last bound stays in force, and it is reported
 /// once per version — which is what the persisted document's reload does with a document it will not publish. A write is
 /// judged before it commits, so reaching this means a row changed behind MailFathom, or a build that judges records
-/// differently from the one that committed it.
+/// differently from the one that committed it. What "does not bind" covers is the user's own document alone: a mail
+/// account that will not bind beside it is left out of the record and reported, and the rest of that user's mailboxes
+/// are republished at the new version, so one broken declaration never freezes a user's whole record at an old one.
 /// </para>
 /// <para>
 /// A label is not read from here. Relabelling a user moves no record version, so the label a replica serves is the one
@@ -42,6 +45,7 @@ namespace MailFathom.Host.Configuration.UserSettings;
 internal sealed partial class ServedMailUsersConvergence(
     IServiceScopeFactory scopes,
     ServedMailUsers servedUsers,
+    HeldBackRecords heldBackRecords,
     ILogger<ServedMailUsersConvergence> logger)
 {
     /// <summary>The version each user's record was last refused at, read and written only under the roster's publication lock.</summary>
@@ -61,7 +65,7 @@ internal sealed partial class ServedMailUsersConvergence(
 
         await using var scope = scopes.CreateAsyncScope();
         var documents = scope.ServiceProvider.GetRequiredService<IUserSettingsDocumentReader>();
-        var binder = scope.ServiceProvider.GetRequiredService<UserAccountDocumentBinder>();
+        var composition = scope.ServiceProvider.GetRequiredService<ServedUserRecordComposition>();
 
         await servedUsers.WaitForRosterPublicationAsync(cancellationToken);
 
@@ -80,11 +84,12 @@ internal sealed partial class ServedMailUsersConvergence(
             {
                 servedUsers.UserErased(erased.User);
                 this.refusedVersions.Remove(erased.User);
+                heldBackRecords.Cleared(erased.User);
             }
 
             foreach (var record in held)
             {
-                await this.RepublishWhenNewerAsync(documents, binder, record, cancellationToken);
+                await this.RepublishWhenNewerAsync(documents, composition, record, cancellationToken);
             }
         }
         finally
@@ -95,7 +100,7 @@ internal sealed partial class ServedMailUsersConvergence(
 
     private async Task RepublishWhenNewerAsync(
         IUserSettingsDocumentReader documents,
-        UserAccountDocumentBinder binder,
+        ServedUserRecordComposition composition,
         UserSettingsDocumentVersion stored,
         CancellationToken cancellationToken)
     {
@@ -111,14 +116,14 @@ internal sealed partial class ServedMailUsersConvergence(
             return;
         }
 
-        var binding = binder.Bind(
-            MailAccountRecordComposition.Compose(record.Json, record.MailAccounts),
-            UserRecordArrival.AlreadyHeld);
+        var composed = composition.Compose(record, UserRecordArrival.AlreadyHeld);
 
-        if (binding.User is not { } bound)
+        heldBackRecords.Replace(record.User, composed.HeldBack);
+        this.Report(composed.HeldBack);
+
+        if (composed.Record is not { } bound)
         {
             this.refusedVersions[record.User] = record.Version;
-            this.LogRecordRefused(record.DisplayName, record.Version, binding.Refusals.Count);
 
             return;
         }
@@ -127,11 +132,34 @@ internal sealed partial class ServedMailUsersConvergence(
         servedUsers.UserDocumentPublished(record.User, record.DisplayName, bound, record.Version);
     }
 
-    /// <remarks>The label rather than the identifier, for the reason the startup gate gives: it is the operator's own text, and the identifier is a generated handle for a person. The count rather than the refusals, because a refusal quotes what the record says.</remarks>
+    /// <summary>Says each refused declaration once, which is once per version because a version is republished once.</summary>
+    private void Report(IReadOnlyList<HeldBackRecord> heldBack)
+    {
+        foreach (var record in heldBack)
+        {
+            this.LogRecordHeldBack(
+                record.Kind,
+                record.Identity,
+                record.Label,
+                record.RejectedVersion,
+                string.Join(" ", record.Corrections));
+        }
+    }
+
+    /// <remarks>
+    /// The identifier and the label together, because the label is what an operator recognizes a record by and the
+    /// identifier is what the command repairing it names. The corrections are carried rather than counted for the reason
+    /// the startup gate's own line gives: they are MailFathom's own sentences about settings and repeat no value.
+    /// </remarks>
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The record of the user labelled {UserDisplayName} was rejected at version {RejectedVersion} and is not in force on this replica; the version it last bound stays in force. It named {RefusalCount} settings to correct.")]
-    private partial void LogRecordRefused(string userDisplayName, long rejectedVersion, int refusalCount);
+        Message = "A {HeldBackRecordKind} record is held back on this replica by a document it will not bind: {HeldBackRecordIdentity} labelled {HeldBackRecordLabel}, at version {RejectedVersion}. The version it last bound stays in force and every other record is unaffected. Correct it: {Corrections}")]
+    private partial void LogRecordHeldBack(
+        HeldBackRecordKind heldBackRecordKind,
+        Guid heldBackRecordIdentity,
+        string heldBackRecordLabel,
+        long? rejectedVersion,
+        string corrections);
 
     [LoggerMessage(
         Level = LogLevel.Error,

@@ -77,7 +77,7 @@ internal static class OrganizationEndpoints
     /// <summary>Lists the organizations this deployment holds.</summary>
     /// <param name="organizations">The organization administration.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the organizations, ordered by short name.</returns>
+    /// <returns><c>200</c> with the organizations, ordered by short name, and the rows this build will not read as one.</returns>
     internal static async Task<Ok<OrganizationListResponse>> ListAsync(
         [FromServices] OrganizationAdministration organizations,
         CancellationToken cancellationToken)
@@ -86,7 +86,9 @@ internal static class OrganizationEndpoints
 
         var held = await organizations.ReadAsync(cancellationToken);
 
-        return TypedResults.Ok(new OrganizationListResponse([.. held.Select(OrganizationResponse.For)]));
+        return TypedResults.Ok(new OrganizationListResponse(
+            [.. held.Organizations.Select(OrganizationResponse.For)],
+            [.. held.Unreadable.Select(UnreadableOrganizationResponse.For)]));
     }
 
     /// <summary>Records an organization.</summary>

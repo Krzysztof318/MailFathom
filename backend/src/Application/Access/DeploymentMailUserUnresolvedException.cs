@@ -87,47 +87,4 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
         + "that read or write one person's contacts, mail accounts, or mailbox are reached by a credential that names "
         + "the user it acts for; grant one such credential per user, and use the deployment-wide administrative "
         + "routes — which name the user they act on — for everything an administrator does across the roster.");
-
-    /// <summary>Reports a user whose own mail accounts carry a secret or a trust anchor this deployment cannot use.</summary>
-    /// <param name="displayName">The label the user is recorded under.</param>
-    /// <param name="refusals">The sentences naming each setting that must change, each already carrying its path within the record.</param>
-    /// <returns>The failure to raise.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="displayName" /> is <see langword="null" />, empty, or white space.</exception>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="refusals" /> is <see langword="null" />.</exception>
-    /// <remarks>
-    /// Separate from the secret gate's own refusal because a user's mailboxes are in a record the configuration that
-    /// gate walks cannot reach, and an operator reading a path alone would not know whose mailbox it names. The
-    /// refusals carry no material and no length, exactly as the ones that gate raises over configuration do.
-    /// </remarks>
-    public static DeploymentMailUserUnresolvedException UserMailAccountsUnusable(
-        string displayName,
-        IReadOnlyList<string> refusals)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
-        ArgumentNullException.ThrowIfNull(refusals);
-
-        return new(
-            $"The mail accounts of the user labelled '{displayName}' carry a setting this deployment cannot use, so "
-            + "they would have failed one connection at a time rather than the start: "
-            + string.Join(" ", refusals));
-    }
-
-    /// <summary>Reports a user whose own record could not be read as the settings it is meant to hold.</summary>
-    /// <param name="displayName">The label the user's row carries.</param>
-    /// <param name="refusals">The sentences naming what must change in the record.</param>
-    /// <returns>The failure to raise.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="displayName" /> is <see langword="null" />, empty, or white space.</exception>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="refusals" /> is <see langword="null" />.</exception>
-    public static DeploymentMailUserUnresolvedException UserRecordUnusable(
-        string displayName,
-        IReadOnlyList<string> refusals)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
-        ArgumentNullException.ThrowIfNull(refusals);
-
-        return new(
-            $"The record of the user labelled '{displayName}' is not the settings a user's document holds, and that "
-            + "user is served from it and from nothing else: "
-            + string.Join(" ", refusals));
-    }
 }

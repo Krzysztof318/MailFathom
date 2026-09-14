@@ -5,10 +5,10 @@
 using System.Globalization;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Records;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings;
@@ -166,51 +166,149 @@ public sealed class ServedMailUsersStartupGateTests
     }
 
     /// <summary>
-    /// The alternative to failing is a deployment reporting itself started while synchronizing none of the mailboxes
-    /// assigned to that user, because what it was to read them from says nothing usable.
+    /// A declaration this build will not bind costs its own mailbox and nothing else: the user keeps every other
+    /// mailbox they have, and the refusal is published rather than raised, because the alternative was one broken row
+    /// taking the whole deployment's mail offline.
     /// </summary>
     [Fact]
-    public async Task StartAsync_AUserWhoseMailboxWillNotBind_FailsStartupNamingTheUser()
+    public async Task StartAsync_AUserWhoseMailboxWillNotBind_ServesTheirOtherMailboxesAndHoldsThatOneBack()
     {
         // Arrange
         var user = MailUserId.Create(RecordedIdentifier);
-        var unbindable = AlexWork with
+        var roster = new ServedMailUsers();
+        var heldBack = new HeldBackRecords();
+        var unbindable = SamWork with
         {
             Document = """{"Host":"imap.example.test","Nonsense":"no property binds this"}""",
         };
 
         // Act
-        var refusal = await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
-            CreateGate(
-                    [Held(user, "alex")],
-                    documents: RecordsHolding(Record(user, LanguageOnlyRecord, unbindable)))
-                .StartAsync(TestContext.Current.CancellationToken));
+        await CreateGate(
+                [Held(user, "alex")],
+                servedUsers: roster,
+                documents: RecordsHolding(Record(user, LanguageOnlyRecord, AlexWork, unbindable)),
+                heldBack: heldBack)
+            .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(MailFathomErrorCode.DeploymentMailUserUnresolved, refusal.ErrorCode);
-        Assert.Contains("'alex'", refusal.Message, StringComparison.Ordinal);
+        var served = Assert.Single(roster.Users);
+        Assert.Equal([AlexWork.Id.ToString("D")], served.MailAccounts.Select(account => account.AccountId));
+        var refused = Assert.Single(heldBack.Current);
+        Assert.Equal(HeldBackRecordKind.MailAccount, refused.Kind);
+        Assert.Equal(unbindable.Id, refused.Identity);
+        Assert.NotEmpty(refused.Corrections);
+    }
+
+    /// <summary>
+    /// A user's own document is the whole of what they are served from, so one that is not a record leaves that user
+    /// unserved — and every other user served exactly as they were, which is the guarantee the start used to break.
+    /// </summary>
+    [Theory]
+    [InlineData("not json at all")]
+    [InlineData("""{"Nonsense":"no property binds this"}""")]
+    [InlineData("""{"Language":"Klingon"}""")]
+    public async Task StartAsync_AUserWhoseOwnRecordIsNotOne_ServesEverybodyElseAndHoldsThatUserBack(string document)
+    {
+        // Arrange
+        var broken = MailUserId.Create(RecordedIdentifier);
+        var roster = new ServedMailUsers();
+        var heldBack = new HeldBackRecords();
+
+        // Act
+        await CreateGate(
+                [Held(broken, "alex"), Held(SyntheticMailUser.Another, "sam")],
+                servedUsers: roster,
+                documents: RecordsHolding(
+                    Record(broken, document, AlexWork),
+                    Record(SyntheticMailUser.Another, LanguageOnlyRecord, SamWork)),
+                heldBack: heldBack)
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var served = Assert.Single(roster.Users);
+        Assert.Equal(SyntheticMailUser.Another, served.User);
+        var refused = Assert.Single(heldBack.Current);
+        Assert.Equal(HeldBackRecordKind.User, refused.Kind);
+        Assert.Equal(broken.Value, refused.Identity);
+    }
+
+    /// <summary>
+    /// A conflict is introduced by the second declaration rather than by both, so the one recorded first is served and
+    /// the one that collided with it is what an operator is told to correct.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_TwoMailboxesSharingADisplayName_ServesTheFirstAndHoldsTheSecondBack()
+    {
+        // Arrange
+        var user = MailUserId.Create(RecordedIdentifier);
+        var roster = new ServedMailUsers();
+        var heldBack = new HeldBackRecords();
+        var colliding = SamWork with { DisplayName = AlexWork.DisplayName };
+
+        // Act
+        await CreateGate(
+                [Held(user, "alex")],
+                servedUsers: roster,
+                documents: RecordsHolding(Record(user, LanguageOnlyRecord, AlexWork, colliding)),
+                heldBack: heldBack)
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var served = Assert.Single(roster.Users);
+        Assert.Equal([AlexWork.Id.ToString("D")], served.MailAccounts.Select(account => account.AccountId));
+        Assert.Equal(colliding.Id, Assert.Single(heldBack.Current).Identity);
     }
 
     /// <summary>
     /// A mailbox is a record rather than a configuration key, so no reading of the files walks the secrets it names.
-    /// Without this the deployment would start clean and fail one mailbox connection at a time.
+    /// Without this the deployment would start clean and fail one mailbox connection at a time; with it, the mailbox
+    /// whose reference nothing resolves is left out and every other mailbox of that user keeps synchronizing.
     /// </summary>
     [Fact]
-    public async Task StartAsync_AUserWhoseMailboxNamesASecretNoSchemeResolves_FailsStartupNamingTheUser()
+    public async Task StartAsync_AUserWhoseMailboxNamesASecretNoSchemeResolves_LeavesItOutAndHoldsItBack()
     {
         // Arrange
         var user = MailUserId.Create(RecordedIdentifier);
-        var unresolvable = Mailbox(AlexWork.Id, "alex@example.test", "work", "no-such-scheme:imap-password");
+        var roster = new ServedMailUsers();
+        var heldBack = new HeldBackRecords();
+        var unresolvable = Mailbox(SamWork.Id, "sam@example.test", "spare", "no-such-scheme:imap-password");
 
         // Act
-        var refusal = await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
-            CreateGate(
-                    [Held(user, "alex")],
-                    documents: RecordsHolding(Record(user, LanguageOnlyRecord, unresolvable)))
-                .StartAsync(TestContext.Current.CancellationToken));
+        await CreateGate(
+                [Held(user, "alex")],
+                servedUsers: roster,
+                documents: RecordsHolding(Record(user, LanguageOnlyRecord, AlexWork, unresolvable)),
+                heldBack: heldBack)
+            .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Contains("'alex'", refusal.Message, StringComparison.Ordinal);
+        var served = Assert.Single(roster.Users);
+        Assert.Equal([AlexWork.Id.ToString("D")], served.MailAccounts.Select(account => account.AccountId));
+        var refused = Assert.Single(heldBack.Current);
+        Assert.Equal(HeldBackRecordKind.MailAccount, refused.Kind);
+        Assert.Equal(unresolvable.Id, refused.Identity);
+    }
+
+    /// <summary>A record that binds again once it is repaired leaves nothing behind, so an operator is not told about a row they already fixed.</summary>
+    [Fact]
+    public async Task StartAsync_EveryRecordBinding_HoldsNothingBack()
+    {
+        // Arrange
+        var heldBack = new HeldBackRecords();
+
+        heldBack.Replace(
+            MailUserId.Create(RecordedIdentifier),
+            [new HeldBackRecord(HeldBackRecordKind.User, RecordedIdentifier, "alex", 1, ["stale"])]);
+
+        // Act
+        await CreateGate(
+                [Held(MailUserId.Create(RecordedIdentifier), "alex")],
+                documents: RecordsHolding(Record(MailUserId.Create(RecordedIdentifier), LanguageOnlyRecord, AlexWork)),
+                heldBack: heldBack)
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(heldBack.Current);
     }
 
     /// <summary>
@@ -528,13 +626,44 @@ public sealed class ServedMailUsersStartupGateTests
         // Act
         await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
             CreateGate(
-                    [Held(SyntheticMailUser.Deployment, "alex")],
-                    startupGates: startupGates,
-                    documents: Substitute.For<IUserSettingsDocumentReader>())
+                    [.. Enumerable
+                        .Range(1, ServedMailUsers.MaximumUsers + 1)
+                        .Select(position => Held(
+                            MailUserId.Create(new Guid(position, 0, 0, [0, 0, 0, 0, 0, 0, 0, 0])),
+                            $"user-{position}"))],
+                    startupGates: startupGates)
                 .StartAsync(TestContext.Current.CancellationToken));
 
         // Assert
         Assert.False(startupGates.Completed);
+    }
+
+    /// <summary>
+    /// A user erased between the statement that listed the roster and the read of their record is a race rather than a
+    /// record to correct, so the start completes, nobody is held back over it, and the next start reads a roster
+    /// without them.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_AUserErasedWhileTheRosterWasRead_CompletesTheGateHoldingNothingBack()
+    {
+        // Arrange
+        var startupGates = new HostStartupGates(HostStartupGate.ServedMailUsers);
+        var roster = new ServedMailUsers();
+        var heldBack = new HeldBackRecords();
+
+        // Act
+        await CreateGate(
+                [Held(SyntheticMailUser.Deployment, "alex")],
+                servedUsers: roster,
+                startupGates: startupGates,
+                documents: Substitute.For<IUserSettingsDocumentReader>(),
+                heldBack: heldBack)
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(roster.Users);
+        Assert.Empty(heldBack.Current);
+        Assert.True(startupGates.Completed);
     }
 
     /// <summary>Reading one row more than a deployment may hold is what makes a roster past the bound observable rather than silently truncated.</summary>
@@ -675,7 +804,8 @@ public sealed class ServedMailUsersStartupGateTests
         McpEndpointOptions? mcpEndpointSettings = null,
         IUserSettingsDocumentReader? documents = null,
         ClientEndpointOptions? clientEndpointSettings = null,
-        ILogger<ServedMailUsersStartupGate>? startupLog = null) =>
+        ILogger<ServedMailUsersStartupGate>? startupLog = null,
+        HeldBackRecords? heldBack = null) =>
         CreateGate(
             DirectoryOf(held),
             declared,
@@ -684,7 +814,8 @@ public sealed class ServedMailUsersStartupGateTests
             mcpEndpointSettings,
             documents,
             clientEndpointSettings,
-            startupLog);
+            startupLog,
+            heldBack);
 
     private static ServedMailUsersStartupGate CreateGate(
         IMailUserDirectory directory,
@@ -694,16 +825,19 @@ public sealed class ServedMailUsersStartupGateTests
         McpEndpointOptions? mcpEndpointSettings = null,
         IUserSettingsDocumentReader? documents = null,
         ClientEndpointOptions? clientEndpointSettings = null,
-        ILogger<ServedMailUsersStartupGate>? startupLog = null)
+        ILogger<ServedMailUsersStartupGate>? startupLog = null,
+        HeldBackRecords? heldBack = null)
     {
         var services = new ServiceCollection();
+        var binder = new UserAccountDocumentBinder(
+            new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
+            new FakeTimeProvider(),
+            Options.Create(new SensitiveContentOptions()));
 
         services.AddScoped(_ => directory);
         services.AddScoped(_ => documents ?? Substitute.For<IUserSettingsDocumentReader>());
-        services.AddSingleton(new UserAccountDocumentBinder(
-            new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
-            new FakeTimeProvider(),
-            Options.Create(new SensitiveContentOptions())));
+        services.AddSingleton(binder);
+        services.AddSingleton(new ServedUserRecordComposition(binder));
         services.AddSingleton(SecretValidation.OverRegisteredSchemes());
 
         return new ServedMailUsersStartupGate(
@@ -711,6 +845,7 @@ public sealed class ServedMailUsersStartupGateTests
             declared ?? new ConfigurationBuilder().Build(),
             new NCalcMailRuleConditionCompiler(),
             servedUsers ?? new ServedMailUsers(),
+            heldBack ?? new HeldBackRecords(),
             startupGates ?? new HostStartupGates(HostStartupGate.ServedMailUsers),
             new SeveralUserAdmission(
                 Options.Create(mcpEndpointSettings ?? new McpEndpointOptions()),

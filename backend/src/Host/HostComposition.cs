@@ -62,6 +62,7 @@ using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Mail.Readers;
 using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Host.Configuration.Providers;
+using MailFathom.Host.Configuration.Records;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.Configuration.SensitiveContent;
@@ -283,6 +284,13 @@ internal static class HostComposition
         // it — the deployment's settings and every user's record alike.
         builder.Services.AddSingleton<PersistedSecretMaterial>();
         builder.Services.AddSingleton<UserAccountDocumentBinder>();
+        // How much of a user's row this build can read, which is where a refusal is attributed to the one declaration
+        // that introduced it rather than costing the user every mailbox they have. A singleton over the binder above,
+        // because it holds nothing of its own and both the startup gate and the convergence ask it the same question.
+        builder.Services.AddSingleton<ServedUserRecordComposition>();
+        // What those two readings refused, which is a report rather than a decision: nothing resolves anything on it,
+        // and the administrative surface is what an operator meets a broken row on instead of a log line.
+        builder.Services.AddSingleton<HeldBackRecords>();
         // Whether this deployment's endpoints could tell one user's caller from another's, which decides whether it
         // may serve a second user at all. A singleton over the startup snapshot, because it is the posture the
         // authentication schemes were registered from: the startup gate and the provisioning ask the same instance so

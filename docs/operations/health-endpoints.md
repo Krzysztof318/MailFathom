@@ -170,7 +170,7 @@ the folder.
 
 **The user gate refuses to start rather than reporting unready.** A mail account says nothing about whose mail it
 holds unless something says which user owns it, so the gate settles the question before anything serves a request: it
-reads the users the deployment holds, serves every one of them from their own record, proves the secrets those records'
+reads the users the deployment holds, serves each of them from their own record, proves the secrets those records'
 mailboxes carry, and reports the roster it settled on. No configuration source names a user or declares a mailbox, so
 there is nothing here to reconcile a file against; what the gate reads is the roster the database holds. It runs behind
 the schema gate, because that table is the schema's, and a deployment it cannot settle does not come up:
@@ -180,11 +180,21 @@ the schema gate, because that table is the schema's, and a deployment it cannot 
 | More user records than a deployment serves | The roster is longer than the 256 one deployment may hold, which is a table something generated rather than provisioned | Find what wrote `settings_accounts`; nothing MailFathom ships writes a roster that long |
 | One mail account name reaching two users | An account's settings are resolved by name alone, so a name two users share would reach whichever of them the lookup met first | Rename one of them, in the record that declares it; the refusal names every shared name |
 | Several users while `McpEndpoint` or `ClientEndpoint` requires no authentication | Such a surface admits a caller that brought nothing, so it could not say whose mail an act is about and every caller reaching it is composed against the single user the deployment holds. One user or none is admissible: with none there is nobody such a caller could be handed | Require a credential on those two surfaces — every one of them is a record naming its user, whichever method presents it — or switch them off. `AdminEndpoint` is not among them: an administrator acts for the deployment, and every user-scoped route there names the user it is for |
-| A user's document that will not bind | Every user is served from their document, and this one is not the settings a document holds | Repair the record; the refusal names each sentence of what must change |
-| A mailbox whose secret reference or trust anchor cannot be resolved | A record's mailboxes sit outside the configuration the secret gate walks, so without this they would start clean and fail one connection at a time | Repair the reference or the anchor; the refusal names the user and the account within their record |
 
 Every one is a refusal rather than degraded readiness, and deliberately: the alternative is a process that serves mail
-while it cannot say whose mail it is serving.
+while it cannot say whose mail it is serving. Each is also a fact about the *roster* rather than about one row in it,
+which is what separates them from the next paragraph.
+
+**One record this deployment will not read never stops the start.** A user's document that is not the settings a
+document holds, a mail account declaration that will not bind, and a mailbox whose secret reference or trust anchor
+cannot be resolved were each a refused start once, and each is now held back on its own: the user is left unserved or
+the mailbox is left out, every other user and mailbox is served exactly as before, and the gate completes.
+[Records this deployment will not read](admin-endpoint.md#records-this-deployment-will-not-read) is where an operator
+meets them, and
+[a record this deployment will not read](configuration-sources.md#a-record-this-deployment-will-not-read) states what
+each one costs. The reason is the one this whole table exists for, turned around: a deployment that cannot say whose
+mail it serves must not start, and a deployment that can say it for everybody but one person must not refuse to serve
+the rest.
 
 **A deployment holding no user is not refused.** A fresh database holds none, so that is where every new deployment
 stands until its first user is recorded, and where one whose every user was erased returns to: the gate settles an
@@ -193,7 +203,9 @@ that person is served without a restart, their mailboxes included. Synchronizati
 recorded to synchronize — where a first run stands, holding nobody yet or a user declaring no mailbox yet — is reported
 at `Information` rather than refused. **Every user the deployment holds
 is served**, each from their own record; there is no held user nobody serves, because there is no file left to stop
-naming them.
+naming them. The one exception is the user whose own record this build will not read, who is reported as
+[held back](admin-endpoint.md#records-this-deployment-will-not-read) rather than served — and is served again, without
+a restart, the moment the record is repaired.
 
 **A deployment whose file still carries `MailSynchronization:Accounts` does not start**, and that refusal comes from
 the settings a start composes rather than from this gate. Nothing imports what the section declared, so the message

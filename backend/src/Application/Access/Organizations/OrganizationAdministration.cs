@@ -47,9 +47,9 @@ public sealed class OrganizationAdministration
 
     /// <summary>Reads the organizations this deployment holds.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The organizations, ordered by short name.</returns>
+    /// <returns>The organizations, ordered by short name, beside the rows this build will not read as one.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminRead" />.</exception>
-    public Task<IReadOnlyList<Organization>> ReadAsync(CancellationToken cancellationToken)
+    public Task<OrganizationListing> ReadAsync(CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminRead);
 

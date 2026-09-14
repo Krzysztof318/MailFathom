@@ -22,8 +22,9 @@ public interface IOrganizationStore
 {
     /// <summary>Reads the organizations this deployment holds, ordered by short name.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>At most <see cref="Organization.MaximumListed" /> organizations, each with how many members it has.</returns>
-    Task<IReadOnlyList<Organization>> ReadAsync(CancellationToken cancellationToken);
+    /// <returns>At most <see cref="Organization.MaximumListed" /> rows, each readable one with how many members it has, and each unreadable one named apart.</returns>
+    /// <remarks>A row this build will not read is reported beside the listing rather than raised through it: one organization nobody can repair must not be every organization nobody can list.</remarks>
+    Task<OrganizationListing> ReadAsync(CancellationToken cancellationToken);
 
     /// <summary>Records an organization.</summary>
     /// <param name="organizationId">The identifier the organization is to carry.</param>

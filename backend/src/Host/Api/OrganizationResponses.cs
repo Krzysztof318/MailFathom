@@ -55,9 +55,30 @@ internal sealed record OrganizationResponse(
     }
 }
 
+/// <summary>One organization row this build will not read as one.</summary>
+/// <param name="Id">The identifier every act on it names, which is what an operator repairs the row with.</param>
+/// <param name="DisplayName">The name an operator reads it by.</param>
+/// <param name="Correction">What the stored short name must become.</param>
+/// <remarks>The stored short name itself is not published, for the reason <see cref="UnreadableOrganization" /> gives: it is the one value that failed every rule about what a short name may hold.</remarks>
+internal sealed record UnreadableOrganizationResponse(Guid Id, string DisplayName, string Correction)
+{
+    internal static UnreadableOrganizationResponse For(UnreadableOrganization organization)
+    {
+        ArgumentNullException.ThrowIfNull(organization);
+
+        return new UnreadableOrganizationResponse(
+            organization.Id,
+            organization.DisplayName,
+            organization.Correction);
+    }
+}
+
 /// <summary>The organizations a deployment holds.</summary>
 /// <param name="Organizations">The organizations, ordered by short name.</param>
-internal sealed record OrganizationListResponse(IReadOnlyList<OrganizationResponse> Organizations);
+/// <param name="Unreadable">The rows this build will not read as an organization, which are held back one at a time rather than refusing the listing.</param>
+internal sealed record OrganizationListResponse(
+    IReadOnlyList<OrganizationResponse> Organizations,
+    IReadOnlyList<UnreadableOrganizationResponse> Unreadable);
 
 /// <summary>What recording an organization answers with.</summary>
 /// <param name="OrganizationId">The identifier the organization was minted under.</param>

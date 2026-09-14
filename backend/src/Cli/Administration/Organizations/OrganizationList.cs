@@ -8,8 +8,19 @@ namespace MailFathom.Cli.Administration.Organizations;
 
 /// <summary>The organizations a deployment holds.</summary>
 /// <param name="Organizations">The organizations, ordered by short name.</param>
+/// <param name="Unreadable">The rows the deployment will not read as an organization, which it holds back one at a time rather than refusing the listing.</param>
 internal sealed record OrganizationList(
-    [property: JsonPropertyName("organizations")] IReadOnlyList<OrganizationEntry>? Organizations);
+    [property: JsonPropertyName("organizations")] IReadOnlyList<OrganizationEntry>? Organizations,
+    [property: JsonPropertyName("unreadable")] IReadOnlyList<UnreadableOrganizationEntry>? Unreadable);
+
+/// <summary>One organization row the deployment will not read as one.</summary>
+/// <param name="Id">The identifier every act on the organization names it by, which is what repairs the row.</param>
+/// <param name="DisplayName">The name an operator reads it by.</param>
+/// <param name="Correction">What the stored short name must become.</param>
+internal sealed record UnreadableOrganizationEntry(
+    [property: JsonPropertyName("id")] Guid Id,
+    [property: JsonPropertyName("displayName")] string? DisplayName,
+    [property: JsonPropertyName("correction")] string? Correction);
 
 /// <summary>One organization a deployment holds.</summary>
 /// <param name="Id">The identifier every act on the organization names it by.</param>

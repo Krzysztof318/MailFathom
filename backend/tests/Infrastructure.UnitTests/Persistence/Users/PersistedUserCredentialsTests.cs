@@ -52,6 +52,48 @@ public sealed class PersistedUserCredentialsTests
         Assert.DoesNotContain("\"OrganizationId\" IS NULL", sql, StringComparison.Ordinal);
     }
 
+    /// <summary>The ordinary rows: a method this build knows, scoped to an organization it reads or to none at all.</summary>
+    [Theory]
+    [InlineData("password", null)]
+    [InlineData("password", "TESTFIRMA")]
+    [InlineData("api-key", null)]
+    public void IsListable_ARowThisBuildReads_PublishesIt(string method, string? organizationShortName)
+    {
+        // Act
+        var listable = PersistedUserCredentials.IsListable(method, organizationShortName);
+
+        // Assert
+        Assert.True(listable);
+    }
+
+    /// <summary>
+    /// A scope this build will not read leaves that one credential out and costs the user nothing else — the listing
+    /// used to raise over it, which took every other credential they hold with it.
+    /// </summary>
+    [Theory]
+    [InlineData("test firma")]
+    [InlineData("TEST/FIRMA")]
+    [InlineData("")]
+    public void IsListable_AScopeThisBuildWillNotRead_LeavesThatRowOut(string organizationShortName)
+    {
+        // Act
+        var listable = PersistedUserCredentials.IsListable("password", organizationShortName);
+
+        // Assert
+        Assert.False(listable);
+    }
+
+    /// <summary>A method this release does not publish is left out on the same terms, which is the rule the scope joined.</summary>
+    [Fact]
+    public void IsListable_AMethodThisBuildDoesNotKnow_LeavesThatRowOut()
+    {
+        // Act
+        var listable = PersistedUserCredentials.IsListable("no-such-method", null);
+
+        // Assert
+        Assert.False(listable);
+    }
+
     private static MailFathomDbContext DesignTimeContext() => new(
         MailFathomDbContextDesignTimeFactory.BuildOptions(
             orchestratedConnectionString: null,

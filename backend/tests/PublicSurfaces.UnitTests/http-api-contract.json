@@ -4775,6 +4775,67 @@
         ],
         "type": "object"
       },
+      "HeldBackRecordListResponse": {
+        "properties": {
+          "mailAccounts": {
+            "items": {
+              "$ref": "#/components/schemas/HeldBackRecordResponse"
+            },
+            "type": "array"
+          },
+          "organizations": {
+            "items": {
+              "$ref": "#/components/schemas/HeldBackRecordResponse"
+            },
+            "type": "array"
+          },
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/HeldBackRecordResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "users",
+          "mailAccounts",
+          "organizations"
+        ],
+        "type": "object"
+      },
+      "HeldBackRecordResponse": {
+        "properties": {
+          "corrections": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "rejectedVersion": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "rejectedVersion",
+          "corrections"
+        ],
+        "type": "object"
+      },
       "JobRecoveryRequest": {
         "properties": {
           "job": {
@@ -6778,10 +6839,17 @@
               "$ref": "#/components/schemas/OrganizationResponse"
             },
             "type": "array"
+          },
+          "unreadable": {
+            "items": {
+              "$ref": "#/components/schemas/UnreadableOrganizationResponse"
+            },
+            "type": "array"
           }
         },
         "required": [
-          "organizations"
+          "organizations",
+          "unreadable"
         ],
         "type": "object"
       },
@@ -8354,6 +8422,26 @@
           "summary",
           "subject",
           "sources"
+        ],
+        "type": "object"
+      },
+      "UnreadableOrganizationResponse": {
+        "properties": {
+          "correction": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "correction"
         ],
         "type": "object"
       },
@@ -11018,6 +11106,30 @@
           },
           "404": {
             "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/records/held-back": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeldBackRecordListResponse"
+                }
+              }
+            },
+            "description": "OK"
           }
         },
         "security": [

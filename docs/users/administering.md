@@ -758,6 +758,13 @@ shows each password credential's login in its "Resolved by" column, so you can r
 [Organizations](../operations/admin-endpoint.md#organizations) holds the rules — what a short name may contain, what a
 move is refused over, and when an organization cannot be removed.
 
+**A row the deployment will not read is named rather than hidden.** A user record, a mail account declaration, or an
+organization row written by an older build, edited in the database, or restored from a backup may stop reading as one —
+and each of them costs only itself, so nothing else tells you. `mfctl organization list` names any organization row in
+that state beneath the listing, and
+[records this deployment will not read](../operations/admin-endpoint.md#records-this-deployment-will-not-read) is the
+route that reports all three kinds with the settings to correct.
+
 A person served this way maintains their own mailboxes from [the client](../operations/client-endpoint.md) without
 reaching this command at all — and sees only their own. Who else a deployment serves is administrative, and no surface
 a person signs in to publishes it.
