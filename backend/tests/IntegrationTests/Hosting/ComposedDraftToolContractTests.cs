@@ -4,7 +4,6 @@
 
 using System.Net;
 using System.Text.Json;
-using MailFathom.AppHost;
 using MailFathom.IntegrationTests.Orchestration;
 using Xunit;
 
@@ -46,13 +45,14 @@ public sealed class ComposedDraftToolContractTests(MailFathomOrchestrationFixtur
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
+        var accountId = (await orchestration.ComposedHostAccountIdAsync(cancellationToken)).Value;
 
         using var client = await orchestration.OpenMcpEndpointClientAsync(cancellationToken);
         using var saveRequest = McpToolCall.Of(
             "save_draft",
             new
             {
-                account = OrchestrationContract.ServedMailAccountId,
+                account = accountId,
                 subject = "draft-tool-contract",
                 plainTextBody = "This one is written and not sent.",
                 to = SavedTo,
@@ -74,7 +74,7 @@ public sealed class ComposedDraftToolContractTests(MailFathomOrchestrationFixtur
             new
             {
                 draftId,
-                account = OrchestrationContract.ServedMailAccountId,
+                account = accountId,
                 subject = "draft-tool-contract",
                 plainTextBody = "This one is written, edited, and then sent.",
                 to = EditedTo,
@@ -106,7 +106,7 @@ public sealed class ComposedDraftToolContractTests(MailFathomOrchestrationFixtur
 
         // The account is the one the deployment serves, and the draft is held rather than filed: this account maps no
         // folder to the drafts role, so there is nowhere to put a copy and the draft is kept here alone.
-        Assert.Equal(OrchestrationContract.ServedMailAccountId, saved.GetProperty("accountId").GetString());
+        Assert.Equal(accountId, saved.GetProperty("accountId").GetString());
         Assert.Equal("held", saved.GetProperty("state").GetString());
         Assert.Equal(1, saved.GetProperty("revision").GetInt32());
         Assert.Equal(SavedTo.Length, saved.GetProperty("recipientCount").GetInt32());
@@ -120,7 +120,7 @@ public sealed class ComposedDraftToolContractTests(MailFathomOrchestrationFixtur
 
         // The promotion answers with the send's own record, queued rather than sent: the answer is that record as
         // the call committed it, and the submission host this deployment would offer it to resolves nowhere.
-        Assert.Equal(OrchestrationContract.ServedMailAccountId, queued.GetProperty("accountId").GetString());
+        Assert.Equal(accountId, queued.GetProperty("accountId").GetString());
         Assert.Equal("queued", queued.GetProperty("state").GetString());
         Assert.Equal(EditedTo.Length, queued.GetProperty("recipientCount").GetInt32());
         Assert.True(Guid.TryParse(queued.GetProperty("outgoingEmailId").GetString(), out _));

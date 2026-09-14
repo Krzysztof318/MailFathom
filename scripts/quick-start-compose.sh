@@ -81,7 +81,9 @@ prepares has no TLS, no backup, and credentials in files under this checkout.
   --port <port>            The IMAP port, for a custom provider. Defaults to 993.
   --user-name <address>    What the mailbox authenticates as.
   --display-name <name>    What an assistant calls this mailbox. Required, and never an identifier.
-  --account-id <id>        The name every tool argument and log line uses. Defaults to 'primary'.
+  --email-address <address>
+                           The address the mailbox receives mail at. Defaults to the user name
+                           where that is an address.
   --password-file <path>   Where to read the mailbox password from, instead of asking for it.
   --mcp-authentication <api-key|none>
                            Whether the MCP endpoint requires a generated key. Defaults to api-key.
@@ -110,7 +112,7 @@ imap_host=''
 imap_port=''
 user_name=''
 display_name=''
-account_id='primary'
+email_address=''
 password_file=''
 mcp_authentication='api-key'
 admin_endpoint='api-key'
@@ -122,7 +124,7 @@ interactive='yes'
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --provider | --host | --port | --user-name | --display-name | --account-id | --password-file | \
+    --provider | --host | --port | --user-name | --display-name | --email-address | --password-file | \
       --mcp-authentication | --admin-endpoint | --version)
       [[ $# -ge 2 ]] || { printf '%s takes a value.\n' "$1" >&2; exit 1; }
       case "$1" in
@@ -131,7 +133,7 @@ while [[ $# -gt 0 ]]; do
         --port) imap_port="$2" ;;
         --user-name) user_name="$2" ;;
         --display-name) display_name="$2" ;;
-        --account-id) account_id="$2" ;;
+        --email-address) email_address="$2" ;;
         --password-file) password_file="$2" ;;
         --mcp-authentication) mcp_authentication="$2" ;;
         --admin-endpoint) admin_endpoint="$2" ;;
@@ -348,10 +350,20 @@ fi
 require_answer "$user_name" 'mailbox user name' '--user-name'
 require_answer "$display_name" 'display name' '--display-name'
 
-# `AccountId` and every alias are names the operator chooses and every tool argument, log line, and error message then
-# uses, so the characters are held to what reads back unambiguously in all three.
-if [[ ! "$account_id" =~ ^[A-Za-z0-9._-]+$ ]]; then
-  printf 'An account identifier holds letters, digits, dots, hyphens, and underscores: %s\n' "$account_id" >&2
+# The address is what tells this mail account apart from every other one the deployment holds, and a provider's login is
+# ordinarily that address, so it is only asked for where the login is something else.
+if [[ -z "$email_address" && "$user_name" == *@* ]]; then
+  email_address="$user_name"
+fi
+
+if [[ "$interactive" == 'yes' && -z "$email_address" ]]; then
+  email_address="$(ask 'The address this mailbox receives mail at')"
+fi
+
+require_answer "$email_address" 'email address' '--email-address'
+
+if [[ ! "$email_address" =~ ^[^[:space:]@]+@[^[:space:]@]+$ ]]; then
+  printf 'An email address holds one @ and no white space: %s\n' "$email_address" >&2
   exit 1
 fi
 
@@ -476,14 +488,14 @@ fi
 # json_string below runs inside a command substitution, and an exit there is the substitution's rather than the script's,
 # so a value carrying a control character would reach the file as broken JSON instead of stopping the run. The check
 # therefore happens here, where it stops it.
-for written_value in "$account_id" "$display_name" "$imap_host" "$user_name"; do
+for written_value in "$email_address" "$display_name" "$imap_host" "$user_name"; do
   if [[ "$written_value" == *[$'\x01'-$'\x1f']* ]]; then
     printf 'A control character cannot be part of a value written into the configuration: %s\n' "$written_value" >&2
     exit 1
   fi
 done
 
-readonly imap_password_name="imap-$account_id-password"
+readonly imap_password_name='imap-password'
 readonly admin_key_name='admin-workstation-key'
 readonly schema_asset="mailfathom-schema-$version.sql"
 
@@ -631,14 +643,14 @@ JSON
 
 chmod 644 config/10-mailfathom.json
 
-# The mailbox is not configuration and this is not a file the deployment reads: every mail account belongs to the record
-# of the user whose mail it is, and a record is written while the deployment runs. So the answers collected above are
-# written here as the declaration `mfctl user account add --from-file` takes, and recorded through the administrative
-# endpoint below — by this script where it started the deployment, and by the operator where it did not. It stays on
-# this machine either way: what it carries is a reference to a credential rather than a credential.
+# The mailbox is not configuration and this is not a file the deployment reads: every mail account is a record of its own,
+# assigned to the users it serves and written while the deployment runs. So the answers collected above are written here
+# as the declaration `mfctl account add --from-file` takes, and recorded through the administrative endpoint below — by
+# this script where it started the deployment, and by the operator where it did not. It stays on this machine either
+# way: what it carries is a reference to a credential rather than a credential.
 cat > mailbox.json << JSON
 {
-  "AccountId": $(json_string "$account_id"),
+  "EmailAddress": $(json_string "$email_address"),
   "DisplayName": $(json_string "$display_name"),
   "Host": $(json_string "$imap_host"),
   "Port": $imap_port,
@@ -757,13 +769,13 @@ report_connection() {
 # running and every fresh database, which holds no user to record it for. Nothing is synchronized until this record
 # exists, so it is a step rather than an afterthought.
 report_recording_commands() {
-  printf '\nThen record the user it serves, unless it holds one already, and declare the mailbox it reads in\n' >&2
-  printf 'their record:\n\n' >&2
+  printf '\nThen record the user it serves, unless it holds one already, and add the mailbox it reads for\n' >&2
+  printf 'them:\n\n' >&2
   printf '  mfctl login --endpoint http://127.0.0.1:%s\n' "$admin_port" >&2
   printf '  mfctl user add --display-name <name>\n' >&2
-  printf '  mfctl user account add --from-file %s/mailbox.json\n\n' "$compose_directory" >&2
-  printf 'A deployment declares no mail account in its own file, so until that record carries one it\n' >&2
-  printf 'reads nothing. %s/users/administering.html\n' "$documentation_base" >&2
+  printf '  mfctl account add --from-file %s/mailbox.json\n\n' "$compose_directory" >&2
+  printf 'A deployment declares no mail account in its own file, so until one is added it reads\n' >&2
+  printf 'nothing. %s/users/administering.html\n' "$documentation_base" >&2
 }
 
 # One scalar out of a small administrative answer. A JSON parser is not a prerequisite of an evaluation, and every value
@@ -773,18 +785,15 @@ read_json_text() {
   grep --only-matching "\"$1\":\"[^\"]*\"" | head -n 1 | cut -d '"' -f 4
 }
 
-read_json_number() {
-  grep --only-matching "\"$1\":[0-9]*" | head -n 1 | cut -d ':' -f 2
-}
-
 # The mailbox this deployment reads is a row it keeps rather than a setting it reads, so it is written through the
-# administrative endpoint once the deployment is up, into the record of the one user it serves. A user is recorded by
-# an operator before anything is declared for them, and never by this script, so a fresh database — which holds nobody —
-# leaves the commands to the operator. Declaring it after the start is what the product does rather than a way around a missing setting: the write that
-# commits a record publishes it to the running roster, so this mailbox is synchronized without a restart. A refusal
-# answers with what it refused rather than with a failing status, which is why the outcome is read out of the body.
+# administrative endpoint once the deployment is up, assigned to the one user it serves. A user is recorded by an
+# operator before anything is added for them, and never by this script, so a fresh database — which holds nobody —
+# leaves the commands to the operator. Adding it after the start is what the product does rather than a way around a
+# missing setting: the write publishes the account to the running roster, so this mailbox is synchronized without a
+# restart. A refusal answers with what it refused rather than with a failing status, which is why the outcome is read
+# out of the body.
 record_the_mailbox() {
-  local origin="http://127.0.0.1:$admin_port" roster user record version outcome declaration
+  local origin="http://127.0.0.1:$admin_port" roster user outcome declaration
   local -a authorization=()
 
   if [[ "$admin_endpoint" == 'api-key' ]]; then
@@ -798,10 +807,6 @@ record_the_mailbox() {
   user="$(printf '%s' "$roster" | read_json_text 'id')"
   [[ -n "$user" ]] || return 1
 
-  record="$(curl -fsS "${authorization[@]}" "$origin/api/admin/users/$user/record")" || return 1
-  version="$(printf '%s' "$record" | read_json_number 'version')"
-  [[ -n "$version" ]] || return 1
-
   # The declaration travels as the JSON object a file states it in, so it is the file's own text on one line rather
   # than a body composed a second time here.
   declaration="$(tr '\n' ' ' < mailbox.json)"
@@ -809,8 +814,8 @@ record_the_mailbox() {
   outcome="$(
     curl -fsS "${authorization[@]}" \
       --header 'Content-Type: application/json' \
-      --data "{ \"version\": $version, \"account\": $(json_string "$declaration") }" \
-      "$origin/api/admin/users/$user/record/mail-accounts"
+      --data "{ \"userId\": \"$user\", \"account\": $(json_string "$declaration") }" \
+      "$origin/api/admin/mail-accounts"
   )" || return 1
 
   if [[ "$outcome" != *'"committed":true'* ]]; then
@@ -976,8 +981,8 @@ printf '\nMailFathom %s started, reading no mailbox yet.\n' "$version" >&2
 printf 'Declaring the mailbox it reads, where it holds one user to declare it for.\n' >&2
 
 if record_the_mailbox; then
-  printf 'Declared the mailbox %s in their record. It is served from now on, without a restart, and the\n' \
-    "$account_id" >&2
+  printf 'Added the mailbox %s for them. It is served from now on, without a restart, and the\n' \
+    "$email_address" >&2
   printf 'first synchronization starts on the next run.\n' >&2
 else
   printf '\nThe deployment is running and reads no mailbox yet, so nothing is synchronized.\n' >&2

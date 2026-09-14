@@ -24,13 +24,15 @@ using NSubstitute;
 
 namespace MailFathom.Host.UnitTests.TestDoubles;
 
-/// <summary>A deployment holding user records, composed as the three services the user routes are published over.</summary>
+/// <summary>A deployment holding user records and mail accounts, composed as the services the user and account routes are published over.</summary>
 /// <remarks>
 /// <para>
-/// All three administrations are built rather than substituted, because they are concrete types the handlers take and
+/// Every administration is built rather than substituted, because they are concrete types the handlers take and
 /// because what a route test is asking about is the boundary in front of real rules rather than in front of a scripted
 /// answer. What is substituted is the row underneath — the reader, the writer, the directory, the provisioning, and the
-/// erasure — so a test states what the deployment holds without a database.
+/// erasure — so a test states what the deployment holds without a database. The mail accounts are held in memory
+/// instead, because every account write moves the version of the user records it reaches and a test reads that
+/// version back through the reader.
 /// </para>
 /// <para>
 /// The binder is the real one for the same reason: a candidate a route accepted and the binder would refuse is exactly
@@ -41,8 +43,6 @@ internal sealed class UserRecordDeployment
 {
     /// <summary>The instant the binder judges a date-bound rule at, so nothing here is drawn from the wall clock.</summary>
     private static readonly DateTimeOffset Today = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
-
-    private readonly ServedMailUsers servedUsers = new();
 
     /// <summary>Composes the deployment for a caller granted the permissions a test's routes are published under.</summary>
     /// <param name="granted">The permissions the caller holds.</param>
@@ -57,6 +57,8 @@ internal sealed class UserRecordDeployment
             : AuthorizedPrincipal.Caller("operations", granted));
 
         this.Documents = Substitute.For<IUserSettingsDocumentReader>();
+        this.Documents.ReadVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ => this.MailAccountRecords.Versions());
 
         this.Store = Substitute.For<IUserSettingsDocumentWriter>();
         this.Store
@@ -84,7 +86,7 @@ internal sealed class UserRecordDeployment
 
         // A roster naming somebody no test acts on, so every user a test writes for reads as one nothing declares —
         // which is the ordinary case — until the test says otherwise.
-        this.servedUsers.Resolved(
+        this.ServedUsers.Resolved(
         [
             new(
                 MailUserId.Create(new Guid("99999999-9999-9999-9999-999999999999")),
@@ -104,23 +106,39 @@ internal sealed class UserRecordDeployment
             this.Provisioning,
             this.Erasure,
             this.Store,
-            this.servedUsers,
+            this.ServedUsers,
             admission,
             new ConfigurationChangeAnnouncements(connect: null, NullLogger<ConfigurationChangeAnnouncements>.Instance),
             NullLogger<UserRosterAdministration>.Instance);
+
+        var binder = new UserAccountDocumentBinder(
+            new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
+            new FakeTimeProvider(Today),
+            Options.Create(new SensitiveContentOptions()));
 
         this.Records = new UserRecordAdministration(
             authorization,
             this.Documents,
             this.Store,
-            new UserAccountDocumentBinder(
-                new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
-                new FakeTimeProvider(Today),
-                Options.Create(new SensitiveContentOptions())),
+            binder,
             SecretValidation.OverRegisteredSchemes(),
-            this.servedUsers,
+            this.ServedUsers,
             Substitute.For<IStoredFileStore>(),
             new ConfigurationChangeAnnouncements(connect: null, NullLogger<ConfigurationChangeAnnouncements>.Instance));
+
+        this.MailAccounts = new MailAccountAdministration(
+            authorization,
+            this.Documents,
+            this.MailAccountRecords,
+            binder,
+            SecretValidation.OverRegisteredSchemes(),
+            new ServedMailUsersConvergence(
+                UserRecordScopes.Resolving(this.Documents, binder),
+                this.ServedUsers,
+                new RecordingLogger<ServedMailUsersConvergence>()),
+            new ConfigurationChangeAnnouncements(
+                () => Task.FromResult(this.Backplane.Connect()),
+                new RecordingLogger<ConfigurationChangeAnnouncements>()));
 
         this.StoredSecrets = Substitute.For<IStoredSecretStore>();
         this.StoredSecrets.CanStore.Returns(true);
@@ -152,6 +170,18 @@ internal sealed class UserRecordDeployment
     /// <summary>Gets the record administration both user-record surfaces are published over.</summary>
     internal UserRecordAdministration Records { get; }
 
+    /// <summary>Gets the mail-account administration the account routes and a user's own account routes are published over.</summary>
+    internal MailAccountAdministration MailAccounts { get; }
+
+    /// <summary>Gets the accounts the deployment holds and the user records they are assigned to.</summary>
+    internal InMemoryMailAccountRecordStore MailAccountRecords { get; } = new();
+
+    /// <summary>Gets the roster this process serves, which an account write converges before announcing.</summary>
+    internal ServedMailUsers ServedUsers { get; } = new();
+
+    /// <summary>Gets the backplane an account write is announced over, which nobody hears until a test listens.</summary>
+    internal InMemoryBackplane Backplane { get; } = new();
+
     /// <summary>Gets the stored-secret administration exposed by the user routes.</summary>
     internal StoredSecretAdministration Secrets { get; }
 
@@ -173,13 +203,17 @@ internal sealed class UserRecordDeployment
     /// <summary>Gets the substituted erasure.</summary>
     internal IMailUserErasure Erasure { get; }
 
-    /// <summary>States the record one user's row holds.</summary>
+    /// <summary>States the record one user's row holds, and the mail accounts assigned to them.</summary>
     /// <param name="user">The user.</param>
     /// <param name="json">The record, as the row holds it.</param>
     /// <param name="version">The version the row stands at.</param>
-    internal void Holding(MailUserId user, string json, long version) =>
+    /// <param name="accounts">The accounts assigned to the user.</param>
+    internal void Holding(MailUserId user, string json, long version, params MailAccountRecord[] accounts)
+    {
+        this.MailAccountRecords.HoldUser(user, json, version, accounts);
         this.Documents.ReadAsync(user, Arg.Any<CancellationToken>())
-            .Returns(new UserSettingsDocument(user, $"user-{user.Value:D}", json, version));
+            .Returns(_ => this.MailAccountRecords.DocumentOf(user));
+    }
 
     /// <summary>States the users this deployment holds, whether or not this process serves them.</summary>
     /// <param name="held">The users.</param>
@@ -188,5 +222,5 @@ internal sealed class UserRecordDeployment
 
     /// <summary>States the roster this process settled at start.</summary>
     /// <param name="served">The users served, and where each one's mail accounts are read from.</param>
-    internal void Serving(params ServedMailUser[] served) => this.servedUsers.Resolved(served);
+    internal void Serving(params ServedMailUser[] served) => this.ServedUsers.Resolved(served);
 }

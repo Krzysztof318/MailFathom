@@ -198,7 +198,7 @@ Nothing keys onto this row and nothing cascades from it. It describes the deploy
 |---|---|
 | `Id` | The stable user identity, and the primary key. MailFathom mints it, for every user: `mfctl user add` mints every user an administrator records, and the migration that adds this table mints the one row it writes where it upgrades a database already holding mail from a release before users were recorded — a fresh database gets none. No file states one — nothing in a file could derive a value that is the same across restarts and across replicas, and one invented per start would attach stored mail to a person who existed for one process. It is opaque, so nothing downstream can come to depend on a well-known value. It is a version 4 identifier rather than one of the version 7 values the rest of this page is keyed by, and deliberately so: a user identifier reaches administrative APIs, audit records, and logs, and a time-ordered one would publish when each user was provisioned and in what order relative to the others — which is a fact about people rather than about rows. Nothing reads these rows in identifier order, so the locality it would buy is worth nothing to pay for with that |
 | `DisplayName` | The label an operator tells this user apart by, unique across the deployment and at most 128 characters. It is a label rather than an identity: nothing resolves a user by it, every reference to a user is the identifier above, and the uniqueness exists so that a list of users can be read rather than so that a name can be looked up. It is exact rather than case-folded, because a comparison rule is owed by a value something resolves by. The migration that adds it labels `user` the row the earlier one wrote on an upgraded database, which is the label that user carries until `mfctl user rename` changes it |
-| `Document` | The user's configurable record, as one `jsonb` document — their mail-account declarations and their user-level settings. Nothing queries into it, which is what makes it a document rather than a schema: the configuration layer that writes it is what reads it back |
+| `Document` | The user's configurable record, as one `jsonb` document — their user-level settings, and no mail account. Nothing queries into it, which is what makes it a document rather than a schema: the configuration layer that writes it is what reads it back |
 | `McpEndpointEnabled`, `ClientEndpointEnabled` | Whether the user is served on the MCP endpoint and on the client endpoint, `boolean NOT NULL DEFAULT TRUE`. The default is what a row recorded before the columns existed reads, and what a provisioning insert naming neither writes. The user's record states them under `EndpointAccess`, and the statement committing a record writes both from it, so the row never serves a user on an endpoint their committed record keeps them off. Every credential resolution and every session read joins them in the statement it already runs, so a switch turned off refuses that user's next request on every replica with no cache to expire |
 | `Version` | The version a write is accepted against. It is a number the writer states rather than the `xmin` token the rest of this page uses, because a rejected write has to be able to report which version it was refused against, and a token the database generates behind the write cannot be quoted back |
 | `CreatedAt`, `UpdatedAt` | When the user was provisioned, and when their document last changed — which is the provisioning instant until it does |
@@ -210,23 +210,51 @@ stored upper-cased and unique across the deployment under its own index, because
 sign-in resolves the organization by; and when it was recorded.
 
 **The document has a typed record to bind to, and the envelope beside it never depends on reading one.** What the
-column holds is one user's configurable record — their mail-account declarations, and the settings that are their own
-rather than the deployment's as each moves out of the deployment's section. A start binds it for every user the
-deployment holds, no configuration source reaching any of them. What the binding does is bind strictly — a
-property nothing binds is a refusal rather than a value quietly dropped — and then judge the record by every rule a mail
-account is stated under, refusing the start naming the user when it finds one; the identifier and the published name are
-unique *within the user*, which is the naming space this binder applies. Nothing narrows it
-across users, so two people may each name a mailbox `work` — but the settings read in front of persistence still
-resolves an account by its identifier alone and keeps the user recorded first, so a start reports such a name at
-`Warning`, naming the users who share it, until [issue 1325](https://github.com/Krzysztof318/MailFathom/issues/1325)
-keys that read by the user as well. The record may carry no secret material at
+column holds is one user's configurable record — the settings that are their own rather than the deployment's. A start
+composes it with every mail account assigned to that user, as a `MailAccounts` collection each entry of which carries
+the account's generated identifier and display name, and binds the result for every user the deployment holds, no
+configuration source reaching any of them. What the binding does is bind strictly — a property nothing binds is a
+refusal rather than a value quietly dropped — and then judge the record by every rule a mail account is stated under,
+refusing the start naming the user when it finds one; the published name is unique *within the user's assigned set*,
+which is the naming space this binder applies. An account holding no address is left out of the composition and
+reported at `Warning`. Neither the record nor an account may carry secret material at
 all — a mailbox password is a reference naming where the material is kept, and a value carrying the material itself is
 refused. Nothing in it shadows a deployment setting, because there is no user configuration layer: a user-level
 setting is a property of this record, or it is a deployment setting somebody put in the wrong document. The label, the
 version, and the marker stay relational for the reason the identifier does — authenticating a request and joining a
 user's mail must never wait on a document being parsed.
 
-`stored_secrets` holds the material a user document refers to through `database:<uuid>`. The document carries only
+`settings_mail_accounts` holds one row per mail account, apart from every user it serves, and
+`mail_account_assignments` says which users each one serves. An account is a record of its own because one mailbox is
+one account however many people read it: its address is compared across the whole deployment, which a declaration
+inside each user's document could not be.
+
+| Column of `settings_mail_accounts` | What it records |
+|---|---|
+| `Id` | The account's identity and the primary key, a version 4 UUID minted by whoever creates the account rather than generated by the model. Its text form is what every stored row, tool argument, and log line names the account by |
+| `EmailAddress` | The mailbox's address as it was declared, trimmed, at most 320 characters. Nullable: an account the upgrade could derive no address for is held without one, is not served, and is reported at startup until an administrator states it |
+| `NormalizedEmailAddress` | The address in the form it is compared in — trimmed and upper-cased — which the unique index below reads |
+| `DisplayName` | The name the account is told apart by among one user's accounts, required and at most 128 characters. It is unique within each assigned user's set, which the composed record's binding judges, rather than by an index |
+| `Document` | Every other setting the mailbox is read with, as one `jsonb` object carrying neither the address nor the name nor an identifier |
+| `Version` | The version a write is accepted against, a concurrency token the writer states for the reason `settings_accounts` states its own |
+| `CreatedAt`, `UpdatedAt` | When the account was created, and when its declaration last changed |
+
+| Column of `mail_account_assignments` | What it records |
+|---|---|
+| `UserId` | The user served, a foreign key onto `settings_accounts` (`fk_mail_account_assignments_settings_accounts`) with `ON DELETE CASCADE` |
+| `MailAccountId` | The account they are served, a foreign key onto `settings_mail_accounts` (`fk_mail_account_assignments_settings_mail_accounts`) with `ON DELETE CASCADE`, under the unique index `ix_mail_account_assignments_mail_account_id`. Until the mail graph is keyed by user as well as account, an account's mail is held once however many people it would serve, so serving it to two users would synchronize one mailbox twice and apply its rules and mutations twice; the index makes one user per account a guarantee two concurrent assignments cannot race past, and it also serves the read that lists who an account is assigned to |
+| `AssignedAt` | When the assignment was made |
+
+The primary key is `(UserId, MailAccountId)`, so an account is assigned to one user once. **One address is one account,
+and the index is the guarantee**: `ix_settings_mail_accounts_normalized_email_address` is unique over
+`NormalizedEmailAddress` where it is not null, so two writers claiming one address at once are separated by PostgreSQL
+rather than by a read either of them made first. Both foreign keys cascade, so erasing a user ends what they were
+assigned and erasing an account ends every assignment to it; what becomes of an account left with nobody is the
+erasure's decision rather than a cascade's, and ending the last assignment erases the account and its mail in the same
+transaction. Every account write moves the `Version` of each assigned user's `settings_accounts` row, which is the
+version a client composes its own changes against.
+
+`stored_secrets` holds the material a user document or a mail account refers to through `database:<uuid>`. The document carries only
 the reference; a database reader therefore sees no mailbox password in the JSONB record. The material is sealed under
 the ADR 0005 key ring before PostgreSQL sees it, and the authenticated binding contains the user, the row identifier,
 the declared secret name, the stored-secret purpose, and the key identifier. Moving any one of them makes the value
@@ -249,10 +277,9 @@ table can be reached or opened, and a deployment without the key ring refuses to
 
 **An account reference is the pair, not the identifier.** Every table that names a mail account carries `UserId`
 beside `MailboxAccountId`, and every index that used to lead with the identifier now leads with the two together. The
-identifier is the string whoever declared the account wrote, and it names one account *within its user* rather than
-across the deployment — two people may each call an account `work`. So a row that named the identifier alone would stop
-naming one account the moment a deployment serves a second person, and a structure led by it alone would interleave two
-users' rows under one key. Reads follow the same order: a mail-reading or mail-writing query narrows on the user and
+identifier is the text form of the account's generated `settings_mail_accounts.Id`. An account is assigned to one user
+at a time, and the mail stored for it hangs on that user, so ending the assignment erases that user's rows under the
+identifier rather than handing them to anybody else. Reads follow the same order: a mail-reading or mail-writing query narrows on the user and
 then on the identifier, and it is given both by whoever resolved the account rather than by a join back to
 `mailbox_accounts`. `mailbox_accounts` is keyed by the pair as well, which is what makes that scope
 a guarantee the schema gives rather than a convention every reader has to keep.
@@ -261,9 +288,9 @@ The one exception is a lookup by a key that already names one row — a primary 
 binding's `(user, account, alias, generation)`. Such a read carries the user because the key does, and adding a term
 beside the key would narrow nothing.
 
-`mailbox_accounts` carries `Id` and `UserId`, and its primary key is both of them in that order. Beside them it carries the two columns [the folders MailFathom keeps for a held account](#the-folders-mailfathom-keeps-for-a-held-account) need: `CustodyPhase`, and the `LocalMailFoldersRevision` those folders are written against. The mailbox identifier is the string whoever declared the account wrote; the user beside it is a `uuid` foreign key onto `settings_accounts` that cascades. Both are relational columns rather than values in a document, which is the point: ownership, lookup, uniqueness, and cascade erasure are then guarantees PostgreSQL gives rather than predicates somebody remembered to write. The key is what scopes the name — a second user declaring `work` gets a second mailbox rather than a refusal — and the user leads it rather than following it, which is what leaves the table without an index of its own: the read that used to need one, which mail accounts one user owns, is a range of the key and is what the erasure below asks.
+`mailbox_accounts` carries `Id` and `UserId`, and its primary key is both of them in that order. Beside them it carries the two columns [the folders MailFathom keeps for a held account](#the-folders-mailfathom-keeps-for-a-held-account) need: `CustodyPhase`, and the `LocalMailFoldersRevision` those folders are written against. The mailbox identifier is the account's generated identifier as text; the user beside it is a `uuid` foreign key onto `settings_accounts` that cascades. Both are relational columns rather than values in a document, which is the point: ownership, lookup, uniqueness, and cascade erasure are then guarantees PostgreSQL gives rather than predicates somebody remembered to write. The key is what scopes a mailbox to its user, and since an account is assigned to one user at a time the table holds one row per account; the user leads the key rather than following it, which is what leaves the table without an index of its own: the read that used to need one, which mail accounts one user owns, is a range of the key and is what the erasure below asks.
 
-**A mailbox is bound to a user that already exists.** The account row is created by whichever synchronization run first binds one of the account's folders, and that run reads the user record rather than minting one: a run that invented a user would be deciding whose mail it is while storing it, and the record it invented would be the boundary every later read of that mail is judged against. Nothing records a user but `mfctl user add` and, on a database upgraded from a release before users were recorded, the migration that provisions the user its stored mail belongs to, and a mailbox is declared in a record that already exists, so the user a run finds is always the one whose record declared the account it is synchronizing.
+**A mailbox is bound to a user that already exists.** The account row is created by whichever synchronization run first binds one of the account's folders, and that run reads the user record rather than minting one: a run that invented a user would be deciding whose mail it is while storing it, and the record it invented would be the boundary every later read of that mail is judged against. Nothing records a user but `mfctl user add` and, on a database upgraded from a release before users were recorded, the migration that provisions the user its stored mail belongs to, and an account is assigned to a user that already exists, so the user a run finds is always one the account it is synchronizing is assigned to.
 
 **Erasing a user is one delete plus a named list.** The cascade above takes the accounts, the folders, the mail, and everything derived from it, and it takes the [contact book](#the-contact-book) beside them, which keys onto the user rather than onto an account. What it does not reach is the tables that record a mail account as a plain identifier with nothing keying it onto one — `mail_answering_audit_entries`, `mail_drafts`, `mail_rederivation_positions`, `mail_rederivation_runs`, `mail_rule_evaluation_runs`, `mailbox_mutation_audit_entries`, `mailbox_refresh_tokens`, `outgoing_emails`, `recurring_sends`, and `spam_classification_runs` — and those are taken by statements of their own, in the same transaction, before the user row goes. The list is derived from the model rather than maintained by hand, so a table added later that records an account without keying onto one is discharged the day it appears; a table that hangs off one of those, such as `outgoing_email_filings`, is left to its own cascade. Each of those statements names the user on the row rather than the accounts that user holds, which is what the user column beside every account reference bought: a row recorded against an account the deployment no longer holds a row for — a sealed refresh token for a mailbox that was authorized and never synchronized is the one that occurs — carries the user it was written for and goes with the rest, where a subquery over the account table would have left it behind.
 

@@ -113,7 +113,7 @@ internal static class ComposedSettings
                 configuration.GetSection(WithdrawnUserCollectionSection).GetChildren().Any()
                     ?
                     [
-                        $"{WithdrawnUserCollectionSection} is no longer read: this deployment records the users it serves rather than declaring them, and nothing imports what the collection declared. Record each of them with 'mfctl user add' and each of their mailboxes with 'mfctl user account add', credentials included, then remove the section from your configuration.",
+                        $"{WithdrawnUserCollectionSection} is no longer read: this deployment records the users it serves rather than declaring them, and nothing imports what the collection declared. Record each of them with 'mfctl user add' and each of their mailboxes with 'mfctl account add', credentials included, then remove the section from your configuration.",
                     ]
                     : []),
             .. Refusal<ServedMailUsers>(
@@ -121,7 +121,7 @@ internal static class ComposedSettings
                 configuration.GetSection(WithdrawnDeploymentMailAccountsSection).Exists()
                     ?
                     [
-                        $"{WithdrawnDeploymentMailAccountsSection} is no longer read: a mail account belongs to the user who owns it, and this deployment reads every one of them from that user's own record. Nothing imports what the section declared. Declare each account with 'mfctl user account add' in the record of the user this deployment already serves, keeping its AccountId so the mail already stored under it stays that mailbox's, and record anybody else with 'mfctl user add' first; then remove the section from your configuration.",
+                        $"{WithdrawnDeploymentMailAccountsSection} is no longer read: a mail account is a record of its own that this deployment holds and assigns to the users it serves. Nothing imports what the section declared. Create each account with 'mfctl account add' for a user this deployment already serves, recording anybody else with 'mfctl user add' first; then remove the section from your configuration.",
                     ]
                     : []),
         ];

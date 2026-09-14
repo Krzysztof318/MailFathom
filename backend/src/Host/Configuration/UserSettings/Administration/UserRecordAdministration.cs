@@ -21,7 +21,9 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <para>
 /// Every change here produces a candidate record and puts it through the one binder both directions share, so a record
 /// a write accepts is a record the next start would read. Nothing patches the row in place: the caller states an act —
-/// a saved document, one mailbox added, one withdrawn — and what the act composes is judged whole.
+/// a saved document, a portrait linked — and what the act composes is judged whole, with the mail accounts assigned
+/// to the user composed back in. The accounts themselves are records of their own, which
+/// <see cref="MailAccountAdministration" /> writes.
 /// </para>
 /// <para>
 /// Two callers reach it and the pairs of entry points are what separate them. An administrator names the user and
@@ -61,16 +63,9 @@ internal sealed class UserRecordAdministration(
     /// <summary>How many times a portrait link is composed again over a record another write moved underneath it.</summary>
     private const int MaximumRelinkAttempts = 3;
 
-    /// <summary>What a refused save is sent to, which is the act that states a mailbox and its credential afresh.</summary>
-    /// <remarks>
-    /// Not a narrower change, because a user's record has none: every setting of a mail account sits inside that
-    /// account's own element, so a save that changes one while a secret beside it stands redacted is exactly the case
-    /// the marker rule refuses. What the surface does have is the pair that replaces the whole element, and the
-    /// credential is stated again as part of it — which is what the reader is sent to instead of a command that could
-    /// not make the change.
-    /// </remarks>
+    /// <summary>What a save refused over a redaction marker it cannot place is sent to.</summary>
     private const string NarrowerChange =
-        "withdraw that mail account with 'mfctl user account remove' and declare it again with 'mfctl user account add', which states its credential afresh.";
+        "state the setting afresh rather than leaving the redaction marker in its place.";
 
     /// <summary>Reads one user's record as an administrator sees it.</summary>
     /// <param name="user">The user asked about.</param>
@@ -146,106 +141,6 @@ internal sealed class UserRecordAdministration(
         return this.SaveAsync(
             authorization.RequireUser(),
             documentJson,
-            expectedVersion,
-            UserRecordAuthority.User,
-            cancellationToken);
-    }
-
-    /// <summary>Declares one more mail account in a user's record.</summary>
-    /// <param name="user">The user the mailbox belongs to.</param>
-    /// <param name="accountJson">The declaration, as the JSON object a file would have written.</param>
-    /// <param name="expectedVersion">The version the record was read at.</param>
-    /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no such user.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="accountJson" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
-    internal Task<UserRecordWriteOutcome?> AddMailAccountAsync(
-        MailUserId user,
-        string accountJson,
-        long expectedVersion,
-        CancellationToken cancellationToken)
-    {
-        RequireNamed(user);
-        ArgumentNullException.ThrowIfNull(accountJson);
-        authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
-
-        return this.AddAsync(
-            user,
-            accountJson,
-            expectedVersion,
-            UserRecordAuthority.Administrator,
-            cancellationToken);
-    }
-
-    /// <summary>Declares one more mail account in the signed-in user's record.</summary>
-    /// <param name="accountJson">The declaration, as the JSON object a file would have written.</param>
-    /// <param name="expectedVersion">The version the record was read at.</param>
-    /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no record for the acting user.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="accountJson" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailAccountsWrite" />.</exception>
-    internal Task<UserRecordWriteOutcome?> AddOwnMailAccountAsync(
-        string accountJson,
-        long expectedVersion,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(accountJson);
-        authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
-
-        return this.AddAsync(
-            authorization.RequireUser(),
-            accountJson,
-            expectedVersion,
-            UserRecordAuthority.User,
-            cancellationToken);
-    }
-
-    /// <summary>Withdraws one mail account from a user's record.</summary>
-    /// <param name="user">The user the mailbox belongs to.</param>
-    /// <param name="accountId">The identifier the declaration is named by.</param>
-    /// <param name="expectedVersion">The version the record was read at.</param>
-    /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no such user.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, or <paramref name="accountId" /> is <see langword="null" />, empty, or white space.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
-    /// <remarks>The mail this deployment already stored for that account is deliberately untouched, exactly as it is when a file stops declaring one: no configuration edit takes somebody's mail away, and erasing it is a separate act somebody means.</remarks>
-    internal Task<UserRecordWriteOutcome?> RemoveMailAccountAsync(
-        MailUserId user,
-        string accountId,
-        long expectedVersion,
-        CancellationToken cancellationToken)
-    {
-        RequireNamed(user);
-        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
-        authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
-
-        return this.RemoveAsync(
-            user,
-            accountId,
-            expectedVersion,
-            UserRecordAuthority.Administrator,
-            cancellationToken);
-    }
-
-    /// <summary>Withdraws one mail account from the signed-in user's record.</summary>
-    /// <param name="accountId">The identifier the declaration is named by.</param>
-    /// <param name="expectedVersion">The version the record was read at.</param>
-    /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no record for the acting user.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> is <see langword="null" />, empty, or white space.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailAccountsWrite" />.</exception>
-    internal Task<UserRecordWriteOutcome?> RemoveOwnMailAccountAsync(
-        string accountId,
-        long expectedVersion,
-        CancellationToken cancellationToken)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
-        authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
-
-        return this.RemoveAsync(
-            authorization.RequireUser(),
-            accountId,
             expectedVersion,
             UserRecordAuthority.User,
             cancellationToken);
@@ -339,151 +234,6 @@ internal sealed class UserRecordAdministration(
         return outcome is null
             ? null
             : new UserEndpointAccessWrite(outcome, outcome.IsCommitted ? requested : standing);
-    }
-
-    /// <summary>Declares one more folder in one of the signed-in user's mail accounts.</summary>
-    /// <param name="accountId">The identifier the account the folder belongs to is named by.</param>
-    /// <param name="folderJson">The folder, as the JSON object a file would have written.</param>
-    /// <param name="expectedVersion">The version the record was read at.</param>
-    /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no record for the acting user.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> is <see langword="null" />, empty, or white space.</exception>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="folderJson" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailAccountsWrite" />.</exception>
-    /// <remarks>
-    /// The three folder acts carry the grant a mail account's own settings carry rather than one of their own. A
-    /// folder is a setting of the account it sits in — it names a path on that account's server and decides what is
-    /// mirrored from it — so a deployment that lets somebody state their own mailboxes has already let them state what
-    /// is read out of one, and a second grant would divide a permission nobody has asked to divide.
-    /// </remarks>
-    internal Task<UserRecordWriteOutcome?> AddOwnFolderAsync(
-        string accountId,
-        string folderJson,
-        long expectedVersion,
-        CancellationToken cancellationToken)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
-        ArgumentNullException.ThrowIfNull(folderJson);
-        authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
-
-        return this.ChangeFolderAsync(
-            authorization.RequireUser(),
-            expectedVersion,
-            record => UserRecordComposition.WithFolderAdded(record, accountId, folderJson),
-            $"This user declares no mail account '{accountId}', so there is nothing for a folder to be added to.",
-            cancellationToken);
-    }
-
-    /// <summary>States one folder of the signed-in user's afresh, in place of the one carrying an alias.</summary>
-    /// <param name="accountId">The identifier the account the folder belongs to is named by.</param>
-    /// <param name="alias">The alias the folder being changed is declared under.</param>
-    /// <param name="folderJson">The folder as it is to stand, as the JSON object a file would have written.</param>
-    /// <param name="expectedVersion">The version the record was read at.</param>
-    /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no record for the acting user.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> or <paramref name="alias" /> is <see langword="null" />, empty, or white space.</exception>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="folderJson" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailAccountsWrite" />.</exception>
-    internal Task<UserRecordWriteOutcome?> ReplaceOwnFolderAsync(
-        string accountId,
-        string alias,
-        string folderJson,
-        long expectedVersion,
-        CancellationToken cancellationToken)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(alias);
-        ArgumentNullException.ThrowIfNull(folderJson);
-        authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
-
-        return this.ChangeFolderAsync(
-            authorization.RequireUser(),
-            expectedVersion,
-            record => UserRecordComposition.WithFolderReplaced(record, accountId, alias, folderJson),
-            $"This user's mail account '{accountId}' declares no folder '{alias}'. Read their record to see the aliases it holds.",
-            cancellationToken);
-    }
-
-    /// <summary>Withdraws one folder from one of the signed-in user's mail accounts.</summary>
-    /// <param name="accountId">The identifier the account the folder belongs to is named by.</param>
-    /// <param name="alias">The alias the folder being withdrawn is declared under.</param>
-    /// <param name="expectedVersion">The version the record was read at.</param>
-    /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no record for the acting user.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> or <paramref name="alias" /> is <see langword="null" />, empty, or white space.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailAccountsWrite" />.</exception>
-    /// <remarks>The mail this deployment already stored out of that folder is deliberately untouched, exactly as it is when a mail account stops being declared: no configuration edit takes somebody's mail away, and what becomes of it is an act of its own.</remarks>
-    internal Task<UserRecordWriteOutcome?> RemoveOwnFolderAsync(
-        string accountId,
-        string alias,
-        long expectedVersion,
-        CancellationToken cancellationToken)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(alias);
-        authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
-
-        return this.ChangeFolderAsync(
-            authorization.RequireUser(),
-            expectedVersion,
-            record => UserRecordComposition.WithFolderRemoved(record, accountId, alias),
-            $"This user's mail account '{accountId}' declares no folder '{alias}'. Read their record to see the aliases it holds.",
-            cancellationToken);
-    }
-
-    /// <summary>Composes one folder change over the record as the row holds it, and refuses one that matched nothing.</summary>
-    /// <remarks>
-    /// One private for the three acts, because they differ in exactly the composition they hand over and in the
-    /// sentence an unmatched change is reported with. What is the same is everything that decides whether the change
-    /// may be made at all — the version, the binder, and the commit — and a copy of that
-    /// per act is three places for one of them to drift.
-    /// </remarks>
-    private async Task<UserRecordWriteOutcome?> ChangeFolderAsync(
-        MailUserId user,
-        long expectedVersion,
-        Func<string, string?> compose,
-        string unmatched,
-        CancellationToken cancellationToken)
-    {
-        if (await this.OpenAsync(user, expectedVersion, cancellationToken) is not { } opened)
-        {
-            return null;
-        }
-
-        if (opened.Refusal is { } refusal)
-        {
-            return refusal;
-        }
-
-        string? candidate;
-
-        try
-        {
-            candidate = compose(opened.Record.Json);
-        }
-        catch (Exception refused) when (refused is FormatException or System.Text.Json.JsonException)
-        {
-            return UserRecordWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationCandidateInvalid,
-                opened.Record.Version,
-                [$"The folder change is not one this deployment can compose over the user's record, so nothing was written: {refused.Message}"]);
-        }
-
-        // Reported as a refusal rather than as nothing to change, for the reason a withdrawn mail account is: a change
-        // that matched nothing is a name the caller got wrong, and answering that the record is fine would leave them
-        // believing a folder had moved.
-        return candidate is null
-            ? UserRecordWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationCandidateInvalid,
-                opened.Record.Version,
-                [unmatched])
-            : await this.JudgeAndCommitAsync(
-                user,
-                opened.Record,
-                candidate,
-                UserRecordAuthority.User,
-                UserRecordArrival.BeingWritten,
-                cancellationToken);
     }
 
     /// <summary>Points the signed-in user's record at one of their stored files as the portrait they are drawn by, or at none.</summary>
@@ -602,6 +352,16 @@ internal sealed class UserRecordAdministration(
             var standing = RedactedDocumentSave.Flatten(inForce.Json);
             var saved = RedactedDocumentSave.Flatten(documentJson);
 
+            if (saved.Keys.Any(NamesAMailAccount))
+            {
+                return UserRecordWriteOutcome.Refused(
+                    MailFathomErrorCode.ConfigurationCandidateInvalid,
+                    inForce.Version,
+                    [
+                        $"The saved record names {MailAccountRecordComposition.MailAccountsProperty}, and a mail account is a record of its own rather than part of a user's. Remove it, and change an account with 'mfctl account edit'.",
+                    ]);
+            }
+
             edits = RedactedDocumentSave.DifferenceBetween(standing, saved);
             unplaceable = RedactedDocumentSave.FindMarkersTheSaveCannotPlace(standing, saved, NarrowerChange);
         }
@@ -640,99 +400,6 @@ internal sealed class UserRecordAdministration(
             authority,
             UserRecordArrival.BeingWritten,
             cancellationToken);
-    }
-
-    /// <summary>Declares one more mail account, composed over the record as the row holds it.</summary>
-    /// <remarks>The standing document rather than a redacted reading, so every secret reference the record already carries survives a change that was never about them.</remarks>
-    private async Task<UserRecordWriteOutcome?> AddAsync(
-        MailUserId user,
-        string accountJson,
-        long expectedVersion,
-        UserRecordAuthority authority,
-        CancellationToken cancellationToken)
-    {
-        if (await this.OpenAsync(user, expectedVersion, cancellationToken)
-            is not { } opened)
-        {
-            return null;
-        }
-
-        if (opened.Refusal is { } refusal)
-        {
-            return refusal;
-        }
-
-        string candidate;
-
-        try
-        {
-            candidate = UserRecordComposition.WithMailAccountAdded(opened.Record.Json, accountJson);
-        }
-        catch (Exception refused) when (refused is FormatException or System.Text.Json.JsonException)
-        {
-            return UserRecordWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationCandidateInvalid,
-                opened.Record.Version,
-                [$"The mail account is not a JSON object of that account's settings, so nothing was written: {refused.Message}"]);
-        }
-
-        return await this.JudgeAndCommitAsync(
-                user,
-                opened.Record,
-                candidate,
-                authority,
-                UserRecordArrival.BeingWritten,
-                cancellationToken);
-    }
-
-    /// <summary>Withdraws one mail account, refusing an identifier the record does not declare.</summary>
-    private async Task<UserRecordWriteOutcome?> RemoveAsync(
-        MailUserId user,
-        string accountId,
-        long expectedVersion,
-        UserRecordAuthority authority,
-        CancellationToken cancellationToken)
-    {
-        if (await this.OpenAsync(user, expectedVersion, cancellationToken)
-            is not { } opened)
-        {
-            return null;
-        }
-
-        if (opened.Refusal is { } refusal)
-        {
-            return refusal;
-        }
-
-        string? candidate;
-
-        try
-        {
-            candidate = UserRecordComposition.WithMailAccountRemoved(opened.Record.Json, accountId);
-        }
-        catch (Exception refused) when (refused is FormatException or System.Text.Json.JsonException)
-        {
-            return UserRecordWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationCandidateInvalid,
-                opened.Record.Version,
-                [$"The user's record is not a document of settings this deployment can read, so nothing was written: {refused.Message}"]);
-        }
-
-        // Reported as a refusal rather than as nothing to change, because the two are different things to tell
-        // somebody: a removal that matched nothing is an identifier they got wrong, and answering that the record is
-        // fine would leave them believing a mailbox had stopped being synchronized.
-        return candidate is null
-            ? UserRecordWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationCandidateInvalid,
-                opened.Record.Version,
-                [$"This user declares no mail account '{accountId}'. Read their record to see the identifiers it holds."])
-            : await this.JudgeAndCommitAsync(
-                user,
-                opened.Record,
-                candidate,
-                authority,
-                UserRecordArrival.BeingWritten,
-                cancellationToken);
     }
 
     /// <summary>Reads the record a change is composed over, and refuses a change authored over a version no longer in force.</summary>
@@ -776,7 +443,9 @@ internal sealed class UserRecordAdministration(
         UserRecordArrival arrival,
         CancellationToken cancellationToken)
     {
-        var binding = binder.Bind(candidateJson, arrival);
+        // Judged with the accounts assigned to the user composed back in, because that is the record a start serves them
+        // from: a language or a scanning posture is judged against the mailboxes it applies to.
+        var binding = binder.Bind(MailAccountRecordComposition.Compose(candidateJson, inForce.MailAccounts), arrival);
 
         if (binding.User is not { } bound)
         {
@@ -823,21 +492,10 @@ internal sealed class UserRecordAdministration(
                 ]);
         }
 
-        // Resolved here rather than left to the next start, which refuses the whole deployment over it: a reference
-        // that is well formed and names nothing retrievable binds cleanly, commits, and then stops the host for every
-        // user it serves until somebody corrects the row by hand. A write that leaves every mail account exactly as it
-        // was cannot have introduced one, because the walk reads nothing else, so refusing it would block every
-        // unrelated edit without making the next start any worse.
+        // Reported rather than refused. A user's own record carries no mail account, so a write to it cannot have
+        // introduced a credential its accounts cannot use; refusing over one would block every unrelated edit without
+        // making the next start any better. What it can do is say so, since the next start refuses the deployment.
         var unusable = await secrets.FindUserMailAccountErrorsAsync(RecordPath, bound.MailAccounts, cancellationToken);
-        var alreadyHeld = unusable.Count > 0 && LeavesEveryMailAccountAsItWas(inForce.Json, candidateJson);
-
-        if (unusable.Count > 0 && !alreadyHeld)
-        {
-            return UserRecordWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationCandidateInvalid,
-                inForce.Version,
-                unusable);
-        }
 
         UserRecordWriteOutcome? outcome;
         await servedUsers.WaitForRosterPublicationAsync(cancellationToken);
@@ -883,36 +541,9 @@ internal sealed class UserRecordAdministration(
         return outcome;
     }
 
-    /// <summary>Reports whether a candidate carries every mail account setting exactly as the record in force holds it.</summary>
-    /// <remarks>
-    /// <para>
-    /// Compared as settings rather than as the problems the walk reports, because a sentence names a path and a failure
-    /// and never the target behind it: a broken reference replaced by a different broken one reads the same, and only
-    /// the settings tell the two apart.
-    /// </para>
-    /// <para>
-    /// The whole collection rather than the account a problem sits in, because a secret name is judged across every
-    /// account at once — renaming one secret can make an untouched account's name the repeated one.
-    /// </para>
-    /// </remarks>
-    private static bool LeavesEveryMailAccountAsItWas(string standingJson, string candidateJson)
-    {
-        var standing = MailAccountSettingsOf(standingJson);
-        var candidate = MailAccountSettingsOf(candidateJson);
-
-        return standing.Count == candidate.Count
-            && standing.All(setting => candidate.TryGetValue(setting.Key, out var value)
-                && string.Equals(value, setting.Value, StringComparison.Ordinal));
-    }
-
-    private static Dictionary<string, string> MailAccountSettingsOf(string json) =>
-        RedactedDocumentSave.Flatten(json)
-            .Where(setting => setting.Key.StartsWith($"{nameof(UserAccountOptions.MailAccounts)}:", StringComparison.OrdinalIgnoreCase))
-            .ToDictionary(setting => setting.Key, setting => setting.Value, StringComparer.OrdinalIgnoreCase);
-
     /// <summary>Says that a problem a committed record still carries was there before the write, and what clears it.</summary>
-    private static string DescribeAsAlreadyHeld(string problem) =>
-        $"{problem} The record already carried this before the change, so the change was committed and left it as it was. A start refuses a record carrying it, so correct it before the deployment next restarts: provision what the reference names, or withdraw the mail account with 'mfctl user account remove' and declare it again with 'mfctl user account add'.";
+    internal static string DescribeAsAlreadyHeld(string problem) =>
+        $"{problem} The record already carried this before the change, so the change was committed and left it as it was. A start refuses a record carrying it, so correct it before the deployment next restarts: provision what the reference names, or state the credential afresh with 'mfctl account edit'.";
 
     /// <summary>Names every secret-bearing value the candidate carries that this user may not point their record at.</summary>
     /// <remarks>
@@ -938,7 +569,7 @@ internal sealed class UserRecordAdministration(
     /// afterwards, and a per-path reading would report the shift as a reference somebody wrote.
     /// </para>
     /// </remarks>
-    private static IReadOnlyList<string> FindSecretsTheUserMayNotName(
+    internal static IReadOnlyList<string> FindSecretsTheUserMayNotName(
         MailUserId user,
         string standingJson,
         string candidateJson)
@@ -954,7 +585,7 @@ internal sealed class UserRecordAdministration(
                 .Select(setting => setting.Key)
                 .Order(StringComparer.OrdinalIgnoreCase)
                 .Select(path =>
-                    $"{path} names a secret that was not provisioned for you: a reference is a path into what this deployment can read, and the mail server it would be presented to is yours. Name material this deployment holds for you — its own name begins with '{CredentialPrefixFor(user)}' — or ask whoever administers this deployment to declare the mailbox with 'mfctl user account add'."),
+                    $"{path} names a secret that was not provisioned for you: a reference is a path into what this deployment can read, and the mail server it would be presented to is yours. Name material this deployment holds for you — its own name begins with '{CredentialPrefixFor(user)}' — or ask whoever administers this deployment to declare the mailbox with 'mfctl account add'."),
         ];
     }
 
@@ -975,6 +606,11 @@ internal sealed class UserRecordAdministration(
     [
         .. document.Where(setting => NamesASecret(setting.Key)).Select(setting => setting.Value),
     ];
+
+    /// <summary>Reports whether a configuration path lies within the mail accounts a record no longer carries.</summary>
+    private static bool NamesAMailAccount(string path) =>
+        path.Equals(MailAccountRecordComposition.MailAccountsProperty, StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith($"{MailAccountRecordComposition.MailAccountsProperty}:", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Reports whether a configuration path names a secret, which is decided by its last segment alone.</summary>
     private static bool NamesASecret(string path) => SecretPropertyNaming.NamesASecret(path.Split(':')[^1]);

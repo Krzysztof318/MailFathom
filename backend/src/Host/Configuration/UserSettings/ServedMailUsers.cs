@@ -122,10 +122,9 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
     /// <param name="accountId">The identifier the account is named by.</param>
     /// <returns>The user and their declaration, or <see langword="null" /> when no user of this roster holds one under that identifier.</returns>
     /// <remarks>
-    /// It answers about every user this roster serves, each from their own record, which is the one place a mail
-    /// account is declared. An identifier two users record answers with the one recorded first, which is the collision
-    /// the startup gate reports until <see href="https://github.com/Krzysztof318/MailFathom/issues/1325">issue 1325</see>
-    /// keys this lookup by the user as well.
+    /// It answers about every user this roster serves. The identifier is generated and unique across the deployment, so
+    /// an account assigned to several users answers with the first of them, and the settings it answers with are the
+    /// same account record whichever user it came through.
     /// </remarks>
     public (MailUserId User, MailSynchronizationAccountOptions Account)? FindAccount(MailAccountId accountId) =>
         this.Users

@@ -48,7 +48,6 @@ internal static class ClientUserRecordEndpoint
     internal const string MailAccountsRoute = $"{RecordRoute}/mail-accounts";
 
     /// <summary>The route one mail account is withdrawn at.</summary>
-    /// <remarks>The identifier travels in the body for the reason <see cref="UserRecordEndpoints.UserMailAccountRemovalRoute" /> gives: it is a name its user chose rather than a generated handle, and a removal that silently addressed nothing is the one outcome this act must not have.</remarks>
     internal const string MailAccountRemovalRoute = $"{MailAccountsRoute}/removal";
 
     /// <summary>The route one folder of one mail account is declared at.</summary>
@@ -162,13 +161,13 @@ internal static class ClientUserRecordEndpoint
         return Answered(await records.ApplyOwnRecordAsync(document, request.Version, cancellationToken));
     }
 
-    /// <summary>Declares one more mail account in the acting user's record.</summary>
-    /// <param name="records">The record administration.</param>
+    /// <summary>Creates a mail account for the acting user alone.</summary>
+    /// <param name="records">The account administration.</param>
     /// <param name="request">The declaration and the version the record was read at.</param>
     /// <param name="cancellationToken">Cancels the read and the commit.</param>
     /// <returns><c>200</c> with what the write did, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the request carries no declaration.</returns>
     internal static async Task<Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> AddMailAccountAsync(
-        [FromServices] UserRecordAdministration records,
+        [FromServices] MailAccountAdministration records,
         [FromBody] UserMailAccountRequest request,
         CancellationToken cancellationToken)
     {
@@ -182,20 +181,20 @@ internal static class ClientUserRecordEndpoint
 
         if (request.Account is not { Length: > 0 } account)
         {
-            return Refusal("A declared mail account carries the settings the account is read with.");
+            return Refusal("A declared mail account carries its address, its display name, and the settings it is read with.");
         }
 
-        return Answered(await records.AddOwnMailAccountAsync(account, request.Version, cancellationToken));
+        return Answered(await records.AddOwnAsync(account, request.Version, cancellationToken));
     }
 
-    /// <summary>Withdraws one mail account from the acting user's record.</summary>
-    /// <param name="records">The record administration.</param>
+    /// <summary>Ends the acting user's assignment to one of their mail accounts.</summary>
+    /// <param name="records">The account administration.</param>
     /// <param name="request">The identifier and the version the record was read at.</param>
     /// <param name="cancellationToken">Cancels the read and the commit.</param>
     /// <returns><c>200</c> with what the write did, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the request names no account.</returns>
-    /// <remarks>The mail already stored for that account stays, exactly as it does when a file stops declaring one. Erasing it is a separate act, and it is not this surface's: what this does is stop the deployment reading the mailbox.</remarks>
+    /// <remarks>An account nobody else is assigned is erased with every message this deployment stored for it.</remarks>
     internal static async Task<Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> RemoveMailAccountAsync(
-        [FromServices] UserRecordAdministration records,
+        [FromServices] MailAccountAdministration records,
         [FromBody] UserMailAccountRemovalRequest request,
         CancellationToken cancellationToken)
     {
@@ -209,10 +208,10 @@ internal static class ClientUserRecordEndpoint
 
         if (request.AccountId is not { Length: > 0 } accountId || string.IsNullOrWhiteSpace(accountId))
         {
-            return Refusal("A withdrawn mail account names the identifier it was declared under.");
+            return Refusal("A withdrawn mail account names the identifier it is served under.");
         }
 
-        return Answered(await records.RemoveOwnMailAccountAsync(accountId, request.Version, cancellationToken));
+        return Answered(await records.RemoveOwnAsync(accountId, request.Version, cancellationToken));
     }
 
     /// <summary>Declares one more folder in one of the acting user's mail accounts.</summary>
@@ -221,7 +220,7 @@ internal static class ClientUserRecordEndpoint
     /// <param name="cancellationToken">Cancels the read and the commit.</param>
     /// <returns><c>200</c> with what the write did, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the request names no account or carries no declaration.</returns>
     internal static async Task<Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> AddFolderAsync(
-        [FromServices] UserRecordAdministration records,
+        [FromServices] MailAccountAdministration records,
         [FromBody] UserFolderRequest request,
         CancellationToken cancellationToken)
     {
@@ -252,7 +251,7 @@ internal static class ClientUserRecordEndpoint
     /// <param name="cancellationToken">Cancels the read and the commit.</param>
     /// <returns><c>200</c> with what the write did, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the request names no account or folder, or carries no declaration.</returns>
     internal static async Task<Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> ReplaceFolderAsync(
-        [FromServices] UserRecordAdministration records,
+        [FromServices] MailAccountAdministration records,
         [FromBody] UserFolderReplacementRequest request,
         CancellationToken cancellationToken)
     {
@@ -287,9 +286,9 @@ internal static class ClientUserRecordEndpoint
     /// <param name="request">The account, the alias, and the version the record was read at.</param>
     /// <param name="cancellationToken">Cancels the read and the commit.</param>
     /// <returns><c>200</c> with what the write did, <c>404</c> when this deployment holds no record for the caller, or <c>400</c> when the request names no account or no folder.</returns>
-    /// <remarks>The mail already stored out of that folder stays, exactly as it does when a mail account stops being declared. What this does is stop the deployment reading the folder.</remarks>
+    /// <remarks>The mail already stored out of that folder stays, unlike withdrawing the whole mail account, which erases it. What this does is stop the deployment reading the folder.</remarks>
     internal static async Task<Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> RemoveFolderAsync(
-        [FromServices] UserRecordAdministration records,
+        [FromServices] MailAccountAdministration records,
         [FromBody] UserFolderRemovalRequest request,
         CancellationToken cancellationToken)
     {

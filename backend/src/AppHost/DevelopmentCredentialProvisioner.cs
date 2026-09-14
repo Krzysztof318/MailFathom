@@ -77,20 +77,25 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
         return true;
     }
 
-    /// <summary>Declares the mailbox this run collected into the served user's record, unless it is already there.</summary>
-    /// <param name="adminEndpoint">The administrative surface the record is written through.</param>
-    /// <param name="user">The user the mailbox belongs to.</param>
+    /// <summary>Creates the mailbox this run collected for the served user, unless an account for its address is already assigned to them.</summary>
+    /// <param name="adminEndpoint">The administrative surface the account is written through.</param>
+    /// <param name="user">The user the mailbox is assigned to.</param>
     /// <param name="host">The IMAP server the mailbox is read from.</param>
     /// <param name="userName">The login the mailbox is reached under.</param>
     /// <param name="password">The password that login is presented with.</param>
     /// <param name="cancellationToken">Cancels the read and the write.</param>
-    /// <returns><see langword="true" /> when this call declared the account, and <see langword="false" /> when the record already declared it.</returns>
+    /// <returns><see langword="true" /> when this call created the account, and <see langword="false" /> when one was already assigned.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the deployment refused the declaration.</exception>
     /// <remarks>
-    /// The password travels as a <c>plaintext:</c> reference rather than as stored material, which is what the
-    /// environment variable this replaced carried and is the same decision it was: a developer's own mailbox password,
-    /// on a loopback deployment, is not worth a rotation surface. A deployment anybody else reaches provisions it with
-    /// <c>mfctl user secret</c> and names the reference that write hands back.
+    /// <para>
+    /// The password travels as a <c>plaintext:</c> reference rather than as stored material: a developer's own mailbox
+    /// password, on a loopback deployment, is not worth a rotation surface.
+    /// </para>
+    /// <para>
+    /// The address is the login where the login is one, which is what a mail provider ordinarily hands out, and is
+    /// composed from the login and the server otherwise, so a local server keyed by bare user names still gets an account
+    /// told apart from every other.
+    /// </para>
     /// </remarks>
     internal async Task<bool> EnsureMailAccountAsync(
         Uri adminEndpoint,
@@ -105,16 +110,16 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
         ArgumentException.ThrowIfNullOrWhiteSpace(userName);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
 
-        var record = await this.ReadRecordAsync(adminEndpoint, user, cancellationToken);
+        var emailAddress = userName.Contains('@', StringComparison.Ordinal) ? userName : $"{userName}@{host}";
 
-        if (DeclaresDevelopmentAccount(record.Document))
+        if (await this.AssignsAccountForAsync(adminEndpoint, user, emailAddress, cancellationToken))
         {
             return false;
         }
 
         var account = new JsonObject
         {
-            ["AccountId"] = OrchestrationContract.DevelopmentMailAccountId,
+            ["EmailAddress"] = emailAddress,
             ["DisplayName"] = OrchestrationContract.DevelopmentMailAccountDisplayName,
             ["Host"] = host,
             ["UserName"] = userName,
@@ -130,12 +135,10 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
 
         var requestBody = new JsonObject
         {
-            ["version"] = record.Version,
+            ["userId"] = user.ToString("D"),
             ["account"] = account.ToJsonString(),
         };
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            new Uri(adminEndpoint, $"api/admin/users/{user:D}/record/mail-accounts"))
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(adminEndpoint, "api/admin/mail-accounts"))
         {
             Content = new StringContent(requestBody.ToJsonString(), Encoding.UTF8, "application/json"),
         };
@@ -158,29 +161,18 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
         " ",
         outcome.GetProperty("messages").EnumerateArray().Select(static message => message.GetString()));
 
-    private static bool DeclaresDevelopmentAccount(string recordJson)
-    {
-        using var record = JsonDocument.Parse(recordJson);
+    private static bool HoldsAddress(JsonElement account, string emailAddress) =>
+        account.TryGetProperty("emailAddress", out var held)
+        && string.Equals(held.GetString()?.Trim(), emailAddress, StringComparison.OrdinalIgnoreCase);
 
-        return record.RootElement.ValueKind == JsonValueKind.Object
-            && record.RootElement.TryGetProperty("MailAccounts", out var accounts)
-            && accounts.ValueKind == JsonValueKind.Array
-            && accounts.EnumerateArray().Any(static account =>
-                account.ValueKind == JsonValueKind.Object
-                && account.TryGetProperty("AccountId", out var accountId)
-                && string.Equals(
-                    accountId.GetString(),
-                    OrchestrationContract.DevelopmentMailAccountId,
-                    StringComparison.OrdinalIgnoreCase));
-    }
-
-    private async Task<(long Version, string Document)> ReadRecordAsync(
+    private async Task<bool> AssignsAccountForAsync(
         Uri adminEndpoint,
         Guid user,
+        string emailAddress,
         CancellationToken cancellationToken)
     {
         using var response = await client.GetAsync(
-            new Uri(adminEndpoint, $"api/admin/users/{user:D}/record"),
+            new Uri(adminEndpoint, "api/admin/mail-accounts"),
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -188,9 +180,12 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
         await using var content = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(content, cancellationToken: cancellationToken);
 
-        return (
-            document.RootElement.GetProperty("version").GetInt64(),
-            document.RootElement.GetProperty("document").GetString() ?? "{}");
+        return document.RootElement
+            .GetProperty("accounts")
+            .EnumerateArray()
+            .Any(account =>
+                account.GetProperty("users").EnumerateArray().Any(assigned => assigned.GetGuid() == user)
+                && HoldsAddress(account, emailAddress));
     }
 
     private async Task WaitForStartedAsync(Uri startedEndpoint, CancellationToken cancellationToken)

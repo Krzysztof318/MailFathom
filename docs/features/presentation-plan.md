@@ -56,7 +56,7 @@ A client reads a synchronized copy, so which mailboxes an answer was composed fr
 part of the answer rather than a footnote under it. An account nobody has reconciled since yesterday means the answer
 may be missing what arrived since, and that may be the whole reason it is wrong.
 
-Each coverage entry names one account by MailFathom's own configured identifier — no host, no user name, no address,
+Each coverage entry names one account by MailFathom's own generated identifier — no host, no user name, no address,
 because how a deployment reaches a mailbox is the operator's business rather than a property of an answer — beside how
 current the local copy of it was, and the two ends of the mail the run actually drew on from it.
 

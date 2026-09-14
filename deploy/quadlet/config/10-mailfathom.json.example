@@ -44,17 +44,17 @@
   // },
 
   // The synchronization worker's own settings. The mailboxes are not among them: a deployment declares no mail account
-  // in its own configuration, because every account belongs to the user whose record holds it. So a deployment copied
-  // from this file starts holding nobody's mailbox, reports itself started, and serves the first one recorded against
-  // it without a restart:
+  // in its own configuration, because every account is a record the deployment holds and assigns to the users it
+  // serves. So a deployment copied from this file starts holding nobody's mailbox, reports itself started, and serves
+  // the first one created against it without a restart:
   //
-  //   mfctl user account add --from-file mailbox.json
+  //   mfctl account add --from-file mailbox.json
   //
-  // What goes in `mailbox.json` is the object this section used to carry, references and all — the credential stays a
-  // reference to material this deployment already holds, exactly as every reference in this file is:
+  // What goes in `mailbox.json` is the account's address and name beside its settings, references and all — the
+  // credential stays a reference to material this deployment already holds, exactly as every reference in this file is:
   //
   //   {
-  //     "AccountId": "primary",
+  //     "EmailAddress": "you@example.test",
   //     "DisplayName": "Personal mail",
   //     "Host": "imap.example.test",
   //     "Port": 993,
@@ -69,15 +69,15 @@
   //     "Folders": [ { "Alias": "inbox", "SpecialUse": "Inbox" } ]
   //   }
   //
-  // `mfctl user add` records a second person, and `--user` then says whose mailbox is being declared. A file still
+  // `mfctl user add` records a second person, and `--user` then says whom the mailbox is created for. A file still
   // carrying an `Accounts` collection here stops the start, naming those two commands.
   "MailSynchronization": {
     "Enabled": true,
     "Interval": "00:05:00"
   },
-  // The administrative endpoint, which is how the mailbox above is recorded: `mfctl user account add` is a client of
-  // this surface, and nothing else writes a user's record. It is on for that reason rather than as an extra. Its own
-  // default port is 8080, which is the socket the MCP endpoint below is served on, so it states 8090 — the port
+  // The administrative endpoint, which is how the mailbox above is recorded: `mfctl account add` is a client of this
+  // surface, and nothing else creates a mail account for somebody else. It is on for that reason rather than as an
+  // extra. Its own default port is 8080, which is the socket the MCP endpoint below is served on, so it states 8090 — the port
   // mailfathom.container publishes for it, on loopback. The key is a systemd credential like every other one here,
   // encrypted under the name `admin-api-key` and loaded by its own LoadCredentialEncrypted= line.
   "AdminEndpoint": {

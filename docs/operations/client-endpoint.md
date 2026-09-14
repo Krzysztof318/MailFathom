@@ -299,14 +299,14 @@ It answers with the mail accounts the signed-in user owns, and how current the l
   "synchronizationEnabled": true,
   "accounts": [
     {
-      "id": "work",
+      "id": "5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10",
       "displayName": "Work mail",
       "synchronizationState": "Synchronized",
       "lastSynchronizedAt": "2026-08-15T10:00:00+00:00",
       "behind": false
     },
     {
-      "id": "private",
+      "id": "8e3f1a6b-2c4d-4f7e-a915-7b2d0c6e1f38",
       "displayName": "Private mail",
       "synchronizationState": "Failing",
       "lastSynchronizedAt": "2026-08-14T21:12:00+00:00",
@@ -316,8 +316,9 @@ It answers with the mail accounts the signed-in user owns, and how current the l
 }
 ```
 
-`id` is the identifier the account was declared under and `displayName` is the name it is published under; each is
-unique within the user rather than across the deployment, and both are MailFathom's own names for the mailbox. The mail
+`id` is the identifier the deployment generated for the account, unique across the whole deployment, and `displayName`
+is the name it is published under, unique within the user rather than across the deployment; both are MailFathom's own
+names for the mailbox. The mail
 server, the port, the user name, and every credential are deliberately absent, and so is everything of the mailbox
 itself — no message, no subject, no correspondent, no folder listing.
 
@@ -381,7 +382,7 @@ It answers with the user's mailboxes and every folder in them, which is the one 
   "accounts": [
     {
       "account": {
-        "id": "work",
+        "id": "5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10",
         "displayName": "Work mail",
         "synchronizationState": "Synchronized",
         "lastSynchronizedAt": "2026-08-15T10:00:00+00:00",
@@ -476,7 +477,7 @@ can grow. Nothing here contacts a mail server, and asking cannot set the remote 
 ### The local folder routes
 
 ```http
-GET  /api/client/local-folders?account=work
+GET  /api/client/local-folders?account=5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 POST /api/client/local-folders
 POST /api/client/local-folders/renames
 POST /api/client/local-folders/moves
@@ -571,7 +572,7 @@ continues the list at each end:
   "emails": [
     {
       "id": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
-      "account": "work",
+      "account": "5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10",
       "folder": "INBOX",
       "threadId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91",
       "subject": "Release 0.8.0 is out",
@@ -730,7 +731,7 @@ It answers with one page of the user's mail ranked against what they are looking
   "results": [
     {
       "id": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
-      "account": "work",
+      "account": "5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10",
       "folder": "INBOX",
       "threadId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91",
       "subject": "Invoice 4471",
@@ -954,7 +955,7 @@ It answers with one conversation as a single document — the messages in it, wh
       "answeredId": null,
       "email": {
         "id": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
-        "account": "work",
+        "account": "5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10",
         "folder": "INBOX",
         "threadId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91",
         "subject": "Release 0.8.0 is out",
@@ -992,7 +993,7 @@ It answers with one conversation as a single document — the messages in it, wh
       "answeredId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
       "email": {
         "id": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a92",
-        "account": "work",
+        "account": "5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10",
         "folder": "SENT",
         "threadId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91",
         "subject": "Re: Release 0.8.0 is out",
@@ -1827,8 +1828,8 @@ somebody's mail is not deciding which mailboxes are read for them.
 | --- | --- |
 | `GET /api/client/record` | Hands over the signed-in user's record as redacted JSON, with the version it was read at |
 | `POST /api/client/record` | Commits that record back edited, as one change against the version it was opened over |
-| `POST /api/client/record/mail-accounts` | Declares one more mailbox in it |
-| `POST /api/client/record/mail-accounts/removal` | Stops it declaring one mailbox, named by the identifier it was declared under |
+| `POST /api/client/record/mail-accounts` | Creates one more mailbox, assigned to the signed-in user alone |
+| `POST /api/client/record/mail-accounts/removal` | Ends the signed-in user's assignment to one mailbox, named by its identifier, and erases the mail stored for it |
 | `POST /api/client/record/mail-accounts/folders` | Declares one more folder in one of those mailboxes |
 | `POST /api/client/record/mail-accounts/folders/replacement` | States one folder afresh, in place of the one carrying an alias |
 | `POST /api/client/record/mail-accounts/folders/removal` | Stops the mailbox declaring one folder, named by its alias |
@@ -1844,12 +1845,14 @@ server.** Each is a change to the mapping the record declares: a declaration add
 create the folder its own configuration names, a replacement states that mapping afresh in the position the old one
 held, and a removal takes the mapping out. Renaming, deleting, subscribing, and unsubscribing a folder *on the server*
 are refused outright by [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md), which is why a removal here
-stops the deployment reading a folder rather than removing one — the mail already stored stays where it is, exactly as
-withdrawing a whole mailbox leaves its mail, and so does the folder on the server. A removal withdraws only the alias
+stops the deployment reading a folder rather than removing one — the mail already stored stays where it is, and so does
+the folder on the server. That is unlike removing a whole mailbox, which erases its stored mail. A removal withdraws only the alias
 it names: a folder nested under it by alias stays declared and is read as a folder of its own from then on.
 
-Each of the three takes the account by the identifier it was declared under, the folder as the JSON a configuration
-file would state it in, and the `version` the record was read at. The declaration is bound and validated exactly as a
+Each of the three takes the account by the identifier the deployment generated for it — the one the account list the
+client is served names — the folder as the JSON a configuration file would state it in, and the `version` the record
+was read at. Every account write answers with the version of the signed-in user's record, which every such write
+moves. The declaration is bound and validated exactly as a
 configuration file's is, so an alias that is not a valid one, a remote path that is not a path, and a record another
 writer moved on in the meantime are each refused with the sentence saying what to correct — as is a replacement or a
 removal naming an alias the account does not declare.
@@ -1862,10 +1865,21 @@ no route through which any of them learns that the others exist. [The administra
 surface](admin-endpoint.md#users-and-their-records) is where a roster is read, and it is not reachable with a
 credential issued for this one.
 
-**A withdrawal withdraws no mail.** Stopping the record declaring a mailbox stops this deployment synchronizing it;
-every message, folder, and attachment already stored for that account stays exactly where it is and stays readable
-through the routes above. Disposing of stored mail is administrative and irreversible, and it is deliberately not
-something a client can reach.
+**A mailbox added here is the user's own, and an address somebody holds is refused without saying whose.** The account
+is created assigned to the signed-in user and nobody else, and an account is served to one user at a time. One address
+is held by one account in the whole deployment, and an address already held — by anybody — is refused with the same
+sentence whoever holds it. It tells the caller the address cannot be added, and it never says who holds it:
+
+```
+This mail account cannot be added for you. Ask whoever administers this deployment to add it.
+```
+
+**Removing a mailbox erases its mail.** A removal ends the signed-in user's assignment and erases the mail this
+deployment stored for them under the account. An account nobody else is assigned to — which, with an account served to
+one user at a time, is every account a removal reaches — goes with it, together with every message, folder, and
+attachment this deployment holds for it, because an account nobody is assigned to serves nobody. The removal asks
+`mailfathom.mail.accounts.write` and nothing more, because the grant is the person's own and the mailbox they dispose of
+is their own; an administrator ending somebody else's assignment takes `mailfathom.admin.erase` instead.
 
 **Nothing here reports a secret, and nothing here can overwrite one blindly.** A record is handed over with every
 password, token, and client secret replaced by the redaction marker; a save is read as the difference from what the row
@@ -1875,10 +1889,11 @@ refused rather than committed over somebody's password. Material supplied here i
 reference to it.
 
 **A candidate is validated before it is committed, and committed whole or not at all.** It is bound strictly against
-the same rules a configuration file is, checked for two mail accounts declared under one identifier, checked that every
-account in it belongs to this user, and put through the same mail-synchronization validators a start applies —
-including the walk that resolves every credential the record names, so a reference that reaches nothing is refused here
-rather than committed and then refusing the whole deployment's next start. What the record asks about [scanning this
+the same rules a configuration file is, composed with every account assigned to this user, and put through the same
+mail-synchronization validators a start applies —
+including the walk that resolves every credential the record names. A save of the record itself never touches an
+account, so a reference that stopped resolving in one of this user's accounts is reported beside the commit rather than
+refusing it, and is worth clearing before the next restart, which refuses a record carrying it. What the record asks about [scanning this
 user's mail](configuration-sources.md#what-a-user-may-say-about-scanning-their-own-mail) is judged here too: a user
 may switch a scanner on for their own mail and never off, and asking for the personal-data scanner where the deployment
 stood no analyzer up is refused at the write rather than left to fail closed on the next message. A refusal names what
@@ -1900,8 +1915,8 @@ target begins with `user-<user identifier>-`**. So `file:/run/secrets/user-3f1d�
 `systemd-credential:user-3f1d…-work-password` are the user's to name, and `file:/run/secrets/database-password` is
 not — whatever path is written in front of it, because the bound is the name of the material rather than the way to it.
 An operator provisioning a mailbox credential for somebody to declare themselves names it that way; one who would
-rather not writes the mail account through [`mfctl user account
-add`](admin-endpoint.md#users-and-their-records) instead, which is bounded by nothing here. A refusal names both
+rather not creates the mail account with [`mfctl account
+add`](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) instead, which is bounded by nothing here. A refusal names both
 routes out.
 
 **A user whose mail accounts are still read from this deployment's configuration cannot write here.** The write is

@@ -193,7 +193,7 @@ internal sealed partial class RootSettingsWriter(
         // that write it are the same ones however the deployment reached this path — a leftover from the collection
         // users were once declared in, or a record MailFathom keeps for somebody it already serves.
         return target.Route == ConfigurationStorageRoute.UserAccounts
-            ? $"MailFathom persists {path} in the {target.Route.Name} store rather than in the deployment's own document, so this is not where it is changed. A user's mailboxes are changed with 'mfctl user account add' and 'mfctl user account remove', or with 'mfctl user edit' for their whole record at once."
+            ? $"MailFathom persists {path} in the {target.Route.Name} store rather than in the deployment's own document, so this is not where it is changed. A user's record is changed with 'mfctl user edit', and the mail accounts they are served with 'mfctl account'."
             : $"MailFathom persists {path} in the {target.Route.Name} store, which this build does not write. Configure it where that store is provisioned from.";
     }
 

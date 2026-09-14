@@ -392,7 +392,6 @@ public sealed class OrchestrationContractTests
     public void DevelopmentMailAccount_NormalTopology_NamesTheAccountTheRecordedMailboxIsDeclaredUnder()
     {
         // Assert
-        Assert.Equal("local", OrchestrationContract.DevelopmentMailAccountId);
         Assert.Equal("Local mailbox", OrchestrationContract.DevelopmentMailAccountDisplayName);
         Assert.Equal("local-mail-password", OrchestrationContract.DevelopmentMailAccountPasswordName);
     }

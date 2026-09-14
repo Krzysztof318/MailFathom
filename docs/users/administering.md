@@ -229,9 +229,9 @@ forward the port over SSH, or use `--mode device` for Microsoft and `--mode manu
 What it produces is a refresh token, and `--account` decides where that token goes:
 
 ```console
-$ mfctl mailbox authorize --provider google --client-id <client-id> --account workspace
+$ mfctl mailbox authorize --provider google --client-id <client-id> --account 8e3f1a6b-2c4d-4f7e-a915-7b2d0c6e1f38
 …
-Stored the refresh token for account 'workspace' on 'production'. It was not printed.
+Stored the refresh token for account '8e3f1a6b-2c4d-4f7e-a915-7b2d0c6e1f38' on 'production'. It was not printed.
 ```
 
 **Named, the token goes straight to your deployment**, which encrypts it and keeps it. It is never printed, so it never
@@ -336,9 +336,9 @@ gave the rule asks on your behalf. That asking is a command, and so is finding o
 | --- | --- |
 | See which rules your deployment is running, in order | `mfctl rules list` |
 | Read one of them in full | `mfctl rules show file-invoices` |
-| Apply them to mail that arrived before them | `mfctl rules run --account work` |
-| Watch that run | `mfctl rules run-status --account work` |
-| Find out what a rule did, or why a message is where it is | `mfctl rules history --account work` |
+| Apply them to mail that arrived before them | `mfctl rules run --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
+| Watch that run | `mfctl rules run-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
+| Find out what a rule did, or why a message is where it is | `mfctl rules history --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
 
 `mfctl rules list` is the one to run after editing a rule file. A deployment refuses a reload whose rules do not
 validate and goes on running the previous set, which it reports to its log and nowhere else — so this is where you find
@@ -366,10 +366,10 @@ moving a threshold does nothing about the existing mailbox until you ask:
 
 | What you want | Command |
 | --- | --- |
-| Find out what classification would do to the mail you have | `mfctl spam run --account work` |
-| Carry that out | `mfctl spam run --account work --apply` |
-| Watch the run | `mfctl spam run-status --account work` |
-| Find out why a message was filed as junk | `mfctl spam classifications --account work --email <id>` |
+| Find out what classification would do to the mail you have | `mfctl spam run --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
+| Carry that out | `mfctl spam run --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10 --apply` |
+| Watch the run | `mfctl spam run-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
+| Find out why a message was filed as junk | `mfctl spam classifications --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10 --email <id>` |
 
 **The run is a dry run unless you add `--apply`**, and that is the order to do it in: run it, read what it found with
 `run-status`, and only then run it again with `--apply`. With filing switched on, a run over an inbox is the largest
@@ -393,7 +393,7 @@ default — an edit to a configuration file should not dispose of mail — and b
 want back:
 
 ```console
-$ mfctl folder erase --account work --folder archive
+$ mfctl folder erase --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10 --folder archive
 1043 stored emails erased from ARCHIVE under work. The folder holds none, and its checkpoint went with them, so
 mirroring it again starts from the beginning rather than resuming.
 ```
@@ -417,9 +417,9 @@ folder, so a message it has already stored is never looked at again.
 
 | What you want | Command |
 | --- | --- |
-| Fill in what is already in the mail you stored | `mfctl mailbox rederive --account work` |
-| See how far that has got | `mfctl mailbox rederive-status --account work` |
-| Fill in what only your mail server knows | `mfctl mailbox rewind --account work` |
+| Fill in what is already in the mail you stored | `mfctl mailbox rederive --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
+| See how far that has got | `mfctl mailbox rederive-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
+| Fill in what only your mail server knows | `mfctl mailbox rewind --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
 | Any of them, for a single folder | add `--folder archive` |
 
 **Reach for `rederive` first, because it is nearly free.** Anything the message itself carries is in the raw mail
@@ -430,18 +430,18 @@ your mail server is not contacted at all, and nothing is marked read.
 so closing it changes nothing and the run survives a restart of the deployment:
 
 ```console
-$ mfctl mailbox rederive --account work
+$ mfctl mailbox rederive --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 A re-derivation of every folder under work has been asked for.
 Requested:  2026-08-18 12:00:00Z
 Progress:   0 re-read, 0 unparseable, 0 no longer stored
-The deployment carries the run in the background. Watch it with 'mfctl mailbox rederive-status --account work'.
+The deployment carries the run in the background. Watch it with 'mfctl mailbox rederive-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10'.
 ```
 
 Asking again while one is going is answered with the run already under way rather than starting a second, so a command
 you are not sure landed is safe to repeat. How far it has come is a second command:
 
 ```console
-$ mfctl mailbox rederive-status --account work
+$ mfctl mailbox rederive-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 Scope:      every folder under work — under way
 Requested:  2026-08-18 12:00:00Z
 Progress:   1,043 re-read, 0 unparseable, 0 no longer stored
@@ -454,7 +454,7 @@ forgets how far synchronization has got, which makes the next runs fetch the who
 much that is and asks before it does anything:
 
 ```console
-$ mfctl mailbox rewind --account work
+$ mfctl mailbox rewind --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 Scope:  every folder under work
 Cost:   22,500 stored emails would be fetched from the mail server, re-read, and stored again.
 Rewind that scope? [y/N]
@@ -541,7 +541,7 @@ tells you it is there:
 | What you want | Command |
 | --- | --- |
 | See what has stopped | `mfctl jobs dead-letters` |
-| See what has stopped for one account | `mfctl jobs dead-letters --account work` |
+| See what has stopped for one account | `mfctl jobs dead-letters --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10` |
 | Run one again, after fixing what broke it | `mfctl jobs retry --job <id>` |
 | Decide one will never run | `mfctl jobs drop --job <id>` |
 
@@ -674,9 +674,9 @@ $ mfctl user list
 
 $ mfctl user add --display-name Morgan
 Recorded Morgan as 9b41....
-Their mail accounts are read from their own record; no configuration source reaches them. Declare one with
-'mfctl user account add', and provision a way for them to sign in with 'mfctl credential create'. The replica this
-request reached serves this user now; other replicas pick up the change after their next user write or restart.
+Their mail accounts are records this deployment holds; no configuration source reaches them. Create one with
+'mfctl account add', and provision a way for them to sign in with 'mfctl credential create'. The replica this request
+reached serves this user now; other replicas pick up the change after their next user write or restart.
 ```
 
 Every command but `list` and `add` takes `--user` and does not need it while the deployment holds one person: it acts
@@ -692,13 +692,21 @@ The switches live in that person's record, so `mfctl user edit` shows and change
 cannot change them from their own client. An endpoint you left requiring no credential has no idea who is calling, so
 it has nobody to keep off: give it a credential first.
 
-**Changing more than one thing about somebody at once is `mfctl user edit`.** `mfctl user account add` and
-`mfctl user account remove` each name one mailbox, so two changes are two commands and the deployment briefly reads what
-is between them. `mfctl user edit` opens that person's whole record in your `$VISUAL` or `$EDITOR` and commits what you
+**Mailboxes are `mfctl account`, and they are records of their own.** `mfctl account add` creates one from a file and
+assigns it to a person, and `mfctl account edit` changes its settings. One address is one account in the whole
+deployment, and an account is served to one person at a time, so adding a mailbox somebody already has is refused, and
+so is assigning it to somebody else.
+
+```console
+$ mfctl account add --user 7c02... --from-file work.json
+Created mail account 5b0c....
+```
+
+**Changing more than one thing about somebody at once is `mfctl user edit`.** It opens that person's whole record in your `$VISUAL` or `$EDITOR` and commits what you
 saved as one change — set it up as `VISUAL="code --wait"` if your editor is a graphical one, since the command reads the
 file back when the editor exits. Empty the buffer to abandon the session, or save it unchanged, and nothing is written
 either way. Passwords read back as `(redacted)`, and a marker saved back leaves the credential beneath it alone. A
-password reference that had already stopped resolving does not block an edit that leaves the mail accounts alone: the change
+password reference in one of their accounts that had already stopped resolving does not block the edit: the change
 commits and the command prints that problem after it, so you can correct it before the deployment next restarts —
 [the endpoint reference](../operations/admin-endpoint.md#users-and-their-records) holds the rule.
 
@@ -720,24 +728,26 @@ there is no second person for an unauthenticated caller to be handed.
 **A deployment upgrading from a release that declared its own mailboxes does not start until the section is cleared.**
 `MailSynchronization:Accounts` is no longer read, and nothing imports what it declared, so a start that ignored it would
 leave you believing mail was being read that nothing was reading. The refusal names the section and the two commands
-that replace it: record the person with `mfctl user add`, state each of their mailboxes with `mfctl user account add`,
+that replace it: record the person with `mfctl user add`, create each of their mailboxes with `mfctl account add`,
 credentials included, and remove the section. Whatever else that section decided about them is stated again the same
 way — the spam classification posture, and the
 [`SensitiveContent`](../features/sensitive-content-scanning.md) block if it stated one, both of which a record carries
 in blocks of its own.
 
-**Withdrawing a mailbox is not deleting mail, and removing a user is.** `mfctl user account remove` stops MailFathom
-synchronizing one mailbox without a restart and leaves everything already stored for it exactly where it is. A run
-already in flight drains against the document version it began with. `mfctl user remove` erases the person and every
+**Taking a mailbox from its last person deletes its mail.** `mfctl account unassign` ends one person's assignment
+without a restart; while somebody else is still assigned the mailbox, its mail stays theirs. Ending the last assignment
+erases the account and everything stored for it, exactly as `mfctl account delete` does, so both show what they are
+about to do and ask. A run already in flight drains against the document version it began with. `mfctl user remove` erases the person and every
 message, folder, attachment, and derived index the deployment holds for them; it shows what it is about to do and asks,
 and nothing puts it back.
 
-**A mailbox somebody declares from the client names a credential you provisioned for them.** A record carries a
-reference rather than a password, and a reference is a path into what the deployment can read, so a person declaring
+**A mailbox somebody adds from the client names a credential you provisioned for them.** An account carries a
+reference rather than a password, and a reference is a path into what the deployment can read, so a person adding
 their own mailbox may name material provisioned for them and nothing else: its name begins with `user-<their
 identifier>-`. Provision one that way — a file or a systemd credential called `user-3f1d…-work-password` — and they
-declare the mailbox themselves; provision it under any other name and `mfctl user account add` is what declares it, on
-this side. [The client endpoint](../operations/client-endpoint.md#the-record-routes) states the rule in full.
+add the mailbox themselves; provision it under any other name and `mfctl account add` is what creates it, on this side.
+A person adding a mailbox whose address another account already holds is refused without being told why, and only you
+can assign that account to them. [The client endpoint](../operations/client-endpoint.md#the-record-routes) states the rule in full.
 
 **Several companies on one deployment sign in under an organization.** `mfctl organization add --short-name TESTFIRMA
 --display-name "Test Firma"` records one, and `mfctl user set-organization --user 7c02... --organization <id>` moves a

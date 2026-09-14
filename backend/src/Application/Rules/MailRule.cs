@@ -136,7 +136,7 @@ public sealed class MailRule
     }
 
     /// <summary>Reports whether this rule is one of the rules the given account's mail is passed through.</summary>
-    /// <param name="account">The configured identifier of the account the email belongs to.</param>
+    /// <param name="account">The identifier the deployment generated for the account the email belongs to.</param>
     /// <returns><see langword="true" /> when the rule is general or names this account.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="account" /> is empty or whitespace.</exception>
     /// <remarks>

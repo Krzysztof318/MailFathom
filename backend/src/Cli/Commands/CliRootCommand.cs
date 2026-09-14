@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.CommandLine;
+using MailFathom.Cli.Commands.Accounts;
 using MailFathom.Cli.Commands.Configuration;
 using MailFathom.Cli.Commands.Contacts;
 using MailFathom.Cli.Commands.Content;
@@ -173,17 +174,22 @@ internal static class CliRootCommand
             AdoptSettingsCommand.Create(context),
         };
 
-        // The mailboxes one user's record declares, which is what this deployment reads for them once their record is
-        // their own. It is a group beneath "user" rather than beside it because every one of these acts is a change to
-        // one user's record, and the record is what "user" administers.
-        Command userAccountCommand = new("account", "Declare and withdraw the mailboxes one user's record carries.")
+        // The mailboxes this deployment reads. A group beside "user" rather than beneath it, because an account is a
+        // record of its own that one user or several are assigned. "delete" and "unassign" are apart from the rest:
+        // erasing an account, or ending its last assignment, disposes of every message this deployment holds for it.
+        Command accountCommand = new("account", "Administer the mail accounts this deployment reads, and who is assigned each.")
         {
-            AddUserMailAccountCommand.Create(context),
-            RemoveUserMailAccountCommand.Create(context),
+            ListMailAccountsCommand.Create(context),
+            ShowMailAccountCommand.Create(context),
+            AddMailAccountCommand.Create(context),
+            EditMailAccountCommand.Create(context),
+            AssignMailAccountCommand.Create(context),
+            UnassignMailAccountCommand.Create(context),
+            DeleteMailAccountCommand.Create(context),
         };
 
-        // Who this deployment serves, and what it reads for each of them. "remove" is apart from the rest — it is the
-        // one command here that destroys mail, and nothing undoes it.
+        // Who this deployment serves. "remove" is apart from the rest — it is the one command here that destroys mail,
+        // and nothing undoes it.
         Command userCommand = new("user", "Record the people this deployment serves, and maintain what it reads for each.")
         {
             AddUserCommand.Create(context),
@@ -194,7 +200,6 @@ internal static class CliRootCommand
             SetUserEndpointsCommand.Create(context),
             SetUserOrganizationCommand.Create(context),
             RemoveUserCommand.Create(context),
-            userAccountCommand,
         };
 
         // How the people this deployment serves are grouped, which decides the login a password credential is typed
@@ -247,6 +252,7 @@ internal static class CliRootCommand
             configCommand,
             userCommand,
             organizationCommand,
+            accountCommand,
             credentialCommand,
         };
     }

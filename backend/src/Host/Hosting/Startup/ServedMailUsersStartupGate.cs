@@ -160,9 +160,16 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
                 record.DisplayName,
                 ["The row it was read from is no longer there."]);
 
+        var unaddressed = document.MailAccounts.Count(account => !MailAccountRecordComposition.IsServed(account));
+
+        if (unaddressed > 0)
+        {
+            this.LogMailAccountsHeldWithoutAnAddress(record.DisplayName, unaddressed);
+        }
+
         var binding = scope.ServiceProvider
             .GetRequiredService<UserAccountDocumentBinder>()
-            .Bind(document.Json, UserRecordArrival.AlreadyHeld);
+            .Bind(MailAccountRecordComposition.Compose(document.Json, document.MailAccounts), UserRecordArrival.AlreadyHeld);
 
         if (binding.User is not { } bound)
         {
@@ -269,9 +276,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// The empty deployment gets a line of its own rather than a count of zero, because the operator reading it needs
     /// the command that ends it. A synchronization switch left on with nothing to synchronize is reported beside it and
     /// refuses nothing: it is what every deployment looks like between its first start and its first recorded
-    /// mailbox. A mailbox identifier several users record is reported
-    /// too, because nothing refuses it and it costs every one of them but the first that mailbox, and so is a rule
-    /// set's claim about a mailbox nobody records, for the reason its own method gives.
+    /// mailbox. A rule set's claim about a mailbox nobody records is reported too, for the reason its own method gives.
     /// </remarks>
     private void Report(IReadOnlyList<ServedMailUser> served)
     {
@@ -290,36 +295,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
             this.LogNothingToSynchronize();
         }
 
-        this.ReportMailAccountIdentifiersSharedAcrossUsers(served);
-
         this.ReportARuleSetTheRosterCannotAnswerFor(served);
-    }
-
-    /// <summary>Reports every mail-account identifier more than one served user records.</summary>
-    /// <remarks>
-    /// A report rather than a refusal, because an identifier names an account within its user and two people may each
-    /// call theirs <c>work</c>. What still resolves an account by the identifier alone is the catalogue of served
-    /// accounts and the settings lookup behind it, and both keep the user recorded first — so until
-    /// <see href="https://github.com/Krzysztof318/MailFathom/issues/1325">issue 1325</see> keys them by the user as well,
-    /// the others' mailbox under that identifier is not served, and this line is what tells the operator so.
-    /// </remarks>
-    private void ReportMailAccountIdentifiersSharedAcrossUsers(IReadOnlyList<ServedMailUser> served)
-    {
-        var shared = served
-            .SelectMany(user => user.MailAccounts
-                .Select(account => MailSynchronizationOptions.TryReadAccountId(account.AccountId))
-                .OfType<string>()
-                .Distinct(StringComparer.Ordinal)
-                .Select(accountId => (AccountId: accountId, user.DisplayName)))
-            .GroupBy(entry => entry.AccountId, StringComparer.Ordinal)
-            .Where(holders => holders.Skip(1).Any());
-
-        foreach (var holders in shared)
-        {
-            var labels = string.Join(", ", holders.Select(holder => $"'{holder.DisplayName}'"));
-
-            this.LogMailAccountIdentifierShared(holders.Key, labels);
-        }
     }
 
     /// <remarks>The record names no user. The identity is a generated identifier for a person this deployment serves, and what an operator needs from this line is how the roster came out rather than who is on it.</remarks>
@@ -331,20 +307,20 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// <remarks>Reached on the first start of a fresh database, which holds no user, and on any start of a deployment whose every user was erased.</remarks>
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "This deployment holds no user and therefore serves nobody. Record one with 'mfctl user add', then give them a mailbox with 'mfctl user account add'.")]
+        Message = "This deployment holds no user and therefore serves nobody. Record one with 'mfctl user add', then give them a mailbox with 'mfctl account add'.")]
     private partial void LogNoUserHeld();
 
     /// <remarks>A report rather than a refusal, because a deployment with the switch on and nothing recorded yet is the ordinary shape of a first run.</remarks>
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Mail synchronization is switched on and no user this deployment serves records a mail account, so there is nothing to synchronize. Record one with 'mfctl user account add'.")]
+        Message = "Mail synchronization is switched on and no user this deployment serves is assigned a mail account, so there is nothing to synchronize. Record one with 'mfctl account add'.")]
     private partial void LogNothingToSynchronize();
 
-    /// <remarks>The labels rather than the identifiers, because they are the operator's own text and the identifiers are generated handles for people.</remarks>
+    /// <remarks>The user's label and a count rather than the accounts, because what the operator needs is where to look and an address is exactly what these accounts lack. It is reached after an upgrade carried a declaration whose address could not be derived.</remarks>
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "The mail account '{MailAccountId}' is recorded by more than one user ({UserDisplayNames}). Only the one recorded first is served under that name, so the others' mailbox under it is not synchronized or read; give each of those mailboxes a name no other user records.")]
-    private partial void LogMailAccountIdentifierShared(string mailAccountId, string userDisplayNames);
+        Message = "The user labelled {UserDisplayName} is assigned {UnaddressedCount} mail accounts that hold no email address, so those mailboxes are not served. State each address with 'mfctl account edit'; 'mfctl account list' names the accounts.")]
+    private partial void LogMailAccountsHeldWithoutAnAddress(string userDisplayName, int unaddressedCount);
 
     /// <remarks>The claim is the sentence a configuration write would have been refused with, which names the rule by its position and the mailbox, folder, or action by what the operator wrote.</remarks>
     [LoggerMessage(

@@ -136,7 +136,7 @@ internal static class SpamClassificationEndpoints
     }
 
     /// <summary>Reports where one account's whole-mailbox classification run has got to, or how the last one ended.</summary>
-    /// <param name="account">The configured identifier of the account whose run is read.</param>
+    /// <param name="account">The identifier the deployment generated for the account whose run is read.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="runs">Reads the one run an account may have outstanding, for a caller the read's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
@@ -168,7 +168,7 @@ internal static class SpamClassificationEndpoints
     }
 
     /// <summary>Serves one page of what classification concluded about an account's mail.</summary>
-    /// <param name="account">The configured identifier of the account whose classifications are read.</param>
+    /// <param name="account">The identifier the deployment generated for the account whose classifications are read.</param>
     /// <param name="email">The local identity of the occurrence to narrow to, or <see langword="null" /> for every one.</param>
     /// <param name="verdict">The verdict to narrow to, or <see langword="null" /> for every verdict.</param>
     /// <param name="from">The earliest evaluation instant served, inclusive, or <see langword="null" /> for none.</param>

@@ -7258,23 +7258,24 @@ quick_start_prepares_the_deployment_the_documentation_describes() {
   # the checkout and ignore the pin.
   assert_contains 'MAILFATHOM_PULL_POLICY=missing' "$compose_directory/.env"
 
-  assert_file_content 'the mailbox password' "$compose_directory/secrets/mailfathom/imap-primary-password"
+  assert_file_content 'the mailbox password' "$compose_directory/secrets/mailfathom/imap-password"
 
-  # The mailbox is a declaration for a user's record rather than a section of the file the deployment reads: a
-  # configuration still declaring one does not start. So the answers land in mailbox.json, carrying the same reference,
-  # and a run that started nothing hands the operator the command that records it.
+  # The mailbox is a mail account record of its own rather than a section of the file the deployment reads: a
+  # configuration still declaring one does not start. So the answers land in mailbox.json, carrying the same reference
+  # and the address the login already was, and a run that started nothing hands the operator the command that records it.
+  assert_contains '"EmailAddress": "you@example.test"' "$compose_directory/mailbox.json"
   assert_contains '"Host": "imap.fastmail.com"' "$compose_directory/mailbox.json"
-  assert_contains '"SecretReference": "file:/etc/mailfathom/secrets/imap-primary-password"' \
+  assert_contains '"SecretReference": "file:/etc/mailfathom/secrets/imap-password"' \
     "$compose_directory/mailbox.json"
   assert_excludes '"Accounts"' "$compose_directory/config/10-mailfathom.json"
-  assert_contains 'mfctl user account add --from-file' "$output_file"
+  assert_contains 'mfctl account add --from-file' "$output_file"
 
   local expected_modes='700 secrets
 711 secrets/mailfathom
 755 config
 444 secrets/postgres-superuser-password
 444 secrets/mailfathom-database-password
-444 secrets/mailfathom/imap-primary-password
+444 secrets/mailfathom/imap-password
 644 config/10-mailfathom.json
 600 mailbox.json'
   local actual_modes
@@ -7284,7 +7285,7 @@ quick_start_prepares_the_deployment_the_documentation_describes() {
     stat --format '%a %n' \
       secrets secrets/mailfathom config \
       secrets/postgres-superuser-password secrets/mailfathom-database-password \
-      secrets/mailfathom/imap-primary-password config/10-mailfathom.json mailbox.json
+      secrets/mailfathom/imap-password config/10-mailfathom.json mailbox.json
   )"
 
   if [[ "$actual_modes" != "$expected_modes" ]]; then
@@ -7330,7 +7331,7 @@ quick_start_refuses_to_overwrite_a_prepared_deployment() {
   run_quick_start "$checkout_root" --provider zoho > "$first_run" 2>&1
 
   local original_password
-  original_password="$(cat "$compose_directory/secrets/mailfathom/imap-primary-password")"
+  original_password="$(cat "$compose_directory/secrets/mailfathom/imap-password")"
 
   if run_quick_start "$checkout_root" --provider zoho > "$second_run" 2>&1; then
     printf 'A second run replaced a prepared deployment instead of refusing.\n' >&2
@@ -7338,7 +7339,7 @@ quick_start_refuses_to_overwrite_a_prepared_deployment() {
   fi
 
   assert_contains 'deploy/compose/.env already exists' "$second_run"
-  assert_file_content "$original_password" "$compose_directory/secrets/mailfathom/imap-primary-password"
+  assert_file_content "$original_password" "$compose_directory/secrets/mailfathom/imap-password"
 }
 
 # A mailbox whose provider accepts no password cannot be prepared by a script that asks for one, and a configuration

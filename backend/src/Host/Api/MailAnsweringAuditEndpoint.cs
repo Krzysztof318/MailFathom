@@ -48,7 +48,7 @@ internal static class MailAnsweringAuditEndpoint
     }
 
     /// <summary>Serves one page of an account's answering record, or reports what was wrong with the request.</summary>
-    /// <param name="account">The configured identifier of the account whose record is read.</param>
+    /// <param name="account">The identifier the deployment generated for the account whose record is read.</param>
     /// <param name="from">The earliest completion instant served, inclusive, or <see langword="null" /> for none.</param>
     /// <param name="before">The completion instant to stop before, exclusive, or <see langword="null" /> for none.</param>
     /// <param name="pageSize">How many entries the page may hold, or <see langword="null" /> for the default.</param>

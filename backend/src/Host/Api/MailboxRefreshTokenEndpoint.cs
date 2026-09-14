@@ -111,7 +111,7 @@ internal static class MailboxRefreshTokenEndpoint
 }
 
 /// <summary>The grant a client asks the deployment to keep for one of its accounts.</summary>
-/// <param name="Account">The configured identifier of the account the grant acts for.</param>
+/// <param name="Account">The identifier the deployment generated for the account the grant acts for.</param>
 /// <param name="RefreshToken">The refresh token the authorization server issued.</param>
 /// <remarks>
 /// Both fields are nullable so a body that omits one is refused with a message naming what is missing, rather than by

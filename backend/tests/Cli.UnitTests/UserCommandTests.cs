@@ -11,7 +11,7 @@ using Xunit;
 namespace MailFathom.Cli.UnitTests;
 
 /// <summary>
-/// Covers the commands that record a user, list them, maintain their mailboxes, and erase them. What these hold is
+/// Covers the commands that record a user, list them, edit their record, and erase them. What these hold is
 /// the part of each act that lives in the command rather than in the deployment: the
 /// version a write is composed over, the confirmation the two destructive acts ask for, and what a refusal tells an
 /// operator to do next.
@@ -36,10 +36,6 @@ public sealed class UserCommandTests : IDisposable
 
     private readonly CliCommandHarness harness = new(new DateTimeOffset(2026, 8, 27, 12, 0, 0, TimeSpan.Zero));
 
-    /// <summary>Where a declaration this suite hands to <c>--from-file</c> is written, cleaned up with the suite.</summary>
-    private readonly string declarations =
-        Path.Combine(Path.GetTempPath(), $"mailfathom-user-tests-{Guid.NewGuid():N}");
-
     /// <summary>The identifier is the deployment's to mint, so what comes back is the one thing a script cannot reconstruct from what it typed.</summary>
     [Fact]
     public async Task Add_ALabelTheDeploymentAccepts_ReportsTheIdentifierItMinted()
@@ -59,9 +55,9 @@ public sealed class UserCommandTests : IDisposable
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("55555555", StringComparison.Ordinal));
     }
 
-    /// <summary>A new user's mailboxes are their own record's from the first moment, so the operator is told where to declare one.</summary>
+    /// <summary>A new user reads no mail until an account is assigned to them, so the operator is told how to add one.</summary>
     [Fact]
-    public async Task Add_ARecordedUser_SaysWhereTheirMailAccountsAreDeclared()
+    public async Task Add_ARecordedUser_SaysHowToAddTheirMailAccounts()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.HoldingNobody();
@@ -72,7 +68,7 @@ public sealed class UserCommandTests : IDisposable
         // Assert
         Assert.Contains(
             this.harness.Console.Lines.Concat(this.harness.Console.Errors),
-            line => line.Contains("mfctl user account add", StringComparison.Ordinal));
+            line => line.Contains("mfctl account add", StringComparison.Ordinal));
     }
 
     /// <summary>A switch the operator did not name is left out of the request, so the deployment keeps it and the command reports both as they now stand.</summary>
@@ -267,110 +263,6 @@ public sealed class UserCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Empty(deployment.UserRequestsTo(HttpMethod.Get, AdminEndpointRoutes.UserRecordPath(User)));
-    }
-
-    /// <summary>
-    /// The record is read first so the write is composed over the version it was read at, which is what makes two
-    /// administrators declaring a mailbox at once produce a refusal rather than one silently dropping the other's.
-    /// </summary>
-    [Fact]
-    public async Task AccountAdd_ADeclarationInAFile_ComposesTheWriteOverTheVersionItRead()
-    {
-        // Arrange
-        using var deployment = FakeUserRecordDeployment.Holding(User);
-        var declaration = await this.WriteDeclarationAsync("""{"AccountId":"archive"}""");
-
-        // Act
-        var exitCode = await this.RunAsync(
-            deployment,
-            "user",
-            "account",
-            "add",
-            "--from-file",
-            declaration,
-            "--endpoint",
-            Endpoint);
-
-        // Assert
-        Assert.Equal(CliExitCode.Success, exitCode);
-
-        var written = Assert.Single(
-            deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserMailAccountsPath(User)));
-
-        Assert.Equal(FakeUserRecordDeployment.RecordVersion, ReadVersion(written.ContentAsUtf8String()));
-        Assert.Contains("archive", ReadField(written.ContentAsUtf8String(), "account"), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AccountAdd_APathNothingIsAt_SaysSoWithoutReachingTheDeployment()
-    {
-        // Arrange
-        using var deployment = FakeUserRecordDeployment.Holding(User);
-
-        // Act
-        var exitCode = await this.RunAsync(
-            deployment,
-            "user",
-            "account",
-            "add",
-            "--from-file",
-            Path.Combine(Path.GetTempPath(), $"mailfathom-absent-{Guid.NewGuid():N}.json"),
-            "--endpoint",
-            Endpoint);
-
-        // Assert
-        Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserMailAccountsPath(User)));
-    }
-
-    [Fact]
-    public async Task AccountAdd_AnEmptyFile_SaysItDeclaresNoMailAccount()
-    {
-        // Arrange
-        using var deployment = FakeUserRecordDeployment.Holding(User);
-        var declaration = await this.WriteDeclarationAsync("   ");
-
-        // Act
-        var exitCode = await this.RunAsync(
-            deployment,
-            "user",
-            "account",
-            "add",
-            "--from-file",
-            declaration,
-            "--endpoint",
-            Endpoint);
-
-        // Assert
-        Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.Contains(
-            this.harness.Console.Errors,
-            line => line.Contains("declares no mail account", StringComparison.Ordinal));
-    }
-
-    /// <summary>No configuration change takes somebody's mail away, so a withdrawal says what it did not do.</summary>
-    [Fact]
-    public async Task AccountRemove_AnIdentifierTheRecordDeclares_SaysTheStoredMailWasNotTouched()
-    {
-        // Arrange
-        using var deployment = FakeUserRecordDeployment.Holding(User);
-
-        // Act
-        var exitCode = await this.RunAsync(
-            deployment,
-            "user",
-            "account",
-            "remove",
-            "--id",
-            "archive",
-            "--endpoint",
-            Endpoint);
-
-        // Assert
-        Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(
-            this.harness.Console.Lines.Concat(this.harness.Console.Errors),
-            line => line.Contains("was not touched", StringComparison.Ordinal));
     }
 
     /// <summary>An identifier copied out of the wrong listing looks the same either way, so the confirmation names the person.</summary>
@@ -656,31 +548,13 @@ public sealed class UserCommandTests : IDisposable
             line => line.Contains("MailAccounts:1:AccountId", StringComparison.Ordinal));
     }
 
-    public void Dispose()
-    {
-        this.harness.Dispose();
-
-        if (Directory.Exists(this.declarations))
-        {
-            Directory.Delete(this.declarations, recursive: true);
-        }
-    }
+    public void Dispose() => this.harness.Dispose();
 
     private static string ReadField(string body, string name) =>
         JsonDocument.Parse(body).RootElement.GetProperty(name).GetString() ?? string.Empty;
 
     private static long ReadVersion(string body) =>
         JsonDocument.Parse(body).RootElement.GetProperty("version").GetInt64();
-
-    private async Task<string> WriteDeclarationAsync(string declaration)
-    {
-        var path = Path.Combine(this.declarations, $"mail-account-{Guid.NewGuid():N}.json");
-
-        Directory.CreateDirectory(this.declarations);
-        await File.WriteAllTextAsync(path, declaration, TestContext.Current.CancellationToken);
-
-        return path;
-    }
 
     private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>
         this.harness.RunAsync(deployment, args);

@@ -69,7 +69,7 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
     /// </remarks>
     public static DeploymentMailUserUnresolvedException NoUserToActFor() => new(
         "This deployment holds no user record, so a request that names none has nobody to act for. Record one with "
-        + "'mfctl user add', then give them a mailbox with 'mfctl user account add'.");
+        + "'mfctl user add', then give them a mailbox with 'mfctl account add'.");
 
     /// <summary>Reports a request that names no user reaching a deployment that serves several.</summary>
     /// <returns>The failure to raise.</returns>

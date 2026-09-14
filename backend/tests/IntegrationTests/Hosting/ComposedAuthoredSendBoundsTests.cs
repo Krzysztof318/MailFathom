@@ -93,7 +93,7 @@ public sealed class ComposedAuthoredSendBoundsTests(MailFathomOrchestrationFixtu
             "send_email",
             new
             {
-                account = OrchestrationContract.ServedMailAccountId,
+                account = OrchestrationContract.ServedMailAccountDisplayName,
                 to = recipients,
                 subject = "authored-send-bounds",
                 plainTextBody = "This message is refused before anything is written down.",

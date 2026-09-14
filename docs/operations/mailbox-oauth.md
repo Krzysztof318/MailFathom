@@ -174,7 +174,7 @@ printing it. The deployment seals it under its [data-encryption key](secret-prov
 same place a rotated token is kept.
 
 ```console
-$ mfctl mailbox authorize --provider google --client-id <client-id> --account workspace
+$ mfctl mailbox authorize --provider google --client-id <client-id> --account <account id>
 Client secret (leave empty for a public client):
 
 A browser has been opened for you. If it did not appear, open this address yourself:
@@ -182,7 +182,7 @@ A browser has been opened for you. If it did not appear, open this address yours
   https://accounts.google.com/o/oauth2/v2/auth?client_id=…&code_challenge=…
 
 Waiting for the sign-in to come back to http://127.0.0.1:8765/...
-Stored the refresh token for account 'workspace' on 'production'. It was not printed.
+Stored the refresh token for account '<account id>' on 'production'. It was not printed.
 ```
 
 Four things about that run are worth stating, because each removes a way the manual step could go wrong:
@@ -214,13 +214,13 @@ interaction between the two is [rotation](#rotation).
 ## Declaring the account
 
 Provision the refresh token and the client secret through [secret provisioning](secret-provisioning.md), then point
-the account at them. The permitted mechanisms are what switch the account onto the token path. The declaration is
-written into the record of the user whose mailbox it is, with `mfctl user account add --from-file`, rather than into a
+the account at them. The permitted mechanisms are what switch the account onto the token path. The declaration creates
+a mail account assigned to the user whose mailbox it is, with `mfctl account add --from-file`, rather than going into a
 configuration source:
 
 ```jsonc
 {
-  "AccountId": "workspace",
+  "EmailAddress": "mailbox@example.com",
   "DisplayName": "Workspace mail",
   "Host": "imap.gmail.com",
   "Port": 993,
@@ -293,17 +293,16 @@ the reference is never read again.
 longer accepts, and it needs no database access and no restart: the next token request spends what the run just stored.
 
 ```console
-$ mfctl mailbox authorize --provider google --client-id <client-id> --account workspace
+$ mfctl mailbox authorize --provider google --client-id <client-id> --account <account id>
 ```
 
 To make an account fall back to its configured reference instead, delete its row with any PostgreSQL client. A stored
-token is held per user and account rather than per account identifier — an identifier names one mailbox within the
-user who owns it — so the statement names both, and reading the user out of `settings_accounts` refuses rather
+token is held per user and account rather than per account identifier, so the statement names both, and reading the user out of `settings_accounts` refuses rather
 than guesses if a deployment ever holds more than one:
 
 ```sql
 DELETE FROM mailbox_refresh_tokens
-WHERE "MailboxAccountId" = 'workspace'
+WHERE "MailboxAccountId" = '<account id>'
   AND "UserId" = (SELECT "Id" FROM settings_accounts);
 ```
 

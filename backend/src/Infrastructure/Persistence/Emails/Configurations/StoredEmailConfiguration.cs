@@ -159,8 +159,8 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
     /// <remarks>
     /// <para>
     /// Every index a mailbox read narrows on leads with the user, because that is the first term such a read carries:
-    /// an account identifier is unique within its user and nowhere else, so a structure led by the account alone would
-    /// interleave two users' mail under one key. The folder-led indexes are the exception and stay as they are — a
+    /// a read is scoped to one user's mail before it names an account, and a read across all of a user's accounts
+    /// names no account at all. The folder-led indexes are the exception and stay as they are — a
     /// folder identity is generated and belongs to exactly one account, so it already names one user's rows.
     /// </para>
     /// <para>

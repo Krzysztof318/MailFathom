@@ -9,6 +9,7 @@ using MailFathom.AppHost;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.IntegrationTests.Orchestration;
 using MailFathom.IntegrationTests.Persistence;
@@ -63,7 +64,8 @@ public sealed class ComposedMailResponseToolContractTests(MailFathomOrchestratio
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        var answeredEmailId = await this.SeedOneAnsweredMessageAsync(cancellationToken);
+        var accountId = await orchestration.ComposedHostAccountIdAsync(cancellationToken);
+        var answeredEmailId = await this.SeedOneAnsweredMessageAsync(accountId, cancellationToken);
 
         using var client = await orchestration.OpenMcpEndpointClientAsync(cancellationToken);
         using var replyRequest = McpToolCall.Of(
@@ -105,8 +107,8 @@ public sealed class ComposedMailResponseToolContractTests(MailFathomOrchestratio
 
         // The account is the one the answered email was stored from rather than anything the calls named, which is what
         // keeps a reply on the mailbox the correspondent has heard from.
-        Assert.Equal(OrchestrationContract.ServedMailAccountId, reply.GetProperty("accountId").GetString());
-        Assert.Equal(OrchestrationContract.ServedMailAccountId, forward.GetProperty("accountId").GetString());
+        Assert.Equal(accountId.Value, reply.GetProperty("accountId").GetString());
+        Assert.Equal(accountId.Value, forward.GetProperty("accountId").GetString());
 
         // Queued rather than sent, in the spelling the surface publishes: the answer is the record as the call
         // committed it, and no submission server has been spoken to for it.
@@ -147,11 +149,16 @@ public sealed class ComposedMailResponseToolContractTests(MailFathomOrchestratio
     /// The content is stored as well as the metadata, unlike the sibling class's seed: an answer quotes the message it
     /// answers, so an email whose bytes this deployment does not hold is refused rather than answered.
     /// </remarks>
-    private async Task<StoredEmailId> SeedOneAnsweredMessageAsync(CancellationToken cancellationToken)
+    private async Task<StoredEmailId> SeedOneAnsweredMessageAsync(MailAccountId accountId, CancellationToken cancellationToken)
     {
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
-        var occurrenceId = SyntheticEmail.OccurrenceIn(binding, uid: 9811);
+        var binding = await OrchestratedFolderBinding.CommitAsync(
+            services,
+            MailAccountIdentity.Create(SyntheticMailAccount.User, accountId),
+            FolderAlias,
+            FolderAlias,
+            cancellationToken);
+        var occurrenceId = SyntheticEmail.OccurrenceIn(accountId, binding, uid: 9811);
         var rawMime = AnsweredRawMime();
         StoredEmailId? storedEmailId = null;
 

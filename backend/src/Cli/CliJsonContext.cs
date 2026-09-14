@@ -4,6 +4,7 @@
 
 using System.Text.Json.Serialization;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Administration.Accounts;
 using MailFathom.Cli.Administration.Configuration;
 using MailFathom.Cli.Administration.Contacts;
 using MailFathom.Cli.Administration.Content;
@@ -98,9 +99,15 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(UserErasure))]
 [JsonSerializable(typeof(UserRecord))]
 [JsonSerializable(typeof(UserRecordSaveRequest))]
-[JsonSerializable(typeof(UserMailAccountRequest))]
-[JsonSerializable(typeof(UserMailAccountRemovalRequest))]
 [JsonSerializable(typeof(UserRecordWriteAnswer))]
+[JsonSerializable(typeof(MailAccountList))]
+[JsonSerializable(typeof(MailAccountEntry))]
+[JsonSerializable(typeof(MailAccountCreationRequest))]
+[JsonSerializable(typeof(MailAccountSaveRequest))]
+[JsonSerializable(typeof(MailAccountAssignmentRequest))]
+[JsonSerializable(typeof(MailAccountWriteAnswer))]
+[JsonSerializable(typeof(MailAccountUnassignment))]
+[JsonSerializable(typeof(MailAccountErasure))]
 [JsonSerializable(typeof(UserCredentialList))]
 [JsonSerializable(typeof(UserCredentialProvisioningRequest))]
 [JsonSerializable(typeof(UserCredentialProvisioned))]

@@ -17,20 +17,21 @@ namespace MailFathom.Mcp.Tools.Results;
 /// mailbox to ask about needs none of them.
 /// </para>
 /// <para>
-/// Both names belong to the account's user and are unique within it rather than across the deployment, and both
-/// descriptions say so because a client stores what it reads here. The user itself is not published: a caller learns
-/// which mailboxes are theirs to name, never that another user spells one the same way.
+/// The identifier is the one the deployment generated for the account and is unique across the deployment; the display
+/// name is unique only within the account's user. Both descriptions say so because a client stores what it reads here.
+/// The user itself is not published: a caller learns which mailboxes are theirs to name, never that another user spells
+/// one the same way.
 /// </para>
 /// </remarks>
 [Description("One mail account you may read, with the names a request may use for it and how current the local copy of each of its folders is.")]
 internal sealed record ListedMailAccount
 {
-    /// <summary>Gets the stable identifier the account is configured under, within its user.</summary>
-    [Description("The configured MailFathom account identifier. It is what every other result reports as accountId, and it is stable across a change of the display name. It is unique within the account's user rather than across the deployment, so store it as this user's name for the mailbox and never compare it with an identifier that reached you from another user or another deployment.")]
+    /// <summary>Gets the stable identifier the deployment generated for the account.</summary>
+    [Description("The MailFathom account identifier the deployment generated. It is what every other result reports as accountId, and it is stable across a change of the display name. It is unique across the deployment, but it is only a name for this mailbox as your own account: an identifier you have not read from list_accounts names nothing you may use.")]
     public required string AccountId { get; init; }
 
     /// <summary>Gets the name the account is published under, within its user.</summary>
-    [Description("The display name the operator gave the account, which is the readable name for the mailbox. Either this or accountId may be used to name the account when narrowing a listing, a search, or a question; the display name is matched without regard to case. It is unique within the account's user in the same way accountId is, and the two names share one naming space there, so either spelling names one mailbox.")]
+    [Description("The display name given to the account, which is the readable name for the mailbox. Either this or accountId may be used to name the account when narrowing a listing, a search, or a question; the display name is matched without regard to case. It is unique among your own accounts rather than across the deployment, and it never collides with another of your accounts' identifiers, so either spelling names one mailbox.")]
     public required string DisplayName { get; init; }
 
     /// <summary>Gets what the operator asked to start the account's next synchronization pass.</summary>

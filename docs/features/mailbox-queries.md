@@ -133,8 +133,8 @@ and its result would read as an answer about the mailbox.
 
 ### Naming an account
 
-An account may be named two ways, and a caller is not required to know which it is holding. The configured `AccountId`
-is matched exactly, because it is a key everything else compares exactly; the `DisplayName` it is published under is
+An account may be named two ways, and a caller is not required to know which it is holding. The identifier the
+deployment generated for it is matched exactly, because it is a key everything else compares exactly; the `DisplayName` it is published under is
 matched without regard to case, because it is prose an operator wrote for a person to retype. Neither is ever matched as
 a fragment, so naming one account can never select another whose name contains it.
 
@@ -144,18 +144,18 @@ for one spelling stays valid for the other. Configuration is what makes this una
 same user's accounts already carries as an identifier or as a display name fails startup — so resolution never has to
 choose between two matches. [`list_accounts`](mcp-tools.md#list_accounts) is where a caller learns both names.
 
-Both spellings belong to the account's user and are unique within it rather than across the deployment, which is as far
-as that unambiguity has to reach: resolution runs against the accounts the caller's user owns, so two users each
-calling an account `work` is no ambiguity at all and neither of them can name the other's. A client storing either name
-is storing this user's name for the mailbox, and one that compared it with a name read for somebody else — another
-user, or a second deployment — would be comparing two values that were never in one naming space.
+The generated identifier is unique across the whole deployment, and the display name alone is unique only within one
+user. Resolution runs against the accounts the caller's user owns, so two users each calling an account `Work mail` is
+no ambiguity at all, and neither of them can name the other's account by its identifier either. A client storing the
+identifier stores a deployment-wide key for the mailbox; a client storing the display name stores this user's name for
+it, and one that compared that name with a name read for somebody else — another user, or a second deployment — would
+be comparing two values that were never in one naming space.
 
 ### Which accounts an unscoped request reads
 
 Naming no account means every account the caller's user owns, and the request is narrowed to that set before anything
-is read rather than left without an account predicate. The two are not the same: removing an account from configuration
-leaves its stored rows in place, so an absent predicate would keep publishing mail from an account MailFathom no longer
-serves — and the rows of every other user are in the same table. Switching `MailSynchronization:Enabled` off is a
+is read rather than left without an account predicate. The two are not the same: the rows of every other user's accounts are
+in the same table, so an absent predicate would publish mail the caller's user is not served. Switching `MailSynchronization:Enabled` off is a
 different matter and hides nothing — it stops runs from fetching mail, and the copy already stored stays readable.
 Switching a single folder's `Synchronize` off is a third thing again: that folder's stored mail is kept and withheld
 from every reader rather than erased, which

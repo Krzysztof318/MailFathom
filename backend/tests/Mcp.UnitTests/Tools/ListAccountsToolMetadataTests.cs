@@ -57,29 +57,29 @@ public sealed class ListAccountsToolMetadataTests
     }
 
     /// <summary>
-    /// A client stores one of the two names, so the descriptor states how far either one is unique before the client
-    /// decides what to do with it. Both are the user's own words and neither is a deployment-wide name.
+    /// A client stores one of the two names, so the descriptor states how far each one is unique before the client
+    /// decides what to do with it: the generated identifier across the deployment, the display name within the user.
     /// </summary>
     [Fact]
-    public void AddMailFathomServer_AdvertisesADescriptionScopingBothNamesToTheirUser()
+    public void AddMailFathomServer_AdvertisesADescriptionStatingHowFarEachNameIsUnique()
     {
         // Arrange, Act
         var description = AdvertisedListAccountsTool().Description;
 
         // Assert
         Assert.NotNull(description);
-        Assert.Contains("unique within that user", description, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("rather than across the deployment", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("identifier is unique across the deployment", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("display name is unique only within your own accounts", description, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
     /// The output schema travels with a stored value where the tool description does not, so each published name says
-    /// on its own that it is unique within its user and nowhere wider.
+    /// on its own how far it is unique.
     /// </summary>
     [Theory]
-    [InlineData("accountId")]
-    [InlineData("displayName")]
-    public void AddMailFathomServer_AdvertisesEachPublishedNameAsUniqueWithinItsUser(string publishedName)
+    [InlineData("accountId", "unique across the deployment")]
+    [InlineData("displayName", "unique among your own accounts rather than across the deployment")]
+    public void AddMailFathomServer_AdvertisesHowFarEachPublishedNameIsUnique(string publishedName, string expectedScope)
     {
         // Arrange, Act
         var outputSchema = AdvertisedListAccountsTool().OutputSchema;
@@ -96,7 +96,7 @@ public sealed class ListAccountsToolMetadataTests
             .GetString();
 
         Assert.NotNull(description);
-        Assert.Contains("unique within the account's user", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(expectedScope, description, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>The tool answers about the deployment rather than about a request, so there is nothing for a caller to get wrong.</summary>

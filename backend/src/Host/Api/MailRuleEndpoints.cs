@@ -154,7 +154,7 @@ internal static class MailRuleEndpoints
     }
 
     /// <summary>Reports where one account's whole-mailbox run has got to, or how the last one ended.</summary>
-    /// <param name="account">The configured identifier of the account whose run is read.</param>
+    /// <param name="account">The identifier the deployment generated for the account whose run is read.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="runs">Reads the one run an account may have outstanding, or the ending of the last one.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
@@ -186,7 +186,7 @@ internal static class MailRuleEndpoints
     }
 
     /// <summary>Serves one page of an account's rule history, or reports what was wrong with the request.</summary>
-    /// <param name="account">The configured identifier of the account whose history is read.</param>
+    /// <param name="account">The identifier the deployment generated for the account whose history is read.</param>
     /// <param name="rule">The rule to narrow to, or <see langword="null" /> for every rule.</param>
     /// <param name="email">The local identity of the message to narrow to, or <see langword="null" /> for every message.</param>
     /// <param name="from">The earliest evaluation instant served, inclusive, or <see langword="null" /> for none.</param>
