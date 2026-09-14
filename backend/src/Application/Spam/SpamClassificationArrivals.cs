@@ -25,10 +25,11 @@ namespace MailFathom.Application.Spam;
 /// holding it.
 /// </para>
 /// <para>
-/// The two cheap questions are asked before the row is written, in the order they cost: whether this user classifies
-/// at all, and whether their scope covers the folder the message arrived in. A user with classification off therefore
-/// costs one settings read per stored message and reaches no queue, which is the same shape every other path through
-/// this feature has when it is switched off.
+/// The two cheap questions are asked before the row is written, in the order they cost: whether this account
+/// classifies at all, and whether its scope covers the folder the message arrived in. An account with classification
+/// off therefore costs one settings read per stored message and reaches no queue, which is the same shape every other
+/// path through this feature has when it is switched off — and a user holding two mailboxes is answered twice, once
+/// for each, because the decision is the mailbox's rather than theirs.
 /// </para>
 /// <para>
 /// <strong>What the queue answers is not acted on, and that is the bound the synchronization run needs.</strong> A row
@@ -51,7 +52,7 @@ public sealed class SpamClassificationArrivals
 
     /// <summary>Initializes the trigger over the queue it writes to and the settings that decide whether it does.</summary>
     /// <param name="jobs">The durable queue one classification is enqueued into.</param>
-    /// <param name="settingsReader">Answers whether the occurrence's user classifies and which folders they cover.</param>
+    /// <param name="settingsReader">Answers whether the occurrence's account is classified and which of its folders are covered.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public SpamClassificationArrivals(IJobStore jobs, ISpamClassificationSettingsReader settingsReader)
     {
@@ -82,7 +83,7 @@ public sealed class SpamClassificationArrivals
     {
         ArgumentNullException.ThrowIfNull(occurrenceId);
 
-        var settings = this.settingsReader.SettingsFor(user);
+        var settings = this.settingsReader.SettingsFor(occurrenceId.AccountId);
 
         if (!settings.IsEnabled || !settings.Covers(occurrenceId.FolderResolutionId.Alias))
         {

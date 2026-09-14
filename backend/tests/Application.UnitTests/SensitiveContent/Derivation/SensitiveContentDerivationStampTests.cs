@@ -208,23 +208,23 @@ public sealed class SensitiveContentDerivationStampTests
     }
 
     /// <summary>
-    /// A cursor is discarded whenever anything the walk judges mail against has moved, and mail whose user the roster
-    /// no longer names is judged against the deployment's own posture. That posture moving is invisible in the rostered
-    /// stamps whenever every rostered user had already asked for at least as much, so it is digested beside them —
+    /// A cursor is discarded whenever anything the walk judges mail against has moved, and mail whose account the roster
+    /// no longer names is judged against the deployment's own posture. That posture moving is invisible in the served
+    /// stamps whenever every served account had already asked for at least as much, so it is digested beside them —
     /// otherwise the walk resumes past rows that had just become stale and never revisits them.
     /// </summary>
     [Fact]
-    public void Across_TheFallbackPostureMovingWhileNoRosteredOneDid_ProducesADifferentComposite()
+    public void Across_TheFallbackPostureMovingWhileNoServedOneDid_ProducesADifferentComposite()
     {
         // Arrange
         var scanner = Scanner(SensitiveContentScannerKind.Secrets, "corpus", "1");
         var plan = Plan(scanner, ProviderToken);
         var stamp = SensitiveContentDerivationStamp.Compute(plan, [scanner]);
         using var permits = new SensitiveContentScanConcurrency(plan.Bounds.MaximumConcurrentScans);
-        var rostered = new[]
+        var served = new[]
         {
-            new UserSensitiveContentPosture(
-                SyntheticMailUser.Deployment,
+            new MailAccountSensitiveContentPosture(
+                FixedSensitiveContentPostures.SoleAccount,
                 SensitiveContentPosture.Scanning(
                     [scanner.Scanner],
                     new SensitiveContentRedactor(plan, [scanner], TimeProvider.System, permits),
@@ -233,8 +233,8 @@ public sealed class SensitiveContentDerivationStampTests
         };
 
         // Act
-        var beforeTheDeploymentScanned = SensitiveContentDerivationStamp.Across(rostered, null);
-        var afterwards = SensitiveContentDerivationStamp.Across(rostered, stamp);
+        var beforeTheDeploymentScanned = SensitiveContentDerivationStamp.Across(served, null);
+        var afterwards = SensitiveContentDerivationStamp.Across(served, stamp);
 
         // Assert
         Assert.NotNull(beforeTheDeploymentScanned);

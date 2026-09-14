@@ -7,8 +7,8 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.SensitiveContent;
 
-/// <summary>Covers what one user may ask for over their own mail, which is the write every other path trusts.</summary>
-public sealed class UserSensitiveContentRulesTests
+/// <summary>Covers what one mail account may ask for over its own mail, which is the write every other path trusts.</summary>
+public sealed class MailAccountSensitiveContentRulesTests
 {
     private const string Path = "Accounts:0:SensitiveContent";
 
@@ -23,22 +23,22 @@ public sealed class UserSensitiveContentRulesTests
         deployment.Secrets.Enabled = true;
 
         // Act
-        var refusals = UserSensitiveContentRules.FindRefusals(new UserSensitiveContentOptions(), deployment, Path);
+        var refusals = MailAccountSensitiveContentRules.FindRefusals(new MailAccountSensitiveContentOptions(), deployment, Path);
 
         // Assert
         Assert.Empty(refusals);
     }
 
-    /// <summary>Tightening is the whole point of the block: a scanner nobody was paying for runs over the mail of whoever asked.</summary>
+    /// <summary>Tightening is the whole point of the block: a scanner nobody was paying for runs over the mail of the mailbox that asked.</summary>
     [Fact]
-    public void FindRefusals_AUserSwitchingOnAScannerTheDeploymentLeftOff_IsAccepted()
+    public void FindRefusals_AnAccountSwitchingOnAScannerTheDeploymentLeftOff_IsAccepted()
     {
         // Arrange
-        var user = new UserSensitiveContentOptions();
-        user.Secrets.Enabled = true;
+        var account = new MailAccountSensitiveContentOptions();
+        account.Secrets.Enabled = true;
 
         // Act
-        var refusals = UserSensitiveContentRules.FindRefusals(user, new SensitiveContentOptions(), Path);
+        var refusals = MailAccountSensitiveContentRules.FindRefusals(account, new SensitiveContentOptions(), Path);
 
         // Assert
         Assert.Empty(refusals);
@@ -46,20 +46,20 @@ public sealed class UserSensitiveContentRulesTests
 
     /// <summary>
     /// The obligation belongs to whoever holds the mail, so a record cannot decline a scanner the deployment requires.
-    /// The refusal names the deployment setting rather than the user's own words, which is what makes it actionable to
+    /// The refusal names the deployment setting rather than the account's own words, which is what makes it actionable to
     /// the operator holding that switch and safe to log.
     /// </summary>
     [Fact]
-    public void FindRefusals_AUserSwitchingOffAScannerTheDeploymentRequires_IsRefusedNamingTheSetting()
+    public void FindRefusals_AnAccountSwitchingOffAScannerTheDeploymentRequires_IsRefusedNamingTheSetting()
     {
         // Arrange
         var deployment = new SensitiveContentOptions();
         deployment.Secrets.Enabled = true;
-        var user = new UserSensitiveContentOptions();
-        user.Secrets.Enabled = false;
+        var account = new MailAccountSensitiveContentOptions();
+        account.Secrets.Enabled = false;
 
         // Act
-        var refusal = Assert.Single(UserSensitiveContentRules.FindRefusals(user, deployment, Path));
+        var refusal = Assert.Single(MailAccountSensitiveContentRules.FindRefusals(account, deployment, Path));
 
         // Assert
         Assert.StartsWith($"{Path}:Secrets:Enabled", refusal, StringComparison.Ordinal);
@@ -72,32 +72,32 @@ public sealed class UserSensitiveContentRulesTests
     /// that fails closed on its next message.
     /// </summary>
     [Fact]
-    public void FindRefusals_AUserAskingForThePersonalDataScannerWithNoAnalyzer_IsRefusedNamingTheMissingSetting()
+    public void FindRefusals_AnAccountAskingForThePersonalDataScannerWithNoAnalyzer_IsRefusedNamingTheMissingSetting()
     {
         // Arrange
-        var user = new UserSensitiveContentOptions();
-        user.Pii.Enabled = true;
+        var account = new MailAccountSensitiveContentOptions();
+        account.Pii.Enabled = true;
 
         // Act
-        var refusal = Assert.Single(UserSensitiveContentRules.FindRefusals(user, new SensitiveContentOptions(), Path));
+        var refusal = Assert.Single(MailAccountSensitiveContentRules.FindRefusals(account, new SensitiveContentOptions(), Path));
 
         // Assert
         Assert.StartsWith($"{Path}:Pii:Enabled", refusal, StringComparison.Ordinal);
         Assert.Contains("SensitiveContent:PersonalDataAnalyzer:Endpoint", refusal, StringComparison.Ordinal);
     }
 
-    /// <summary>The other half: an analyzer the deployment stood up is one a user may ask to be scanned by.</summary>
+    /// <summary>The other half: an analyzer the deployment stood up is one an account may ask to be scanned by.</summary>
     [Fact]
-    public void FindRefusals_AUserAskingForThePersonalDataScannerWhereAnAnalyzerIsConfigured_IsAccepted()
+    public void FindRefusals_AnAccountAskingForThePersonalDataScannerWhereAnAnalyzerIsConfigured_IsAccepted()
     {
         // Arrange
         var deployment = new SensitiveContentOptions();
         deployment.PersonalDataAnalyzer.Endpoint = AnalyzerAddress;
-        var user = new UserSensitiveContentOptions();
-        user.Pii.Enabled = true;
+        var account = new MailAccountSensitiveContentOptions();
+        account.Pii.Enabled = true;
 
         // Act
-        var refusals = UserSensitiveContentRules.FindRefusals(user, deployment, Path);
+        var refusals = MailAccountSensitiveContentRules.FindRefusals(account, deployment, Path);
 
         // Assert
         Assert.Empty(refusals);
@@ -105,13 +105,13 @@ public sealed class UserSensitiveContentRulesTests
 
     /// <summary>An entry naming no scanner would be dropped in silence and read as a record that screens more than it does.</summary>
     [Fact]
-    public void FindRefusals_AUserScreeningForSomethingNoScannerIsCalled_IsRefusedNamingWhatIsAccepted()
+    public void FindRefusals_AnAccountScreeningForSomethingNoScannerIsCalled_IsRefusedNamingWhatIsAccepted()
     {
         // Arrange
-        var user = new UserSensitiveContentOptions { ScreenOutgoingMailFor = ["Sekrety"] };
+        var account = new MailAccountSensitiveContentOptions { ScreenOutgoingMailFor = ["Sekrety"] };
 
         // Act
-        var refusal = Assert.Single(UserSensitiveContentRules.FindRefusals(user, new SensitiveContentOptions(), Path));
+        var refusal = Assert.Single(MailAccountSensitiveContentRules.FindRefusals(account, new SensitiveContentOptions(), Path));
 
         // Assert
         Assert.DoesNotContain("Sekrety", refusal, StringComparison.Ordinal);
@@ -122,30 +122,30 @@ public sealed class UserSensitiveContentRulesTests
 
     /// <summary>The refusal is what an administrator and a start both read, so its noun agrees with the count it reports.</summary>
     [Fact]
-    public void FindRefusals_AUserScreeningForSeveralUnknownScanners_CountsThemAsEntries()
+    public void FindRefusals_AnAccountScreeningForSeveralUnknownScanners_CountsThemAsEntries()
     {
         // Arrange
-        var user = new UserSensitiveContentOptions { ScreenOutgoingMailFor = ["Sekrety", "Dane"] };
+        var account = new MailAccountSensitiveContentOptions { ScreenOutgoingMailFor = ["Sekrety", "Dane"] };
 
         // Act
-        var refusal = Assert.Single(UserSensitiveContentRules.FindRefusals(user, new SensitiveContentOptions(), Path));
+        var refusal = Assert.Single(MailAccountSensitiveContentRules.FindRefusals(account, new SensitiveContentOptions(), Path));
 
         // Assert
         Assert.Contains("names 2 entries", refusal, StringComparison.Ordinal);
     }
 
-    /// <summary>The list is the user's whole answer, so one naming fewer scanners than the deployment stops mail for is a narrowing.</summary>
+    /// <summary>The list is the account's whole answer, so one naming fewer scanners than the deployment stops mail for is a narrowing.</summary>
     [Fact]
-    public void FindRefusals_AUserScreeningForFewerScannersThanTheDeployment_IsRefusedNamingWhatIsMissing()
+    public void FindRefusals_AnAccountScreeningForFewerScannersThanTheDeployment_IsRefusedNamingWhatIsMissing()
     {
         // Arrange
         var deployment = new SensitiveContentOptions();
         deployment.Secrets.Enabled = true;
         deployment.ScreenOutgoingMailFor = ["Secrets"];
-        var user = new UserSensitiveContentOptions { ScreenOutgoingMailFor = [] };
+        var account = new MailAccountSensitiveContentOptions { ScreenOutgoingMailFor = [] };
 
         // Act
-        var refusal = Assert.Single(UserSensitiveContentRules.FindRefusals(user, deployment, Path));
+        var refusal = Assert.Single(MailAccountSensitiveContentRules.FindRefusals(account, deployment, Path));
 
         // Assert
         Assert.StartsWith($"{Path}:ScreenOutgoingMailFor", refusal, StringComparison.Ordinal);
@@ -154,18 +154,18 @@ public sealed class UserSensitiveContentRulesTests
 
     /// <summary>Naming what the deployment stops mail for and something beside it is an addition, which is allowed.</summary>
     [Fact]
-    public void FindRefusals_AUserAddingAScannerToWhatTheDeploymentAlreadyStopsMailFor_IsAccepted()
+    public void FindRefusals_AnAccountAddingAScannerToWhatTheDeploymentAlreadyStopsMailFor_IsAccepted()
     {
         // Arrange
         var deployment = new SensitiveContentOptions();
         deployment.Secrets.Enabled = true;
         deployment.PersonalDataAnalyzer.Endpoint = AnalyzerAddress;
         deployment.ScreenOutgoingMailFor = ["Secrets"];
-        var user = new UserSensitiveContentOptions { ScreenOutgoingMailFor = ["secrets", "Pii"] };
-        user.Pii.Enabled = true;
+        var account = new MailAccountSensitiveContentOptions { ScreenOutgoingMailFor = ["secrets", "Pii"] };
+        account.Pii.Enabled = true;
 
         // Act
-        var refusals = UserSensitiveContentRules.FindRefusals(user, deployment, Path);
+        var refusals = MailAccountSensitiveContentRules.FindRefusals(account, deployment, Path);
 
         // Assert
         Assert.Empty(refusals);
@@ -179,12 +179,12 @@ public sealed class UserSensitiveContentRulesTests
         var deployment = new SensitiveContentOptions();
         deployment.Secrets.Enabled = true;
         deployment.ScreenOutgoingMailFor = ["Secrets"];
-        var user = new UserSensitiveContentOptions { ScreenOutgoingMailFor = [] };
-        user.Secrets.Enabled = false;
-        user.Pii.Enabled = true;
+        var account = new MailAccountSensitiveContentOptions { ScreenOutgoingMailFor = [] };
+        account.Secrets.Enabled = false;
+        account.Pii.Enabled = true;
 
         // Act
-        var refusals = UserSensitiveContentRules.FindRefusals(user, deployment, Path);
+        var refusals = MailAccountSensitiveContentRules.FindRefusals(account, deployment, Path);
 
         // Assert
         Assert.Equal(3, refusals.Count);
@@ -195,12 +195,12 @@ public sealed class UserSensitiveContentRulesTests
     {
         // Act, Assert
         Assert.Throws<ArgumentNullException>(
-            () => UserSensitiveContentRules.FindRefusals(null!, new SensitiveContentOptions(), Path));
+            () => MailAccountSensitiveContentRules.FindRefusals(null!, new SensitiveContentOptions(), Path));
         Assert.Throws<ArgumentNullException>(
-            () => UserSensitiveContentRules.FindRefusals(new UserSensitiveContentOptions(), null!, Path));
+            () => MailAccountSensitiveContentRules.FindRefusals(new MailAccountSensitiveContentOptions(), null!, Path));
         Assert.Throws<ArgumentNullException>(
-            () => UserSensitiveContentRules.FindRefusals(
-                new UserSensitiveContentOptions(),
+            () => MailAccountSensitiveContentRules.FindRefusals(
+                new MailAccountSensitiveContentOptions(),
                 new SensitiveContentOptions(),
                 null!));
     }

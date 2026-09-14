@@ -214,9 +214,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
             record.User,
             record.DisplayName,
             usable,
-            bound.ReadingLanguage ?? MailUserLanguage.English,
-            bound.SpamClassification,
-            bound.SensitiveContent);
+            bound.ReadingLanguage ?? MailUserLanguage.English);
 
         return (served, document.Version);
     }

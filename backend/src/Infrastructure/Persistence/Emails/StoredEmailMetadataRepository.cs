@@ -100,7 +100,7 @@ internal sealed class StoredEmailMetadataRepository(
                 entity,
                 metadata.Subject,
                 timeProvider.GetUtcNow(),
-                derivationGuard.StampFor(MailUserId.Create(entity.UserId)),
+                derivationGuard.StampFor(MailAccountId.Create(entity.MailboxAccountId)),
                 cancellationToken);
         }
 
@@ -244,7 +244,7 @@ internal sealed class StoredEmailMetadataRepository(
                 entity,
                 subject: null,
                 storedAt,
-                derivationGuard.StampFor(account.User),
+                derivationGuard.StampFor(account.Id),
                 cancellationToken);
         }
 

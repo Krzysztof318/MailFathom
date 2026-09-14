@@ -3,19 +3,19 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Spam.Actions;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration.Mail;
 
 namespace MailFathom.Host.Configuration.Spam;
 
-/// <summary>Reads what each user asked to happen to their own junk, out of the record that is the whole of their posture.</summary>
+/// <summary>Reads what each account asks to happen to its own junk, out of the record that is the whole of its posture.</summary>
 /// <remarks>
 /// <para>
 /// The same source <see cref="ConfiguredSpamClassificationSettingsReader" /> reads, because the two halves of one
-/// user's posture are written in one place: their own record.
+/// account's posture are written in one place: that account's own record.
 /// </para>
 /// <para>
-/// The record is read per request rather than captured, so switching filing on reaches that user's next verdict and
+/// The record is read per request rather than captured, so switching filing on reaches that account's next verdict and
 /// switching it off stops it, neither needing a restart.
 /// </para>
 /// <para>
@@ -28,23 +28,14 @@ internal sealed class ConfiguredSpamActionSettingsReader(MailSynchronizationOpti
     : ISpamActionSettingsReader
 {
     /// <inheritdoc />
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    public SpamActionSettings ActionsFor(MailUserId user)
+    public SpamActionSettings ActionsFor(MailAccountId account)
     {
-        if (!user.IsSpecified)
-        {
-            throw new ArgumentException("A junk posture is read for a named user.", nameof(user));
-        }
-
-        var served = (synchronizationOptions.ServedUsers ?? [])
-            .FirstOrDefault(candidate => candidate.User == user);
-
-        if (served is null)
+        if (synchronizationOptions.FindConfiguredAccount(account) is not { } declared)
         {
             return SpamActionSettings.None;
         }
 
-        var record = served.SpamClassification ?? new UserSpamClassificationOptions();
+        var record = declared.SpamClassification ?? new MailAccountSpamClassificationOptions();
 
         return record.Enabled ? record.Actions.ToSettings() : SpamActionSettings.None;
     }

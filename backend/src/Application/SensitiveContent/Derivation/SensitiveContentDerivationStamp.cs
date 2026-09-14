@@ -42,7 +42,7 @@ public readonly record struct SensitiveContentDerivationStamp
     private const string HashDomain = "mailfathom.sensitive-content-derivation.v1";
 
     /// <summary>Names the composite scheme separately, so a set of one posture cannot collide with that posture.</summary>
-    private const string CompositeHashDomain = "mailfathom.sensitive-content-derivation-across-users.v1";
+    private const string CompositeHashDomain = "mailfathom.sensitive-content-derivation-across-accounts.v1";
 
     private SensitiveContentDerivationStamp(string value) => this.Value = value;
 
@@ -90,10 +90,10 @@ public readonly record struct SensitiveContentDerivationStamp
         return new SensitiveContentDerivationStamp(Convert.ToHexStringLower(digest.GetHashAndReset()));
     }
 
-    /// <summary>Computes the one stamp a walk over every user's mail is re-deriving towards.</summary>
-    /// <param name="postures">What every user this deployment serves has their mail scanned under, ordered by user.</param>
-    /// <param name="unrostered">
-    /// What mail whose user the roster no longer names is judged against, which is the deployment's own posture, and
+    /// <summary>Computes the one stamp a walk over every account's mail is re-deriving towards.</summary>
+    /// <param name="postures">What every account this deployment serves has its mail scanned under, ordered by account.</param>
+    /// <param name="unserved">
+    /// What mail whose account the roster no longer names is judged against, which is the deployment's own posture, and
     /// <see langword="null" /> where nothing scans it.
     /// </param>
     /// <returns>The composite, or <see langword="null" /> where no mail this walk covers is scanned at all.</returns>
@@ -101,28 +101,30 @@ public readonly record struct SensitiveContentDerivationStamp
     /// <remarks>
     /// <para>
     /// It identifies a set of configurations rather than one, and it is written on exactly one thing: the position a
-    /// re-derivation walk has reached. A derived row records the stamp of the user it belongs to, because that is what
-    /// says whether <em>that message</em> is stale; a cursor belongs to no user and has to be discarded whenever any
-    /// user's posture has moved, since the walk it was advancing was skipping rows a new one has to revisit.
+    /// re-derivation walk has reached. A derived row records the stamp of the account it belongs to, because that is
+    /// what says whether <em>that message</em> is stale; a cursor belongs to no account and has to be discarded
+    /// whenever any account's posture has moved, since the walk it was advancing was skipping rows a new one has to
+    /// revisit.
     /// </para>
     /// <para>
-    /// It carries the user beside each stamp, so two users exchanging postures is a different composite rather than
-    /// the same one. Users whose mail nothing scans are in the digest as well, by their identifier alone, because a
-    /// user who switched their scanner off since the cursor was written is exactly the case that has to discard it.
+    /// It carries the account beside each stamp, so two accounts exchanging postures is a different composite rather
+    /// than the same one. Accounts whose mail nothing scans are in the digest as well, by their identifier alone,
+    /// because an account that switched its scanner off since the cursor was written is exactly the case that has to
+    /// discard it.
     /// </para>
     /// <para>
-    /// The fallback is digested beside them because the walk judges mail against it: rows belonging to a user this
+    /// The fallback is digested beside them because the walk judges mail against it: rows belonging to an account this
     /// deployment has stopped serving are stale exactly when the deployment's own posture moved, and that move is
-    /// invisible in the rostered stamps whenever every rostered user had already asked for at least as much.
+    /// invisible in the served stamps whenever every served account had already asked for at least as much.
     /// </para>
     /// </remarks>
     public static SensitiveContentDerivationStamp? Across(
-        IReadOnlyList<UserSensitiveContentPosture> postures,
-        SensitiveContentDerivationStamp? unrostered)
+        IReadOnlyList<MailAccountSensitiveContentPosture> postures,
+        SensitiveContentDerivationStamp? unserved)
     {
         ArgumentNullException.ThrowIfNull(postures);
 
-        if (unrostered is null && !postures.Any(posture => posture.Posture.Stamp is not null))
+        if (unserved is null && !postures.Any(posture => posture.Posture.Stamp is not null))
         {
             return null;
         }
@@ -132,13 +134,13 @@ public readonly record struct SensitiveContentDerivationStamp
         CanonicalDigest.AppendText(digest, CompositeHashDomain);
         CanonicalDigest.AppendNumber(digest, postures.Count);
 
-        foreach (var posture in postures.OrderBy(candidate => candidate.User.Value))
+        foreach (var posture in postures.OrderBy(candidate => candidate.Account.Value, StringComparer.Ordinal))
         {
-            CanonicalDigest.AppendText(digest, posture.User.ToString());
+            CanonicalDigest.AppendText(digest, posture.Account.ToString());
             CanonicalDigest.AppendText(digest, posture.Posture.Stamp?.Value ?? string.Empty);
         }
 
-        CanonicalDigest.AppendText(digest, unrostered?.Value ?? string.Empty);
+        CanonicalDigest.AppendText(digest, unserved?.Value ?? string.Empty);
 
         return new SensitiveContentDerivationStamp(Convert.ToHexStringLower(digest.GetHashAndReset()));
     }

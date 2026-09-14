@@ -70,7 +70,7 @@ public sealed class MailEnrichmentPass
     /// <param name="enrichmentStore">Reads what is awaiting a derivation and writes down what one produced.</param>
     /// <param name="enricher">Derives one message's marks, in whichever state the deployment left it.</param>
     /// <param name="languages">Answers which language the account's owner reads, which the readings are written in.</param>
-    /// <param name="egressGuard">States whose mail the passages are, so the derivation scans them under that user's posture.</param>
+    /// <param name="egressGuard">States which mailbox the passages are from, so the derivation scans them under that account's posture.</param>
     /// <param name="commitPolicy">Commits one message's record, retrying a conflict with a competing writer.</param>
     /// <param name="timeProvider">Reads when a derivation ran.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
@@ -122,9 +122,9 @@ public sealed class MailEnrichmentPass
                 EmailsRemain: false);
         }
 
-        // Established for the whole pass rather than per message, because whose mail a passage is decides the posture it
-        // is scanned under and every message in the batch belongs to the one account this pass walks.
-        using var actingFor = this.egressGuard.ActingFor(account.User);
+        // Established for the whole pass rather than per message, because which mailbox a passage is from decides the
+        // posture it is scanned under and every message in the batch belongs to the one account this pass walks.
+        using var actingFor = this.egressGuard.ActingFor(account);
 
         // Resolved once for the same reason and from the same fact: every message in this batch is one person's, and
         // what they read is what every reading derived from it is written in.

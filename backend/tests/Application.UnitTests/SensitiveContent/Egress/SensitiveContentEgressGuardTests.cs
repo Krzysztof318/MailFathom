@@ -5,6 +5,7 @@
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -48,7 +49,7 @@ public sealed class SensitiveContentEgressGuardTests
         var guard = new SensitiveContentEgressGuard(
             FixedSensitiveContentPostures.Of(
                 SensitiveContentPosture.ScanningNothing,
-                (SyntheticMailUser.Deployment, egress.Postures.ForUser(SyntheticMailUser.Deployment))),
+                (ScanningSensitiveContentEgress.Account.Id, egress.Postures.ForAccount(ScanningSensitiveContentEgress.Account.Id))),
             new RecordingSensitiveContentEgressTelemetry(),
             this.timeProvider);
 
@@ -80,10 +81,10 @@ public sealed class SensitiveContentEgressGuardTests
     /// <summary>
     /// A flow that reached the guard without stating whose mail it holds is a use case that skipped the resolution,
     /// which would otherwise be served under whatever the deployment happened to scan for. It fails loudly instead,
-    /// because the wrong answer here is one person's mail read under another person's posture.
+    /// because the wrong answer here is one mailbox's mail read under another mailbox's posture.
     /// </summary>
     [Fact]
-    public async Task GuardAsync_AFlowActingForNoUser_IsRefusedRatherThanReadUnderSomebodyElsesPosture()
+    public async Task GuardAsync_AFlowActingForNobodysMail_IsRefusedRatherThanReadUnderAnotherPosture()
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
@@ -95,7 +96,7 @@ public sealed class SensitiveContentEgressGuardTests
             TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Contains("acting for no user", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("acting for nobody's mail", refusal.Message, StringComparison.Ordinal);
     }
 
     /// <summary>A deployment nobody is scanned for needs no user stated, which is what keeps an opt-in nobody took free.</summary>
@@ -131,7 +132,7 @@ public sealed class SensitiveContentEgressGuardTests
         var guard = new SensitiveContentEgressGuard(
             FixedSensitiveContentPostures.Of(
                 SensitiveContentPosture.ScanningNothing,
-                (SyntheticMailUser.Deployment, egress.Postures.ForUser(SyntheticMailUser.Deployment))),
+                (ScanningSensitiveContentEgress.Account.Id, egress.Postures.ForAccount(ScanningSensitiveContentEgress.Account.Id))),
             new RecordingSensitiveContentEgressTelemetry(),
             this.timeProvider);
 
@@ -151,6 +152,62 @@ public sealed class SensitiveContentEgressGuardTests
         // Assert
         Assert.True(guard.IsActive);
         Assert.Equal("the key is [redacted:CloudKey]", guarded);
+    }
+
+    /// <summary>
+    /// The scope a pass holding one mailbox opens. Two accounts of one user are scanned differently, so the account
+    /// scope has to read the one it names rather than the strictest of the pair, which is what the user scope answers
+    /// for a read that spans them.
+    /// </summary>
+    [Fact]
+    public async Task ActingFor_AnAccountOfAUserWhoseOtherMailboxIsScanned_ReadsTheAccountsOwnPosture()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+
+        var scanned = ScanningSensitiveContentEgress.Account;
+        var unscanned = MailAccountIdentity.Create(scanned.User, MailAccountId.Create("archive"));
+
+        var guard = new SensitiveContentEgressGuard(
+            FixedSensitiveContentPostures.Of(
+                SensitiveContentPosture.ScanningNothing,
+                (scanned.Id, egress.Postures.ForAccount(scanned.Id))),
+            new RecordingSensitiveContentEgressTelemetry(),
+            this.timeProvider);
+
+        // Act
+        string fromScannedMailbox;
+        string fromUnscannedMailbox;
+        string acrossBoth;
+
+        using (guard.ActingFor(scanned))
+        {
+            fromScannedMailbox = await guard.GuardAsync(
+                SensitiveContentEgressPoint.ChatPrompt,
+                $"the key is {Marker}",
+                TestContext.Current.CancellationToken);
+        }
+
+        using (guard.ActingFor(unscanned))
+        {
+            fromUnscannedMailbox = await guard.GuardAsync(
+                SensitiveContentEgressPoint.ChatPrompt,
+                $"the key is {Marker}",
+                TestContext.Current.CancellationToken);
+        }
+
+        using (guard.ActingFor(scanned.User))
+        {
+            acrossBoth = await guard.GuardAsync(
+                SensitiveContentEgressPoint.ChatPrompt,
+                $"the key is {Marker}",
+                TestContext.Current.CancellationToken);
+        }
+
+        // Assert
+        Assert.Equal("the key is [redacted:CloudKey]", fromScannedMailbox);
+        Assert.Equal($"the key is {Marker}", fromUnscannedMailbox);
+        Assert.Equal("the key is [redacted:CloudKey]", acrossBoth);
     }
 
     /// <summary>What a caller waits on is the operation, so every text guarded inside one is counted against it.</summary>

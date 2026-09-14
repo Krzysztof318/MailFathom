@@ -1584,7 +1584,7 @@ public sealed class EmailContentReaderTests
             ]);
         using var permits = new SensitiveContentScanConcurrency(plan.Bounds.MaximumConcurrentScans);
 
-        var postures = FixedSensitiveContentPostures.ForEveryUser(
+        var postures = FixedSensitiveContentPostures.ForEveryAccount(
             SensitiveContentPosture.Scanning(
                 [scanner.Scanner],
                 new SensitiveContentRedactor(plan, [scanner], TimeProvider.System, permits),

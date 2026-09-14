@@ -161,36 +161,41 @@ The image is pinned to an exact digest in all four places that name it, and movi
 which is what the recorded corpus revision exists to make visible. `THIRD_PARTY_LICENSES.md` records the image, its
 licences, that whole messages are sent to it, and that it bundles no plugin reporting anything outside the deployment.
 
-## Each user decides this for their own mail
+## Each account decides this for the mail in it
 
-Junk is a judgement about somebody's own mailbox, and both of the actions below write to that person's mail server. So
-**the posture is the user's**: whether their mail is classified at all, whether the scanner is consulted for it, which
-of their folders are classified, the score a verdict is reached at, and what becomes of the result. A user may switch
-classification off entirely for themselves, and no deployment setting requires it of them. That follows from junk
-affecting only that user's own mailbox: there is nobody else's interest for a deployment-wide floor to protect.
+Junk is a judgement about one mailbox, and both of the actions below write to that mailbox's mail server. So **the
+posture is the account's**: whether the mail in it is classified at all, whether the scanner is consulted for it, which
+of that account's folders are classified, the score a verdict is reached at, and what becomes of the result. An account
+may be left unclassified entirely, and no deployment setting requires otherwise.
+
+**It is the account rather than each person assigned it because the mail is one copy.** A mailbox two people read is
+classified once, and a verdict that filed a message moved it on the server for both of them whatever either would have
+asked for — so a deployment whose two people want a mailbox classified differently is describing two mailboxes. It also
+means that changing one account's posture changes that mailbox and no other, including the other mailboxes of the same
+person.
 
 **What stays the deployment's is what costs it a resource**: where the scanner daemon is, what one scan may spend, how
 many scans run at once, how long a message may wait for a verdict before the index moves on without it, and how wide one
-pass of a classification run is. So are the bounds a threshold may be set within — a user writing a value outside them
-is refused at the write, and the refusal names the range.
+pass of a classification run is. So are the bounds a threshold may be set within — an account written with a value
+outside them is refused at the write, and the refusal names the range.
 
-A user's posture is read from their own record, beside the mail accounts it declares, described in
-[the users a deployment serves](../operations/configuration-sources.md#the-users-a-deployment-serves). **A record and
-the deployment's `SpamClassification` section are never unioned**: switching classification off in a record actually
-switches it off rather than falling back to whatever the file still says. Nothing carries the section's posture into a
-record, so a deployment stating somebody's posture states it
-there afresh alongside their mailboxes.
+An account's posture is read from that account's own record, described in
+[classifying this account's mail](../operations/configuration-mail.md#classifying-this-accounts-mail--spamclassification).
+**A record and the deployment's `SpamClassification` section are never unioned**: switching classification off in a
+record actually switches it off rather than falling back to whatever the file still says. Nothing carries the section's
+posture into a record, and a user's record carries no such block at all — one naming it is refused as a property nothing
+binds.
 
-A folder resolves within that user's own mail accounts and nowhere else — both the folders their mail is classified
-over and the folder their junk is filed into. A name only somebody else's account carries is answered exactly as one
-this deployment does not serve.
+A folder resolves within that account's own mapping and nowhere else — both the folders its mail is classified over and
+the folder its junk is filed into. A name only another account carries is answered exactly as one this deployment does
+not serve, and is refused where filing is switched on.
 
 This reaches every deployment, one served user or several. `SpamClassification:ScannedFolders`,
 `SpamClassification:ScannerThreshold`, and the `SpamClassification:Actions` block name nobody's posture and are read by
-no classification: a deployment that stated them and recorded nothing in its users' records classifies nothing. State
-them in each user's record instead. `SpamClassification:Enabled` and `SpamClassification:UseScanner` stay the
-deployment's in the one sense the section above describes — whether a scanner is registered at all — and a user's own
-`UseScanner` asks for it rather than deciding it.
+no classification: a deployment that stated them and recorded nothing on its accounts classifies nothing. State them on
+each account instead. `SpamClassification:Enabled` and `SpamClassification:UseScanner` stay the deployment's in the one
+sense the section above describes — whether a scanner is registered at all — and an account's own `UseScanner` asks for
+it rather than deciding it.
 
 ## What an operator can let a verdict do
 
@@ -305,10 +310,10 @@ decided about yet waits rather than being derived from ahead of the answer.
 With classification off, nothing is gated. Chunking, embedding, and rule evaluation reach exactly the mail they reached
 before any of this existed, and no folder is looked at to decide it.
 
-**Off is per user here as everywhere else.** A walk over stored mail spans users, and the gate narrows it by the
-accounts of the users who classify — so a user who switched classification off has all of their mail admitted at
-once, their junk folder included, while another user's mail in the same walk goes on waiting on its verdict. Their junk
-folder goes with them because withholding it is an ordering behind a verdict rather than a rule of its own: nothing is
+**Off is per account here as everywhere else.** A walk over stored mail spans accounts, and the gate narrows it by the
+accounts that classify — so an account with classification switched off has all of its mail admitted at once, its junk
+folder included, while another account's mail in the same walk goes on waiting on its verdict. Its junk folder goes
+with it because withholding it is an ordering behind a verdict rather than a rule of its own: nothing is
 ever going to score that mail, so holding it back would hold it back forever.
 
 ### What is decided about one message
@@ -533,30 +538,30 @@ unchanged rather than wrapped in a predicate that admits everything.
 ## Configuration
 
 The `SpamClassification` section, in full, is in the
-[AI configuration](../operations/configuration-ai.md#spamclassification). It is what reaches a user still read from a
-configuration source; a user whose document has been written states the same posture in their own record, under the
-`SpamClassification` property the same page describes. What either of them decides:
+[AI configuration](../operations/configuration-ai.md#spamclassification), and the block each mailbox carries is in
+[classifying this account's mail](../operations/configuration-mail.md#classifying-this-accounts-mail--spamclassification).
+The section registers the scanner and bounds what the process spends; the account's block is what decides:
 
 - whether classification runs at all;
 - whether a configured scanner is consulted after the deterministic stage;
-- which folder aliases are classified, defaulting to whichever alias each account maps to its inbox;
+- which folder aliases are classified, defaulting to whichever alias that account maps to its inbox;
 - the threshold a scanner's score is judged against, defaulting to the scanner's own.
 
 What neither of them decides is how wide one pass of a classification run is: how many messages a batch commits, and how
-many batches one account run takes before it leaves the rest to the next. Both are the deployment's for every user,
+many batches one account run takes before it leaves the rest to the next. Both are the deployment's for every account,
 because they bound what one pass of the process spends rather than what happens to anybody's mail, and neither is a
 schedule — how often a pass happens is the account's own synchronization interval. So is how long a message may wait on
 a verdict before derived work runs for it unclassified.
 
-Two blocks sit below it. `SpamClassification:Scanner` holds the daemon's address and bounds and is read only where the
-scanner is switched on, and it is the deployment's for every user. `SpamClassification:Actions` holds the two switches,
-the folder junk is filed into, and the score the user is willing to act at; it is read per verdict, so switching filing
-on reaches the next one without a restart. A user's own record carries `Actions` and the posture above it, and none of
-the engine settings — a record reaching for one is refused by the strict binding that reads it.
+Two blocks sit below the section. `SpamClassification:Scanner` holds the daemon's address and bounds and is read only
+where the scanner is switched on, and it is the deployment's for every account. `SpamClassification:Actions` holds the
+two switches, the folder junk is filed into, and the score the mailbox is acted on at; it is read per verdict, so
+switching filing on reaches the next one without a restart. An account's own record carries `Actions` and the posture
+above it, and none of the engine settings — a record reaching for one is refused by the strict binding that reads it.
 
 An operator who switched the scanner on and left classification off is told at startup rather than given the quiet
 answer, and so is one who switched it on and named no address for it, one who asked for junk to be acted on with
-classification off, and one whose accounts do not all map the folder a filing would go to. An unusable folder alias, an
+classification off, and one whose account does not map the folder its filing would go to. An unusable folder alias, an
 out-of-range threshold, and a bound outside its range each fail startup naming themselves.
 
 ## Reading what was concluded

@@ -7,6 +7,7 @@ using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.TestSupport;
 
@@ -19,9 +20,9 @@ namespace MailFathom.TestSupport;
 /// the guard is the same deployment answering the other question, which is whether an act may happen at all.
 /// </para>
 /// <para>
-/// Every user reads the same posture, because what these suites are about is what a boundary does with a finding
-/// rather than whose mail was scanned. A suite about the difference between two users states two postures itself,
-/// through <see cref="FixedSensitiveContentPostures" />.
+/// Every account reads the same posture, because what these suites are about is what a boundary does with a finding
+/// rather than which mailbox was scanned. A suite about the difference between two accounts states two postures
+/// itself, through <see cref="FixedSensitiveContentPostures" />.
 /// </para>
 /// <para>
 /// It holds the permits the redaction runs under, which is what makes it disposable: they are the process's budget of
@@ -50,7 +51,7 @@ internal sealed class ScanningSensitiveContentEgress : IDisposable
         this.concurrency = new SensitiveContentScanConcurrency(bounds.MaximumConcurrentScans);
         this.Scanner = scanner;
         this.Telemetry = new RecordingSensitiveContentEgressTelemetry();
-        this.Postures = FixedSensitiveContentPostures.ForEveryUser(
+        this.Postures = FixedSensitiveContentPostures.ForEveryAccount(
             SensitiveContentPosture.Scanning(
                 [scanner.Scanner],
                 new SensitiveContentRedactor(plan, [scanner], timeProvider, this.concurrency),
@@ -63,7 +64,11 @@ internal sealed class ScanningSensitiveContentEgress : IDisposable
     /// <summary>Gets the user whose mail this deployment is exercised over.</summary>
     public static MailUserId User => SyntheticMailUser.Deployment;
 
-    /// <summary>Gets what every user's mail is scanned under, for a consumer that resolves the user itself.</summary>
+    /// <summary>Gets the mailbox whose mail this deployment is exercised over, beside the user it is assigned to.</summary>
+    public static MailAccountIdentity Account { get; } =
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, FixedSensitiveContentPostures.SoleAccount);
+
+    /// <summary>Gets what every account's mail is scanned under, for a consumer that resolves the account itself.</summary>
     public FixedSensitiveContentPostures Postures { get; }
 
     /// <summary>Gets the guard a consumer is handed.</summary>

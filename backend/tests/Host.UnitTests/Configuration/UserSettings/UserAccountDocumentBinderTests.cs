@@ -399,32 +399,34 @@ public sealed class UserAccountDocumentBinderTests
         Assert.Contains(binding.Refusals, refusal => refusal.Contains("not a JSON object", StringComparison.Ordinal));
     }
 
-    /// <summary>The block a user states their own posture in binds as its own type, beside their mailboxes.</summary>
+    /// <summary>The block a mailbox states its own posture in binds as its own type, on the account that carries it.</summary>
     [Fact]
-    public void Bind_ADocumentStatingAClassificationPosture_BindsItAsTheUsersOwn()
+    public void Bind_ADocumentStatingAClassificationPosture_BindsItAsTheAccountsOwn()
     {
         // Arrange
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("""
-            {
-              "Language": "English",
-              "MailAccounts": [],
-              "SpamClassification": {
-                "Enabled": true,
-                "UseScanner": true,
-                "ScannedFolders": [ "inbox" ],
-                "ScannerThreshold": 6.5,
-                "Actions": { "MoveToJunkFolder": true, "JunkFolder": "role:Junk", "Threshold": 8 }
-              }
-            }
-            """, UserRecordArrival.BeingWritten);
+        var binding = binder.Bind(
+            DocumentDeclaringAccountCarrying("""
+                "Folders": [
+                  { "Alias": "inbox", "RemotePath": "INBOX" },
+                  { "Alias": "quarantine", "RemotePath": "Quarantine" }
+                ],
+                "SpamClassification": {
+                  "Enabled": true,
+                  "UseScanner": true,
+                  "ScannedFolders": [ "inbox" ],
+                  "ScannerThreshold": 6.5,
+                  "Actions": { "MoveToJunkFolder": true, "JunkFolder": "quarantine", "Threshold": 8 }
+                }
+                """),
+            UserRecordArrival.BeingWritten);
 
         // Assert
         Assert.True(binding.IsBound);
 
-        var classification = binding.User!.SpamClassification;
+        var classification = binding.User!.MailAccounts.Single().SpamClassification;
 
         Assert.True(classification.Enabled);
         Assert.True(classification.UseScanner);
@@ -436,8 +438,8 @@ public sealed class UserAccountDocumentBinderTests
 
     /// <summary>What the engine costs is the deployment's, so a record reaching for one of its settings is refused.</summary>
     /// <remarks>
-    /// The key is one the deployment's own section really binds, so this fails if the user's type ever grows it — which
-    /// is the shape the refusal exists against. An invented name would only prove what
+    /// The key is one the deployment's own section really binds, so this fails if the account's type ever grows it —
+    /// which is the shape the refusal exists against. An invented name would only prove what
     /// <see cref="Bind_PropertyNothingBinds_IsRefused" /> already proves about any unknown property.
     /// </remarks>
     [Fact]
@@ -447,16 +449,18 @@ public sealed class UserAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("""
-            { "MailAccounts": [], "SpamClassification": { "Enabled": true, "ClassificationWait": "00:30:00" } }
-            """, UserRecordArrival.BeingWritten);
+        var binding = binder.Bind(
+            DocumentDeclaringAccountCarrying("""
+                "SpamClassification": { "Enabled": true, "ClassificationWait": "00:30:00" }
+                """),
+            UserRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
         Assert.Contains(binding.Refusals, refusal => refusal.Contains("ClassificationWait", StringComparison.Ordinal));
     }
 
-    /// <summary>A user writing outside the range the deployment permits is refused at the write, naming the range.</summary>
+    /// <summary>An account writing outside the range the deployment permits is refused at the write, naming the range.</summary>
     [Fact]
     public void Bind_ADocumentStatingAThresholdOutsideTheDeploymentsRange_IsRefusedNamingTheRange()
     {
@@ -464,9 +468,11 @@ public sealed class UserAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("""
-            { "MailAccounts": [], "SpamClassification": { "Enabled": true, "ScannerThreshold": 5000 } }
-            """, UserRecordArrival.BeingWritten);
+        var binding = binder.Bind(
+            DocumentDeclaringAccountCarrying("""
+                "SpamClassification": { "Enabled": true, "ScannerThreshold": 5000 }
+                """),
+            UserRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -587,7 +593,7 @@ public sealed class UserAccountDocumentBinderTests
         return $$"""{"MailAccounts":[],{{string.Join(",", pairs)}}}""";
     }
 
-    /// <summary>A user switching on a scanner the deployment left off is the record this block exists for.</summary>
+    /// <summary>An account switching on a scanner the deployment left off is the record this block exists for.</summary>
     [Fact]
     public void Bind_ARecordSwitchingOnAScannerTheDeploymentLeftOff_BindsWhatItAsksFor()
     {
@@ -595,11 +601,15 @@ public sealed class UserAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("""{"Language":"English","SensitiveContent":{"Secrets":{"Enabled":true}}}""", UserRecordArrival.BeingWritten);
+        var binding = binder.Bind(
+            DocumentDeclaringAccountCarrying("""
+                "SensitiveContent": { "Secrets": { "Enabled": true } }
+                """),
+            UserRecordArrival.BeingWritten);
 
         // Assert
         Assert.True(binding.IsBound);
-        Assert.True(binding.User!.SensitiveContent.Secrets.Enabled);
+        Assert.True(binding.User!.MailAccounts.Single().SensitiveContent.Secrets.Enabled);
     }
 
     /// <summary>
@@ -615,13 +625,17 @@ public sealed class UserAccountDocumentBinderTests
         var binder = CreateBinder(deployment);
 
         // Act
-        var binding = binder.Bind("""{"Language":"English","SensitiveContent":{"Secrets":{"Enabled":false}}}""", UserRecordArrival.BeingWritten);
+        var binding = binder.Bind(
+            DocumentDeclaringAccountCarrying("""
+                "SensitiveContent": { "Secrets": { "Enabled": false } }
+                """),
+            UserRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
         Assert.Contains(
             binding.Refusals,
-            refusal => refusal.Contains("SensitiveContent:Secrets:Enabled", StringComparison.Ordinal));
+            refusal => refusal.Contains("MailAccounts:0:SensitiveContent:Secrets:Enabled", StringComparison.Ordinal));
     }
 
     /// <summary>Asking for a scanner this deployment stood up no analyzer for is refused here rather than at the first message.</summary>
@@ -632,7 +646,11 @@ public sealed class UserAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("""{"Language":"English","SensitiveContent":{"Pii":{"Enabled":true}}}""", UserRecordArrival.BeingWritten);
+        var binding = binder.Bind(
+            DocumentDeclaringAccountCarrying("""
+                "SensitiveContent": { "Pii": { "Enabled": true } }
+                """),
+            UserRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -654,7 +672,9 @@ public sealed class UserAccountDocumentBinderTests
         deployment.Secrets.Enabled = true;
         deployment.ScreenOutgoingMailFor = ["Secrets", "Pii"];
         var binder = CreateBinder(deployment);
-        const string held = """{"Language":"English","SensitiveContent":{"Secrets":{"Enabled":false},"ScreenOutgoingMailFor":["Secrets"]}}""";
+        var held = DocumentDeclaringAccountCarrying("""
+            "SensitiveContent": { "Secrets": { "Enabled": false }, "ScreenOutgoingMailFor": [ "Secrets" ] }
+            """);
 
         // Act
         var written = binder.Bind(held, UserRecordArrival.BeingWritten);
@@ -663,7 +683,7 @@ public sealed class UserAccountDocumentBinderTests
         // Assert
         Assert.False(written.IsBound);
         Assert.True(alreadyHeld.IsBound);
-        Assert.Equal(["Secrets"], alreadyHeld.User!.SensitiveContent.ScreenOutgoingMailFor!);
+        Assert.Equal(["Secrets"], alreadyHeld.User!.MailAccounts.Single().SensitiveContent.ScreenOutgoingMailFor!);
     }
 
     /// <summary>Everything a record is judged by other than the deployment's own posture holds in both directions.</summary>
@@ -674,10 +694,43 @@ public sealed class UserAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("""{"Language":"English","SensitiveContent":{"Secrets":{"Enabled":true}},"Nonsense":1}""", UserRecordArrival.AlreadyHeld);
+        var binding = binder.Bind(
+            """{"Language":"English","MailAccounts":[],"Nonsense":1}""",
+            UserRecordArrival.AlreadyHeld);
 
         // Assert
         Assert.False(binding.IsBound);
+    }
+
+    /// <summary>
+    /// Both blocks are the mail account's now, so a record naming either one beside the user's own settings names a
+    /// property nothing binds and is refused by the name it wrote. Held records are judged the same way as one being
+    /// written, because a record written before the move carries the block where it no longer reads: dropping it
+    /// quietly would leave every one of that user's mailboxes scanned under the deployment's posture while the record
+    /// on file still says what it asked for.
+    /// </summary>
+    [Theory]
+    [InlineData(false, "SensitiveContent", """{"Secrets":{"Enabled":true}}""")]
+    [InlineData(false, "SpamClassification", """{"IsEnabled":true}""")]
+    [InlineData(true, "SensitiveContent", """{"Secrets":{"Enabled":true}}""")]
+    [InlineData(true, "SpamClassification", """{"IsEnabled":true}""")]
+    public void Bind_ARecordNamingABlockThatMovedOntoTheMailAccount_IsRefusedByThePropertyItWrote(
+        bool alreadyHeld,
+        string property,
+        string block)
+    {
+        // Arrange
+        var binder = CreateBinder();
+        var arrival = alreadyHeld ? UserRecordArrival.AlreadyHeld : UserRecordArrival.BeingWritten;
+
+        // Act
+        var binding = binder.Bind(
+            $$"""{"Language":"English","MailAccounts":[],"{{property}}":{{block}}}""",
+            arrival);
+
+        // Assert
+        Assert.False(binding.IsBound);
+        Assert.Contains(binding.Refusals, refusal => refusal.Contains(property, StringComparison.Ordinal));
     }
 
     /// <summary>Builds the binder, over a deployment that scans nothing unless a test says otherwise.</summary>
@@ -687,6 +740,26 @@ public sealed class UserAccountDocumentBinderTests
             new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
             new FakeTimeProvider(Today),
             Options.Create(deployment ?? new SensitiveContentOptions()));
+
+    /// <summary>Composes a record whose one mailbox carries the stated block beside everything an account must declare.</summary>
+    /// <param name="block">The settings block, written as the JSON properties it occupies on the account.</param>
+    /// <returns>A document one account long, carrying that block.</returns>
+    private static string DocumentDeclaringAccountCarrying(string block) =>
+        $$"""
+          {
+            "Language": "English",
+            "MailAccounts": [
+              {
+                "AccountId": "work",
+                "DisplayName": "The work mailbox",
+                "Host": "imap.example.test",
+                "UserName": "mailfathom@example.test",
+                "Secrets": { "Password": { "Name": "work-password", "SecretReference": "{{PasswordReference}}" } },
+                {{block}}
+              }
+            ]
+          }
+          """;
 
     private static string DocumentDeclaring(
         params (string AccountId, string DisplayName)[] accounts) =>

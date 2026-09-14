@@ -61,7 +61,7 @@ public sealed class SpamClassificationPass
     /// <param name="classifications">Answers what an occurrence was already decided as, and under which terms.</param>
     /// <param name="classifier">Scores an occurrence and records the verdict.</param>
     /// <param name="actionRecorder">Applies the run's posture to a verdict, writing the changes down or only working them out.</param>
-    /// <param name="settingsReader">Answers whether the account's user classifies and what profile their mail runs under.</param>
+    /// <param name="settingsReader">Answers whether the account classifies and what profile the mail in it runs under.</param>
     /// <param name="commitPolicy">Commits the run's position and counts.</param>
     /// <param name="options">Bounds one pass.</param>
     /// <param name="timeProvider">Stamps the instant a run ends.</param>
@@ -112,8 +112,8 @@ public sealed class SpamClassificationPass
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels. Committed batches stay durable.</exception>
     /// <remarks>
     /// The two ways a run ends without reaching the end of its mail are both decided here and before any message is
-    /// read, because both are statements about the whole run rather than about one message: the account's user
-    /// classifying nothing, and a profile that has moved under a walk already half done.
+    /// read, because both are statements about the whole run rather than about one message: the account classifying
+    /// nothing, and a profile that has moved under a walk already half done.
     /// </remarks>
     public async Task<SpamClassificationRunReport> RunAsync(
         MailAccountIdentity account,
@@ -126,7 +126,7 @@ public sealed class SpamClassificationPass
             return SpamClassificationRunReport.NoRun;
         }
 
-        var settings = this.settingsReader.SettingsFor(account.User);
+        var settings = this.settingsReader.SettingsFor(account.Id);
 
         if (!settings.IsEnabled)
         {
@@ -273,7 +273,6 @@ public sealed class SpamClassificationPass
         }
 
         var action = await this.actionRecorder.RecordAsync(
-            run.Account.User,
             classification,
             run.Terms.Posture,
             cancellationToken);

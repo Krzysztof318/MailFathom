@@ -577,42 +577,6 @@ public sealed class UserRecordAdministrationTests
             .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
     }
 
-    /// <summary>
-    /// The write route is where a mailbox user's own record actually arrives, and it is the one path a narrowing has
-    /// to be refused on: a record already held is composed to the stricter answer instead, so nothing downstream would
-    /// report this. A candidate switching off a scanner the deployment requires is refused here, naming the deployment
-    /// setting it would narrow rather than quoting anything out of the record.
-    /// </summary>
-    [Fact]
-    public async Task ApplyRecordAsync_ACandidateSwitchingOffAScannerTheDeploymentRequires_IsRefused()
-    {
-        // Arrange
-        var deployment = new SensitiveContentOptions();
-        deployment.Secrets.Enabled = true;
-
-        var harness = new RecordHarness(
-            MailFathomPermission.AdminConfigurationWrite,
-            alsoGranted: MailFathomPermission.AdminRead,
-            scanning: deployment);
-        harness.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 1);
-
-        // Act
-        var outcome = await harness.Records.ApplyRecordAsync(
-            SyntheticMailUser.Deployment,
-            """{ "Language": "English", "SensitiveContent": { "Secrets": { "Enabled": false } } }""",
-            expectedVersion: 1,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
-        Assert.Contains(
-            "SensitiveContent:Secrets:Enabled",
-            Assert.Single(outcome.Messages),
-            StringComparison.Ordinal);
-        await harness.Store.DidNotReceiveWithAnyArgs()
-            .CommitAsync(default, default!, default, default, TestContext.Current.CancellationToken);
-    }
-
     /// <summary>A save that composes what the record already carries spends no version, and says so rather than reporting a commit.</summary>
     [Fact]
     public async Task ApplyRecordAsync_ARecordSavedExactlyAsItWasRead_ChangesNothingAndSpendsNoVersion()
@@ -656,7 +620,7 @@ public sealed class UserRecordAdministrationTests
         // Act
         var outcome = await harness.Records.ApplyRecordAsync(
             SyntheticMailUser.Deployment,
-            """{ "Language": "English", "SpamClassification": { "Enabled": true } }""",
+            """{ "Language": "Polish" }""",
             expectedVersion: 3,
             TestContext.Current.CancellationToken);
 
@@ -669,7 +633,7 @@ public sealed class UserRecordAdministrationTests
         await harness.Store.Received(1).CommitAsync(
             SyntheticMailUser.Deployment,
             Arg.Is<string>(candidate =>
-                candidate!.Contains("SpamClassification", StringComparison.Ordinal)
+                candidate!.Contains("Polish", StringComparison.Ordinal)
                 && !candidate.Contains("MailAccounts", StringComparison.Ordinal)),
             Arg.Any<MailUserEndpointAccess>(),
             3,
@@ -694,6 +658,56 @@ public sealed class UserRecordAdministrationTests
         // Assert
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
     }
+
+    /// <summary>
+    /// An operator switching a scanner on deployment-wide after the accounts were recorded turns every stored block
+    /// asking for less into one that reads as a loosening. The account write route refuses such a block, and this one
+    /// must not: the record a user saves here carries no account block at all, so refusing it would leave them unable
+    /// to change their own display name or language with nothing they could correct.
+    /// </summary>
+    [Fact]
+    public async Task ApplyRecordAsync_AHeldAccountAskingLessThanTheDeploymentNowRequires_CommitsTheUsersOwnSave()
+    {
+        // Arrange
+        var scanning = new SensitiveContentOptions();
+        scanning.Secrets.Enabled = true;
+
+        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite, scanning: scanning);
+        harness.Holding(SyntheticMailUser.Deployment, LanguageOnlyRecord, version: 3, MailboxScanningForLessThanTheDeployment());
+
+        // Act
+        var outcome = await harness.Records.ApplyRecordAsync(
+            SyntheticMailUser.Deployment,
+            """{ "Language": "Polish" }""",
+            expectedVersion: 3,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+        Assert.Empty(outcome.Messages);
+        await harness.Store.Received(1).CommitAsync(
+            SyntheticMailUser.Deployment,
+            Arg.Is<string>(candidate => candidate!.Contains("Polish", StringComparison.Ordinal)),
+            Arg.Any<MailUserEndpointAccess>(),
+            3,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A mailbox whose own record switches off a scanner a deployment requiring it would refuse on the account route.</summary>
+    private static MailAccountRecord MailboxScanningForLessThanTheDeployment() =>
+        new(
+            Guid.Parse("0197a3c0-0000-7000-8000-0000000000a2"),
+            "work@example.test",
+            "work",
+            """
+            {
+              "Host": "imap.example.test",
+              "UserName": "mailfathom@example.test",
+              "Secrets": { "Password": { "Name": "work-password", "SecretReference": "file:secrets/work-password" } },
+              "SensitiveContent": { "Secrets": { "Enabled": false } }
+            }
+            """,
+            Version: 1);
 
     private static ServedMailUser Serving(MailUserId user, params string[] accountIds) =>
         new(

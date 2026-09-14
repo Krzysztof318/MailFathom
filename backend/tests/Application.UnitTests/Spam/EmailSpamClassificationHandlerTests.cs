@@ -194,7 +194,7 @@ public sealed class EmailSpamClassificationHandlerTests
         ISpamActionOccurrenceReader? occurrences = null)
     {
         var settingsReader = Substitute.For<ISpamClassificationSettingsReader>();
-        settingsReader.SettingsFor(Arg.Any<MailUserId>()).Returns(settings ?? SettingsCovering(Inbox));
+        settingsReader.SettingsFor(Arg.Any<MailAccountId>()).Returns(settings ?? SettingsCovering(Inbox));
 
         var sessionFactory = this.harness.CommittingSessions();
         var commitPolicy = this.harness.CommitPolicyOver(sessionFactory);

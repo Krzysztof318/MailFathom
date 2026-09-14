@@ -162,18 +162,19 @@ public sealed class ServedMailUsersTests
         Assert.Same(newer, Assert.Single(servedUsers.Users).MailAccounts.Single());
     }
 
-    /// <summary>A committed record decides how that user's mail is classified, so the roster carries the block beside the mailboxes.</summary>
+    /// <summary>A committed record decides how one mailbox's mail is classified, so the roster carries the block on the account.</summary>
     /// <remarks>
-    /// The whole of what makes a document actually take over: a row still answering with no block reads as classification
-    /// off for that user, which is not what a record stating a posture says either — a commit switching the scanner on
-    /// would go on classifying nothing.
+    /// The whole of what makes a document actually take over: an account still answering with no block reads as
+    /// classification off for that mailbox, which is not what a record stating a posture says either — a commit
+    /// switching the scanner on would go on classifying nothing.
     /// </remarks>
     [Fact]
-    public void UserDocumentPublished_ARecordCarryingAClassificationBlock_ServesThatUserFromIt()
+    public void UserDocumentPublished_ARecordCarryingAClassificationBlock_ServesThatAccountFromIt()
     {
         // Arrange
         var servedUsers = new ServedMailUsers();
-        var classification = new UserSpamClassificationOptions { Enabled = true, UseScanner = true };
+        var classification = new MailAccountSpamClassificationOptions { Enabled = true, UseScanner = true };
+        var account = new MailSynchronizationAccountOptions { AccountId = "primary", SpamClassification = classification };
 
         servedUsers.Resolved([Serving(SyntheticMailUser.Deployment, "user")]);
 
@@ -181,13 +182,13 @@ public sealed class ServedMailUsersTests
         servedUsers.UserDocumentPublished(
             SyntheticMailUser.Deployment,
             "user",
-            new UserAccountOptions { SpamClassification = classification },
+            new UserAccountOptions { MailAccounts = [account] },
             2);
 
         // Assert
         var served = Assert.Single(servedUsers.Users);
 
-        Assert.Same(classification, served.SpamClassification);
+        Assert.Same(classification, served.MailAccounts.Single().SpamClassification);
     }
 
     /// <summary>Two user-document writes cannot validate and publish against the same runtime roster.</summary>

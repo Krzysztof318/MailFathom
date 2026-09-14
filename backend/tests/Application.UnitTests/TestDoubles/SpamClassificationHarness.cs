@@ -15,7 +15,6 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Spam.Signals;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -141,7 +140,7 @@ internal sealed class SpamClassificationHarness
         OptimisticConcurrencyRetryPolicy commitPolicy)
     {
         var settingsReader = Substitute.For<ISpamActionSettingsReader>();
-        settingsReader.ActionsFor(Arg.Any<MailUserId>()).Returns(actions);
+        settingsReader.ActionsFor(Arg.Any<MailAccountId>()).Returns(actions);
 
         var dispositions = Substitute.For<IAuthoredDeleteEmailDispositionReader>();
         dispositions

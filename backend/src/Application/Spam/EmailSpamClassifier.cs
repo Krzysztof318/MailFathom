@@ -64,7 +64,7 @@ public sealed class EmailSpamClassifier
     /// <param name="headerReader">Reads the spam-relevant headers out of that content.</param>
     /// <param name="junkFolders">Answers whether the occurrence's folder is its account's junk folder.</param>
     /// <param name="deterministicClassifier">Reaches a verdict from what the message already carried.</param>
-    /// <param name="settingsReader">Answers what the occurrence's user decided about their own mail.</param>
+    /// <param name="settingsReader">Answers what the occurrence's account decided about the mail in it.</param>
     /// <param name="classificationStore">Records the classification.</param>
     /// <param name="chunkStore">Removes the passages and vectors of a message the verdict calls junk.</param>
     /// <param name="attachmentTextStore">Removes the attachment readings of a message the verdict calls junk.</param>
@@ -121,10 +121,10 @@ public sealed class EmailSpamClassifier
         this.scanner = scanner;
     }
 
-    /// <summary>Classifies one occurrence, on the terms its user decided for their own mail.</summary>
+    /// <summary>Classifies one occurrence, on the terms written on the account it was stored from.</summary>
     /// <param name="user">
-    /// The user whose posture decides everything below. The email is read only within this user's mail, so a user who
-    /// does not hold it finds nothing and the attempt ends as <see cref="SpamClassificationOutcome.OccurrenceMissing" />.
+    /// The user the email is read as. It is read only within this user's mail, so a user who does not hold it finds
+    /// nothing and the attempt ends as <see cref="SpamClassificationOutcome.OccurrenceMissing" />.
     /// </param>
     /// <param name="emailId">The occurrence to classify.</param>
     /// <param name="mode">What to do about an occurrence that already carries a classification.</param>
@@ -133,11 +133,13 @@ public sealed class EmailSpamClassifier
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="mode" /> is not a defined member.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when every allowed commit attempt conflicted.</exception>
     /// <remarks>
-    /// The order of the checks is the order of what they cost. Whether this user classifies at all is free, then the email
-    /// is looked up within the user's own mail — an email the user does not hold ends here, before anything else about it
-    /// is read — then the scope and the existing record are one lookup each, and only then is content read, so an
-    /// occurrence outside the scope costs no read of its mail, which is the property that keeps a switched-off feature
-    /// free.
+    /// The order of the checks is the order of what they cost, after the one that settles which account's posture is
+    /// being read at all: the email is looked up within the user's own mail — an email the user does not hold ends
+    /// here, before anything else about it is read — then whether that account classifies and whether the folder is in
+    /// scope are free, the existing record is one lookup, and only then is content read. So an occurrence outside the
+    /// scope still costs no read of its mail, which is the property that keeps a switched-off feature free; what it
+    /// costs that it did not before is one row for a message nobody classifies, because the settings hang on the
+    /// account the row names rather than on the caller.
     /// </remarks>
     public async Task<SpamClassificationResult> ClassifyAsync(
         MailUserId user,
@@ -153,18 +155,18 @@ public sealed class EmailSpamClassifier
                 "A classification either leaves an existing record alone or replaces it.");
         }
 
-        var settings = this.settingsReader.SettingsFor(user);
-
-        if (!settings.IsEnabled)
-        {
-            return SpamClassificationResult.NotClassified(SpamClassificationOutcome.Disabled);
-        }
-
         var email = await this.emailReader.FindAsync(user, emailId, cancellationToken);
 
         if (email is null)
         {
             return SpamClassificationResult.NotClassified(SpamClassificationOutcome.OccurrenceMissing);
+        }
+
+        var settings = this.settingsReader.SettingsFor(email.AccountId);
+
+        if (!settings.IsEnabled)
+        {
+            return SpamClassificationResult.NotClassified(SpamClassificationOutcome.Disabled);
         }
 
         if (!settings.Covers(email.FolderAlias))

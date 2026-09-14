@@ -83,6 +83,7 @@ internal sealed class StoredEmailAttachmentTextStore(
             .. candidates.Select(row => new EmailAwaitingAttachmentText(
                 StoredEmailId.Create(row.Id),
                 MailUserId.Create(row.UserId),
+                account.Id,
                 row.Candidate.AdmittedUnder(terms))),
         ];
     }

@@ -104,16 +104,16 @@ Neither check calls a provider to find out; each reports the outcome of the last
 health scrape from spending an operator's money. [Chat generation](../features/chat-generation.md#provider-health-is-tracked-per-provider)
 records the states and what each asks of an operator.
 
-**The personal-data analyzer is the opposite case.** Where the personal-data scanner runs for anybody the deployment
-serves — the deployment's own switch, or [a user who asked for
-it](../features/sensitive-content-scanning.md#each-users-own-posture) — the
+**The personal-data analyzer is the opposite case.** Where the personal-data scanner runs over any mailbox the
+deployment serves — the deployment's own switch, or [an account that asked for
+it](../features/sensitive-content-scanning.md#each-accounts-own-posture) — the
 scanner fails closed, so an instance whose analyzer cannot answer refuses every read, derived write, and egress that
 scanner guards — it is not serving a narrower service, it is serving nothing the scanner covers. So the
 `personal-data-analyzer` check reports **unhealthy**, `/health` answers `503`, and the instance leaves the load balancer.
 It never reaches the liveness probe: restarting this process cannot start the container beside it, and doing so would
 turn one sidecar's outage into a restart loop.
 
-The check is skipped entirely where no user's posture runs that scanner, which is what keeps a deployment carrying a
+The check is skipped entirely where no account's posture runs that scanner, which is what keeps a deployment carrying a
 leftover analyzer address from reporting itself unready over a scanner nobody is running.
 
 Like the database check and unlike the two above it, this one reaches its dependency on each scrape. The analyzer is a

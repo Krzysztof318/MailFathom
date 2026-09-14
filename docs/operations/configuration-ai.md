@@ -20,33 +20,33 @@ Both scanners are off by default, and an absent section is that default rather t
 this process. `Pii` reaches an analyzer deployed beside it, configured in the block below, and switching it on with
 nowhere to ask **fails startup** rather than running unprotected.
 
-**This section is the floor rather than the whole answer.** Each user's record carries a scanning block of its own, and
-the posture their mail is read under is the stricter of the two: a user may switch on a scanner this section left off
-and add a scanner to what stops their outgoing mail, and may do neither in the other direction. The keys below the two
-switches — the analyzer's address, the ceiling, the timeout, the concurrency, and the rebuild — stay wholly the
-deployment's, and the concurrency is one budget every user shares. [Each user's own
-posture](../features/sensitive-content-scanning.md#each-users-own-posture) is the rule, and
-the [`SensitiveContent` block of their own record](configuration-sources.md#what-a-user-may-say-about-scanning-their-own-mail)
+**This section is the floor rather than the whole answer.** Each mail account's record carries a scanning block of its
+own, and the posture the mail in it is read under is the stricter of the two: an account may switch on a scanner this
+section left off and add a scanner to what stops the mail leaving it, and may do neither in the other direction. The
+keys below the two switches — the analyzer's address, the ceiling, the timeout, the concurrency, and the rebuild — stay
+wholly the deployment's, and the concurrency is one budget every account shares. [Each account's own
+posture](../features/sensitive-content-scanning.md#each-accounts-own-posture) is the rule, and
+the [`SensitiveContent` block of the account's own record](configuration-mail.md#scanning-this-accounts-mail--sensitivecontent)
 is where it is written.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `SensitiveContent:Secrets:Enabled` | bool | `false` | A scanner switched on with no detector registered fails startup. It is the floor for every user: one may switch it on for their own mail and none may switch it off | restart |
+| `SensitiveContent:Secrets:Enabled` | bool | `false` | A scanner switched on with no detector registered fails startup. It is the floor for every account: one may switch it on for its own mail and none may switch it off | restart |
 | `SensitiveContent:Secrets:Categories:<n>` | string | unset | Must name a category the scanner detects; the list replaces the scanner's defaults, and an absent list yields them | restart |
 | `SensitiveContent:Secrets:Suppressions:<n>:Category` | string | — | Must name a category the scanner detects; naming one never switches it on | restart |
 | `SensitiveContent:Secrets:Suppressions:<n>:Rule` | string | — | Must name a rule that category holds | restart |
-| `SensitiveContent:Pii:Enabled` | bool | `false` | As above, for the personal-data scanner. A user may switch it on for their own mail only where the analyzer address below names one | restart |
+| `SensitiveContent:Pii:Enabled` | bool | `false` | As above, for the personal-data scanner. An account may switch it on for its own mail only where the analyzer address below names one | restart |
 | `SensitiveContent:Pii:Categories:<n>` | string | unset | As above | restart |
 | `SensitiveContent:Pii:Suppressions:<n>:Category` | string | — | As above | restart |
 | `SensitiveContent:Pii:Suppressions:<n>:Rule` | string | — | As above | restart |
-| `SensitiveContent:PersonalDataAnalyzer:Endpoint` | string | unset | Required once `Pii` is on, and an absolute `http` or `https` address. It is also what makes the personal-data scanner available to a user: a record switching that scanner on where this names no address is refused at the write, naming this key | restart |
+| `SensitiveContent:PersonalDataAnalyzer:Endpoint` | string | unset | Required once `Pii` is on, and an absolute `http` or `https` address. It is also what makes the personal-data scanner available to an account: a record switching that scanner on where this names no address is refused at the write, naming this key | restart |
 | `SensitiveContent:PersonalDataAnalyzer:Languages:<n>` | string | unset | Two lowercase letters each, naming a language the analyzer loads a model for and registers recognizers in; an absent list yields `en`. At most eight, since one scan asks once per language inside a single `ScanTimeout`. The order is not read — the set is deduplicated and ordered before use — and the set is part of the derivation stamp | restart |
 | `SensitiveContent:PersonalDataAnalyzer:MinimumConfidence` | double | `0.4` | 0 – 1 inclusive, compared inclusively by the analyzer. It decides which regions are replaced, so it is part of the derivation stamp and changing it marks earlier-derived rows stale | restart |
 | `SensitiveContent:MaximumAnalyzedCharacters` | int | `200000` | 1 – 10000000; text beyond it is dropped from the result rather than handed on unscanned. On the derived path that is what is *stored*, so lowering it truncates every message indexed afterwards and the value is part of the derivation stamp | restart |
 | `SensitiveContent:ScanTimeout` | TimeSpan | `00:00:15` | One second to two minutes, per call to one scanner — which for the personal-data scanner covers every configured language together rather than each. A scan that misses it is refused rather than served unscanned, and on the derivation path that refusal ends the synchronization run carrying it, so a budget below what the analyzer spends on a large body leaves a folder repeating the same batch. It also bounds one personal-data readiness scrape whole, so naming more languages costs more analyzer requests and never a longer scrape | restart |
-| `SensitiveContent:MaximumConcurrentScans` | int | `4` | 1 – 256, across the process and across every user it serves | restart |
-| `SensitiveContent:RebuildStaleDerivedData` | bool | `false` | Read only while a scanner is on for somebody; re-derives every message whose derived text predates its own user's current configuration, and discards every reading of an attachment that does so the account run's attachment stage takes it again | restart |
-| `SensitiveContent:ScreenOutgoingMailFor:<n>` | string | `Secrets` | Each entry names a scanner — `Secrets` or `Pii`, matched ignoring capitalization — whose findings cancel a send or a draft save. An absent key is the default; a written empty array screens nothing; a scanner named here that is switched off screens nothing. A user may name more than this and never fewer | restart |
+| `SensitiveContent:MaximumConcurrentScans` | int | `4` | 1 – 256, across the process and across every account it serves | restart |
+| `SensitiveContent:RebuildStaleDerivedData` | bool | `false` | Read only while a scanner is on for somebody; re-derives every message whose derived text predates its own account's current configuration, and discards every reading of an attachment that does so the account run's attachment stage takes it again | restart |
+| `SensitiveContent:ScreenOutgoingMailFor:<n>` | string | `Secrets` | Each entry names a scanner — `Secrets` or `Pii`, matched ignoring capitalization — whose findings cancel a send or a draft save. An absent key is the default; a written empty array screens nothing; a scanner named here that is switched off screens nothing. An account may name more than this and never fewer | restart |
 
 **Screening outgoing mail refuses acts rather than rewriting messages**, which is why what it screens for is a key of
 its own rather than the scanner switches above. A credential in a message somebody is sending is what it exists for and
@@ -154,10 +154,12 @@ switches on reaches the mailbox reads as well as the classification. [Spam class
 records what a classification holds, which facts the deterministic stage reads, and why a scanner never overturns a
 provider's own verdict.
 
-**The section is read for each user this deployment still serves from a configuration source.** Junk is a judgement
-about somebody's own mailbox, so the posture below is that user's rather than the deployment's, and a user whose
-document has been written states it in [their own record](configuration-sources.md#one-users-own-classification-posture)
-instead — at which point this section stops reaching them. The keys the two split into are named after the table.
+**Nothing in this section decides which mail is classified.** Junk is a judgement about one mailbox, and the actions a
+verdict triggers write to that mailbox's mail server, so whether an account's mail is classified at all, over which of
+its folders, at what score, and what becomes of the result are what [that account's own
+record](configuration-mail.md#classifying-this-accounts-mail--spamclassification) states. What is left here is the
+scanner this deployment stands up and what the process may spend on it. The keys the two split into are named after the
+table.
 
 Every switch is off by default, and an absent section is that default rather than a startup failure. The deterministic
 stage works alone and is the whole of the feature without a sidecar; `UseScanner` adds the Apache SpamAssassin daemon
@@ -167,8 +169,8 @@ described below.
 | --- | --- | --- | --- | --- |
 | `SpamClassification:Enabled` | bool | `false` | | reload |
 | `SpamClassification:UseScanner` | bool | `false` | Asking for a scanner while `Enabled` is false fails startup, because a scanner is only consulted where classification runs | restart |
-| `SpamClassification:ScannedFolders:<n>` | string | unset | Read by no classification: the scope is each user's own, stated in their record | — |
-| `SpamClassification:ScannerThreshold` | double | unset | Read by no classification: the threshold is each user's own, stated in their record, and this range is what a record is judged against | — |
+| `SpamClassification:ScannedFolders:<n>` | string | unset | Read by no classification: the scope is each account's own, stated in that account's record | — |
+| `SpamClassification:ScannerThreshold` | double | unset | Read by no classification: the threshold is each account's own, stated in that account's record, and this range is what a record is judged against | — |
 | `SpamClassification:ClassificationWait` | TimeSpan | `00:15:00` | 1 s – 7 days; how long a stored message may wait for a verdict before it is derived from anyway | reload |
 | `SpamClassification:RunBatchSize` | int | `50` | 1 – 10 000 | reload |
 | `SpamClassification:MaxRunBatchesPerPass` | int | `4` | 1 – 1 000 | reload |
@@ -177,26 +179,26 @@ described below.
 | `SpamClassification:Scanner:ScanTimeoutSeconds` | int | `30` | 1 – 120 | restart |
 | `SpamClassification:Scanner:MaximumMessageBytes` | int | `512000` | 32 000 – 33 554 432 | restart |
 | `SpamClassification:Scanner:MaximumConcurrentScans` | int | `5` | 1 – 64 | restart |
-| `SpamClassification:Actions:MoveToJunkFolder` | bool | `false` | Read by no classification: what a verdict does is each user's own, stated in their record | — |
+| `SpamClassification:Actions:MoveToJunkFolder` | bool | `false` | Read by no classification: what a verdict does is each account's own, stated in that account's record | — |
 | `SpamClassification:Actions:MarkAsRead` | bool | `false` | Read by no classification, for the reason above | — |
 | `SpamClassification:Actions:JunkFolder` | string | `role:Junk` | Read by no classification, for the reason above | — |
 | `SpamClassification:Actions:Threshold` | double | unset | Read by no classification: this range is what a record's own value is judged against | — |
 
-**Eight of those keys are one user's decision and the rest are the deployment's.** `Enabled`, `UseScanner`,
-`ScannedFolders`, `ScannerThreshold`, and the four settings under `Actions` are what a user decides about their own
-mail, and are the whole of what their record may carry. `ClassificationWait`, `RunBatchSize`, `MaxRunBatchesPerPass`,
+**Eight of those keys are one account's decision and the rest are the deployment's.** `Enabled`, `UseScanner`,
+`ScannedFolders`, `ScannerThreshold`, and the four settings under `Actions` are what an account decides about the mail
+in it, and are the whole of what its record may carry. `ClassificationWait`, `RunBatchSize`, `MaxRunBatchesPerPass`,
 and the `Scanner` block are the deployment's, because each of them is what the process holds open or spends rather than
-a judgement about anybody's mailbox — a user record naming one is refused. The bounds a threshold is judged against,
-`0.1` to `1000`, are the deployment's too and apply to a user's value unchanged.
+a judgement about anybody's mailbox — an account record naming one is refused. The bounds a threshold is judged
+against, `0.1` to `1000`, are the deployment's too and apply to an account's value unchanged.
 
-**A user's `UseScanner` asks for the deployment's scanner rather than deciding that one exists.** Whether any scanner
-is registered is read from this section alone, at startup, so a user switching the key on where the deployment
-registered none is neither refused nor a failed start: their mail is classified by the deterministic stage, exactly as
-it would be with the key off. Everything else in the eight means the same for a user as it does here.
+**An account's `UseScanner` asks for the deployment's scanner rather than deciding that one exists.** Whether any
+scanner is registered is read from this section alone, at startup, so an account switching the key on where the
+deployment registered none is neither refused nor a failed start: its mail is classified by the deterministic stage,
+exactly as it would be with the key off. Everything else in the eight means the same for an account as it does here.
 
 `UseScanner` and the `Scanner` block are read once, at startup: whether a scanner exists at all decides what is
 constructed and whether the host refuses to start without a daemon, which a reload cannot revisit. That is this
-section's key; the paragraph above is what a user's own copy of it can and cannot do. Everything else in
+section's key; the paragraph above is what an account's own copy of it can and cannot do. Everything else in
 this section is read per classification.
 
 `ClassificationWait` bounds the ordering rather than a scan. Wherever classification is on, a message it covers is not
@@ -219,11 +221,11 @@ what an address outside it gives up, and what the rule-update and DNS postures c
 sidecar itself — [Kubernetes](deployment-kubernetes.md#spam-scanning),
 [Compose](deployment-compose.md#spam-scanning), and [Quadlet](deployment-quadlet.md#spam-scanning).
 
-The default scope follows the folder **role** rather than the text `INBOX`: it is whichever alias each of that user's
-own accounts maps to `Inbox`, so a server presenting the inbox under another name is classified without the scope being
-restated here. Those accounts are the ones
-[that user's own record](configuration-mail.md#one-account--a-mailbox-in-a-users-record) declares, which is the only
-place a mailbox is declared at all. The two shapes of an unset list are deliberately
+The default scope follows the folder **role** rather than the text `INBOX`: it is whichever alias the account itself
+maps to `Inbox`, so a server presenting the inbox under another name is classified without the scope being restated
+here. Every alias a scope names is resolved within
+[that account's own record](configuration-mail.md#one-account--a-mailbox-in-a-users-record), so one only another
+account maps reaches no mail at all. The two shapes of an unset list are deliberately
 distinguishable — writing no key asks for that default, and writing an empty list asks for no folder, which switches the
 work off without switching the section off.
 

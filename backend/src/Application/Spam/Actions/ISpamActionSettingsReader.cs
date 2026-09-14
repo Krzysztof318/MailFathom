@@ -2,11 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Spam.Actions;
 
-/// <summary>Answers what one user asked to happen to mail a classification calls junk.</summary>
+/// <summary>Answers what one account asks to happen to mail a classification calls junk.</summary>
 /// <remarks>
 /// <para>
 /// It is a port of its own rather than a second property on <see cref="ISpamClassificationSettingsReader" /> because the
@@ -15,18 +15,18 @@ namespace MailFathom.Application.Spam.Actions;
 /// nothing but its own record — it never resolves this reader and cannot reach a mailbox through it.
 /// </para>
 /// <para>
-/// The answer is one user's because the act is on that user's own mail server: moving a message and marking it read
-/// are things done to somebody's mailbox, and nobody else's settings may decide them.
+/// The answer is one account's because the act is on that account's own mail server: moving a message and marking it
+/// read are things done to one mailbox, and no other mailbox's settings may decide them.
 /// </para>
 /// </remarks>
 public interface ISpamActionSettingsReader
 {
-    /// <summary>Gets what one user decided, as it stands now.</summary>
-    /// <param name="user">The user whose mailbox would be written to.</param>
-    /// <returns>Their settings, or <see cref="SpamActionSettings.None" /> where this deployment serves no such user.</returns>
+    /// <summary>Gets what one account states, as it stands now.</summary>
+    /// <param name="account">The account whose mailbox would be written to.</param>
+    /// <returns>Its settings, or <see cref="SpamActionSettings.None" /> where this deployment serves no such account.</returns>
     /// <remarks>
-    /// Read per request rather than captured, so a user switching filing on reaches the next verdict without a
-    /// restart — and so one switching it off stops the next one.
+    /// Read per request rather than captured, so switching filing on reaches the next verdict without a restart — and
+    /// so switching it off stops the next one.
     /// </remarks>
-    SpamActionSettings ActionsFor(MailUserId user);
+    SpamActionSettings ActionsFor(MailAccountId account);
 }

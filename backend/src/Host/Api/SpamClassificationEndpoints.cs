@@ -84,7 +84,7 @@ internal static class SpamClassificationEndpoints
     /// <summary>Asks for every message stored for one account to be classified on the terms the caller named.</summary>
     /// <param name="request">The account, the scope, and the two switches.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
-    /// <param name="settings">Answers what scope the account's own user classifies over, which is the default and the bound.</param>
+    /// <param name="settings">Answers what scope the account itself classifies over, which is the default and the bound.</param>
     /// <param name="requests">Records the request, or reports the run already in front of the account.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the run, or <c>400</c> naming what was wrong with the request.</returns>
@@ -115,7 +115,7 @@ internal static class SpamClassificationEndpoints
             return AdminAccountRequest.Refuse(request?.Account);
         }
 
-        var configuredScope = settings.SettingsFor(servedAccount.User).ScannedFolderAliases;
+        var configuredScope = settings.SettingsFor(servedAccount.Id).ScannedFolderAliases;
         var scope = ResolveScope(request?.Folders, configuredScope);
 
         if (scope.Refusal is { } refusal)

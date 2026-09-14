@@ -48,7 +48,11 @@ internal sealed class UserRecordDeployment
     /// <summary>Composes the deployment for a caller granted the permissions a test's routes are published under.</summary>
     /// <param name="granted">The permissions the caller holds.</param>
     /// <param name="actingFor">The user the caller acts for, or the default for one acting for nobody's mail.</param>
-    internal UserRecordDeployment(IReadOnlyList<MailFathomPermission> granted, MailUserId actingFor = default)
+    /// <param name="scanning">The deployment's own scanning section, which an account's block may only tighten; the default scans nothing.</param>
+    internal UserRecordDeployment(
+        IReadOnlyList<MailFathomPermission> granted,
+        MailUserId actingFor = default,
+        SensitiveContentOptions? scanning = null)
     {
         ArgumentNullException.ThrowIfNull(granted);
 
@@ -115,7 +119,7 @@ internal sealed class UserRecordDeployment
         var binder = new UserAccountDocumentBinder(
             new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
             new FakeTimeProvider(Today),
-            Options.Create(new SensitiveContentOptions()));
+            Options.Create(scanning ?? new SensitiveContentOptions()));
 
         this.Records = new UserRecordAdministration(
             authorization,

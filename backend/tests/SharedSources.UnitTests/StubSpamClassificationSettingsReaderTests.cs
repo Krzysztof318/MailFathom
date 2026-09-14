@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Spam;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
@@ -15,7 +14,29 @@ namespace MailFathom.SharedSources.UnitTests;
 public sealed class StubSpamClassificationSettingsReaderTests
 {
     [Fact]
-    public void SettingsFor_TheSettingsItWasGiven_AnswersThemUnchanged()
+    public void SettingsFor_AnAccountItClassifiesFor_AnswersTheSettingsItWasGivenUnchanged()
+    {
+        // Arrange
+        var settings = SpamClassificationSettings.Create(
+            isEnabled: true,
+            usesScanner: false,
+            [MailFolderAlias.Create("INBOX")]);
+        var account = MailAccountId.Create("primary");
+
+        // Act
+        var answered = new StubSpamClassificationSettingsReader(settings, account).SettingsFor(account);
+
+        // Assert
+        Assert.Same(settings, answered);
+    }
+
+    /// <summary>
+    /// The deployed reader answers an account its roster does not resolve with the disabled posture, and this double
+    /// has to as well: a use case that resolved a message's account and then failed to narrow by it would otherwise
+    /// read back somebody else's mailbox's settings and pass.
+    /// </summary>
+    [Fact]
+    public void SettingsFor_AnAccountOutsideItsScope_ClassifiesNothing()
     {
         // Arrange
         var settings = SpamClassificationSettings.Create(
@@ -25,10 +46,11 @@ public sealed class StubSpamClassificationSettingsReaderTests
 
         // Act
         var answered = new StubSpamClassificationSettingsReader(settings, MailAccountId.Create("primary"))
-            .SettingsFor(MailUserId.Create(Guid.NewGuid()));
+            .SettingsFor(MailAccountId.Create("archive"));
 
         // Assert
-        Assert.Same(settings, answered);
+        Assert.False(answered.IsEnabled);
+        Assert.Empty(answered.ScannedFolderAliases);
     }
 
     /// <summary>A posture that classifies beside a scope naming nobody is a pairing the deployed reader cannot produce.</summary>
@@ -74,8 +96,8 @@ public sealed class StubSpamClassificationSettingsReaderTests
         var reader = StubSpamClassificationSettingsReader.Disabled;
 
         // Assert
-        Assert.False(reader.SettingsFor(MailUserId.Create(Guid.NewGuid())).IsEnabled);
-        Assert.Empty(reader.SettingsFor(MailUserId.Create(Guid.NewGuid())).ScannedFolderAliases);
+        Assert.False(reader.SettingsFor(MailAccountId.Create("anything")).IsEnabled);
+        Assert.Empty(reader.SettingsFor(MailAccountId.Create("anything")).ScannedFolderAliases);
         Assert.Empty(reader.ScopeInForce.ClassifyingAccounts);
     }
 }

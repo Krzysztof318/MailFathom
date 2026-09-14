@@ -3,33 +3,32 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Spam;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Mail.Readers;
-using MailFathom.Host.Configuration.UserSettings;
 using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Configuration.Spam;
 
-/// <summary>Reads each user's classification settings from their own record.</summary>
+/// <summary>Reads each account's classification settings from its own record.</summary>
 /// <remarks>
 /// <para>
-/// One source and no layer over it. Whether a user's mail is classified, which of their folders are scanned, and at
-/// what threshold are the block their record carries and nothing else, so switching classification off in a record
-/// switches it off — there is no deployment section behind it to revert to.
+/// One source and no layer over it. Whether an account's mail is classified, which of its folders are scanned, and at
+/// what threshold are the block that account's record carries and nothing else, so switching classification off in a
+/// record switches it off — there is no deployment section behind it to revert to.
 /// </para>
 /// <para>
-/// The wait comes from the deployment's section for every user, because it bounds how long the index may be held back
-/// by a scanner that has stopped answering — a cost the process bears rather than a decision about somebody's mail.
+/// The wait comes from the deployment's section for every account, because it bounds how long the index may be held
+/// back by a scanner that has stopped answering — a cost the process bears rather than a decision about a mailbox.
 /// </para>
 /// <para>
-/// The default scope is resolved here rather than stated in a record because it is not a constant: it is whichever alias
-/// each of that user's own accounts maps to its inbox. An operator whose server presents the inbox under another name
-/// configures the role, and the default has to follow the role rather than the literal text.
+/// The default scope is resolved here rather than stated in a record because it is not a constant: it is whichever
+/// alias that account maps to its inbox. An operator whose server presents the inbox under another name configures the
+/// role, and the default has to follow the role rather than the literal text.
 /// </para>
 /// <para>
-/// Both sources are read per request rather than captured, so a reload of the file and a commit of a user's record
+/// Both sources are read per request rather than captured, so a reload of the file and a commit of an account's record
 /// each take effect on the next classification without a restart — and reading them changes nothing about what is
 /// already recorded.
 /// </para>
@@ -42,32 +41,34 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
     /// <inheritdoc />
     /// <remarks>
     /// <para>
-    /// Composed from the same per-user reading <see cref="SettingsFor(MailUserId)" /> answers with, so the walk that
-    /// narrows a table and the arrival that asks about one message cannot disagree about whose mail is classified. A
-    /// deployment whose roster is not settled yet classifies nothing, which is the answer every path takes before the
+    /// Composed from the same per-account reading <see cref="SettingsFor(MailAccountId)" /> answers with, so the walk
+    /// that narrows a table and the arrival that asks about one message cannot disagree about which mail is classified.
+    /// A deployment whose roster is not settled yet classifies nothing, which is the answer every path takes before the
     /// startup gate has run.
     /// </para>
     /// <para>
-    /// The deployment's section supplies the wait every user's classification is bounded by and nothing about whose
-    /// mail is classified: that is each user's own record. It is read once for the whole scope rather than per user,
-    /// so a reload landing part way through cannot bound one user's walk by the old value and the next by the new one.
+    /// The deployment's section supplies the wait every classification is bounded by and nothing about which mail is
+    /// classified: that is each account's own record. It is read once for the whole scope rather than per account, so a
+    /// reload landing part way through cannot bound one account's walk by the old value and the next by the new one.
     /// </para>
     /// </remarks>
     public SpamClassificationScope ScopeInForce
     {
         get
         {
-            if (synchronizationOptions.ServedUsers is not { } users)
+            if (synchronizationOptions.ServedUsers is null)
             {
                 return SpamClassificationScope.None;
             }
 
             var deployment = deploymentOptions.CurrentValue;
 
-            var classifying = users
-                .Select(served => new { Served = served, Settings = SettingsFor(served) })
+            // Filtered before the folders are composed, because this property is read once per stored message and a
+            // folder graph built for an account that classifies nothing is allocated and then discarded.
+            var classifying = this.DeclaredAccounts()
+                .Select(account => new { Account = account, Settings = Compose(account) })
                 .Where(entry => entry.Settings.IsEnabled)
-                .Select(entry => new { entry.Settings, Folders = FoldersOf(entry.Served).ToArray() })
+                .Select(entry => new { entry.Settings, Folders = ConfiguredMailFolders.Of([entry.Account]).ToArray() })
                 .ToArray();
 
             return SpamClassificationScope.Create(
@@ -81,60 +82,46 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
     }
 
     /// <inheritdoc />
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    public SpamClassificationSettings SettingsFor(MailUserId user)
-    {
-        if (!user.IsSpecified)
-        {
-            throw new ArgumentException("A classification posture is read for a named user.", nameof(user));
-        }
-
-        return this.Served(user) is { } served
-            ? SettingsFor(served)
+    public SpamClassificationSettings SettingsFor(MailAccountId account) =>
+        synchronizationOptions.FindConfiguredAccount(account) is { } declared
+            ? Compose(declared)
             : SpamClassificationSettings.Disabled;
+
+    /// <summary>Builds one account's settings out of the block its own declaration carries.</summary>
+    private static SpamClassificationSettings Compose(MailSynchronizationAccountOptions account)
+    {
+        var record = account.SpamClassification ?? new MailAccountSpamClassificationOptions();
+
+        return SpamClassificationSettings.Create(
+            record.Enabled,
+            record.UseScanner,
+            ScannedAliasesOf(record.ScannedFolders, account),
+            record.ScannerThreshold);
     }
 
-    /// <summary>Reads one user's settings from the roster entry that already names them.</summary>
-    /// <remarks>
-    /// Takes the entry rather than the identifier because <see cref="ScopeInForce" /> holds it already, and searching
-    /// the roster again per user would make composing the scope quadratic in a roster that may hold
-    /// <see cref="ServedMailUsers.MaximumUsers" /> entries — a cost every stored message pays, because the
-    /// derived-work gate reads the scope once per message a synchronization run stores.
-    /// </remarks>
-    private static SpamClassificationSettings SettingsFor(ServedMailUser served) =>
-        Compose(served.SpamClassification ?? new UserSpamClassificationOptions(), served.MailAccounts);
-
-    /// <summary>Builds one user's settings out of the block their own document carries.</summary>
-    private static SpamClassificationSettings Compose(
-        UserSpamClassificationOptions record,
-        IReadOnlyList<MailSynchronizationAccountOptions> accounts) => SpamClassificationSettings.Create(
-        record.Enabled,
-        record.UseScanner,
-        ScannedAliasesOf(record.ScannedFolders, accounts),
-        record.ScannerThreshold);
-
-    /// <summary>Reads the aliases a posture names, or the user's own accounts' inbox aliases where it names none.</summary>
+    /// <summary>Reads the aliases a posture names, or the account's own inbox aliases where it names none.</summary>
     /// <remarks>
     /// An explicitly empty list is honoured as an empty scope, which is the distinction the nullable setting exists to
     /// preserve: whoever wrote no folders asked for the default, and whoever wrote none asked for none. Either way the
-    /// aliases only ever reach this user's own mail, because every query the scope narrows is scoped to that user —
-    /// so an alias only another user's account carries selects nothing.
+    /// aliases only ever reach this account's own mail, because every query the scope narrows is scoped to it — so an
+    /// alias only another account carries selects nothing.
     /// </remarks>
     private static IEnumerable<MailFolderAlias> ScannedAliasesOf(
         string[]? scannedFolders,
-        IReadOnlyList<MailSynchronizationAccountOptions> accounts) =>
+        MailSynchronizationAccountOptions account) =>
         scannedFolders is { } configured
             ? configured
                 .Where(static alias => !string.IsNullOrWhiteSpace(alias))
                 .Select(MailFolderAlias.Create)
-            : ConfiguredMailFolders.InboxAliasesOf(accounts);
+            : ConfiguredMailFolders.InboxAliasesOf([account]);
 
-    /// <summary>Reads the folders of the accounts this user is served with.</summary>
-    private static IEnumerable<ConfiguredFolder> FoldersOf(ServedMailUser served) =>
-        ConfiguredMailFolders.Of(served.MailAccounts);
-
-    /// <summary>Finds the user on the roster this snapshot was published with.</summary>
-    private ServedMailUser? Served(MailUserId user) =>
-        (synchronizationOptions.ServedUsers ?? [])
-            .FirstOrDefault(candidate => candidate.User == user);
+    /// <summary>Reads every account this deployment serves, one entry per mailbox however many users hold it.</summary>
+    /// <remarks>
+    /// A mailbox assigned to two people is one record with one posture, so classifying it twice would file one message
+    /// under two verdicts and narrow the walk by the same folders twice.
+    /// </remarks>
+    private IEnumerable<MailSynchronizationAccountOptions> DeclaredAccounts() =>
+        synchronizationOptions.DeclaredAccounts
+            .Where(static account => MailSynchronizationOptions.TryReadAccountId(account.AccountId) is not null)
+            .DistinctBy(static account => MailSynchronizationOptions.TryReadAccountId(account.AccountId), StringComparer.Ordinal);
 }

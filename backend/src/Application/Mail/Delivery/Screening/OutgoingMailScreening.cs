@@ -4,7 +4,7 @@
 
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Mail.Delivery.Screening;
 
@@ -24,10 +24,10 @@ namespace MailFathom.Application.Mail.Delivery.Screening;
 /// It also screens what will actually be transmitted rather than what somebody typed.
 /// </para>
 /// <para>
-/// Nothing is parsed where nothing screens this author's mail. The screen answers whether it is active for them before
-/// the message is read back, so an opt-in nobody took costs a send no parse, no allocation, no document read, and no
-/// scan — and a user who added a category pays for one while the user beside them does not. That test is what keeps
-/// the attachment reading below out of the cost of an unscreened send entirely.
+/// Nothing is parsed where nothing screens the mail leaving this account. The screen answers whether it is active for
+/// that mailbox before the message is read back, so an opt-in nobody took costs a send no parse, no allocation, no
+/// document read, and no scan — and an account that added a category pays for one while the account beside it does
+/// not. That test is what keeps the attachment reading below out of the cost of an unscreened send entirely.
 /// </para>
 /// <para>
 /// <b>What the message attaches is screened with what it says</b>, and a document nothing here could read stops the act
@@ -43,7 +43,7 @@ public sealed class OutgoingMailScreening(
     SensitiveContentEgressScreen screen)
 {
     /// <summary>Screens one composed message and reports what stops it, if anything does.</summary>
-    /// <param name="user">The user the message is being sent or filed for, whose posture its findings are judged by.</param>
+    /// <param name="account">The account the message is being sent or filed from, whose posture its findings are judged by.</param>
     /// <param name="rawMime">The RFC 822 bytes about to be stored and transmitted or filed.</param>
     /// <param name="cancellationToken">Cancels the parse and the scan.</param>
     /// <returns>What stopped the act, or <see langword="null" /> where nothing did.</returns>
@@ -59,13 +59,13 @@ public sealed class OutgoingMailScreening(
     /// </para>
     /// <para>
     /// The emptiness guard is above the active test rather than left to the reader, so what may be handed to this
-    /// method does not depend on what an operator or a user switched on. The outbox refuses empty bytes of its own
-    /// accord and the draft book does not, and a user screening nothing would otherwise file a draft of no message at
-    /// all while the user beside them was refused it.
+    /// method does not depend on what an operator or an account switched on. The outbox refuses empty bytes of its own
+    /// accord and the draft book does not, and an account screening nothing would otherwise file a draft of no message
+    /// at all while the account beside it was refused one.
     /// </para>
     /// </remarks>
     public async Task<SensitiveContentEgressRefusal?> FindRefusalAsync(
-        MailUserId user,
+        MailAccountIdentity account,
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken)
     {
@@ -76,7 +76,7 @@ public sealed class OutgoingMailScreening(
                 nameof(rawMime));
         }
 
-        if (!screen.IsActiveFor(user))
+        if (!screen.IsActiveFor(account))
         {
             return null;
         }
@@ -85,7 +85,7 @@ public sealed class OutgoingMailScreening(
 
         var found = await screen.ScreenAsync(
             SensitiveContentEgressPoint.OutgoingMail,
-            user,
+            account,
             composed.ScreenedValues,
             cancellationToken);
 

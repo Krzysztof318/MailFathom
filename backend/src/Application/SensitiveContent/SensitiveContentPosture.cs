@@ -8,11 +8,12 @@ using MailFathom.Application.SensitiveContent.Redaction;
 
 namespace MailFathom.Application.SensitiveContent;
 
-/// <summary>What one user's mail is scanned for, what a finding in it does, and what a derived row of it records.</summary>
+/// <summary>What one mail account's mail is scanned for, what a finding in it does, and what a derived row of it records.</summary>
 /// <remarks>
 /// <para>
-/// One deployment holds several of these, because a scanner switched on for one user's correspondence is a cost with
-/// no return over another's. What varies between them is only what is scanned for and what a finding stops: the
+/// One deployment holds several of these, because a scanner switched on for one mailbox's correspondence is a cost
+/// with no return over another's — a work account carrying contracts and an archive nobody writes to are scanned
+/// differently under one user. What varies between them is only what is scanned for and what a finding stops: the
 /// analyzer's address, the analyzed ceiling, the per-scan budget, and the process-wide concurrency are the
 /// deployment's, and every posture reads mail through detectors registered once and permits budgeted once.
 /// </para>
@@ -23,9 +24,9 @@ namespace MailFathom.Application.SensitiveContent;
 /// silently partial.
 /// </para>
 /// <para>
-/// <see cref="ScanningNothing" /> is an ordinary state rather than a missing one. A user whose deployment switched
-/// both scanners off and who switched neither on themselves reads mail through a posture that constructs no detector,
-/// takes no permit, and stamps nothing, which is what keeps an opt-in nobody took free on every path.
+/// <see cref="ScanningNothing" /> is an ordinary state rather than a missing one. An account whose deployment
+/// switched both scanners off and whose own record switched neither on reads mail through a posture that constructs no
+/// detector, takes no permit, and stamps nothing, which is what keeps an opt-in nobody took free on every path.
 /// </para>
 /// </remarks>
 public sealed record SensitiveContentPosture
@@ -42,11 +43,11 @@ public sealed record SensitiveContentPosture
         this.Stamp = stamp;
     }
 
-    /// <summary>Gets the posture of a user whose mail nothing is scanned for.</summary>
+    /// <summary>Gets the posture of an account whose mail nothing is scanned for.</summary>
     public static SensitiveContentPosture ScanningNothing { get; } =
         new([], null, SensitiveContentScreeningPolicy.ScreeningNothing(), null);
 
-    /// <summary>Gets which scanners run over this user's mail, which is empty where nothing does.</summary>
+    /// <summary>Gets which scanners run over this account's mail, which is empty where nothing does.</summary>
     /// <remarks>
     /// Published beside the redaction rather than read out of it, because one consumer asks about a scanner rather than
     /// about a text: the readiness probe of the analyzer the personal-data scanner reaches, which answers for a
@@ -54,32 +55,32 @@ public sealed record SensitiveContentPosture
     /// </remarks>
     public IReadOnlyList<SensitiveContentScannerKind> Scanners { get; }
 
-    /// <summary>Gets the redaction this user's mail is read through, or <see langword="null" /> where nothing scans it.</summary>
+    /// <summary>Gets the redaction this account's mail is read through, or <see langword="null" /> where nothing scans it.</summary>
     public SensitiveContentRedactor? Redactor { get; }
 
-    /// <summary>Gets which findings stop this user's outgoing message rather than being read for a placeholder.</summary>
+    /// <summary>Gets which findings stop a message sent from this account rather than being read for a placeholder.</summary>
     public SensitiveContentScreeningPolicy Screening { get; }
 
-    /// <summary>Gets the configuration a derived row of this user's mail records, present exactly when <see cref="Redactor" /> is.</summary>
+    /// <summary>Gets the configuration a derived row of this account's mail records, present exactly when <see cref="Redactor" /> is.</summary>
     public SensitiveContentDerivationStamp? Stamp { get; }
 
     /// <summary>Gets whether anything is scanned for at all under this posture.</summary>
     public bool IsActive => this.Redactor is not null;
 
-    /// <summary>Gets whether a finding under this posture can stop an outgoing message.</summary>
+    /// <summary>Gets whether a finding under this posture can stop a message sent from this account.</summary>
     public bool ScreensAnything => this.Redactor is not null && this.Screening.RefusesAnything;
 
-    /// <summary>Reports whether one scanner runs over this user's mail.</summary>
+    /// <summary>Reports whether one scanner runs over this account's mail.</summary>
     /// <param name="scanner">The scanner to ask about.</param>
     /// <returns><see langword="true" /> when this posture runs it.</returns>
     public bool Runs(SensitiveContentScannerKind scanner) => this.Scanners.Contains(scanner);
 
-    /// <summary>Composes the posture of a user with at least one scanner switched on for their mail.</summary>
-    /// <param name="scanners">Which scanners run over their mail, which is what the redaction below runs.</param>
-    /// <param name="redactor">The redaction their mail is read through.</param>
-    /// <param name="screening">Which of its findings stop their outgoing message.</param>
-    /// <param name="stamp">The configuration a derived row of their mail records.</param>
-    /// <returns>The posture every path scanning that user's mail reads.</returns>
+    /// <summary>Composes the posture of an account with at least one scanner switched on for its mail.</summary>
+    /// <param name="scanners">Which scanners run over that mailbox's mail, which is what the redaction below runs.</param>
+    /// <param name="redactor">The redaction that mailbox's mail is read through.</param>
+    /// <param name="screening">Which of its findings stop a message sent from it.</param>
+    /// <param name="stamp">The configuration a derived row of that mailbox's mail records.</param>
+    /// <returns>The posture every path scanning that account's mail reads.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when no scanner is named, which is <see cref="ScanningNothing" /> rather than a posture.</exception>
     public static SensitiveContentPosture Scanning(

@@ -6,7 +6,6 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Mutations;
@@ -66,7 +65,7 @@ public sealed class SpamActionRecorder
     private readonly OptimisticConcurrencyRetryPolicy retryPolicy;
 
     /// <summary>Initializes the use case from the decisions it has to read and the submission it writes through.</summary>
-    /// <param name="settingsReader">Answers what the message's user asked to happen to their own junk.</param>
+    /// <param name="settingsReader">Answers what the message's account asked to happen to the junk in it.</param>
     /// <param name="occurrences">Reads where the classified email is and whether it is already read.</param>
     /// <param name="records">Answers whether this feature has already asked for a message to be filed.</param>
     /// <param name="submission">Records each change, or commits it where the account is held.</param>
@@ -100,8 +99,7 @@ public sealed class SpamActionRecorder
         this.retryPolicy = retryPolicy;
     }
 
-    /// <summary>Asks for whatever the user's switches say should happen to one classified message.</summary>
-    /// <param name="user">The user whose mailbox would be written to, whose switches decide whether anything is.</param>
+    /// <summary>Asks for whatever the account's switches say should happen to one classified message.</summary>
     /// <param name="classification">What classification concluded about the occurrence.</param>
     /// <param name="posture">Whether the changes are written down or only worked out.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
@@ -110,10 +108,11 @@ public sealed class SpamActionRecorder
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="posture" /> is not a defined member.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when every allowed commit attempt conflicted.</exception>
     /// <remarks>
-    /// The checks run in the order of what they cost and of what they settle. Whether this user switched anything on is
-    /// free and answers for every one of their messages; the verdict and the threshold are already in hand; only then is
-    /// the mailbox read. A user who asked for no action therefore costs one settings read per classified message of
-    /// theirs and nothing else.
+    /// The checks run in the order of what they cost and of what they settle. The verdict is already in hand and
+    /// answers first, because it is free and refuses most messages; the occurrence is then read, because the switches
+    /// are the account's and the occurrence is what names it; the threshold and the mailbox follow. A message nothing
+    /// concluded junk about therefore costs no read at all, and one that is junk in a mailbox that asked for no action
+    /// costs the occurrence row and nothing else.
     /// <para>
     /// The posture is read last of all, after every one of those checks. That is what makes a dry run a rehearsal rather
     /// than a prediction: a message a filing would be refused for reports the refusal in both postures, so an operator
@@ -121,7 +120,6 @@ public sealed class SpamActionRecorder
     /// </para>
     /// </remarks>
     public async Task<SpamActionResult> RecordAsync(
-        MailUserId user,
         SpamClassification classification,
         SpamActionPosture posture,
         CancellationToken cancellationToken)
@@ -136,21 +134,9 @@ public sealed class SpamActionRecorder
                 "An attempt either writes the changes down or works them out and writes nothing.");
         }
 
-        var settings = this.settingsReader.ActionsFor(user);
-
-        if (!settings.IsAnyActionEnabled)
-        {
-            return SpamActionResult.NotActedOn(SpamActionOutcome.NoActionConfigured);
-        }
-
         if (classification.Verdict is not SpamVerdict.Spam)
         {
             return SpamActionResult.NotActedOn(SpamActionOutcome.NotSpam);
-        }
-
-        if (!ClearsActingThreshold(classification, settings.Threshold))
-        {
-            return SpamActionResult.NotActedOn(SpamActionOutcome.BelowThreshold);
         }
 
         var occurrence = await this.occurrences.FindAsync(classification.EmailId, cancellationToken);
@@ -158,6 +144,18 @@ public sealed class SpamActionRecorder
         if (occurrence is null)
         {
             return SpamActionResult.NotActedOn(SpamActionOutcome.OccurrenceMissing);
+        }
+
+        var settings = this.settingsReader.ActionsFor(occurrence.Account.Id);
+
+        if (!settings.IsAnyActionEnabled)
+        {
+            return SpamActionResult.NotActedOn(SpamActionOutcome.NoActionConfigured);
+        }
+
+        if (!ClearsActingThreshold(classification, settings.Threshold))
+        {
+            return SpamActionResult.NotActedOn(SpamActionOutcome.BelowThreshold);
         }
 
         var filing = await this.DecideFilingAsync(occurrence, settings, cancellationToken);

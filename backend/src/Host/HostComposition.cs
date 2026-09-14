@@ -311,17 +311,17 @@ internal static class HostComposition
     /// <summary>Registers the scanners this deployment provides, and the postures that decide whose mail meets one.</summary>
     /// <remarks>
     /// <para>
-    /// Registration follows what the deployment <em>provides</em> rather than what it switched on, because a user's
-    /// own record may switch a scanner on for their own mail and no roster exists while services are being registered.
-    /// Providing is not the same as costing anything: a detector registered here is constructed on first resolution,
-    /// and nothing resolves one until a posture runs it, so a deployment nobody asked for scanning on still compiles no
-    /// expression and opens no analyzer client.
+    /// Registration follows what the deployment <em>provides</em> rather than what it switched on, because a mail
+    /// account's own record may switch a scanner on for the mail in it and no roster exists while services are being
+    /// registered. Providing is not the same as costing anything: a detector registered here is constructed on first
+    /// resolution, and nothing resolves one until a posture runs it, so a deployment nobody asked for scanning on still
+    /// compiles no expression and opens no analyzer client.
     /// </para>
     /// <para>
     /// The plan registered here is the provisioned one — every scanner this deployment stands behind, with the
     /// categories, suppressions, and bounds its own section names — because the detectors and the readiness probe are
     /// built from it and each must be able to find everything the deployment configured. Which of them run over one
-    /// user's mail is that user's posture, which composes a plan of its own naming a subset of the same scanners.
+    /// account's mail is that account's posture, which composes a plan of its own naming a subset of the same scanners.
     /// </para>
     /// </remarks>
     private static void AddSensitiveContentScanning(WebApplicationBuilder builder)
@@ -379,7 +379,7 @@ internal static class HostComposition
         // The detectors arrive behind a delegate rather than resolved, so a deployment where nobody is scanned for never
         // constructs one. Everything that scans reads this port, and nothing reads the deployment's own section for a
         // posture: composing the two answers is this type's and no caller's.
-        builder.Services.AddSingleton<ISensitiveContentPostures>(provider => new UserSensitiveContentPostures(
+        builder.Services.AddSingleton<ISensitiveContentPostures>(provider => new MailAccountSensitiveContentPostures(
             provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value,
             provider.GetServices<ISensitiveContentCatalog>(),
             provider.GetServices<ISensitiveContentScanner>,

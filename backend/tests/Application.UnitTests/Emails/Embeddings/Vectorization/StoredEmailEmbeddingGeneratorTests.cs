@@ -14,6 +14,7 @@ using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -25,6 +26,10 @@ namespace MailFathom.Application.UnitTests.Emails.Embeddings.Vectorization;
 public sealed class StoredEmailEmbeddingGeneratorTests
 {
     private static readonly StoredEmailId Message = StoredEmailId.Create(Guid.CreateVersion7());
+
+    /// <summary>The mailbox whose own record switched a scanner on, which is what the passages out of it are read under.</summary>
+    private static readonly MailAccountIdentity ScannedMailbox =
+        MailAccountIdentity.Create(SyntheticMailUser.Another, MailAccountId.Create("secondary"));
 
     private static readonly EmbeddingProfileId ProfileId = EmbeddingProfileId.Create(Guid.CreateVersion7());
 
@@ -442,18 +447,18 @@ public sealed class StoredEmailEmbeddingGeneratorTests
     }
 
     /// <summary>
-    /// The passages leaving for a hosted provider are scanned under the posture of the user whose message they were
-    /// cut from rather than the deployment's. Nothing else says so: the generator opens its scope from the ownership it
-    /// read, and one naming the wrong user would publish one person's body text judged by another person's answer,
+    /// The passages leaving for a hosted provider are scanned under the posture of the mailbox they were cut from
+    /// rather than the deployment's. Nothing else says so: the generator opens its scope from the ownership it read,
+    /// and one naming the wrong mailbox would publish one account's body text judged by another account's answer,
     /// while one naming nobody would fail only on a deployment that scans somebody.
     /// </summary>
     [Fact]
-    public async Task EmbedAsync_TwoUsersScannedDifferently_SendsEachUsersPassagesUnderTheirOwnPosture()
+    public async Task EmbedAsync_TwoMailboxesScannedDifferently_SendsEachMailboxesPassagesUnderItsOwnPosture()
     {
         // Arrange
         const string marker = "AKIAEXAMPLEKEY";
 
-        var scannedUsersMessage = StoredEmailId.Create(Guid.CreateVersion7());
+        var scannedMailboxesMessage = StoredEmailId.Create(Guid.CreateVersion7());
         var scanner = new MarkerSensitiveContentScanner(
             marker,
             SensitiveContentScannerKind.Secrets,
@@ -470,15 +475,16 @@ public sealed class StoredEmailEmbeddingGeneratorTests
 
         var postures = FixedSensitiveContentPostures.Of(
             SensitiveContentPosture.ScanningNothing,
-            (SyntheticMailUser.Another, SensitiveContentPosture.Scanning(
+            (ScannedMailbox.Id, SensitiveContentPosture.Scanning(
                 [scanner.Scanner],
                 new SensitiveContentRedactor(plan, [scanner], TimeProvider.System, permits),
                 SensitiveContentScreeningPolicy.ScreeningNothing(),
-                SensitiveContentDerivationStamp.Compute(plan, [scanner]))));
+                SensitiveContentDerivationStamp.Compute(plan, [scanner])),
+                ScannedMailbox.User));
 
         var store = new InMemoryEmailEmbeddingStore();
         store.AddPassages(Message, PassageCarrying(marker));
-        store.AddPassages(scannedUsersMessage, PassageCarrying(marker));
+        store.AddPassages(scannedMailboxesMessage, PassageCarrying(marker));
 
         var egressGuard = new SensitiveContentEgressGuard(
             postures,
@@ -491,12 +497,12 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         var generator = CreateGenerator(
             store,
             provider,
-            ownership: new StubMailOwnership().Owns(scannedUsersMessage, SyntheticMailUser.Another),
+            ownership: new StubMailOwnership().Owns(scannedMailboxesMessage, ScannedMailbox),
             egressGuard: egressGuard);
 
         // Act
         await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
-        await generator.EmbedAsync(scannedUsersMessage, CreateProfile(), TestContext.Current.CancellationToken);
+        await generator.EmbedAsync(scannedMailboxesMessage, CreateProfile(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Contains(marker, Assert.Single(provider.RequestedBatches[0]), StringComparison.Ordinal);

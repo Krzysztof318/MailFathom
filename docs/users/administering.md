@@ -731,8 +731,8 @@ leave you believing mail was being read that nothing was reading. The refusal na
 that replace it: record the person with `mfctl user add`, create each of their mailboxes with `mfctl account add`,
 credentials included, and remove the section. Whatever else that section decided about them is stated again the same
 way — the spam classification posture, and the
-[`SensitiveContent`](../features/sensitive-content-scanning.md) block if it stated one, both of which a record carries
-in blocks of its own.
+[`SensitiveContent`](../features/sensitive-content-scanning.md) block if it stated one, both of which each **mail
+account's** record carries in blocks of its own.
 
 **Taking a mailbox from its last person deletes its mail.** `mfctl account unassign` ends one person's assignment
 without a restart; while somebody else is still assigned the mailbox, its mail stays theirs. Ending the last assignment

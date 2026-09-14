@@ -6,6 +6,7 @@ using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -17,6 +18,8 @@ public sealed class SensitiveContentDerivationGuardTests
 {
     private const string Marker = "AKIAEXAMPLEKEY";
 
+    private static readonly MailAccountId AnotherAccount = MailAccountId.Create("secondary");
+
     private readonly FakeTimeProvider timeProvider = new(new DateTimeOffset(2026, 8, 12, 9, 0, 0, TimeSpan.Zero));
 
     [Fact]
@@ -27,7 +30,7 @@ public sealed class SensitiveContentDerivationGuardTests
 
         // Act
         var stored = await derivation.Guard.GuardAsync(
-            ScanningSensitiveContentDerivation.User,
+            ScanningSensitiveContentDerivation.Account,
             $"the key is {Marker} and it works",
             TestContext.Current.CancellationToken);
 
@@ -36,12 +39,12 @@ public sealed class SensitiveContentDerivationGuardTests
     }
 
     /// <summary>
-    /// A derived row belongs to one user, so what redacted it and what it is stamped with are that user's. The user
-    /// who asked for nothing has their text stored as it was read and their rows carry no stamp, which is what a later
-    /// walk reads to decide whose mail a posture change made stale.
+    /// A derived row belongs to one account, so what redacted it and what it is stamped with are that account's. The
+    /// account that asked for nothing has its text stored as it was read and its rows carry no stamp, which is what a
+    /// later walk reads to decide which mailbox a posture change made stale.
     /// </summary>
     [Fact]
-    public async Task GuardAsync_TwoUsersOfOneDeployment_RedactsAndStampsEachUnderTheirOwnPosture()
+    public async Task GuardAsync_TwoAccountsOfOneDeployment_RedactsAndStampsEachUnderItsOwnPosture()
     {
         // Arrange
         using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
@@ -49,30 +52,30 @@ public sealed class SensitiveContentDerivationGuardTests
         var guard = new SensitiveContentDerivationGuard(
             FixedSensitiveContentPostures.Of(
                 SensitiveContentPosture.ScanningNothing,
-                (SyntheticMailUser.Deployment, derivation.Postures.ForUser(SyntheticMailUser.Deployment))),
+                (FixedSensitiveContentPostures.SoleAccount, derivation.Postures.ForAccount(FixedSensitiveContentPostures.SoleAccount))),
             new RecordingSensitiveContentDerivationTelemetry(),
             this.timeProvider);
 
         // Act
         var scanned = await guard.GuardAsync(
-            SyntheticMailUser.Deployment,
+            FixedSensitiveContentPostures.SoleAccount,
             $"the key is {Marker}",
             TestContext.Current.CancellationToken);
         var unscanned = await guard.GuardAsync(
-            SyntheticMailUser.Another,
+            AnotherAccount,
             $"the key is {Marker}",
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("the key is [redacted:CloudKey]", scanned);
         Assert.Equal($"the key is {Marker}", unscanned);
-        Assert.NotNull(guard.StampFor(SyntheticMailUser.Deployment));
-        Assert.Null(guard.StampFor(SyntheticMailUser.Another));
+        Assert.NotNull(guard.StampFor(FixedSensitiveContentPostures.SoleAccount));
+        Assert.Null(guard.StampFor(AnotherAccount));
     }
 
-    /// <summary>The walk that re-derives stale rows reads every user from here, each beside their own stamp.</summary>
+    /// <summary>The walk that re-derives stale rows reads every account from here, each beside its own stamp.</summary>
     [Fact]
-    public void Current_ADeploymentServingTwoUsers_ReportsBothOfThemBesideWhatTheirRowsAreWrittenUnder()
+    public void Current_ADeploymentServingTwoAccounts_ReportsBothOfThemBesideWhatTheirRowsAreWrittenUnder()
     {
         // Arrange
         using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
@@ -80,8 +83,8 @@ public sealed class SensitiveContentDerivationGuardTests
         var guard = new SensitiveContentDerivationGuard(
             FixedSensitiveContentPostures.Of(
                 SensitiveContentPosture.ScanningNothing,
-                (SyntheticMailUser.Deployment, derivation.Postures.ForUser(SyntheticMailUser.Deployment)),
-                (SyntheticMailUser.Another, SensitiveContentPosture.ScanningNothing)),
+                (FixedSensitiveContentPostures.SoleAccount, derivation.Postures.ForAccount(FixedSensitiveContentPostures.SoleAccount)),
+                (AnotherAccount, SensitiveContentPosture.ScanningNothing)),
             new RecordingSensitiveContentDerivationTelemetry(),
             this.timeProvider);
 
@@ -90,8 +93,8 @@ public sealed class SensitiveContentDerivationGuardTests
 
         // Assert
         Assert.Equal(
-            [SyntheticMailUser.Deployment, SyntheticMailUser.Another],
-            current.Select(user => user.User));
+            [FixedSensitiveContentPostures.SoleAccount, AnotherAccount],
+            current.Select(posture => posture.Account));
         Assert.NotNull(current[0].Posture.Stamp);
         Assert.Null(current[1].Posture.Stamp);
     }
@@ -104,7 +107,7 @@ public sealed class SensitiveContentDerivationGuardTests
         using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
 
         // Act
-        var stamp = derivation.Guard.StampFor(ScanningSensitiveContentDerivation.User);
+        var stamp = derivation.Guard.StampFor(ScanningSensitiveContentDerivation.Account);
 
         // Assert
         Assert.True(derivation.Guard.IsActive);
@@ -121,13 +124,13 @@ public sealed class SensitiveContentDerivationGuardTests
 
         // Act
         var stored = await guard.GuardAsync(
-            ScanningSensitiveContentDerivation.User,
+            ScanningSensitiveContentDerivation.Account,
             $"the key is {Marker}",
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(guard.IsActive);
-        Assert.Null(guard.StampFor(ScanningSensitiveContentDerivation.User));
+        Assert.Null(guard.StampFor(ScanningSensitiveContentDerivation.Account));
         Assert.Equal($"the key is {Marker}", stored);
     }
 
@@ -141,7 +144,7 @@ public sealed class SensitiveContentDerivationGuardTests
         // Act
         var refusal = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
             derivation.Guard.GuardAsync(
-                ScanningSensitiveContentDerivation.User,
+                ScanningSensitiveContentDerivation.Account,
                 "whatever the message said",
                 TestContext.Current.CancellationToken));
 
@@ -160,7 +163,7 @@ public sealed class SensitiveContentDerivationGuardTests
         // Act
         await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
             derivation.Guard.GuardAsync(
-                ScanningSensitiveContentDerivation.User,
+                ScanningSensitiveContentDerivation.Account,
                 "whatever the message said",
                 TestContext.Current.CancellationToken));
 
@@ -179,7 +182,7 @@ public sealed class SensitiveContentDerivationGuardTests
 
         // Act
         await derivation.Guard.GuardAsync(
-            ScanningSensitiveContentDerivation.User,
+            ScanningSensitiveContentDerivation.Account,
             $"{Marker} and {Marker}",
             TestContext.Current.CancellationToken);
 
@@ -198,13 +201,13 @@ public sealed class SensitiveContentDerivationGuardTests
 
     /// <summary>A stamp on a row promises the text beside it went through a redaction, so neither travels alone.</summary>
     [Fact]
-    public void StampFor_AUserNothingScans_IsAbsentBesideTheRedactionThatIsAbsentToo()
+    public void StampFor_AnAccountNothingScans_IsAbsentBesideTheRedactionThatIsAbsentToo()
     {
         // Arrange
         var guard = ScanningSensitiveContentDerivation.Inactive();
 
         // Act
-        var stamp = guard.StampFor(ScanningSensitiveContentDerivation.User);
+        var stamp = guard.StampFor(ScanningSensitiveContentDerivation.Account);
 
         // Assert
         Assert.Null(stamp);

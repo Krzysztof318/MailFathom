@@ -11,7 +11,6 @@ using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.UnitTests.TestDoubles;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -33,6 +32,8 @@ public sealed class SpamActionRecorderTests
 
     private static readonly MailAccountIdentity Account =
         MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-1"));
+
+    private static readonly MailAccountId AnotherAccount = MailAccountId.Create("acct-2");
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -68,40 +69,48 @@ public sealed class SpamActionRecorderTests
         .GetAuthoredDeleteDisposition(Arg.Any<MailAccountId>())
         .Returns(AuthoredDeleteEmailDisposition.RetainLocalCopy);
 
+    /// <summary>
+    /// A mailbox that asked for no action costs the occurrence row and nothing else: the switches are the account's,
+    /// and the occurrence is what names the account the message sits in.
+    /// </summary>
     [Fact]
-    public async Task RecordAsync_NeitherSwitchOn_AsksForNothingAndReadsNoMailbox()
+    public async Task RecordAsync_NeitherSwitchOn_AsksForNothingAndOpensNoRecord()
     {
         // Arrange
-        var occurrences = Substitute.For<ISpamActionOccurrenceReader>();
-        var recorder = this.Recorder(SpamActionSettings.None, occurrences);
+        var recorder = this.Recorder(SpamActionSettings.None);
 
         // Act
-        var result = await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SpamActionOutcome.NoActionConfigured, result.Outcome);
         Assert.Equal(0, this.records.OpenedRecordCount);
-        await occurrences.DidNotReceive().FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>());
     }
 
-    /// <summary>What happens to junk is the mailbox user's decision, so the switches read are the user the caller named.</summary>
+    /// <summary>What happens to junk is the mailbox's own setting, so the switches read are the account the message sits in.</summary>
     /// <remarks>
-    /// The identity this whole per-user split exists for, and it is driven with a user <see cref="Account" /> does
-    /// not carry so that the forwarded parameter is separable from the account's own user. A recorder reading a
-    /// constant, or taking the user off the occurrence, answers with the settings arranged for nobody and files
-    /// nothing — which on a roster of several is mail moved and marked read on one person's server under another
-    /// person's switches.
+    /// The identity this whole per-account split exists for, and it is driven with an account <see cref="Account" />
+    /// is not so that the resolved value is separable from this class's own. A recorder reading a constant, or taking
+    /// the settings off the acting user, answers with the settings arranged for no mailbox and files nothing — which
+    /// on a user holding several is mail moved and marked read on one server under another mailbox's switches.
     /// </remarks>
     [Fact]
-    public async Task RecordAsync_AVerdictForOneUser_ReadsThatUsersActionSettings()
+    public async Task RecordAsync_AVerdictOnOneAccount_ReadsThatAccountsActionSettings()
     {
         // Arrange
         this.MapMirroredJunk("Junk");
-        var recorder = this.Recorder(FilingAndMarkingRead(), actingFor: SyntheticMailUser.Another);
+        this.mappings.With(
+            AnotherAccount,
+            MailFolderMapping.ToSpecialUse(Junk, MailFolderSpecialUse.Junk, MailFolderParticipation.Full));
+        this.bindings.Bind(AnotherAccount, Junk, "Junk");
+
+        var recorder = this.Recorder(
+            FilingAndMarkingRead(),
+            ReaderOf(OccurrenceIn(Inbox, isRemotelySeen: false, account: AnotherAccount)),
+            settingsOf: AnotherAccount);
 
         // Act
         var result = await recorder.RecordAsync(
-            SyntheticMailUser.Another,
             SpamVerdictOf(SpamVerdict.Spam),
             SpamActionPosture.Acting,
             TestContext.Current.CancellationToken);
@@ -109,7 +118,7 @@ public sealed class SpamActionRecorderTests
         // Assert
         var settingsReader = this.settingsReader!;
 
-        settingsReader.Received().ActionsFor(SyntheticMailUser.Another);
+        settingsReader.Received().ActionsFor(AnotherAccount);
         Assert.Equal(SpamActionOutcome.Requested, result.Outcome);
     }
 
@@ -122,7 +131,7 @@ public sealed class SpamActionRecorderTests
         var recorder = this.Recorder(FilingAndMarkingRead());
 
         // Act
-        var result = await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(verdict), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(SpamVerdictOf(verdict), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SpamActionOutcome.NotSpam, result.Outcome);
@@ -137,7 +146,7 @@ public sealed class SpamActionRecorderTests
         var recorder = this.Recorder(FilingAndMarkingRead());
 
         // Act
-        var result = await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         MailboxMutation[] appliedInOrder = [MailboxMutation.SetSeen, MailboxMutation.Relocate];
@@ -157,7 +166,7 @@ public sealed class SpamActionRecorderTests
         var recorder = this.Recorder(SpamActionSettings.Create(filesJunk: true, marksJunkRead: false));
 
         // Act
-        await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         var request = Assert.Single(this.records.OpenedRequests);
@@ -178,7 +187,7 @@ public sealed class SpamActionRecorderTests
         var recorder = this.Recorder(SpamActionSettings.Create(filesJunk: true, marksJunkRead: false));
 
         // Act
-        await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         var request = Assert.Single(this.records.OpenedRequests);
@@ -193,7 +202,7 @@ public sealed class SpamActionRecorderTests
         var recorder = this.Recorder(FilingAndMarkingRead(), OccurrenceIn(Inbox, isRemotelySeen: true));
 
         // Act
-        var result = await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(result.MarkedReadRecordId);
@@ -209,7 +218,7 @@ public sealed class SpamActionRecorderTests
         var recorder = this.Recorder(FilingAndMarkingRead(), OccurrenceIn(Junk, isRemotelySeen: false));
 
         // Act
-        var result = await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(result.FiledRecordId);
@@ -225,7 +234,7 @@ public sealed class SpamActionRecorderTests
         var recorder = this.Recorder(FilingAndMarkingRead(), OccurrenceIn(Junk, isRemotelySeen: true));
 
         // Act
-        var result = await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SpamActionOutcome.NothingToChange, result.Outcome);
@@ -240,7 +249,7 @@ public sealed class SpamActionRecorderTests
         this.MapUnmirroredJunk("Spam");
         var settings = FilingAndMarkingRead();
         var recorder = this.Recorder(settings);
-        await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // The user drags the message back into the inbox, which reaches this instance as a new occurrence of the same
         // local email under a new UID.
@@ -248,7 +257,6 @@ public sealed class SpamActionRecorderTests
 
         // Act
         var result = await movedBack.RecordAsync(
-            SyntheticMailUser.Deployment,
             SpamVerdictOf(SpamVerdict.Spam),
             SpamActionPosture.Acting,
             TestContext.Current.CancellationToken);
@@ -265,10 +273,10 @@ public sealed class SpamActionRecorderTests
         // Arrange
         this.MapUnmirroredJunk("Spam");
         var recorder = this.Recorder(SpamActionSettings.Create(filesJunk: true, marksJunkRead: false));
-        await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Act
-        var result = await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SpamActionOutcome.PreviouslyFiled, result.Outcome);
@@ -283,8 +291,8 @@ public sealed class SpamActionRecorderTests
         var recorder = this.Recorder(SpamActionSettings.Create(filesJunk: false, marksJunkRead: true));
 
         // Act
-        await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
-        await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, this.records.OpenedRecordCount);
@@ -297,11 +305,11 @@ public sealed class SpamActionRecorderTests
         this.MapUnmirroredJunk("Spam");
         var classification = ScannerVerdictOf(score: 12);
         await this.Recorder(SpamActionSettings.Create(filesJunk: false, marksJunkRead: true, threshold: 5))
-            .RecordAsync(SyntheticMailUser.Deployment, classification, SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+            .RecordAsync(classification, SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Act
         await this.Recorder(SpamActionSettings.Create(filesJunk: false, marksJunkRead: true, threshold: 8))
-            .RecordAsync(SyntheticMailUser.Deployment, classification, SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+            .RecordAsync(classification, SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(2, this.records.OpenedRecordCount);
@@ -316,7 +324,6 @@ public sealed class SpamActionRecorderTests
 
         // Act
         var result = await recorder.RecordAsync(
-            SyntheticMailUser.Deployment,
             ScannerVerdictOf(score: 6),
             SpamActionPosture.Acting,
             TestContext.Current.CancellationToken);
@@ -335,7 +342,6 @@ public sealed class SpamActionRecorderTests
 
         // Act
         var result = await recorder.RecordAsync(
-            SyntheticMailUser.Deployment,
             ScannerVerdictOf(score: 8),
             SpamActionPosture.Acting,
             TestContext.Current.CancellationToken);
@@ -353,7 +359,7 @@ public sealed class SpamActionRecorderTests
         var recorder = this.Recorder(SpamActionSettings.Create(filesJunk: false, marksJunkRead: true, threshold: 8));
 
         // Act
-        var result = await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SpamActionOutcome.Requested, result.Outcome);
@@ -370,7 +376,7 @@ public sealed class SpamActionRecorderTests
         var recorder = this.Recorder(FilingAndMarkingRead(), occurrences);
 
         // Act
-        var result = await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SpamActionOutcome.OccurrenceMissing, result.Outcome);
@@ -385,7 +391,7 @@ public sealed class SpamActionRecorderTests
         var recorder = this.Recorder(FilingAndMarkingRead());
 
         // Act
-        var result = await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SpamActionOutcome.DestinationUnresolved, result.Outcome);
@@ -402,7 +408,7 @@ public sealed class SpamActionRecorderTests
         var recorder = this.Recorder(FilingAndMarkingRead());
 
         // Act
-        var result = await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SpamActionOutcome.DestinationUnresolved, result.Outcome);
@@ -421,7 +427,7 @@ public sealed class SpamActionRecorderTests
         var recorder = this.Recorder(FilingAndMarkingRead());
 
         // Act
-        var result = await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SpamActionOutcome.AccountNoLongerConfigured, result.Outcome);
@@ -443,7 +449,7 @@ public sealed class SpamActionRecorderTests
             MailFolderReference.ToAlias(elsewhere)));
 
         // Act
-        await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         var request = Assert.Single(this.records.OpenedRequests);
@@ -483,7 +489,7 @@ public sealed class SpamActionRecorderTests
             session: session);
 
         // Act
-        var result = await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        var result = await recorder.RecordAsync(SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SpamActionOutcome.DestinationUnresolved, result.Outcome);
@@ -498,7 +504,7 @@ public sealed class SpamActionRecorderTests
         var recorder = this.Recorder(SpamActionSettings.Create(filesJunk: true, marksJunkRead: false, threshold: 8));
 
         // Act
-        await recorder.RecordAsync(SyntheticMailUser.Deployment, ScannerVerdictOf(score: 12), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+        await recorder.RecordAsync(ScannerVerdictOf(score: 12), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
 
         // Assert
         var request = Assert.Single(this.records.OpenedRequests);
@@ -516,7 +522,6 @@ public sealed class SpamActionRecorderTests
 
         // Act
         var result = await recorder.RecordAsync(
-            SyntheticMailUser.Deployment,
             SpamVerdictOf(SpamVerdict.Spam),
             SpamActionPosture.DryRun,
             TestContext.Current.CancellationToken);
@@ -535,7 +540,6 @@ public sealed class SpamActionRecorderTests
         var recorder = this.Recorder(FilingAndMarkingRead());
 
         await recorder.RecordAsync(
-            SyntheticMailUser.Deployment,
             SpamVerdictOf(SpamVerdict.Spam),
             SpamActionPosture.Acting,
             TestContext.Current.CancellationToken);
@@ -544,7 +548,6 @@ public sealed class SpamActionRecorderTests
 
         // Act
         var result = await recorder.RecordAsync(
-            SyntheticMailUser.Deployment,
             SpamVerdictOf(SpamVerdict.Spam),
             SpamActionPosture.DryRun,
             TestContext.Current.CancellationToken);
@@ -562,7 +565,6 @@ public sealed class SpamActionRecorderTests
 
         // Act
         var result = await recorder.RecordAsync(
-            SyntheticMailUser.Deployment,
             SpamVerdictOf(SpamVerdict.NotSpam),
             SpamActionPosture.DryRun,
             TestContext.Current.CancellationToken);
@@ -580,7 +582,6 @@ public sealed class SpamActionRecorderTests
 
         // Act
         var refusal = async () => await recorder.RecordAsync(
-            SyntheticMailUser.Deployment,
             SpamVerdictOf(SpamVerdict.Spam),
             (SpamActionPosture)7,
             TestContext.Current.CancellationToken);
@@ -597,7 +598,6 @@ public sealed class SpamActionRecorderTests
 
         // Act
         var refusal = async () => await recorder.RecordAsync(
-            SyntheticMailUser.Deployment,
             classification: null!,
             SpamActionPosture.Acting,
             TestContext.Current.CancellationToken);
@@ -632,11 +632,12 @@ public sealed class SpamActionRecorderTests
     private static SpamActionOccurrence OccurrenceIn(
         MailFolderAlias folderAlias,
         bool isRemotelySeen,
-        uint uid = 4401) => new(
+        uint uid = 4401,
+        MailAccountId? account = null) => new(
         Email,
         Account.User,
         EmailOccurrenceId.Create(
-            Account.Id,
+            account ?? Account.Id,
             new MailFolderResolutionId(folderAlias, MailFolderResolutionGeneration.First),
             ImapUidValidity.Create(9),
             ImapUid.Create(uid)),
@@ -672,28 +673,28 @@ public sealed class SpamActionRecorderTests
         SpamActionOccurrence occurrence) =>
         this.Recorder(settings, ReaderOf(occurrence));
 
-    /// <summary>Builds the recorder over a reader that answers with these settings for one user and with nothing for anybody else.</summary>
-    /// <param name="settings">The switches the acting user has set.</param>
+    /// <summary>Builds the recorder over a reader that answers with these settings for one account and with nothing for any other.</summary>
+    /// <param name="settings">The switches the mailbox has set.</param>
     /// <param name="occurrences">Where the message sits, defaulting to an unread occurrence in the inbox.</param>
-    /// <param name="actingFor">The user those switches belong to, defaulting to the one this class's account carries.</param>
+    /// <param name="settingsOf">The account those switches belong to, defaulting to this class's own.</param>
     /// <param name="submission">What the changes are submitted through, defaulting to one over an account that is not held.</param>
     /// <param name="session">The session every commit is staged in, defaulting to one that commits.</param>
     /// <remarks>
-    /// Configured per user rather than for any user, so a recorder forwarding a constant reads as no action taken and
-    /// fails the test that expected one. Separating that constant from the account's own user needs
-    /// <paramref name="actingFor" /> as well, since every other test here drives the account's user and the two values
+    /// Configured per account rather than for any account, so a recorder forwarding a constant reads as no action taken
+    /// and fails the test that expected one. Separating that constant from this class's own account needs
+    /// <paramref name="settingsOf" /> as well, since every other test here drives the one account and the two values
     /// are otherwise one.
     /// </remarks>
     private SpamActionRecorder Recorder(
         SpamActionSettings settings,
         ISpamActionOccurrenceReader? occurrences = null,
-        MailUserId? actingFor = null,
+        MailAccountId? settingsOf = null,
         MailboxChangeSubmission? submission = null,
         IPersistenceSession? session = null)
     {
         var settingsReader = Substitute.For<ISpamActionSettingsReader>();
-        settingsReader.ActionsFor(Arg.Any<MailUserId>()).Returns(SpamActionSettings.None);
-        settingsReader.ActionsFor(actingFor ?? Account.User).Returns(settings);
+        settingsReader.ActionsFor(Arg.Any<MailAccountId>()).Returns(SpamActionSettings.None);
+        settingsReader.ActionsFor(settingsOf ?? Account.Id).Returns(settings);
         this.settingsReader = settingsReader;
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();

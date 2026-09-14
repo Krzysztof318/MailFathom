@@ -575,28 +575,37 @@ public sealed class ServedMailUsersStartupGateTests
         Assert.Equal(MailUserLanguage.English, Assert.Single(roster.Users).Language);
     }
 
-    /// <summary>The scanning posture a user asked for in their own record reaches the roster beside their mailboxes.</summary>
+    /// <summary>The scanning posture an account asked for in the record reaches the roster on that mailbox.</summary>
     [Fact]
-    public async Task StartAsync_AUserWhoseRecordAsksForAScanner_PublishesWhatTheyAskedFor()
+    public async Task StartAsync_AnAccountWhoseRecordAsksForAScanner_PublishesWhatItAskedFor()
     {
         // Arrange
         var user = MailUserId.Create(RecordedIdentifier);
         var roster = new ServedMailUsers();
+        var scanned = AlexWork with
+        {
+            Document = """
+                {
+                  "Host": "imap.example.test",
+                  "UserName": "alex@example.test",
+                  "Secrets": { "Password": { "Name": "imap-password", "SecretReference": "systemd-credential:imap-password" } },
+                  "SensitiveContent": { "Secrets": { "Enabled": true }, "ScreenOutgoingMailFor": [ "Secrets" ] }
+                }
+                """,
+        };
 
         // Act
         await CreateGate(
                 [Held(user, "alex")],
                 servedUsers: roster,
-                documents: RecordsHolding(Record(
-                    user,
-                    """{"Language":"English","SensitiveContent":{"Secrets":{"Enabled":true},"ScreenOutgoingMailFor":["Secrets"]}}""")))
+                documents: RecordsHolding(Record(user, LanguageOnlyRecord, scanned)))
             .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        var served = Assert.Single(roster.Users);
+        var account = Assert.Single(Assert.Single(roster.Users).MailAccounts);
 
-        Assert.True(served.SensitiveContent!.Secrets.Enabled);
-        Assert.Equal(["Secrets"], served.SensitiveContent!.ScreenOutgoingMailFor!);
+        Assert.True(account.SensitiveContent.Secrets.Enabled);
+        Assert.Equal(["Secrets"], account.SensitiveContent.ScreenOutgoingMailFor!);
     }
 
     [Fact]

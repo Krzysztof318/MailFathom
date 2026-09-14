@@ -72,7 +72,7 @@ public sealed class ThreadStateDerivationPass
     /// <param name="stateStore">Reads which conversations are awaiting a state and writes down what one derivation produced.</param>
     /// <param name="deriver">Derives one conversation's state, in whichever state the deployment left it.</param>
     /// <param name="languages">Answers which language the account's owner reads, which the statements are written in.</param>
-    /// <param name="egressGuard">States whose mail the conversation is, so the derivation scans it under that user's posture.</param>
+    /// <param name="egressGuard">States which mailbox the conversation is in, so the derivation scans it under that account's posture.</param>
     /// <param name="commitPolicy">Commits one conversation's record, retrying a conflict with a competing writer.</param>
     /// <param name="timeProvider">Reads when a derivation ran.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
@@ -125,9 +125,9 @@ public sealed class ThreadStateDerivationPass
                 ThreadsRemain: false);
         }
 
-        // Established for the whole pass rather than per conversation, because whose mail a message is decides the
+        // Established for the whole pass rather than per conversation, because which mailbox a message is in decides the
         // posture it is scanned under and every conversation in the batch belongs to the one account this pass walks.
-        using var actingFor = this.egressGuard.ActingFor(account.User);
+        using var actingFor = this.egressGuard.ActingFor(account);
 
         // Resolved once for the same reason and from the same fact: every conversation in this batch is one person's,
         // and what they read is what every statement derived from it is written in.

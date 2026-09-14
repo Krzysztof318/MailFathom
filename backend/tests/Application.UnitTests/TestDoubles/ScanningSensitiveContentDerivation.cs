@@ -7,6 +7,7 @@ using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
@@ -14,9 +15,10 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 /// <summary>A deployment with one scanner switched on, as a derived write meets it.</summary>
 /// <remarks>
 /// <para>
-/// Every user reads the same posture, because what most of these suites are about is what a derived write does with a
-/// finding rather than whose mail was scanned. <see cref="FindingForOneUser" /> is the exception, for the one claim
-/// that is about the user: that a consumer scans under the user it was handed rather than under one of its own.
+/// Every account reads the same posture, because what most of these suites are about is what a derived write does with
+/// a finding rather than which mailbox was scanned. <see cref="FindingForOneAccount" /> is the exception, for the one
+/// claim that is about the account: that a consumer scans under the account it was handed rather than under one of its
+/// own.
 /// </para>
 /// <para>
 /// It holds the permits the redaction runs under, which is what makes it disposable: they are the process's budget of
@@ -32,7 +34,7 @@ internal sealed class ScanningSensitiveContentDerivation : IDisposable
         MarkerSensitiveContentScanner scanner,
         IReadOnlyList<SensitiveContentCategory> categories,
         TimeProvider timeProvider,
-        MailUserId scannedUser = default)
+        MailAccountId scannedAccount = default)
     {
         var plan = SensitiveContentPlan.Create(
             SensitiveContentScanBounds.Default,
@@ -48,16 +50,19 @@ internal sealed class ScanningSensitiveContentDerivation : IDisposable
             SensitiveContentScreeningPolicy.ScreeningNothing(),
             SensitiveContentDerivationStamp.Compute(plan, [scanner]));
 
-        this.Postures = scannedUser.IsSpecified
-            ? FixedSensitiveContentPostures.Of(SensitiveContentPosture.ScanningNothing, (scannedUser, scanning))
-            : FixedSensitiveContentPostures.ForEveryUser(scanning);
+        this.Postures = scannedAccount.Value is null
+            ? FixedSensitiveContentPostures.ForEveryAccount(scanning)
+            : FixedSensitiveContentPostures.Of(SensitiveContentPosture.ScanningNothing, (scannedAccount, scanning));
         this.Guard = new SensitiveContentDerivationGuard(this.Postures, this.Telemetry, timeProvider);
     }
 
     /// <summary>Gets the user whose mail this deployment is exercised over.</summary>
     public static MailUserId User => SyntheticMailUser.Deployment;
 
-    /// <summary>Gets what every user's mail is scanned under, for a consumer that resolves the user itself.</summary>
+    /// <summary>Gets the account whose mail this deployment is exercised over.</summary>
+    public static MailAccountId Account => FixedSensitiveContentPostures.SoleAccount;
+
+    /// <summary>Gets what every account's mail is scanned under, for a consumer that resolves the account itself.</summary>
     public FixedSensitiveContentPostures Postures { get; }
 
     /// <summary>Gets the guard a derived write is handed.</summary>
@@ -88,19 +93,19 @@ internal sealed class ScanningSensitiveContentDerivation : IDisposable
             timeProvider);
     }
 
-    /// <summary>Builds a deployment where one user asked for scanning and nobody else did.</summary>
-    /// <param name="scannedUser">The user whose mail the scanner runs over; every other user reads a posture that scans nothing.</param>
+    /// <summary>Builds a deployment where one account asked for scanning and no other did.</summary>
+    /// <param name="scannedAccount">The account whose mail the scanner runs over; every other reads a posture that scans nothing.</param>
     /// <param name="marker">The literal a finding covers, which the placeholder replaces.</param>
     /// <param name="timeProvider">Times the per-call budget and stamps the findings.</param>
     /// <returns>The deployment, which the test disposes.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="timeProvider" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// This is what a consumer that forwards the user it was handed is told apart by: the same text, read for two
-    /// users, comes back redacted for one and untouched for the other, so a caller resolving the posture from anything
-    /// but its own argument fails rather than passing.
+    /// This is what a consumer that forwards the account it was handed is told apart by: the same text, read for two
+    /// accounts, comes back redacted for one and untouched for the other, so a caller resolving the posture from
+    /// anything but its own argument fails rather than passing.
     /// </remarks>
-    public static ScanningSensitiveContentDerivation FindingForOneUser(
-        MailUserId scannedUser,
+    public static ScanningSensitiveContentDerivation FindingForOneAccount(
+        MailAccountId scannedAccount,
         string marker,
         TimeProvider timeProvider)
     {
@@ -110,7 +115,7 @@ internal sealed class ScanningSensitiveContentDerivation : IDisposable
             new MarkerSensitiveContentScanner(marker, SensitiveContentScannerKind.Secrets, timeProvider),
             [MarkerSensitiveContentScanner.Category],
             timeProvider,
-            scannedUser);
+            scannedAccount);
     }
 
     /// <summary>Builds a deployment whose scanner cannot say what a text carries.</summary>

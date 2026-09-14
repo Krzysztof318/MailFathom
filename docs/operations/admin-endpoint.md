@@ -658,15 +658,15 @@ to name and the rule's own words are what an operator has to correct.
 
 ### Classifying the mail you already have, and reading what was concluded
 
-Three commands, and none of *them* writes a setting: they apply the account user's classification settings to the mail
-this deployment already holds for them, and read what was decided. Whether mail is classified at all, what a scanner is
-judged by, and what happens to junk are that user's to decide, and each is read from whichever source their record's
-marker names — the deployment's [`SpamClassification`](configuration-ai.md#spamclassification) section while a
-configuration source still reaches them, and their own document once it has been written. The first is changeable
-without a restart through [reading and changing the
-configuration](#reading-and-changing-the-deployments-own-configuration) and the second through
-[the user record routes](#users-and-their-records); neither is reached through these three. [Spam
-classification](../features/spam-classification.md) is what the feature does.
+Three commands, and none of *them* writes a setting: they apply the account's own classification settings to the mail
+this deployment already holds for it, and read what was decided. Whether that mail is classified at all, what a scanner
+is judged by, and what happens to junk are the account's to state, in the
+[`SpamClassification`](configuration-mail.md#classifying-this-accounts-mail--spamclassification) block of its record;
+the deployment's [`SpamClassification`](configuration-ai.md#spamclassification) section registers the scanner and bounds
+what the process spends on it and reaches no mailbox's scope. The first is changed through [the mail account
+routes](#mail-accounts-and-who-they-are-assigned-to) and the second, without a restart, through [reading and changing
+the configuration](#reading-and-changing-the-deployments-own-configuration); neither is reached through these three.
+[Spam classification](../features/spam-classification.md) is what the feature does.
 
 **`mfctl spam run --account <id>` is a dry run unless you add `--apply`.** It returns as soon as the deployment has
 written the request down and never waits for the walk; the run is carried by the account's synchronization runs, so
@@ -1332,8 +1332,8 @@ editor exits.
 
 **A record is committed whole or not at all, over the version it was read at.** A candidate is composed with the mail
 accounts assigned to that user, bound strictly against the same rules a configuration file is, put through the same
-mail-synchronization validators a start applies, and judged for [what it asks about scanning that user's
-mail](configuration-sources.md#what-a-user-may-say-about-scanning-their-own-mail) — and a candidate failing any of
+mail-synchronization validators a start applies, and judged for [what each of those accounts asks about scanning the
+mail in it](configuration-mail.md#scanning-this-accounts-mail--sensitivecontent) — and a candidate failing any of
 those is refused with what to correct rather than committed and discovered at the next restart. A scanning refusal
 names the deployment setting behind it and never quotes the record. A record another writer moved on in the meantime is refused as superseded, so nothing silently
 overwrites a change made from the client or from another terminal.

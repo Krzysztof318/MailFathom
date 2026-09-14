@@ -1205,8 +1205,8 @@ continues. Both of its tags are written
 whatever stopped the act, and an act stopped because the analyzed ceiling cut the text reads `not_scanned` in each —
 a value rather than an absent tag, because a series missing one dimension is a second series and a query summing this
 counter by scanner would silently drop every length refusal. Which findings stop an act is the operator's floor and the
-user's to tighten: [`SensitiveContent:ScreenOutgoingMailFor`](configuration-ai.md#sensitivecontent) is where the floor
-is written, and [each user's own posture](../features/sensitive-content-scanning.md#each-users-own-posture) is what
+account's to tighten: [`SensitiveContent:ScreenOutgoingMailFor`](configuration-ai.md#sensitivecontent) is where the floor
+is written, and [each account's own posture](../features/sensitive-content-scanning.md#each-accounts-own-posture) is what
 may add to it.
 
 The findings are split by category rather than totalled because which kind of material a mailbox is producing is what
