@@ -81,7 +81,7 @@ public sealed class MailFolderEditor
     /// <param name="role">The role the folder is to play, or <see langword="null" /> for an ordinary folder.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The created folder, or the refusal.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <c>mailfathom.mail.folders.write</c>.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <c>mailfathom.mail.folders.write</c> and <c>mailfathom.mail.read</c>, both of which an act needs.</exception>
     public Task<MailFolderActOutcome> CreateAsync(
         MailAccountId account,
         string? parentId,
@@ -100,7 +100,7 @@ public sealed class MailFolderEditor
     /// <param name="name">The new name.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The renamed folder, or the refusal.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <c>mailfathom.mail.folders.write</c>.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <c>mailfathom.mail.folders.write</c> and <c>mailfathom.mail.read</c>, both of which an act needs.</exception>
     public Task<MailFolderActOutcome> RenameAsync(
         MailAccountId account,
         string? folderId,
@@ -119,7 +119,7 @@ public sealed class MailFolderEditor
     /// <param name="parentId">The folder to move it beneath, or <see langword="null" /> for the top of the hierarchy.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The moved folder, or the refusal.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <c>mailfathom.mail.folders.write</c>.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <c>mailfathom.mail.folders.write</c> and <c>mailfathom.mail.read</c>, both of which an act needs.</exception>
     public Task<MailFolderActOutcome> MoveAsync(
         MailAccountId account,
         string? folderId,
@@ -139,7 +139,7 @@ public sealed class MailFolderEditor
     /// <param name="folderId">The folder.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The folder as the act left it, or the refusal.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <c>mailfathom.mail.folders.write</c>.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <c>mailfathom.mail.folders.write</c> and <c>mailfathom.mail.read</c>, both of which an act needs.</exception>
     /// <remarks>
     /// On an account whose mailbox MailFathom holds, a deletion moves the folder into the trash and a deletion of one
     /// already there erases it with its mail. On a mirrored account it deletes the folder on the mail server, or marks

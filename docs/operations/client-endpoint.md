@@ -65,10 +65,10 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `GET /api/client/accounts` | `mailfathom.mail.read` |
 | `GET /api/client/folders` | `mailfathom.mail.read` |
 | `GET /api/client/managed-folders` | `mailfathom.mail.read` |
-| `POST /api/client/managed-folders` | `mailfathom.mail.folders.write` |
-| `POST /api/client/managed-folders/renames` | `mailfathom.mail.folders.write` |
-| `POST /api/client/managed-folders/moves` | `mailfathom.mail.folders.write` |
-| `POST /api/client/managed-folders/deletions` | `mailfathom.mail.folders.write` |
+| `POST /api/client/managed-folders` | `mailfathom.mail.folders.write` with `mailfathom.mail.read` |
+| `POST /api/client/managed-folders/renames` | `mailfathom.mail.folders.write` with `mailfathom.mail.read` |
+| `POST /api/client/managed-folders/moves` | `mailfathom.mail.folders.write` with `mailfathom.mail.read` |
+| `POST /api/client/managed-folders/deletions` | `mailfathom.mail.folders.write` with `mailfathom.mail.read` |
 | `GET /api/client/emails` | `mailfathom.mail.read` |
 | `GET /api/client/emails/search` | `mailfathom.mail.read` |
 | `GET /api/client/emails/search/phrasing` | `mailfathom.mail.ask` |
@@ -603,7 +603,9 @@ carried the act out and MailFathom could not write it down, so the folders are r
 asked.
 
 The read takes `mailfathom.mail.read` and the writes take
-[`mailfathom.mail.folders.write`](permissions.md#the-published-set); each committed write is written to the service log
+[`mailfathom.mail.folders.write`](permissions.md#the-published-set) as well as `mailfathom.mail.read`, because an act
+is dispatched from the account's own folders and a credential that may not read them cannot be told which act it just
+asked for; each committed write is written to the service log
 as an audit record naming the account, the folder's identity, and the kind of change — never a folder's name — and
 tells the caller's clients over [the signal channel](#the-signal-channel) that the folder set moved.
 

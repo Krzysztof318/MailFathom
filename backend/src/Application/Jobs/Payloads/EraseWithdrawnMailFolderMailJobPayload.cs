@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Serialization;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -61,6 +63,27 @@ public sealed record EraseWithdrawnMailFolderMailJobPayload : IJobPayload
 
     /// <summary>Composes the identity that makes one pass run once.</summary>
     /// <returns>The key.</returns>
+    /// <remarks>
+    /// Neither an account's identifier nor a folder's alias carries a maximum length, so the two of them can compose a
+    /// key longer than the store accepts — and they would do so inside the deletion that queues the pass, once the
+    /// folder is already gone from the server and nothing is left to refuse. What is kept then is as much of the
+    /// composed identity as fits beside a digest of the whole of it, so two folders whose identities share a prefix
+    /// still enqueue two passes rather than one swallowing the other's mail.
+    /// </remarks>
     public JobIdempotencyKey ToIdempotencyKey() => JobIdempotencyKey.Create(
-        $"{JobType.EraseWithdrawnMailFolderMail.Name}:{this.UserId}:{this.AccountId}:{this.FolderAlias}:{this.Pass}");
+        Fit($"{JobType.EraseWithdrawnMailFolderMail.Name}:{this.UserId}:{this.AccountId}:{this.FolderAlias}:{this.Pass}"));
+
+    private static string Fit(string identity)
+    {
+        const int DigestLength = 32;
+
+        if (identity.Length <= JobIdempotencyKey.MaximumLength)
+        {
+            return identity;
+        }
+
+        var digest = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
+
+        return $"{identity[..(JobIdempotencyKey.MaximumLength - DigestLength - 1)]}~{digest[..DigestLength]}";
+    }
 }

@@ -112,6 +112,60 @@ public sealed class MirroredMailFolderEditorTests
         Assert.Equal(["created Archive", "declared ARCHIVE at Archive"], deployment.Log);
     }
 
+    /// <summary>
+    /// The name RFC 3501 reserves belongs to the one folder every account already has, and that rule is MailFathom's
+    /// own rather than whatever a source server would have answered.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_TheReservedNameAtTheTopOfTheHierarchy_IsRefusedAndReachesNoServer()
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment();
+
+        // Act
+        var outcome = await deployment.Editor.CreateAsync(Account, parentAlias: null, "inbox", role: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFolderActRefusal.InboxNameAtTopLevel, outcome.Refusal);
+        Assert.Empty(deployment.Log);
+    }
+
+    [Fact]
+    public async Task RenameAsync_ATopLevelFolderToTheReservedName_IsRefusedAndReachesNoServer()
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment();
+        deployment.Declares(MailFolderMapping.ToRemotePath(Projects, RemoteFolderPath.Create("Projects", '/')));
+        deployment.Declarations.Declared.Add(Projects);
+
+        // Act
+        var outcome = await deployment.Editor.RenameAsync(Account, Projects, "INBOX", TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFolderActRefusal.InboxNameAtTopLevel, outcome.Refusal);
+        Assert.Empty(deployment.Log);
+    }
+
+    /// <summary>
+    /// The window between the server acting and MailFathom writing it down is the one place a cancelled act would leave
+    /// the two sides disagreeing, so the declaration write is given a token that cannot be cancelled.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_TheServerHasAlreadyActed_WritesTheDeclarationWithoutTheCallersCancellation()
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment();
+        using var cancellation = new CancellationTokenSource();
+        deployment.CreatesAt("Projects");
+
+        // Act
+        await deployment.Editor.CreateAsync(Account, parentAlias: null, "Projects", role: null, cancellation.Token);
+
+        // Assert
+        Assert.All(deployment.Declarations.WriteTokens, token => Assert.False(token.CanBeCanceled));
+        Assert.NotEmpty(deployment.Declarations.WriteTokens);
+    }
+
     [Fact]
     public async Task CreateAsync_ARoleTheAccountAlreadyHasAFolderFor_IsRefusedAndReachesNoServer()
     {
@@ -467,6 +521,9 @@ public sealed class MirroredMailFolderEditorTests
     {
         internal HashSet<MailFolderAlias> Declared { get; } = [];
 
+        /// <summary>The token each write was given, which is how a test reads whether the write could have been cancelled.</summary>
+        internal List<CancellationToken> WriteTokens { get; } = [];
+
         public Task<IReadOnlySet<MailFolderAlias>> AliasesTheAccountDeclaresAsync(
             MailAccountId accountId,
             CancellationToken cancellationToken) =>
@@ -480,6 +537,7 @@ public sealed class MirroredMailFolderEditorTests
             CancellationToken cancellationToken)
         {
             log.Add($"declared {folderAlias.Value} at {path.Value}");
+            this.WriteTokens.Add(cancellationToken);
             this.Declared.Add(folderAlias);
 
             return Task.FromResult(MailFolderDeclarationOutcome.Committed);
@@ -492,6 +550,7 @@ public sealed class MirroredMailFolderEditorTests
             CancellationToken cancellationToken)
         {
             log.Add($"repointed {folderAlias.Value} at {path.Value}");
+            this.WriteTokens.Add(cancellationToken);
 
             return Task.FromResult(MailFolderDeclarationOutcome.Committed);
         }
@@ -502,6 +561,7 @@ public sealed class MirroredMailFolderEditorTests
             CancellationToken cancellationToken)
         {
             log.Add($"withdrew {folderAlias.Value}");
+            this.WriteTokens.Add(cancellationToken);
             this.Declared.Remove(folderAlias);
 
             return Task.FromResult(MailFolderDeclarationOutcome.Committed);

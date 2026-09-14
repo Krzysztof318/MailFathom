@@ -152,9 +152,9 @@ public sealed class MirroredMailFolderEditor
 
         var parentPath = requestedParent is { } parent ? PathOf(folders, parent) : null;
 
-        if (NamesSiblingOf(folders, parentPath, folderName, movingFolder: null))
+        if (RefusePlacement(folders, parentPath, folderName, movingFolder: null) is { } placementRefusal)
         {
-            return MailFolderActOutcome.Refused(MailFolderActRefusal.NameTaken);
+            return MailFolderActOutcome.Refused(placementRefusal);
         }
 
         var alias = UnusedAlias(folders, role, folderName);
@@ -173,7 +173,7 @@ public sealed class MirroredMailFolderEditor
                     this.transportPolicies.GetPolicy(account.Id),
                     cancellationToken);
 
-                return await this.declarations.DeclareAsync(account.Id, alias, created, role, cancellationToken);
+                return await this.declarations.DeclareAsync(account.Id, alias, created, role, CancellationToken.None);
             },
             () => new ManagedMailFolder(
                 alias.Value,
@@ -211,8 +211,8 @@ public sealed class MirroredMailFolderEditor
 
         var parentPath = ParentPathOf(acting.Folders, acting.Path);
 
-        return NamesSiblingOf(acting.Folders, parentPath, folderName, folderAlias)
-            ? MailFolderActOutcome.Refused(MailFolderActRefusal.NameTaken)
+        return RefusePlacement(acting.Folders, parentPath, folderName, folderAlias) is { } placementRefusal
+            ? MailFolderActOutcome.Refused(placementRefusal)
             : await this.CarryOutRenameAsync(
                 account,
                 acting,
@@ -261,8 +261,8 @@ public sealed class MirroredMailFolderEditor
             return MailFolderActOutcome.Refused(MailFolderActRefusal.NestedInItself);
         }
 
-        return NamesSiblingOf(acting.Folders, parentPath, folderName, folderAlias)
-            ? MailFolderActOutcome.Refused(MailFolderActRefusal.NameTaken)
+        return RefusePlacement(acting.Folders, parentPath, folderName, folderAlias) is { } placementRefusal
+            ? MailFolderActOutcome.Refused(placementRefusal)
             : await this.CarryOutRenameAsync(
                 account,
                 acting,
@@ -319,7 +319,7 @@ public sealed class MirroredMailFolderEditor
                         cancellationToken);
                 }
 
-                return await this.declarations.WithdrawAsync(account.Id, folderAlias, cancellationToken);
+                return await this.declarations.WithdrawAsync(account.Id, folderAlias, CancellationToken.None);
             },
             () => deleted,
             erasesStoredMail: disposition is AuthoredFolderDeleteDisposition.DeleteOnServer,
@@ -348,7 +348,7 @@ public sealed class MirroredMailFolderEditor
                     this.transportPolicies.GetPolicy(account.Id),
                     cancellationToken);
 
-                return await this.declarations.RepointAsync(account.Id, acting.Alias, moved, cancellationToken);
+                return await this.declarations.RepointAsync(account.Id, acting.Alias, moved, CancellationToken.None);
             },
             () => new ManagedMailFolder(acting.Alias.Value, parentAlias, folderName.Value, Role: null, []));
 
@@ -360,10 +360,12 @@ public sealed class MirroredMailFolderEditor
     /// the same continuation and only after the server has answered.
     /// </para>
     /// <para>
-    /// It takes no cancellation token, which is why the caller's is closed over by <paramref name="act" /> instead:
-    /// everything cancellable is inside that continuation, and what follows it must not be cancellable at all — the
-    /// window between the server acting and MailFathom writing it down is exactly where a cancelled act would leave the
-    /// two sides disagreeing.
+    /// It takes no cancellation token, which is why the caller's is closed over by <paramref name="act" /> instead: the
+    /// call to the server is the one cancellable step in an act, and everything after it — the declaration the
+    /// continuation writes, and the erasure and the signal that follow the continuation — runs regardless. The window
+    /// between the server acting and MailFathom writing it down is exactly where a cancelled act would leave the two
+    /// sides disagreeing, so every one of those steps is given <see cref="CancellationToken.None" /> rather than the
+    /// caller's.
     /// </para>
     /// </remarks>
     private async Task<MailFolderActOutcome> CarryOutAsync(
@@ -510,16 +512,29 @@ public sealed class MirroredMailFolderEditor
             ? folders.FirstOrDefault(folder => folder.RemotePath is { } candidate && candidate.Value == path.Value)?.Alias.Value
             : null;
 
-    private static bool NamesSiblingOf(
+    // The two rules a name has to satisfy wherever it is about to sit, which is the same pair LocalMailFolderTree
+    // applies to a held account: the name RFC 3501 reserves belongs to the one folder every account already has, and no
+    // two folders under one parent may name the same thing.
+    private static MailFolderActRefusal? RefusePlacement(
         IReadOnlyList<MailFolderMapping> folders,
         RemoteFolderPath? parentPath,
         LocalMailFolderName name,
-        MailFolderAlias? movingFolder) => folders.Any(folder =>
+        MailFolderAlias? movingFolder)
+    {
+        if (parentPath is null && name.IsReservedAtTopLevel)
+        {
+            return MailFolderActRefusal.InboxNameAtTopLevel;
+        }
+
+        return folders.Any(folder =>
             folder.Alias != movingFolder
             && folder.RemotePath is { } path
             && ParentPathOf(folders, path)?.Value == parentPath?.Value
             && LocalMailFolderName.TryCreate(path.ToHierarchyLevels()[^1], out var sibling)
-            && sibling.NamesSameFolderAs(name));
+            && sibling.NamesSameFolderAs(name))
+            ? MailFolderActRefusal.NameTaken
+            : null;
+    }
 
     private static bool IsWithin(RemoteFolderPath candidate, RemoteFolderPath ancestor) =>
         candidate.Value.Equals(ancestor.Value, StringComparison.Ordinal)

@@ -852,8 +852,10 @@ stored, and removing its mapping leaves the rows where they are, so that [editin
 file](../features/imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is) can never dispose of
 somebody's mail. That leaves an operator who means it with nothing to ask, and this is the ask. The mailbox's own user
 has one too, and it is theirs rather than yours: deleting a folder [through the
-client](client-endpoint.md#the-folder-management-routes) takes the mail stored from it, unless the account's
-`AuthoredFolderDeleteDisposition` says to mark the folder deleted instead.
+client](client-endpoint.md#the-folder-management-routes) can take the mail stored from it. On a mirrored account it
+does, unless the account's `AuthoredFolderDeleteDisposition` says to mark the folder deleted instead; on an account
+whose mailbox MailFathom holds that setting decides nothing, and a deletion moves the folder into the trash with its
+mail intact — only deleting one already in the trash erases it.
 
 ```console
 $ mfctl folder erase --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10 --folder archive
