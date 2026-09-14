@@ -106,7 +106,7 @@ public sealed class AttachmentDerivationSpendGate
                 consumed.DeploymentConsumedUnitCount,
                 deploymentCeiling);
 
-            if (strictestUser is null || (standing.IsExhausted && !strictestUser.IsExhausted))
+            if (strictestUser is null || IsStricter(standing, strictestUser))
             {
                 strictestUser = standing;
             }
@@ -240,6 +240,16 @@ public sealed class AttachmentDerivationSpendGate
             unitCount,
             cancellationToken);
     }
+
+    // Exhaustion first, because that is what decides whether the work proceeds at all, and the units still admitted
+    // second, so the standing handed back is the one the mailbox actually has rather than whichever assigned user the
+    // scan happened to read first. A period counting against no ceiling admits everything, so it is the loosest there
+    // is and never displaces one that counts.
+    private static bool IsStricter(AttachmentDerivationPeriod candidate, AttachmentDerivationPeriod standing) =>
+        candidate.IsExhausted != standing.IsExhausted
+            ? candidate.IsExhausted
+            : candidate.RemainingUnitCount is { } remaining
+                && (standing.RemainingUnitCount is not { } strictest || remaining < strictest);
 
     private DateTimeOffset CurrentPeriodStart() => this.budget.PeriodStartAt(this.timeProvider.GetUtcNow());
 

@@ -129,8 +129,8 @@ public sealed class ThreadStateDerivationPass
         // posture it is scanned under and every conversation in the batch belongs to the one account this pass walks.
         using var actingFor = this.egressGuard.ActingFor(account);
 
-        // Resolved once for the same reason and from the same fact: every conversation in this batch is one person's,
-        // and what they read is what every statement derived from it is written in.
+        // Resolved once for the same reason and from the same fact: every conversation in this batch is the one
+        // account's, and what that mailbox is read in is what every statement derived from it is written in.
         var language = this.accountLanguages.LanguageOf(account);
 
         var batch = await this.stateStore.GetThreadsAwaitingStateAsync(

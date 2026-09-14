@@ -233,10 +233,11 @@ public sealed class MailDraftBook
 
     /// <summary>Gives up one draft and takes the copies of it back out of the mailbox.</summary>
     /// <param name="draftId">The draft to give up.</param>
+    /// <param name="writtenBy">The user giving it up, who has to be the one the draft was written by.</param>
     /// <param name="cancellationToken">Cancels the write and the commands that follow it.</param>
     /// <returns>What settling the mailbox did, which is already durable by the time it is returned.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />.</exception>
-    /// <exception cref="MailDraftRefusedException">Thrown when no draft this deployment holds is still one to give up under that identifier.</exception>
+    /// <exception cref="MailDraftRefusedException">Thrown when no draft this deployment holds is still one for <paramref name="writtenBy" /> to give up under that identifier.</exception>
     /// <remarks>
     /// <para>
     /// <b>Only a draft this system created can be given up here.</b> The identifier names a record MailFathom wrote, and
@@ -254,14 +255,23 @@ public sealed class MailDraftBook
     /// and keeping no record of where it came from. What stops such a send is cancelling the send, and until it is
     /// delivered or cancelled the draft stands — which is the same answer revising a promoted draft already gives.
     /// </para>
+    /// <para>
+    /// <b>A draft somebody else wrote is refused as one nobody holds</b>, the same answer and for the same reason
+    /// revising one gives: ADR 0014 keeps a draft on its author rather than on the mailbox, so once two people are
+    /// assigned one account the account no longer says whose draft it is, and telling a foreign draft apart from an
+    /// absent one would let a caller learn which drafts exist by asking to give them up. The author is asked here
+    /// rather than left to whichever collaborator a caller was wired to.
+    /// </para>
     /// </remarks>
     public async Task<MailDraftFilingResult> DiscardAsync(
         MailDraftId draftId,
+        MailUserId writtenBy,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailDraftsWrite);
 
-        if (await this.drafts.FindAsync(draftId, cancellationToken) is not { PromotedTo: null } draft)
+        if (await this.drafts.FindAsync(draftId, cancellationToken) is not { PromotedTo: null } draft
+            || draft.User != writtenBy)
         {
             throw MailDraftRefusedException.NotFound();
         }

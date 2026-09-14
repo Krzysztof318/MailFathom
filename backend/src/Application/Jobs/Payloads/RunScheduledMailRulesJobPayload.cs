@@ -10,7 +10,7 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// <summary>Points one job at a whole account, and at nothing inside its mailbox.</summary>
 /// <remarks>
 /// <para>
-/// The account identifier is the deployment's own configured name for a mailbox, so the document carries nothing derived
+/// The account identifier is the one this deployment generated for a mailbox, so the document carries nothing derived
 /// from a message and nothing that could become one: there is no property here for a folder, an occurrence, or a
 /// subject. What the work reads about the mailbox it reads from committed local state.
 /// </para>
@@ -22,7 +22,7 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// <para>
 /// The properties are primitives rather than the domain value objects they came from, because this record is the stored
 /// document — one <c>jsonb</c> column an operator reads when they ask what a queued job is. Rebuilding the identity is
-/// <see cref="ToAccountIdentity" />, which validates both halves the way the domain types do.
+/// <see cref="ToAccountId" />, which validates it the way the domain type does.
 /// </para>
 /// </remarks>
 public sealed record RunScheduledMailRulesJobPayload : IJobPayload
@@ -42,14 +42,14 @@ public sealed record RunScheduledMailRulesJobPayload : IJobPayload
         AccountId = account.Value,
     };
 
-    /// <summary>Rebuilds the account identity this payload names.</summary>
-    /// <returns>The account identity.</returns>
-    /// <exception cref="ArgumentException">Thrown when the stored values no longer name a valid account identity.</exception>
+    /// <summary>Rebuilds the generated account identifier this payload names.</summary>
+    /// <returns>The account's generated identifier.</returns>
+    /// <exception cref="ArgumentException">Thrown when the stored value no longer names a valid account.</exception>
     /// <remarks>
     /// The identifier is a required property, so a document that carries none is refused by the deserializer before
     /// this is reached. What remains here is a value that is present and does not name an account, which this refuses
     /// for the reason every payload record refuses a component that no longer validates.
     /// </remarks>
-    public MailAccountId ToAccountIdentity() =>
+    public MailAccountId ToAccountId() =>
         MailAccountId.Create(this.AccountId);
 }

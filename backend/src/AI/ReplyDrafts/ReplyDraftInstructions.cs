@@ -43,8 +43,8 @@ internal static class ReplyDraftInstructions
         .GetValues<MailAccountLanguage>()
         .ToFrozenDictionary(static language => language, Compose);
 
-    /// <summary>Gets the instruction the agent is composed with for one person's language.</summary>
-    /// <param name="language">The language this deployment writes for the person the draft is for, which decides a draft answering no correspondence.</param>
+    /// <summary>Gets the instruction the agent is composed with for one mailbox's language.</summary>
+    /// <param name="language">The language the mailbox the draft is written from is read in, which decides a draft answering no correspondence.</param>
     /// <returns>The instruction text.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the value names no language this deployment writes in.</exception>
     internal static string TextFor(MailAccountLanguage language) => TextByLanguage.TryGetValue(language, out var text)

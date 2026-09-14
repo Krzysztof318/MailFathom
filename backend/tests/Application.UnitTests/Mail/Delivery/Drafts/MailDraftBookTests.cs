@@ -102,7 +102,7 @@ public sealed class MailDraftBookTests
         var draft = await SaveAsync(harness, "first version");
 
         // Act
-        var result = await harness.Book.DiscardAsync(draft.Id, CancellationToken.None);
+        var result = await harness.Book.DiscardAsync(draft.Id, SyntheticMailUser.Deployment, CancellationToken.None);
 
         // Assert
         Assert.Equal(MailDraftFilingOutcome.Discarded, result.Outcome);
@@ -256,7 +256,7 @@ public sealed class MailDraftBookTests
         var draft = await SaveAsync(harness, "first version");
 
         // Act
-        var result = await harness.Book.DiscardAsync(draft.Id, CancellationToken.None);
+        var result = await harness.Book.DiscardAsync(draft.Id, SyntheticMailUser.Deployment, CancellationToken.None);
 
         // Assert
         Assert.Equal(MailDraftFilingOutcome.Discarded, result.Outcome);
@@ -280,7 +280,7 @@ public sealed class MailDraftBookTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
-            () => harness.Book.DiscardAsync(foreign, CancellationToken.None));
+            () => harness.Book.DiscardAsync(foreign, SyntheticMailUser.Deployment, CancellationToken.None));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.MailDraftNotFound, refusal.ErrorCode);
@@ -317,7 +317,7 @@ public sealed class MailDraftBookTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
-            () => harness.Book.DiscardAsync(draft.Id, CancellationToken.None));
+            () => harness.Book.DiscardAsync(draft.Id, SyntheticMailUser.Deployment, CancellationToken.None));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.MailDraftNotFound, refusal.ErrorCode);
@@ -407,6 +407,35 @@ public sealed class MailDraftBookTests
         Assert.Equal(1, harness.Drafts.Peek(theirs.Id)!.Revision);
     }
 
+    /// <summary>A draft another assigned user wrote is not one this caller may give up, however the caller was wired.</summary>
+    /// <remarks>
+    /// Asked of the book rather than only of <see cref="UserMailDrafts" />, because a caller taking the book as its
+    /// own dependency would otherwise reach a draft it did not write on the drafting grant alone — which is what a
+    /// mailbox assigned to two people makes reachable.
+    /// </remarks>
+    [Fact]
+    public async Task DiscardAsync_ADraftAnotherUserOfTheSameAccountWrote_IsRefusedAndLeavesItStanding()
+    {
+        // Arrange
+        var harness = Harness();
+        harness.MapDraftsFolder(Account);
+        var theirs = await harness.Book.SaveAsync(
+            Account,
+            SyntheticMailUser.Another,
+            OutgoingEmailRequester.Command("mfctl-3c02"),
+            Composed("their draft"),
+            revises: null,
+            CancellationToken.None);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
+            () => harness.Book.DiscardAsync(theirs.Id, SyntheticMailUser.Deployment, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailDraftNotFound, refusal.ErrorCode);
+        Assert.False(harness.Drafts.Peek(theirs.Id)!.IsDiscarded);
+    }
+
     /// <summary>The sending grant does not carry the drafting one, because no permission here implies another.</summary>
     /// <remarks>
     /// The pair of refusals is what makes the two halves of authoring separable at all. A deployment that granted
@@ -446,6 +475,7 @@ public sealed class MailDraftBookTests
         // Act
         var refusal = () => harness.Book.DiscardAsync(
             MailDraftId.Create(Guid.CreateVersion7(Moment)),
+            SyntheticMailUser.Deployment,
             CancellationToken.None);
 
         // Assert

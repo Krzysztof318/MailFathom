@@ -161,7 +161,7 @@ public sealed class StoredMailRederivationHandler : IJobHandler
                 nameof(payload));
         }
 
-        StoredMailScope scope = new(named.ToAccountIdentity(), named.ToFolderAlias());
+        StoredMailScope scope = new(named.ToAccountId(), named.ToFolderAlias());
 
         if (await this.runStore.FindAsync(scope, cancellationToken) is not { IsOutstanding: true } run)
         {

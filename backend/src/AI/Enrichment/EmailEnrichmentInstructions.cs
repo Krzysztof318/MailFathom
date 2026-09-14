@@ -28,11 +28,13 @@ namespace MailFathom.AI.Enrichment;
 /// on.
 /// </para>
 /// <para>
-/// What the readings are written in is the reader's language rather than the message's. A derivation is produced for
-/// one person and nobody asked it a question, so there is no language in the request to answer in — before their record
-/// stated one, a mailbox carrying two languages produced a list that alternated between them. Quoted text is the one
-/// exception the instruction states, because a subject rendered into another language is no longer the subject
-/// somebody would find in their mail.
+/// What the readings are written in is the mailbox's language rather than the message's. A derivation is produced
+/// for a mailbox and nobody asked it a question, so there is no language in the request to answer in — before the
+/// account's record stated one, a mailbox carrying two languages produced a list that alternated between them. The
+/// mailbox's rather than a reader's because the reading is one row: a mailbox two people are assigned is enriched
+/// once, and both of them read the sentence that one derivation wrote. Quoted text is the one exception the
+/// instruction states, because a subject rendered into another language is no longer the subject somebody would find
+/// in their mail.
 /// </para>
 /// </remarks>
 internal static class EmailEnrichmentInstructions
@@ -43,7 +45,7 @@ internal static class EmailEnrichmentInstructions
         .GetValues<MailAccountLanguage>()
         .ToFrozenDictionary(static language => language, Compose);
 
-    /// <summary>Gets the instruction the agent is composed with for one user's language.</summary>
+    /// <summary>Gets the instruction the agent is composed with for one mailbox's language.</summary>
     /// <param name="language">The language this derivation's readings are written in.</param>
     /// <returns>The instruction text.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the value names no language this deployment writes in.</exception>

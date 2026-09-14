@@ -52,7 +52,7 @@ public sealed class SpamClassificationArrivalsTests
         Assert.Equal(JobType.ClassifyStoredEmailSpam, request.JobType);
         Assert.Equal(Account, request.Account);
         var payload = Assert.IsType<ClassifyStoredEmailSpamJobPayload>(request.Payload);
-        Assert.Equal(Account, payload.ToAccountIdentity());
+        Assert.Equal(Account, payload.ToAccountId());
         Assert.Equal(StoredEmail, payload.ToStoredEmailId());
         Assert.Null(request.AvailableAt);
     }

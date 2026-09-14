@@ -132,7 +132,6 @@ public sealed class UserMailDraftsTests
 
         return new UserMailDrafts(
             AssignedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Work)),
-            harness.Drafts,
             harness.Book,
             PromotionOver(harness, outgoingEmails ?? new InMemoryOutgoingEmailStore()),
             callerAuthorization);

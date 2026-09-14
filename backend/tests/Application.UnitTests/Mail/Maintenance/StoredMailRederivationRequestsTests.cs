@@ -59,7 +59,7 @@ public sealed class StoredMailRederivationRequestsTests
 
         var payload = Assert.IsType<RederiveStoredMailJobPayload>(request.Payload);
 
-        Assert.Equal(WholeAccount.Account, payload.ToAccountIdentity());
+        Assert.Equal(WholeAccount.Account, payload.ToAccountId());
         Assert.Null(payload.ToFolderAlias());
     }
 

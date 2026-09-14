@@ -1218,7 +1218,8 @@ belongs between an agent and a recipient.
 **[The client endpoint](../operations/client-endpoint.md#the-drafts-routes) reaches the same drafts as a person rather
 than as an agent**, under the same two grants and with the same meaning: composing, listing, opening, revising, giving
 up, and attaching are `mailfathom.mail.drafts.write`, and promoting one is `mailfathom.mail.send`. Every route there is
-scoped to the caller's own user, so a draft another user holds answers exactly as one nobody holds — and because a
+scoped to the caller's own user, as every draft tool on the MCP surface is, so a draft another user holds answers
+exactly as one nobody holds — and because a
 draft is a row, a stored message, and a copy in the user's folder rather than anything a client keeps, the one
 somebody started in the browser is the one the desktop shell opens and the one their phone's mail client shows.
 [The outbox routes](../operations/client-endpoint.md#the-outbox-routes) beside them are where that client watches what

@@ -180,11 +180,11 @@ public sealed class MailboxScopeResolver
             .WithJunkMail(junkMail, this.junkFolders.JunkFolders);
     }
 
-    /// <summary>Gets the user this unit of work is acting for, whose mail every scope resolved here narrows to.</summary>
+    /// <summary>Gets the user this unit of work is acting for, which is what decides the posture its content is scanned under.</summary>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user.</exception>
     /// <remarks>
-    /// Published here rather than read from the catalog by each use case, so the user a read narrows to and the user
-    /// its content is scanned under are one answer. It is the user the unit of work is acting for whatever scope was
+    /// Published here rather than read from the catalog by each use case, so the accounts a read narrows to and the
+    /// user its content is scanned under are resolved in one place. It is the user the unit of work is acting for whatever scope was
     /// resolved, which is why a use case reads it here rather than off the scope: no mail row carries a user, so a
     /// scope names accounts and nothing else, while whose posture a run's text is scanned under is still a question
     /// about the person in hand. It is also available before any scope is — what a use case needs, since a search

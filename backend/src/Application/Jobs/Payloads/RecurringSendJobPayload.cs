@@ -45,15 +45,15 @@ public sealed record RecurringSendJobPayload : IJobPayload
         DeclarationId = recurringSendId.Value,
     };
 
-    /// <summary>Rebuilds the account identity this payload names.</summary>
-    /// <returns>The account identity.</returns>
-    /// <exception cref="ArgumentException">Thrown when the stored values no longer name a valid account identity.</exception>
+    /// <summary>Rebuilds the generated account identifier this payload names.</summary>
+    /// <returns>The account's generated identifier.</returns>
+    /// <exception cref="ArgumentException">Thrown when the stored value no longer names a valid account.</exception>
     /// <remarks>
     /// The identifier is a required property, so a document that carries none is refused by the deserializer before
     /// this is reached. What remains here is a value that is present and does not name an account, which this refuses
     /// for the reason every payload record refuses a component that no longer validates.
     /// </remarks>
-    public MailAccountId ToAccountIdentity() =>
+    public MailAccountId ToAccountId() =>
         MailAccountId.Create(this.AccountId);
 
     /// <summary>Rebuilds the declaration identity this payload names.</summary>

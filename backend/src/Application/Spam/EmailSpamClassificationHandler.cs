@@ -84,7 +84,7 @@ public sealed class EmailSpamClassificationHandler : IJobHandler
                 nameof(payload));
         }
 
-        var account = email.ToAccountIdentity();
+        var account = email.ToAccountId();
         var classification = await this.ClassifyAsync(account, email.ToStoredEmailId(), cancellationToken);
 
         if (classification is not null)

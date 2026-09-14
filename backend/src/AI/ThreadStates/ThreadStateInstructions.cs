@@ -36,7 +36,7 @@ internal static class ThreadStateInstructions
         .GetValues<MailAccountLanguage>()
         .ToFrozenDictionary(static language => language, Compose);
 
-    /// <summary>Gets the instruction the agent is composed with for one user's language.</summary>
+    /// <summary>Gets the instruction the agent is composed with for one mailbox's language.</summary>
     /// <param name="language">The language this derivation's statements are written in.</param>
     /// <returns>The instruction text.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the value names no language this deployment writes in.</exception>

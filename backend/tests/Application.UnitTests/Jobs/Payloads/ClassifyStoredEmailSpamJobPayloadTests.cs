@@ -26,7 +26,7 @@ public sealed class ClassifyStoredEmailSpamJobPayloadTests
         var payload = ClassifyStoredEmailSpamJobPayload.For(Account, Email);
 
         // Assert
-        Assert.Equal(Account, payload.ToAccountIdentity());
+        Assert.Equal(Account, payload.ToAccountId());
         Assert.Equal(Email, payload.ToStoredEmailId());
     }
 

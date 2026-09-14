@@ -25,7 +25,7 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// <para>
 /// The properties are primitives rather than the domain value objects they came from, because this record is the stored
 /// document: it is serialized into one <c>jsonb</c> column and read by an operator looking at a queue. Rebuilding them
-/// is <see cref="ToAccountIdentity" /> for the account and <see cref="ToOccurrenceId" /> for the occurrence,
+/// is <see cref="ToAccountId" /> for the account and <see cref="ToOccurrenceId" /> for the occurrence,
 /// which between them validate every component the way the domain types do.
 /// </para>
 /// </remarks>
@@ -68,15 +68,15 @@ public sealed record ClassifyEmailSpamJobPayload : IJobPayload
         };
     }
 
-    /// <summary>Rebuilds the account identity this payload names.</summary>
-    /// <returns>The account identity.</returns>
-    /// <exception cref="ArgumentException">Thrown when the stored values no longer name a valid account identity.</exception>
+    /// <summary>Rebuilds the generated account identifier this payload names.</summary>
+    /// <returns>The account's generated identifier.</returns>
+    /// <exception cref="ArgumentException">Thrown when the stored value no longer names a valid account.</exception>
     /// <remarks>
     /// The identifier is a required property, so a document that carries none is refused by the deserializer before
     /// this is reached. What remains here is a value that is present and does not name an account, which this refuses
     /// for the reason every payload record refuses a component that no longer validates.
     /// </remarks>
-    public MailAccountId ToAccountIdentity() =>
+    public MailAccountId ToAccountId() =>
         MailAccountId.Create(this.AccountId);
 
     /// <summary>Rebuilds the occurrence identity this payload names.</summary>

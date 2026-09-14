@@ -107,11 +107,11 @@ public sealed class StoredEmailEmbeddingGenerator
     /// </exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels or the host is shutting down. Committed vectors stay durable.</exception>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when no message is stored under <paramref name="storedEmailId" />, so the user whose spend this turn
+    /// Thrown when no message is stored under <paramref name="storedEmailId" />, so the mailbox whose spend this turn
     /// would be charged against cannot be established. The caller holds an identifier it read from this deployment, so
     /// what this reports is a message erased underneath the turn rather than an argument a caller can correct. The
     /// ordinary form of that race does not reach it: a message already gone has nothing outstanding, which ends the
-    /// turn as whole before a user is ever asked for, and only one erased between that answer and the ownership
+    /// turn as whole before a mailbox is ever asked for, and only one erased between that answer and the account
     /// lookup behind it arrives here.
     /// </exception>
     /// <remarks>

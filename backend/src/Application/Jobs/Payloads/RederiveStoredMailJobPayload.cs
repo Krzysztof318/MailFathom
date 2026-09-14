@@ -11,8 +11,8 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// <summary>Points one job at the stored mail of an account, or of one folder of it, and at nothing inside a message.</summary>
 /// <remarks>
 /// <para>
-/// Every property is one of MailFathom's own identifiers: the deployment's
-/// configured name for that mailbox within them, and its own name for a folder of it. The document therefore carries
+/// Every property is one of MailFathom's own identifiers: the identifier this deployment generated for the mailbox,
+/// and its own name for a folder of it. The document therefore carries
 /// nothing derived from a message and has no property one could be put in, and what the work reads about that mail it
 /// reads from committed local state.
 /// </para>
@@ -24,7 +24,7 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// <para>
 /// The properties are primitives rather than the domain value objects they came from, because this record is the stored
 /// document — one <c>jsonb</c> column an operator reads when they ask what a queued job is. Rebuilding the identities is
-/// <see cref="ToAccountIdentity" /> and <see cref="ToFolderAlias" />, which validate them the way the domain types do.
+/// <see cref="ToAccountId" /> and <see cref="ToFolderAlias" />, which validate them the way the domain types do.
 /// </para>
 /// </remarks>
 public sealed record RederiveStoredMailJobPayload : IJobPayload
@@ -49,15 +49,15 @@ public sealed record RederiveStoredMailJobPayload : IJobPayload
         FolderAlias = folderAlias?.Value,
     };
 
-    /// <summary>Rebuilds the account identity this payload names.</summary>
-    /// <returns>The account identity.</returns>
-    /// <exception cref="ArgumentException">Thrown when the stored values no longer name a valid account identity.</exception>
+    /// <summary>Rebuilds the generated account identifier this payload names.</summary>
+    /// <returns>The account's generated identifier.</returns>
+    /// <exception cref="ArgumentException">Thrown when the stored value no longer names a valid account.</exception>
     /// <remarks>
     /// The identifier is a required property, so a document that carries none is refused by the deserializer before
     /// this is reached. What remains here is a value that is present and does not name an account, which this refuses
     /// for the reason every payload record refuses a component that no longer validates.
     /// </remarks>
-    public MailAccountId ToAccountIdentity() =>
+    public MailAccountId ToAccountId() =>
         MailAccountId.Create(this.AccountId);
 
     /// <summary>Rebuilds the folder alias this payload names, which is absent for a whole-account scope.</summary>

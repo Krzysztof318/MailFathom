@@ -26,7 +26,7 @@ internal static class ThreadStateAgentComposition
     /// <summary>Composes the thread-state agent over a chat client.</summary>
     /// <param name="chatClient">The client the one call is made through.</param>
     /// <param name="plan">The generation parameters this deployment configured.</param>
-    /// <param name="language">The language the person this derivation is for reads, which its statements are written in.</param>
+    /// <param name="language">The language the mailbox this derivation is of is read in, which its statements are written in.</param>
     /// <param name="instructionEnvelope">The preamble and postamble every agent here carries.</param>
     /// <param name="loggerFactory">The factory the agent logs through.</param>
     /// <returns>The composed agent.</returns>

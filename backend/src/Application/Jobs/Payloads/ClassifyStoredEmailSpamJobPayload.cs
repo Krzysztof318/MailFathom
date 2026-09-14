@@ -49,10 +49,10 @@ public sealed record ClassifyStoredEmailSpamJobPayload : IJobPayload
         EmailRecordId = email.Value,
     };
 
-    /// <summary>Rebuilds the account identity this payload names.</summary>
-    /// <returns>The account identity.</returns>
-    /// <exception cref="ArgumentException">Thrown when the stored values no longer name a valid account identity.</exception>
-    public MailAccountId ToAccountIdentity() =>
+    /// <summary>Rebuilds the generated account identifier this payload names.</summary>
+    /// <returns>The account's generated identifier.</returns>
+    /// <exception cref="ArgumentException">Thrown when the stored value no longer names a valid account.</exception>
+    public MailAccountId ToAccountId() =>
         MailAccountId.Create(this.AccountId);
 
     /// <summary>Rebuilds the stored identity this payload names.</summary>

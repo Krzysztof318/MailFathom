@@ -232,8 +232,15 @@ public sealed class EmbeddingSpendGate
             cancellationToken);
     }
 
+    // Exhaustion first, because that is what decides whether the work proceeds at all, and the characters still
+    // admitted second, so the standing handed back is the one the mailbox actually has rather than whichever assigned
+    // user the scan happened to read first. A period counting against no ceiling admits everything, so it is the
+    // loosest there is and never displaces one that counts.
     private static bool IsStricter(EmbeddingSpendPeriod candidate, EmbeddingSpendPeriod standing) =>
-        candidate.IsExhausted && !standing.IsExhausted;
+        candidate.IsExhausted != standing.IsExhausted
+            ? candidate.IsExhausted
+            : candidate.RemainingInputCharacterCount is { } remaining
+                && (standing.RemainingInputCharacterCount is not { } strictest || remaining < strictest);
 
     private DateTimeOffset CurrentPeriodStart() => this.budget.PeriodStartAt(this.timeProvider.GetUtcNow());
 

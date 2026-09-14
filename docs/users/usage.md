@@ -410,6 +410,11 @@ from the stored message exactly as `reply_to_email` and `forward_email` read the
 is for, so no recipient is required; `send_draft` is where the absence is refused, and the remedy is `update_draft`
 rather than saving again.
 
+**A draft belongs to whoever wrote it, not to the mailbox.** All four tools are scoped to the user the call is acting
+for, so on a mailbox two people are assigned, a draft the other person wrote answers exactly as a draft that never
+existed: `update_draft`, `delete_draft`, and `send_draft` each refuse it that way rather than saying it is somebody
+else's.
+
 **These are the only calls here that wait on your mail server**, and for one round trip: the draft is written down
 first and the copy is then put into your Drafts folder, or taken back out of it, while whoever asked is still there.
 So a saved draft comes back saying `filed` when your folder shows it and `held` when it does not — because the server

@@ -135,8 +135,7 @@ internal sealed class DraftedMailDeployment
         this.OutgoingEmails = new InMemoryOutgoingEmailStore(timeProvider: this.clock);
         this.SaveTool = new SaveDraftTool(writing);
         this.UpdateTool = new UpdateDraftTool(writing);
-        this.DeleteTool = new DeleteDraftTool(book);
-        this.SendTool = new SendDraftTool(new MailDraftPromotion(
+        var promotion = new MailDraftPromotion(
             this.Drafts,
             this.contents,
             new MailOutbox(
@@ -154,7 +153,18 @@ internal sealed class DraftedMailDeployment
             commitPolicy,
             Bounds,
             AuthoredSendGovernors.Permitting(authorization),
-            authorization));
+            authorization);
+
+        // Both acts go through the user-scoped door the client surface uses, because that is what hands the book and
+        // the promotion the user a draft is judged against.
+        var userDrafts = new UserMailDrafts(
+            new StubMailAccountCatalog(ServedAccount),
+            book,
+            promotion,
+            authorization);
+
+        this.DeleteTool = new DeleteDraftTool(userDrafts);
+        this.SendTool = new SendDraftTool(userDrafts);
     }
 
     /// <summary>Gets what has been written down about every draft, which is what a tool's answer is read against.</summary>

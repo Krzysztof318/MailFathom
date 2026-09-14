@@ -187,11 +187,18 @@ public sealed class MailReplyDrafting
 
     /// <summary>Finds the mailbox a draft is written from, which is what decides the language it comes out in.</summary>
     /// <remarks>
+    /// <para>
     /// The answered message's account where there is one, because that is the mailbox the reply will leave from and
     /// the one whose correspondent is being answered. A composer answering nothing names no message and so no
     /// mailbox, and takes the first this caller is assigned — deterministic rather than arbitrary, the order the
-    /// scope is resolved in being fixed. A caller assigned none is answered with the unset identity, which the port
+    /// catalog answers in being fixed. A caller assigned none is answered with the unset identity, which the port
     /// reads as an account this deployment does not serve and therefore as English.
+    /// </para>
+    /// <para>
+    /// The assignment listing rather than a resolved scope, because the whole of what is wanted here is one account
+    /// identifier: resolving a scope would walk every assigned account's folders, order them, and fold the junk
+    /// mapping in, and then have all of it discarded but the first identifier.
+    /// </para>
     /// </remarks>
     private MailAccountId WrittenFrom(ReplyDraftSources sources)
     {
@@ -200,9 +207,7 @@ public sealed class MailReplyDrafting
             return answered;
         }
 
-        return this.scopeResolver.ReadableScope([], [], JunkMailInclusion.Included).AccountIds is [var first, ..]
-            ? first
-            : default;
+        return this.scopeResolver.AssignedAccounts is [var first, ..] ? first : default;
     }
 
     /// <summary>Reads the conversation one drafting answers, or nothing where this user holds no such message.</summary>
