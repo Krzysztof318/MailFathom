@@ -8,6 +8,7 @@ using System.Xml.Linq;
 using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Search.Phrasing;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
@@ -838,7 +839,7 @@ public sealed class HostCompositionTests
         var screen = provider.GetRequiredService<SensitiveContentEgressScreen>();
 
         // Assert
-        Assert.Equal(expected, screen.IsActiveFor(SyntheticMailUser.Deployment));
+        Assert.Equal(expected, screen.IsActiveFor(MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"))));
     }
 
     /// <summary>

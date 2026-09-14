@@ -248,7 +248,7 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
 
         var postures = Substitute.For<ISensitiveContentPostures>();
         var scanned = true;
-        postures.RunsForAnyUser(SensitiveContentScannerKind.Pii).Returns(_ => scanned);
+        postures.RunsForAnyAccount(SensitiveContentScannerKind.Pii).Returns(_ => scanned);
 
         var check = new PersonalDataAnalyzerHealthCheck(
             probe,
@@ -318,11 +318,11 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
         return new PersonalDataAnalyzerHealthCheck(probe, ScanningForPersonalData(), logger);
     }
 
-    /// <summary>The postures of a deployment where at least one user's mail is scanned for personal data.</summary>
+    /// <summary>The postures of a deployment where at least one account's mail is scanned for personal data.</summary>
     private static ISensitiveContentPostures ScanningForPersonalData()
     {
         var postures = Substitute.For<ISensitiveContentPostures>();
-        postures.RunsForAnyUser(SensitiveContentScannerKind.Pii).Returns(true);
+        postures.RunsForAnyAccount(SensitiveContentScannerKind.Pii).Returns(true);
 
         return postures;
     }

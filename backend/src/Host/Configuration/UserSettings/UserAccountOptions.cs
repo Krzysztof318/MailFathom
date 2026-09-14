@@ -4,11 +4,10 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Mail;
-using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.Configuration.SensitiveContent;
-using MailFathom.Host.Configuration.Spam;
 
 namespace MailFathom.Host.Configuration.UserSettings;
 
@@ -21,15 +20,15 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// an entry here rather than a row to the table.
 /// </para>
 /// <para>
-/// What belongs in it is whatever is that user's own rather than the deployment's. Today that is the language this
-/// deployment writes for them in, their mail-account
-/// declarations, how their own mail is classified as spam, and what they ask to have it scanned for; the mail rules and
-/// the trusted senders join them as each moves out of the deployment's section, and each arrives as a property here
-/// rather than as a second document. What never belongs in it is a value the deployment set: there is no user
-/// configuration layer, so nothing here shadows a deployment setting, and a property that would need to is a deployment
-/// setting somebody put in the wrong document. The scanning block is the worked example of the difference — it can
-/// switch a scanner on for this user's mail and can neither switch off what the deployment requires nor move the
-/// analyzer the deployment stood up.
+/// What belongs in it is whatever is that person's own rather than the deployment's or a mailbox's. Today that is the
+/// language this deployment writes for them in, the stored file they are drawn by, and which of the two mail-serving
+/// endpoints they are served on; the mail rules and the trusted senders join them as each moves out of the deployment's
+/// section, and each arrives as a property here rather than as a second document. What never belongs in it is a value
+/// the deployment set: there is no user configuration layer, so nothing here shadows a deployment setting, and a
+/// property that would need to is a deployment setting somebody put in the wrong document. What also never belongs in
+/// it is a setting of a mailbox — how mail is classified as spam, what it is scanned for, which folders are mirrored —
+/// because the mail is one copy and two people assigned one mailbox must not configure it apart; those are the account
+/// record's, and a record naming one of them is refused as a property nothing binds.
 /// </para>
 /// <para>
 /// The envelope is not repeated here. The user's identifier, the label they are told apart by, the version, and the
@@ -71,23 +70,6 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// without borrowing the word the deployment's own mail section carries.
     /// </remarks>
     public List<MailSynchronizationAccountOptions> MailAccounts { get; set; } = [];
-
-    /// <summary>Gets or sets how this user's mail is classified as spam and what becomes of their junk.</summary>
-    /// <remarks>
-    /// Always present so that a record stating none of its keys still binds, and off in every switch, which is what
-    /// makes classification something this user asked for rather than something a deployment did to their mailbox. It
-    /// holds only the decisions that are about their own mail: the engine and what it costs stay the deployment's, and
-    /// no key here shadows one of theirs.
-    /// </remarks>
-    public UserSpamClassificationOptions SpamClassification { get; set; } = new();
-
-    /// <summary>Gets what this user asks to have their own mail scanned for, within what the deployment provides.</summary>
-    /// <remarks>
-    /// A record that says nothing here reads the deployment's own posture, which is what every user read before this
-    /// block existed. What it may say is judged against the deployment rather than on its own, so the rule lives beside
-    /// that section rather than in this type — <see cref="FindSensitiveContentErrors" /> is where it is asked.
-    /// </remarks>
-    public UserSensitiveContentOptions SensitiveContent { get; } = new();
 
     /// <summary>Gets or sets the stored file this user is drawn by, or <see langword="null" /> for none.</summary>
     /// <remarks>
@@ -131,16 +113,10 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// among them is the one that cannot be: <see cref="FindSynchronizationWindowErrors" /> asks a question about the
     /// current date, so it is supplied a clock by whoever runs it.
     /// </para>
-    /// <para>
-    /// The classification block is judged against this record's own mailboxes and against nothing else, which is what
-    /// makes a scanned folder or a junk destination resolve within the user's accounts: a name only somebody else's
-    /// account carries is refused here exactly as one nobody carries.
-    /// </para>
     /// </remarks>
     internal IEnumerable<ValidationResult> FindRefusals() =>
         this.FindUnwritableLanguageError()
-            .Concat(UserMailAccountRules.FindRefusals(this.MailAccounts, nameof(this.MailAccounts)))
-            .Concat(this.SpamClassification.FindRefusals(DeclaredMailAccounts.ReadFrom(this.MailAccounts)));
+            .Concat(UserMailAccountRules.FindRefusals(this.MailAccounts, nameof(this.MailAccounts)));
 
     /// <summary>Finds every declared earliest received date that could not mean anything on the supplied date.</summary>
     /// <param name="today">The current date the declared bounds are read against.</param>
@@ -153,18 +129,20 @@ internal sealed class UserAccountOptions : IValidatableObject
     internal IEnumerable<ValidationResult> FindSynchronizationWindowErrors(DateOnly today) =>
         UserMailAccountRules.FindSynchronizationWindowErrors(this.MailAccounts, today);
 
-    /// <summary>Finds everything about the scanning block this deployment could not serve.</summary>
-    /// <param name="deployment">The deployment's own <c>SensitiveContent</c> section, which a user may only tighten.</param>
-    /// <returns>One result per refusal, empty when the block is one this deployment can serve.</returns>
+    /// <summary>Finds everything about this record's scanning blocks that this deployment could not serve.</summary>
+    /// <param name="deployment">The deployment's own <c>SensitiveContent</c> section, which an account may only tighten.</param>
+    /// <returns>One result per refusal, empty when every block is one this deployment can serve.</returns>
     /// <remarks>
     /// Asked by whoever supplies the deployment's section, for the reason the synchronization window is asked that way:
     /// the answer depends on something outside the record, and a record judged by every rule but this one would accept
-    /// a posture the composition could not honour.
+    /// a posture the composition could not honour. One block per account rather than one for the record, because the
+    /// mail each is about is the account's, and the refusal names the account's position so that whoever wrote it knows
+    /// which mailbox the operator's switch was being asked about.
     /// </remarks>
     internal IEnumerable<ValidationResult> FindSensitiveContentErrors(SensitiveContentOptions deployment) =>
-        UserSensitiveContentRules
-            .FindRefusals(this.SensitiveContent, deployment, UserSensitiveContentOptions.BlockName)
-            .Select(refusal => new ValidationResult(refusal, [nameof(this.SensitiveContent)]));
+        this.MailAccounts.Index().SelectMany(entry => entry.Item.FindSensitiveContentErrors(
+            deployment,
+            $"{nameof(this.MailAccounts)}:{entry.Index.ToString(CultureInfo.InvariantCulture)}:{MailAccountSensitiveContentOptions.BlockName}"));
 
     /// <summary>Finds the refusal for a record stating a language this build does not write in.</summary>
     /// <returns>One result where <see cref="Language" /> names something no member does, empty where it names a member or nothing at all.</returns>

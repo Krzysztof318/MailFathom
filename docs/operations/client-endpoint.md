@@ -1931,10 +1931,11 @@ the same rules a configuration file is, composed with every account assigned to 
 mail-synchronization validators a start applies —
 including the walk that resolves every credential the record names. A save of the record itself never touches an
 account, so a reference that stopped resolving in one of this user's accounts is reported beside the commit rather than
-refusing it, and is worth clearing before the next restart, which refuses a record carrying it. What the record asks about [scanning this
-user's mail](configuration-sources.md#what-a-user-may-say-about-scanning-their-own-mail) is judged here too: a user
-may switch a scanner on for their own mail and never off, and asking for the personal-data scanner where the deployment
-stood no analyzer up is refused at the write rather than left to fail closed on the next message. A refusal names what
+refusing it, and is worth clearing before the next restart, which refuses a record carrying it. What each composed
+account asks about [scanning the mail in it](configuration-mail.md#scanning-this-accounts-mail--sensitivecontent) is
+judged here too: an account may switch a scanner on for its own mail and never off, and asking for the personal-data
+scanner where the deployment stood no analyzer up is refused at the write rather than left to fail closed on the next
+message. A refusal names what
 to correct — for a scanning one, the deployment setting behind it — and carries nothing that was supplied as a secret. A record another writer moved on in the meantime — the user from a second
 device, or an administrator — is refused as superseded rather than overwritten, so the client re-reads and composes the
 change again.

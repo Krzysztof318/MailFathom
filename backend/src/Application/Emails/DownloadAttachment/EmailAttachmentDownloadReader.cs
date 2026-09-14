@@ -12,6 +12,7 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 
@@ -61,7 +62,8 @@ namespace MailFathom.Application.Emails.DownloadAttachment;
 /// </para>
 /// <para>
 /// <b>What decides whether the screen runs at all is <c>SensitiveContent:ScreenOutgoingMailFor</c></b>, the same key
-/// that decides whether a send is screened, read through the user's posture before an attachment is opened. So the
+/// that decides whether a send is screened, read through the posture of the account the mail is in before an
+/// attachment is opened. So the
 /// asymmetry this closes is closed exactly where that key names a scanner: a deployment that wrote an empty list keeps
 /// its scanners redacting every read and serves every attachment whole, which is a deliberate configuration rather
 /// than a gap here — but it is the same shape as the one above, and an operator writing that list is deciding about
@@ -233,16 +235,16 @@ public sealed class EmailAttachmentDownloadReader
         }
 
         return opened.Attachment is { } attachment
-            ? await this.ScreenedAsync(attachment, cancellationToken)
+            ? await this.ScreenedAsync(summary.Account, attachment, cancellationToken)
             : AttachmentDownloadOutcome.NothingToServe();
     }
 
     /// <summary>Reads the opened attachment's text and answers whether this deployment will serve it.</summary>
     /// <remarks>
     /// <para>
-    /// The screen is asked whether it is active for this user before anything is read, exactly as the outgoing screen
-    /// asks before a message is parsed: a deployment that screens nothing pays no document read, no allocation, and no
-    /// scan for a download, and one user's added category costs the user beside them nothing.
+    /// The screen is asked whether it is active for the account the mail is in before anything is read, exactly as the
+    /// outgoing screen asks before a message is parsed: a deployment that screens nothing pays no document read, no
+    /// allocation, and no scan for a download, and one mailbox's added category costs the mailbox beside it nothing.
     /// </para>
     /// <para>
     /// An attachment nothing recognized as a document is served unchanged, because no text scanner ever undertook to
@@ -259,10 +261,11 @@ public sealed class EmailAttachmentDownloadReader
     /// </para>
     /// </remarks>
     private async Task<AttachmentDownloadOutcome> ScreenedAsync(
+        MailAccountIdentity account,
         IOpenedEmailAttachment attachment,
         CancellationToken cancellationToken)
     {
-        if (!this.screen.IsActiveFor(this.scopeResolver.User))
+        if (!this.screen.IsActiveFor(account))
         {
             return AttachmentDownloadOutcome.Served(attachment);
         }
@@ -287,7 +290,7 @@ public sealed class EmailAttachmentDownloadReader
                 ? null
                 : await this.screen.ScreenAsync(
                     SensitiveContentEgressPoint.AttachmentDownload,
-                    this.scopeResolver.User,
+                    account,
                     [read.Text],
                     cancellationToken);
 

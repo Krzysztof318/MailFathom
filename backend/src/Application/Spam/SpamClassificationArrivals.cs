@@ -51,7 +51,7 @@ public sealed class SpamClassificationArrivals
 
     /// <summary>Initializes the trigger over the queue it writes to and the settings that decide whether it does.</summary>
     /// <param name="jobs">The durable queue one classification is enqueued into.</param>
-    /// <param name="settingsReader">Answers whether the occurrence's user classifies and which folders they cover.</param>
+    /// <param name="settingsReader">Answers whether the occurrence's account is classified and which of its folders are covered.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public SpamClassificationArrivals(IJobStore jobs, ISpamClassificationSettingsReader settingsReader)
     {
@@ -82,7 +82,7 @@ public sealed class SpamClassificationArrivals
     {
         ArgumentNullException.ThrowIfNull(occurrenceId);
 
-        var settings = this.settingsReader.SettingsFor(user);
+        var settings = this.settingsReader.SettingsFor(occurrenceId.AccountId);
 
         if (!settings.IsEnabled || !settings.Covers(occurrenceId.FolderResolutionId.Alias))
         {

@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Administration;
+using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.UserSettings.Administration;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Users;
@@ -766,6 +767,46 @@ public sealed class MailAccountAdministrationTests
         // Assert
         Assert.True(outcome!.IsCommitted);
         Assert.Contains("already carried this before the change", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The write route is where a mailbox's own record actually arrives, and it is the one path a narrowing has to be
+    /// refused on: a record already held is composed to the stricter answer instead, so nothing downstream would
+    /// report this. A declaration switching off a scanner the deployment requires is refused here, naming the
+    /// deployment setting it would narrow rather than quoting anything out of the record.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_ADeclarationSwitchingOffAScannerTheDeploymentRequires_IsRefused()
+    {
+        // Arrange
+        var scanning = new SensitiveContentOptions();
+        scanning.Secrets.Enabled = true;
+
+        var work = Mailbox("work@example.test", "work");
+        var deployment = new UserRecordDeployment(
+            [MailFathomPermission.AdminConfigurationWrite],
+            scanning: scanning);
+        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+
+        // Act
+        var outcome = await deployment.MailAccounts.SaveAsync(
+            work.Id,
+            MailAccountDeclaration.Of(work).Replace(
+                "\"Host\"",
+                "\"SensitiveContent\": { \"Secrets\": { \"Enabled\": false } },\n  \"Host\"",
+                StringComparison.Ordinal),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains(
+            "SensitiveContent:Secrets:Enabled",
+            Assert.Single(outcome.Messages),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            deployment.MailAccountRecords.Accounts,
+            account => account.Document.Contains("SensitiveContent", StringComparison.Ordinal));
     }
 
     /// <summary>

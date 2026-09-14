@@ -7,7 +7,7 @@ using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -33,6 +33,10 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
 /// </remarks>
 public sealed class StoredEmailStaleDerivedDataSelectionTests : IDisposable
 {
+    private static readonly MailAccountId ScannedAccount = MailAccountId.Create("work");
+
+    private static readonly MailAccountId UnservedAccount = MailAccountId.Create("archive");
+
     private static readonly DateTimeOffset Now = new(2026, 9, 7, 10, 0, 0, TimeSpan.Zero);
 
     private static readonly SensitiveContentDerivationStamp CurrentStamp =
@@ -52,7 +56,7 @@ public sealed class StoredEmailStaleDerivedDataSelectionTests : IDisposable
     public void StaleOrReadUnderAnOlderPostureFor_AMessageWhoseAttachmentAloneIsStale_SelectsIt()
     {
         // Arrange
-        var email = Email(SyntheticMailUser.Deployment, CurrentStamp);
+        var email = Email(ScannedAccount, CurrentStamp);
         AddReading(email, OlderStamp, position: 0);
 
         // Act
@@ -67,7 +71,7 @@ public sealed class StoredEmailStaleDerivedDataSelectionTests : IDisposable
     public void StaleOrReadUnderAnOlderPostureFor_AnAttachmentReadBeforeAnyScannerWasOn_SelectsIt()
     {
         // Arrange
-        var email = Email(SyntheticMailUser.Deployment, CurrentStamp);
+        var email = Email(ScannedAccount, CurrentStamp);
         AddReading(email, stamp: null, position: 0);
 
         // Act
@@ -82,7 +86,7 @@ public sealed class StoredEmailStaleDerivedDataSelectionTests : IDisposable
     public void StaleOrReadUnderAnOlderPostureFor_AMessageAndItsAttachmentsBothCurrent_LeavesItOut()
     {
         // Arrange
-        var email = Email(SyntheticMailUser.Deployment, CurrentStamp);
+        var email = Email(ScannedAccount, CurrentStamp);
         AddReading(email, CurrentStamp, position: 0);
         AddReading(email, CurrentStamp, position: 1);
 
@@ -94,14 +98,14 @@ public sealed class StoredEmailStaleDerivedDataSelectionTests : IDisposable
     }
 
     /// <summary>
-    /// One branch per user rather than a body set unioned with an attachment set: a message stale on both counts would
+    /// One branch per account rather than a body set unioned with an attachment set: a message stale on both counts would
     /// otherwise arrive in the same batch twice, be read twice, and have the position committed past itself.
     /// </summary>
     [Fact]
     public void StaleOrReadUnderAnOlderPostureFor_AMessageStaleOnBothCounts_SelectsItOnce()
     {
         // Arrange
-        var email = Email(SyntheticMailUser.Deployment, OlderStamp);
+        var email = Email(ScannedAccount, OlderStamp);
         AddReading(email, OlderStamp, position: 0);
         AddReading(email, OlderStamp, position: 1);
 
@@ -112,12 +116,12 @@ public sealed class StoredEmailStaleDerivedDataSelectionTests : IDisposable
         Assert.Single(selected);
     }
 
-    /// <summary>Mail still stored for somebody the roster no longer names is judged by the deployment's own posture.</summary>
+    /// <summary>Mail still stored for a mailbox the roster no longer names is judged by the deployment's own posture.</summary>
     [Fact]
-    public void StaleOrReadUnderAnOlderPostureFor_AnUnrosteredUsersStaleAttachment_SelectsIt()
+    public void StaleOrReadUnderAnOlderPostureFor_AnUnservedAccountsStaleAttachment_SelectsIt()
     {
         // Arrange
-        var email = Email(SyntheticMailUser.Another, CurrentStamp);
+        var email = Email(UnservedAccount, CurrentStamp);
         AddReading(email, OlderStamp, position: 0);
 
         // Act
@@ -132,7 +136,7 @@ public sealed class StoredEmailStaleDerivedDataSelectionTests : IDisposable
     public void StaleReadingsFor_AMessageWhoseAttachmentsWereReadUnderSeveralPostures_CountsOnlyTheOnesThatAreStale()
     {
         // Arrange
-        var email = Email(SyntheticMailUser.Deployment, CurrentStamp);
+        var email = Email(ScannedAccount, CurrentStamp);
         AddReading(email, OlderStamp, position: 0);
         AddReading(email, stamp: null, position: 1);
         AddReading(email, CurrentStamp, position: 2);
@@ -140,39 +144,67 @@ public sealed class StoredEmailStaleDerivedDataSelectionTests : IDisposable
         // Act
         var stale = StoredEmailExtractionBackfillStore.StaleReadingsFor(
             new[] { email }.AsQueryable(),
-            this.PosturesScanning(),
+            [this.PostureOf(ScannedAccount, CurrentStamp)],
             CurrentStamp);
 
         // Assert
         Assert.Equal([0, 1], stale.Select(reading => reading.AttachmentPosition).Order());
     }
 
-    /// <summary>A user whose mail nothing scans has no stamp to be stale against, so their readings are never counted.</summary>
+    /// <summary>An account whose mail nothing scans has no stamp to be stale against, so its readings are never counted.</summary>
     [Fact]
-    public void StaleReadingsFor_ADeploymentThatScansNobody_CountsNothing()
+    public void StaleReadingsFor_ADeploymentThatScansNoAccount_CountsNothing()
     {
         // Arrange
-        var email = Email(SyntheticMailUser.Deployment, OlderStamp);
+        var email = Email(ScannedAccount, OlderStamp);
         AddReading(email, OlderStamp, position: 0);
 
         // Act
         var stale = StoredEmailExtractionBackfillStore.StaleReadingsFor(
             new[] { email }.AsQueryable(),
             [],
-            unrostered: null);
+            unserved: null);
 
         // Assert
         Assert.Empty(stale);
     }
 
+    /// <summary>
+    /// The claim a posture held per account exists for: an operator who tightens one mailbox re-derives that mailbox's
+    /// mail and nobody else's. Both messages were derived under the same older stamp, and only the account whose
+    /// posture moved is selected — under a posture held on the user, every account that user is assigned would have
+    /// been rebuilt with it.
+    /// </summary>
+    [Fact]
+    public void StaleOrReadUnderAnOlderPostureFor_OneAccountsPostureChanged_SelectsThatAccountsMailAlone()
+    {
+        // Arrange
+        var changed = Email(ScannedAccount, OlderStamp);
+        var untouched = Email(UnservedAccount, OlderStamp);
+
+        AddReading(changed, OlderStamp, position: 0);
+        AddReading(untouched, OlderStamp, position: 0);
+
+        // Act
+        var selected = StoredEmailExtractionBackfillStore.StaleOrReadUnderAnOlderPostureFor(
+            new[] { changed, untouched }.AsQueryable(),
+            [this.PostureOf(ScannedAccount, CurrentStamp), this.PostureOf(UnservedAccount, OlderStamp)],
+            unserved: null);
+
+        // Assert
+        Assert.Equal([changed.Id], selected.Select(email => email.Id));
+    }
+
     private IReadOnlyList<StoredEmailEntity> Stale(StoredEmailEntity email) =>
         [.. StoredEmailExtractionBackfillStore.StaleOrReadUnderAnOlderPostureFor(
             new[] { email }.AsQueryable(),
-            this.PosturesScanning(),
+            [this.PostureOf(ScannedAccount, CurrentStamp)],
             CurrentStamp)];
 
-    /// <summary>The roster of a deployment scanning one user's mail towards the current stamp, and nobody else's.</summary>
-    private IReadOnlyList<UserSensitiveContentPosture> PosturesScanning()
+    /// <summary>One account's posture, scanning its mail towards the stated stamp.</summary>
+    private MailAccountSensitiveContentPosture PostureOf(
+        MailAccountId account,
+        SensitiveContentDerivationStamp stamp)
     {
         var plan = SensitiveContentPlan.Create(
             SensitiveContentScanBounds.Default,
@@ -183,32 +215,29 @@ public sealed class StoredEmailStaleDerivedDataSelectionTests : IDisposable
                     []),
             ]);
 
-        return
-        [
-            new UserSensitiveContentPosture(
-                SyntheticMailUser.Deployment,
-                SensitiveContentPosture.Scanning(
-                    [SensitiveContentScannerKind.Secrets],
-                    new SensitiveContentRedactor(plan, [], TimeProvider.System, this.concurrency),
-                    SensitiveContentScreeningPolicy.ScreeningNothing(),
-                    CurrentStamp)),
-        ];
+        return new MailAccountSensitiveContentPosture(
+            account,
+            SensitiveContentPosture.Scanning(
+                [SensitiveContentScannerKind.Secrets],
+                new SensitiveContentRedactor(plan, [], TimeProvider.System, this.concurrency),
+                SensitiveContentScreeningPolicy.ScreeningNothing(),
+                stamp));
     }
 
     /// <summary>Builds one message already derived under a stated configuration, carrying no attachment reading yet.</summary>
-    private static StoredEmailEntity Email(MailUserId user, SensitiveContentDerivationStamp stamp)
+    private static StoredEmailEntity Email(MailAccountId account, SensitiveContentDerivationStamp stamp)
     {
         var email = new StoredEmailEntity
         {
-            UserId = user.Value,
-            MailboxAccountId = "work",
+            UserId = SyntheticMailUser.Deployment.Value,
+            MailboxAccountId = account.Value,
             MailFolder = new MailFolderEntity
             {
-                UserId = user.Value,
-                MailboxAccountId = "work",
+                UserId = SyntheticMailUser.Deployment.Value,
+                MailboxAccountId = account.Value,
                 Alias = "INBOX",
                 RemotePath = "INBOX",
-                MailboxAccount = new MailboxAccountEntity { UserId = user.Value, Id = "work" },
+                MailboxAccount = new MailboxAccountEntity { UserId = SyntheticMailUser.Deployment.Value, Id = account.Value },
             },
             StoredAt = Now,
             ContentAvailability = StoredEmailContentAvailability.Available,

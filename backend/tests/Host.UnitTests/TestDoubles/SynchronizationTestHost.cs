@@ -47,7 +47,6 @@ using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
@@ -471,7 +470,7 @@ internal static class SynchronizationTestHost
     private static ISpamClassificationSettingsReader CreateClassificationSettingsReader()
     {
         var reader = Substitute.For<ISpamClassificationSettingsReader>();
-        reader.SettingsFor(Arg.Any<MailUserId>()).Returns(SpamClassificationSettings.Disabled);
+        reader.SettingsFor(Arg.Any<MailAccountId>()).Returns(SpamClassificationSettings.Disabled);
         reader.ScopeInForce.Returns(SpamClassificationScope.None);
 
         return reader;
@@ -481,7 +480,7 @@ internal static class SynchronizationTestHost
     private static ISpamActionSettingsReader CreateSpamActionSettingsReader()
     {
         var reader = Substitute.For<ISpamActionSettingsReader>();
-        reader.ActionsFor(Arg.Any<MailUserId>()).Returns(SpamActionSettings.None);
+        reader.ActionsFor(Arg.Any<MailAccountId>()).Returns(SpamActionSettings.None);
 
         return reader;
     }

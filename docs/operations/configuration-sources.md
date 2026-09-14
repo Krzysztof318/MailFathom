@@ -195,50 +195,29 @@ imports what the collection declared. Record each of them with 'mfctl user add' 
 
 **Nothing imports what the file declared**, and there is no route that would. The identifiers the file carried are the operator's own values rather than ones MailFathom mints, so a deployment moving across records its roster afresh and lets synchronization refill it — which is what [ADR 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md) already says an operator does: *the operator's action is to provision what they had configured, and nothing imports it for them*.
 
-### What a user may say about scanning their own mail
+### Scanning and classification are written on the mail account
 
-A user's `SensitiveContent` block is their half of [sensitive-content
-scanning](../features/sensitive-content-scanning.md#each-users-own-posture), and it lives in their record. It is content
-of that record rather than an overlay on the deployment's `SensitiveContent` section: the two are composed, and what is
-in force over that user's mail is the stricter of them.
+**Neither `SensitiveContent` nor `SpamClassification` is a user's to state.** Both are blocks of a **mail account's**
+record, one per mailbox: [scanning this account's
+mail](configuration-mail.md#scanning-this-accounts-mail--sensitivecontent) holds every key of the first, its refusals,
+and what stays the deployment's, and [classifying this account's
+mail](configuration-mail.md#classifying-this-accounts-mail--spamclassification) the same for the second. A user's
+record naming either binds nothing and is refused as a property nothing binds, exactly as any other unknown setting is:
 
-```json
-{
-  "SensitiveContent": {
-    "Secrets": { "Enabled": true },
-    "ScreenOutgoingMailFor": ["Secrets", "Pii"]
-  }
-}
+```
+The user record names 'SpamClassification', which is not a setting a user's record carries. Remove it, or correct the spelling of the setting it was meant to be.
 ```
 
-| Key | Required | What it is |
-| --- | --- | --- |
-| `SensitiveContent:Secrets:Enabled` | No | Switches the secret scanner on over this user's mail. Unset reads the deployment's answer |
-| `SensitiveContent:Pii:Enabled` | No | The same for the personal-data scanner, which the deployment must have configured an analyzer address for |
-| `SensitiveContent:ScreenOutgoingMailFor:<n>` | No | Which scanners' findings stop **this user's** outgoing mail. Read as their whole answer rather than as an addition, so it names at least what the deployment screens for |
+**It is the mailbox rather than the person because the mail is one copy.** A verdict that files junk moves the message
+on the mail server for everybody who reads that mailbox, and a redaction is written into the one derived text a message
+has, so both questions are answered per account: a mailbox is classified once, under its own settings, and scanned once,
+under its own posture, whoever it is assigned to. [Each account's own
+posture](../features/sensitive-content-scanning.md#each-accounts-own-posture) is that rule for the scanning half, and
+[spam classification](../features/spam-classification.md) for the other.
 
-**Only tightening is accepted, and a loosening is refused where it is written.** Three refusals, each naming the
-deployment setting behind it and never repeating the record's own text:
-
-- `false` against a scanner the deployment switched on. The obligation belongs to whoever holds the mail, so a user
-  may switch a scanner on for their own and never off.
-- `true` for the personal-data scanner where `SensitiveContent:PersonalDataAnalyzer:Endpoint` names no address. Nothing
-  could scan for it, and only an operator can state that key — so this is refused at the write rather than left to fail
-  closed on the user's next message.
-- A `ScreenOutgoingMailFor` naming fewer scanners than `SensitiveContent:ScreenOutgoingMailFor` does. A user may add
-  to that list and never take from it; removing the key altogether takes the deployment's list as it stands.
-
-**A record this deployment already holds is composed rather than refused.** The three refusals above are judged where a
-record is *written*; on the next start a stored record is read back and its block composed against the section as it
-stands. That is what keeps the tightening this feature exists for from being a trap: an operator who switches a scanner
-on deployment-wide, or widens `SensitiveContent:ScreenOutgoingMailFor`, turns every record accepted before that into one
-that now asks for less — and refusing those would refuse the start itself, for every user, over records their authors
-could no longer reach to rewrite. What is in force is the stricter of the two either way, so nothing is loosened by
-accepting them.
-
-Everything else about scanning stays the deployment's: the analyzer's address, the analyzed ceiling, the per-scan
-timeout, the process-wide scan concurrency — one budget every user shares — and the rebuild switch. A record naming one
-of them binds nothing and is refused as a property nothing binds, like any other.
+A user is still the scope of one thing, and it is what redacts a read: a search or a retrieval resolves the person
+rather than the mailbox, so what is withheld from it is the strictest of the postures across the accounts that user is
+assigned. That is the feature page's rule rather than a setting anybody writes.
 
 ### The identifier MailFathom mints
 
@@ -350,46 +329,6 @@ reach the same commit, which stores the record and copies the two switches onto 
 request is judged against that row rather than against the document, so authentication never reads a record. A user
 saving their own record is refused a change to either switch; what the switches do is
 [the administrative page's](admin-endpoint.md#users-and-their-records).
-
-### One user's own classification posture
-
-A user's record carries a `SpamClassification` property, and it is the only source of their
-posture — the deployment's section reaches nobody's classification scope, and the two are never unioned. That is what
-makes switching classification off in a record actually switch it off.
-
-```json
-{
-  "SpamClassification": {
-    "Enabled": true,
-    "UseScanner": true,
-    "ScannedFolders": [ "inbox" ],
-    "ScannerThreshold": 6.5,
-    "Actions": { "MoveToJunkFolder": true, "MarkAsRead": false, "JunkFolder": "role:Junk", "Threshold": 8 }
-  }
-}
-```
-
-Every key means exactly what the same-named key of
-[the deployment's section](configuration-ai.md#spamclassification) means, and the constraints are the same — including
-the `0.1` to `1000` range both thresholds are judged against, which stays the deployment's. A record stating none of it
-classifies that user's mail not at all, which is the same answer a deployment that configured nothing gives.
-
-**`UseScanner` is the one exception, and it asks rather than decides.** Whether a scanner exists at all is read from the
-deployment's own section when the host starts — that is what constructs the daemon conversation and what refuses to
-start without an address for it. A user switching `UseScanner` on where the deployment registered no scanner is not
-refused and does not fail the start; their mail is classified by the deterministic stage alone, as it would be with the
-key off. What the key decides for a user is whether a scanner the deployment *has* is consulted for their mail.
-
-**A record may hold only what is that user's.** The daemon's address, the per-scan bounds, the scan concurrency, the
-classification wait, and the run batch sizes are what the process holds open or spends rather than a judgement about
-anybody's mailbox, so a record naming one of them is refused at the write, naming the key. So is a threshold outside the
-permitted range, naming the range; a scanned folder that is not a usable alias; a scanner asked for with `Enabled` false;
-an action asked for with `Enabled` false; a junk destination that is neither a usable alias nor a role written as
-`role:<name>`; and, once filing is switched on, a junk destination **any** of that user's accounts fails to map — every
-one of them has to map it, exactly as every configured account has to map the deployment's own, because MailFathom
-creates a folder on nobody's server. A folder only somebody else's account carries is therefore refused exactly as one
-nobody maps. The destination's syntax is judged whatever the switches say; what filing being off leaves unjudged is only
-whether the accounts map it, exactly as with the deployment's own key.
 
 ## Changing a persisted setting
 

@@ -115,7 +115,7 @@ internal static class SpamClassificationEndpoints
             return AdminAccountRequest.Refuse(request?.Account);
         }
 
-        var configuredScope = settings.SettingsFor(servedAccount.User).ScannedFolderAliases;
+        var configuredScope = settings.SettingsFor(servedAccount.Id).ScannedFolderAliases;
         var scope = ResolveScope(request?.Folders, configuredScope);
 
         if (scope.Refusal is { } refusal)

@@ -755,7 +755,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
 
         this.openedPermits.Add(permits);
 
-        services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ForEveryUser(
+        services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ForEveryAccount(
             SensitiveContentPosture.Scanning(
                 [scanner.Scanner],
                 new SensitiveContentRedactor(plan, [scanner], TimeProvider.System, permits),

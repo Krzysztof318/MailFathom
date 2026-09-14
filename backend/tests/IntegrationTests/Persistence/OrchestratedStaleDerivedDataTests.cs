@@ -507,7 +507,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
 
         return FixedSensitiveContentPostures.Of(
             SensitiveContentPosture.ScanningNothing,
-            (SyntheticMailAccount.User,
+            (SyntheticMailAccount.AccountId,
                 SensitiveContentPosture.Scanning(
                     [SensitiveContentScannerKind.Secrets],
                     new SensitiveContentRedactor(plan, [], TimeProvider.System, this.concurrency),

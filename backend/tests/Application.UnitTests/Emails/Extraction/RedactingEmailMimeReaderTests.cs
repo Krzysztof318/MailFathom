@@ -7,7 +7,6 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.UnitTests.TestDoubles;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
@@ -23,6 +22,8 @@ public sealed class RedactingEmailMimeReaderTests
 {
     private const string Marker = "AKIAEXAMPLEKEY";
 
+    private static readonly MailAccountId AnotherAccount = MailAccountId.Create("secondary");
+
     private readonly FakeTimeProvider timeProvider = new(new DateTimeOffset(2026, 8, 12, 9, 0, 0, TimeSpan.Zero));
 
     /// <summary>The placeholder is what everything cut, embedded, and retrieved from this text will carry.</summary>
@@ -36,7 +37,7 @@ public sealed class RedactingEmailMimeReaderTests
             derivation.Guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(AccountOf(ScanningSensitiveContentDerivation.Account), Content(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("the key is [redacted:CloudKey]", extraction.Metadata?.Text.TrimmedText);
@@ -54,7 +55,7 @@ public sealed class RedactingEmailMimeReaderTests
             derivation.Guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(AccountOf(ScanningSensitiveContentDerivation.Account), Content(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("nothing to see", extraction.Metadata?.Text.TrimmedText);
@@ -72,7 +73,7 @@ public sealed class RedactingEmailMimeReaderTests
             derivation.Guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(AccountOf(ScanningSensitiveContentDerivation.Account), Content(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("the key is [redacted:CloudKey]", extraction.Metadata?.Text.TrimmedText);
@@ -92,7 +93,7 @@ public sealed class RedactingEmailMimeReaderTests
             derivation.Guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(AccountOf(ScanningSensitiveContentDerivation.Account), Content(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(ExtractedEmailTextSource.DerivedFromHtmlBodyPart, extraction.Metadata?.Text.Source);
@@ -110,7 +111,7 @@ public sealed class RedactingEmailMimeReaderTests
             derivation.Guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(AccountOf(ScanningSensitiveContentDerivation.Account), Content(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("Subject", extraction.Metadata?.Subject);
@@ -130,7 +131,7 @@ public sealed class RedactingEmailMimeReaderTests
         var reader = new RedactingEmailMimeReader(ReaderYielding(text), derivation.Guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(AccountOf(ScanningSensitiveContentDerivation.Account), Content(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Same(text, extraction.Metadata?.Text);
@@ -149,7 +150,7 @@ public sealed class RedactingEmailMimeReaderTests
         var reader = new RedactingEmailMimeReader(inner, derivation.Guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(AccountOf(ScanningSensitiveContentDerivation.Account), Content(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmailMimeExtractionOutcome.MalformedContent, extraction.Outcome);
@@ -168,7 +169,7 @@ public sealed class RedactingEmailMimeReaderTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
-            reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken));
+            reader.ReadMetadataAsync(AccountOf(ScanningSensitiveContentDerivation.Account), Content(), TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(SensitiveContentScannerKind.Secrets, refusal.Scanner);
@@ -185,7 +186,7 @@ public sealed class RedactingEmailMimeReaderTests
         var reader = new RedactingEmailMimeReader(ReaderYielding(extracted), guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(AccountOf(ScanningSensitiveContentDerivation.Account), Content(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal($"original {Marker}", extraction.Metadata?.Text.OriginalText);
@@ -198,7 +199,7 @@ public sealed class RedactingEmailMimeReaderTests
     /// beside it never went through, and a row stamped stricter than what produced it is a row nothing revisits.
     /// </summary>
     [Fact]
-    public async Task ReadMetadataAsync_ABodyRedactedForAUser_CarriesThePostureItWasRedactedUnder()
+    public async Task ReadMetadataAsync_ABodyRedactedForAnAccount_CarriesThePostureItWasRedactedUnder()
     {
         // Arrange
         using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
@@ -208,28 +209,28 @@ public sealed class RedactingEmailMimeReaderTests
 
         // Act
         var extraction = await reader.ReadMetadataAsync(
-            AccountOf(SyntheticMailUser.Deployment),
+            AccountOf(ScanningSensitiveContentDerivation.Account),
             Content(),
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
-            derivation.Guard.StampFor(SyntheticMailUser.Deployment),
+            derivation.Guard.StampFor(ScanningSensitiveContentDerivation.Account),
             extraction.Metadata!.RedactedUnder);
     }
 
     /// <summary>
-    /// This decorator is the outermost of the extraction chain and receives the user first-hand, and nothing below it
-    /// re-checks — so forwarding that argument rather than resolving a posture of its own is its whole claim. The same
-    /// body read for two users is what states it: one scanned, one not, and a reader asking about anybody but its
-    /// argument answers the same way for both.
+    /// This decorator is the outermost of the extraction chain and receives the account first-hand, and nothing below
+    /// it re-checks — so forwarding that argument rather than resolving a posture of its own is its whole claim. The
+    /// same body read for two mailboxes is what states it: one scanned, one not, and a reader asking about any account
+    /// but its argument answers the same way for both.
     /// </summary>
     [Fact]
-    public async Task ReadMetadataAsync_TwoUsersScannedDifferently_RedactsAndStampsOnlyTheOneWhoAskedForIt()
+    public async Task ReadMetadataAsync_TwoAccountsScannedDifferently_RedactsAndStampsOnlyTheOneThatAskedForIt()
     {
         // Arrange
-        using var derivation = ScanningSensitiveContentDerivation.FindingForOneUser(
-            SyntheticMailUser.Another,
+        using var derivation = ScanningSensitiveContentDerivation.FindingForOneAccount(
+            AnotherAccount,
             Marker,
             this.timeProvider);
         var reader = new RedactingEmailMimeReader(
@@ -238,17 +239,17 @@ public sealed class RedactingEmailMimeReaderTests
 
         // Act
         var scanned = await reader.ReadMetadataAsync(
-            AccountOf(SyntheticMailUser.Another),
+            AccountOf(AnotherAccount),
             Content(),
             TestContext.Current.CancellationToken);
         var unscanned = await reader.ReadMetadataAsync(
-            AccountOf(SyntheticMailUser.Deployment),
+            AccountOf(ScanningSensitiveContentDerivation.Account),
             Content(),
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.DoesNotContain(Marker, scanned.Metadata!.Text.OriginalText, StringComparison.Ordinal);
-        Assert.Equal(derivation.Guard.StampFor(SyntheticMailUser.Another), scanned.Metadata.RedactedUnder);
+        Assert.Equal(derivation.Guard.StampFor(AnotherAccount), scanned.Metadata.RedactedUnder);
 
         Assert.Equal($"before {Marker} after", unscanned.Metadata!.Text.OriginalText);
         Assert.Null(unscanned.Metadata.RedactedUnder);
@@ -266,13 +267,13 @@ public sealed class RedactingEmailMimeReaderTests
 
         // Act
         var extraction = await reader.ReadMetadataAsync(
-            AccountOf(SyntheticMailUser.Deployment),
+            AccountOf(ScanningSensitiveContentDerivation.Account),
             Content(),
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
-            derivation.Guard.StampFor(SyntheticMailUser.Deployment),
+            derivation.Guard.StampFor(ScanningSensitiveContentDerivation.Account),
             extraction.Metadata!.RedactedUnder);
     }
 
@@ -286,7 +287,7 @@ public sealed class RedactingEmailMimeReaderTests
 
         // Act
         var extraction = await reader.ReadMetadataAsync(
-            AccountOf(SyntheticMailUser.Deployment),
+            AccountOf(ScanningSensitiveContentDerivation.Account),
             Content(),
             TestContext.Current.CancellationToken);
 
@@ -316,7 +317,8 @@ public sealed class RedactingEmailMimeReaderTests
         return reader;
     }
 
-    private static MailAccountIdentity AccountOf(MailUserId user) => MailAccountIdentity.Create(user, MailAccountId.Create("primary"));
+    private static MailAccountIdentity AccountOf(MailAccountId account) =>
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, account);
 
     private static ReadOnlyMemory<byte> Content() => new byte[] { 1, 2, 3 };
 }

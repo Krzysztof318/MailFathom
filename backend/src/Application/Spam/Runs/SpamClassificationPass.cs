@@ -112,8 +112,8 @@ public sealed class SpamClassificationPass
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels. Committed batches stay durable.</exception>
     /// <remarks>
     /// The two ways a run ends without reaching the end of its mail are both decided here and before any message is
-    /// read, because both are statements about the whole run rather than about one message: the account's user
-    /// classifying nothing, and a profile that has moved under a walk already half done.
+    /// read, because both are statements about the whole run rather than about one message: the account classifying
+    /// nothing, and a profile that has moved under a walk already half done.
     /// </remarks>
     public async Task<SpamClassificationRunReport> RunAsync(
         MailAccountIdentity account,
@@ -126,7 +126,7 @@ public sealed class SpamClassificationPass
             return SpamClassificationRunReport.NoRun;
         }
 
-        var settings = this.settingsReader.SettingsFor(account.User);
+        var settings = this.settingsReader.SettingsFor(account.Id);
 
         if (!settings.IsEnabled)
         {

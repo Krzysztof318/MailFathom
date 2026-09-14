@@ -156,7 +156,7 @@ public sealed class StaleDerivedDataStartupReportTests
                     []),
             ]);
         var concurrency = new SensitiveContentScanConcurrency(plan.Bounds.MaximumConcurrentScans);
-        var postures = FixedSensitiveContentPostures.ForEveryUser(
+        var postures = FixedSensitiveContentPostures.ForEveryAccount(
             SensitiveContentPosture.Scanning(
                 [SensitiveContentScannerKind.Secrets],
                 new SensitiveContentRedactor(plan, [], this.timeProvider, concurrency),

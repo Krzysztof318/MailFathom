@@ -516,7 +516,7 @@ public sealed class EmailSpamClassifierTests
         headerReader.ReadAsync(Arg.Any<StoredEmailContent>(), Arg.Any<CancellationToken>()).Returns(facts);
 
         var settingsReader = Substitute.For<ISpamClassificationSettingsReader>();
-        settingsReader.SettingsFor(Arg.Any<MailUserId>()).Returns(settings);
+        settingsReader.SettingsFor(Arg.Any<MailAccountId>()).Returns(settings);
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());

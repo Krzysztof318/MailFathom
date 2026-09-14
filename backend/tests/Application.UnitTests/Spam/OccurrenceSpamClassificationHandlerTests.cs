@@ -124,7 +124,7 @@ public sealed class OccurrenceSpamClassificationHandlerTests
     private OccurrenceSpamClassificationHandler CreateHandler(SpamActionSettings? actions = null)
     {
         var settingsReader = Substitute.For<ISpamClassificationSettingsReader>();
-        settingsReader.SettingsFor(Arg.Any<MailUserId>())
+        settingsReader.SettingsFor(Arg.Any<MailAccountId>())
             .Returns(SpamClassificationSettings.Create(isEnabled: true, usesScanner: false, [Inbox]));
 
         var sessionFactory = this.harness.CommittingSessions();

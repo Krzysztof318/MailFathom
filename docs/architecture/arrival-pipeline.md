@@ -189,17 +189,17 @@ mail a user drags out of the junk folder ordinary mail from that moment.
 | Outcome | Rules | Passages | Vectors |
 | --- | --- | --- | --- |
 | Junk — a verdict, or the message is in the account's junk folder | No | No, and any already cut are removed | No |
-| Not junk, or the folder is outside that user's scope | Yes | Yes | Yes |
+| Not junk, or the folder is outside that account's scope | Yes | Yes | Yes |
 | No verdict yet — the job is queued, running, or ran out of attempts without recording one | No, held | No, held | No, held |
 | Released — the message carries nothing classifiable, or it waited longer than allowed | Yes | Yes | Yes |
-| The message's user classifies nothing | Yes | Yes | Yes |
+| The message's account classifies nothing | Yes | Yes | Yes |
 
-**The gate is read per user, and the last row is what that buys.** Classification is
-[each user's decision about their own mail](../features/spam-classification.md#each-user-decides-this-for-their-own-mail),
-so the terms a walk is decided under name the accounts of the users who classify rather than a single deployment-wide
-switch. A user who classifies nothing has every one of their messages admitted at once — their junk folder included,
-because withholding it is an ordering behind a verdict rather than a rule of its own — while another user's mail in the
-same walk goes on waiting on its own.
+**The gate is read per account, and the last row is what that buys.** Classification is
+[each account's decision about the mail in it](../features/spam-classification.md#each-account-decides-this-for-the-mail-in-it),
+so the terms a walk is decided under name the accounts that classify rather than a single deployment-wide switch. An
+account that classifies nothing has every one of its messages admitted at once — its junk folder included, because
+withholding it is an ordering behind a verdict rather than a rule of its own — while another account's mail in the same
+walk goes on waiting on its own.
 
 A held message is held rather than dropped. The same four facts are read again by the next account run and by both
 sweeps, so a verdict that arrives late, a wait that runs out, and a message moved out of the junk folder all admit it

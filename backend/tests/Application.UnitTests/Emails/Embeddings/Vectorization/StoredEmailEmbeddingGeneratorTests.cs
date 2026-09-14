@@ -14,6 +14,7 @@ using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -442,13 +443,13 @@ public sealed class StoredEmailEmbeddingGeneratorTests
     }
 
     /// <summary>
-    /// The passages leaving for a hosted provider are scanned under the posture of the user whose message they were
-    /// cut from rather than the deployment's. Nothing else says so: the generator opens its scope from the ownership it
-    /// read, and one naming the wrong user would publish one person's body text judged by another person's answer,
-    /// while one naming nobody would fail only on a deployment that scans somebody.
+    /// The passages leaving for a hosted provider are scanned under the posture composed over the accounts of the user
+    /// whose message they were cut from rather than the deployment's. Nothing else says so: the generator opens its
+    /// scope from the ownership it read, and one naming the wrong user would publish one person's body text judged by
+    /// another person's answer, while one naming nobody would fail only on a deployment that scans somebody.
     /// </summary>
     [Fact]
-    public async Task EmbedAsync_TwoUsersScannedDifferently_SendsEachUsersPassagesUnderTheirOwnPosture()
+    public async Task EmbedAsync_TwoUsersScannedDifferently_SendsEachUsersPassagesUnderTheirOwnAccountsPosture()
     {
         // Arrange
         const string marker = "AKIAEXAMPLEKEY";
@@ -470,11 +471,12 @@ public sealed class StoredEmailEmbeddingGeneratorTests
 
         var postures = FixedSensitiveContentPostures.Of(
             SensitiveContentPosture.ScanningNothing,
-            (SyntheticMailUser.Another, SensitiveContentPosture.Scanning(
+            (MailAccountId.Create("secondary"), SensitiveContentPosture.Scanning(
                 [scanner.Scanner],
                 new SensitiveContentRedactor(plan, [scanner], TimeProvider.System, permits),
                 SensitiveContentScreeningPolicy.ScreeningNothing(),
-                SensitiveContentDerivationStamp.Compute(plan, [scanner]))));
+                SensitiveContentDerivationStamp.Compute(plan, [scanner])),
+                SyntheticMailUser.Another));
 
         var store = new InMemoryEmailEmbeddingStore();
         store.AddPassages(Message, PassageCarrying(marker));

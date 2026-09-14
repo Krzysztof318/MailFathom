@@ -7,33 +7,41 @@ using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.UserSettings;
 
 namespace MailFathom.Host.Configuration.SensitiveContent;
 
-/// <summary>Composes each user's scanning posture from the deployment's section and that user's own record.</summary>
+/// <summary>Composes each account's scanning posture from the deployment's section and that account's own record.</summary>
 /// <remarks>
 /// <para>
 /// The composition takes the stricter of the two in one direction only: a scanner the deployment switched on runs over
-/// every user's mail whatever their record says, and a scanner it left off runs over the mail of whoever asked for it.
-/// The same holds for what stops an outgoing message, where the two lists are unioned. Nothing here refuses a
-/// loosening, because nothing here is where a record is written — <see cref="UserSensitiveContentRules" /> refuses one
-/// at the write, so what reaches this is already a record whose own words describe what is in force.
+/// every mailbox whatever an account's record says, and a scanner it left off runs over the mail of whichever accounts
+/// asked for it. The same holds for what stops an outgoing message, where the two lists are unioned. Nothing here
+/// refuses a loosening, because nothing here is where a record is written —
+/// <see cref="MailAccountSensitiveContentRules" /> refuses one at the write, so what reaches this is already a record
+/// whose own words describe what is in force.
 /// </para>
 /// <para>
-/// Postures are composed once per distinct answer rather than once per user, so a deployment whose users all read the
-/// deployment's own posture holds one redaction and one stamp however many people it serves. The detectors behind them
-/// are the ones the composition root registered, constructed once for the scanners this deployment provides and shared
-/// by every posture that runs one, and the permits are the process's single
+/// A user's own answer is composed beside the accounts', as the union over the accounts they are assigned, for the one
+/// reader that cannot name an account: a read spanning a person's whole mail. It is the strictest of their mailboxes
+/// rather than any one of them, which only ever redacts more than the message's own account asked for.
+/// </para>
+/// <para>
+/// Postures are composed once per distinct answer rather than once per account, so a deployment whose accounts all read
+/// the deployment's own posture holds one redaction and one stamp however many mailboxes it serves. The detectors
+/// behind them are the ones the composition root registered, constructed once for the scanners this deployment provides
+/// and shared by every posture that runs one, and the permits are the process's single
 /// <see cref="SensitiveContentScanConcurrency" />.
 /// </para>
 /// <para>
 /// The roster is followed rather than read per call: it is published by the startup gate and republished by each
-/// user-document commit, and this recomposes when it changes. A deployment before its gate has run serves the
-/// deployment's own posture to whoever asks, which is the answer every user had before any record existed.
+/// record commit, and this recomposes when it changes. A deployment before its gate has run serves the deployment's own
+/// posture to whoever asks, which is the answer every mailbox had before any record existed.
 /// </para>
 /// </remarks>
-internal sealed class UserSensitiveContentPostures : ISensitiveContentPostures
+internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPostures
 {
     private readonly SensitiveContentOptions deployment;
     private readonly IReadOnlyList<ISensitiveContentCatalog> catalogs;
@@ -59,7 +67,7 @@ internal sealed class UserSensitiveContentPostures : ISensitiveContentPostures
     /// regular-expression corpus and an analyzer client. A deployment where nobody is scanned for composes no posture
     /// and therefore never asks, which is what keeps an opt-in nobody took free of the cost of the opt-in existing.
     /// </remarks>
-    public UserSensitiveContentPostures(
+    public MailAccountSensitiveContentPostures(
         SensitiveContentOptions deployment,
         IEnumerable<ISensitiveContentCatalog> catalogs,
         Func<IEnumerable<ISensitiveContentScanner>> scanners,
@@ -83,13 +91,21 @@ internal sealed class UserSensitiveContentPostures : ISensitiveContentPostures
     }
 
     /// <inheritdoc />
-    public bool IsActiveForAnyUser => this.Composed().IsActiveForAnyUser;
+    public bool IsActiveForAnyAccount => this.Composed().IsActiveForAnyAccount;
 
     /// <inheritdoc />
-    public IReadOnlyList<UserSensitiveContentPosture> Current => this.Composed().Users;
+    public IReadOnlyList<MailAccountSensitiveContentPosture> Current => this.Composed().Accounts;
 
     /// <inheritdoc />
-    public SensitiveContentPosture ForUser(MailUserId user)
+    public SensitiveContentPosture ForAccount(MailAccountId account)
+    {
+        var current = this.Composed();
+
+        return current.ByAccount.TryGetValue(account, out var posture) ? posture : current.Deployment;
+    }
+
+    /// <inheritdoc />
+    public SensitiveContentPosture AcrossAccountsOf(MailUserId user)
     {
         var current = this.Composed();
 
@@ -97,39 +113,39 @@ internal sealed class UserSensitiveContentPostures : ISensitiveContentPostures
     }
 
     /// <inheritdoc />
-    public bool RunsForAnyUser(SensitiveContentScannerKind scanner)
+    public bool RunsForAnyAccount(SensitiveContentScannerKind scanner)
     {
         var current = this.Composed();
 
-        return current.Deployment.Runs(scanner) || current.Users.Any(user => user.Posture.Runs(scanner));
+        return current.Deployment.Runs(scanner) || current.Accounts.Any(account => account.Posture.Runs(scanner));
     }
 
-    /// <summary>Composes what one user asked for over the deployment's own answer, in the one direction allowed.</summary>
+    /// <summary>Composes what one account asked for over the deployment's own answer, in the one direction allowed.</summary>
     /// <remarks>
     /// <para>
     /// A scanner is on where either side switched it on, and the screening list is the union of the two. Both are the
-    /// same rule read twice: the deployment's answer is a floor, and a user's record can only stand on it.
+    /// same rule read twice: the deployment's answer is a floor, and an account's record can only stand on it.
     /// </para>
     /// <para>
-    /// A user's opt-in reaches only what the deployment provides. <see cref="UserSensitiveContentRules" /> refuses
-    /// the other case at the write, but a record accepted while an analyzer was configured outlives the operator
-    /// removing that address, and honouring it then would compose a plan naming a scanner no detector is registered
-    /// for — which would throw out of here and take every scanning path on the deployment with it. The deployment's
-    /// own switch needs no such guard: startup validation already refuses it.
+    /// An account's opt-in reaches only what the deployment provides. <see cref="MailAccountSensitiveContentRules" />
+    /// refuses the other case at the write, but a record accepted while an analyzer was configured outlives the
+    /// operator removing that address, and honouring it then would compose a plan naming a scanner no detector is
+    /// registered for — which would throw out of here and take every scanning path on the deployment with it. The
+    /// deployment's own switch needs no such guard: startup validation already refuses it.
     /// </para>
     /// </remarks>
     private static EffectivePosture Compose(
         SensitiveContentOptions deployment,
-        UserSensitiveContentOptions? user)
+        MailAccountSensitiveContentOptions? account)
     {
         var provided = deployment.ProvidedScanners;
         var switchedOn = Enum.GetValues<SensitiveContentScannerKind>()
             .Where(scanner => deployment.For(scanner).Enabled
-                || (user?.For(scanner).Enabled is true && provided.Contains(scanner)))
+                || (account?.For(scanner).Enabled is true && provided.Contains(scanner)))
             .ToArray();
 
         var screening = SensitiveContentPlanMapper.ScreeningScannersOf(deployment)
-            .Concat(user?.ScreenOutgoingMailFor is { } named
+            .Concat(account?.ScreenOutgoingMailFor is { } named
                 ? named
                     .Select(scanner => Enum.TryParse<SensitiveContentScannerKind>(scanner, ignoreCase: true, out var kind)
                         ? kind
@@ -142,6 +158,20 @@ internal sealed class UserSensitiveContentPostures : ISensitiveContentPostures
             .ToArray();
 
         return new EffectivePosture(switchedOn, screening);
+    }
+
+    /// <summary>Composes the strictest of several answers, which is what a read spanning accounts is judged by.</summary>
+    /// <remarks>
+    /// The deployment's own answer is one of them rather than a special case, so a user assigned no account at all
+    /// composes to it exactly as one whose accounts asked for nothing does.
+    /// </remarks>
+    private static EffectivePosture StrictestOf(IEnumerable<EffectivePosture> answers)
+    {
+        var composed = answers.ToArray();
+
+        return new EffectivePosture(
+            [.. composed.SelectMany(answer => answer.SwitchedOn).Distinct().Order()],
+            [.. composed.SelectMany(answer => answer.Screening).Distinct().Order()]);
     }
 
     /// <summary>Reads the composition, rebuilding it when the roster it was composed from has been replaced.</summary>
@@ -168,7 +198,12 @@ internal sealed class UserSensitiveContentPostures : ISensitiveContentPostures
         }
     }
 
-    /// <summary>Builds every posture one roster produces, sharing one redaction between users who read the same one.</summary>
+    /// <summary>Builds every posture one roster produces, sharing one redaction between accounts that read the same one.</summary>
+    /// <remarks>
+    /// An account assigned to two users is one mailbox with one record, so it is composed once and reached under one
+    /// answer however many people it is declared for. An account whose identifier is unusable is passed over, because
+    /// nothing that asks here could name it.
+    /// </remarks>
     private Composition Build(IReadOnlyList<ServedMailUser>? roster)
     {
         var built = new Dictionary<EffectivePosture, SensitiveContentPosture>();
@@ -180,25 +215,43 @@ internal sealed class UserSensitiveContentPostures : ISensitiveContentPostures
             return new Composition(
                 null,
                 deploymentPosture,
+                new Dictionary<MailAccountId, SensitiveContentPosture>(),
                 new Dictionary<MailUserId, SensitiveContentPosture>(),
                 []);
         }
 
-        var answers = roster
-            .Select(served => (served.User, Answer: Compose(this.deployment, served.SensitiveContent)))
+        var declared = roster
+            .SelectMany(served => served.MailAccounts.Select(account => new
+            {
+                served.User,
+                Account = MailSynchronizationOptions.TryReadAccountId(account.AccountId),
+                Answer = Compose(this.deployment, account.SensitiveContent),
+            }))
+            .Where(entry => entry.Account is not null)
             .ToArray();
 
-        var byUser = answers.ToDictionary(
-            entry => entry.User,
-            entry => this.PostureOf(built, entry.Answer));
+        var byAccount = declared
+            .DistinctBy(entry => entry.Account, StringComparer.Ordinal)
+            .ToDictionary(
+                entry => MailAccountId.Create(entry.Account!),
+                entry => this.PostureOf(built, entry.Answer));
+
+        var byUser = roster.ToDictionary(
+            served => served.User,
+            served => this.PostureOf(built, StrictestOf(
+            [
+                deploymentAnswer,
+                .. declared.Where(entry => entry.User == served.User).Select(entry => entry.Answer),
+            ])));
 
         return new Composition(
             roster,
             deploymentPosture,
+            byAccount,
             byUser,
-            [.. byUser
-                .OrderBy(entry => entry.Key.Value)
-                .Select(entry => new UserSensitiveContentPosture(entry.Key, entry.Value))]);
+            [.. byAccount
+                .OrderBy(entry => entry.Key.Value, StringComparer.Ordinal)
+                .Select(entry => new MailAccountSensitiveContentPosture(entry.Key, entry.Value))]);
     }
 
     /// <summary>Finds the posture one effective answer produces, composing it the first time that answer is met.</summary>
@@ -273,17 +326,19 @@ internal sealed class UserSensitiveContentPostures : ISensitiveContentPostures
 
     /// <summary>What one roster composed to, held whole so a reader never observes a half-rebuilt set.</summary>
     /// <param name="Roster">The roster this was built from, which is what says whether it is still current.</param>
-    /// <param name="Deployment">The posture of a user this roster does not name, which is the deployment's own.</param>
-    /// <param name="ByUser">The posture of each user the roster names.</param>
-    /// <param name="Users">The same postures as an ordered list, for the walk that judges every user's rows at once.</param>
+    /// <param name="Deployment">The posture of an account this roster does not name, which is the deployment's own.</param>
+    /// <param name="ByAccount">The posture of each account the roster declares.</param>
+    /// <param name="ByUser">The strictest posture over each user's own accounts, for a read that spans them.</param>
+    /// <param name="Accounts">The account postures as an ordered list, for the walk that judges every account's rows at once.</param>
     private sealed record Composition(
         IReadOnlyList<ServedMailUser>? Roster,
         SensitiveContentPosture Deployment,
+        IReadOnlyDictionary<MailAccountId, SensitiveContentPosture> ByAccount,
         IReadOnlyDictionary<MailUserId, SensitiveContentPosture> ByUser,
-        IReadOnlyList<UserSensitiveContentPosture> Users)
+        IReadOnlyList<MailAccountSensitiveContentPosture> Accounts)
     {
         /// <summary>Gets whether anything at all is scanned for on this deployment.</summary>
-        public bool IsActiveForAnyUser =>
-            this.Deployment.IsActive || this.Users.Any(user => user.Posture.IsActive);
+        public bool IsActiveForAnyAccount =>
+            this.Deployment.IsActive || this.Accounts.Any(account => account.Posture.IsActive);
     }
 }

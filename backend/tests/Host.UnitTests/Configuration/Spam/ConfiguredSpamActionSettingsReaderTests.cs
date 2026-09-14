@@ -2,30 +2,36 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Spam;
 using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Spam;
 
 /// <summary>
-/// Covers how a user's own record becomes the settings an action on their junk is decided by. There is no second
-/// source: the deployment's own section reaches nobody's mailbox, so every answer here comes off the roster.
+/// Covers how an account's own record becomes the settings an action on its junk is decided by. There is no second
+/// source: the deployment's own section reaches no mailbox, so every answer here comes off the roster.
 /// </summary>
 public sealed class ConfiguredSpamActionSettingsReaderTests
 {
+    private static readonly MailAccountId PrimaryAccount = MailAccountId.Create("primary");
+
+    private static readonly MailAccountId SecondAccount = MailAccountId.Create("second-account");
+
     [Fact]
     public void ActionsFor_ARecordSettingNothing_AsksForNoChangeToAnyMailbox()
     {
         // Arrange
-        var reader = ReaderFor(User(SyntheticMailUser.Deployment, new UserSpamClassificationOptions()));
+        var reader = ReaderFor(Account(PrimaryAccount, new MailAccountSpamClassificationOptions()));
 
         // Act
-        var settings = reader.ActionsFor(SyntheticMailUser.Deployment);
+        var settings = reader.ActionsFor(PrimaryAccount);
 
         // Assert
         Assert.False(settings.IsAnyActionEnabled);
@@ -35,12 +41,12 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
     public void ActionsFor_BothSwitchesOn_CarriesTheDestinationAndTheThreshold()
     {
         // Arrange
-        var reader = ReaderFor(User(
-            SyntheticMailUser.Deployment,
-            new UserSpamClassificationOptions
+        var reader = ReaderFor(Account(
+            PrimaryAccount,
+            new MailAccountSpamClassificationOptions
             {
                 Enabled = true,
-                Actions = new UserSpamActionOptions
+                Actions = new MailAccountSpamActionOptions
                 {
                     MoveToJunkFolder = true,
                     MarkAsRead = true,
@@ -50,7 +56,7 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
             }));
 
         // Act
-        var settings = reader.ActionsFor(SyntheticMailUser.Deployment);
+        var settings = reader.ActionsFor(PrimaryAccount);
 
         // Assert
         Assert.True(settings.FilesJunk);
@@ -65,45 +71,45 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
     public void ActionsFor_ARecordWhoseClassificationIsOff_AsksForNothing()
     {
         // Arrange
-        var reader = ReaderFor(User(
-            SyntheticMailUser.Deployment,
-            new UserSpamClassificationOptions
+        var reader = ReaderFor(Account(
+            PrimaryAccount,
+            new MailAccountSpamClassificationOptions
             {
                 Enabled = false,
-                Actions = new UserSpamActionOptions { MoveToJunkFolder = true, MarkAsRead = true },
+                Actions = new MailAccountSpamActionOptions { MoveToJunkFolder = true, MarkAsRead = true },
             }));
 
         // Act
-        var settings = reader.ActionsFor(SyntheticMailUser.Deployment);
+        var settings = reader.ActionsFor(PrimaryAccount);
 
         // Assert
         Assert.False(settings.IsAnyActionEnabled);
     }
 
-    /// <summary>Each user decides what happens to their own junk, so one filing it does not file anybody else's.</summary>
+    /// <summary>Each account decides what happens to its own junk, so one filing it does not file any other mailbox's.</summary>
     [Fact]
-    public void ActionsFor_TwoUsersWithDifferentPostures_AnswersEachWithTheirOwn()
+    public void ActionsFor_TwoAccountsWithDifferentPostures_AnswersEachWithItsOwn()
     {
         // Arrange
         var reader = ReaderFor(
-            User(
-                SyntheticMailUser.Deployment,
-                new UserSpamClassificationOptions
+            Account(
+                PrimaryAccount,
+                new MailAccountSpamClassificationOptions
                 {
                     Enabled = true,
-                    Actions = new UserSpamActionOptions { MoveToJunkFolder = true, JunkFolder = "quarantine" },
+                    Actions = new MailAccountSpamActionOptions { MoveToJunkFolder = true, JunkFolder = "quarantine" },
                 }),
-            User(
-                SyntheticMailUser.Another,
-                new UserSpamClassificationOptions
+            Account(
+                SecondAccount,
+                new MailAccountSpamClassificationOptions
                 {
                     Enabled = true,
-                    Actions = new UserSpamActionOptions { MarkAsRead = true },
+                    Actions = new MailAccountSpamActionOptions { MarkAsRead = true },
                 }));
 
         // Act
-        var filing = reader.ActionsFor(SyntheticMailUser.Deployment);
-        var marking = reader.ActionsFor(SyntheticMailUser.Another);
+        var filing = reader.ActionsFor(PrimaryAccount);
+        var marking = reader.ActionsFor(SecondAccount);
 
         // Assert
         Assert.True(filing.FilesJunk);
@@ -115,37 +121,63 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
 
     /// <summary>Nothing writes to a mailbox this deployment does not serve, because no record says it may.</summary>
     [Fact]
-    public void ActionsFor_AUserThisDeploymentDoesNotServe_AsksForNothing()
+    public void ActionsFor_AnAccountThisDeploymentDoesNotServe_AsksForNothing()
     {
         // Arrange
-        var reader = ReaderFor(User(
-            SyntheticMailUser.Deployment,
-            new UserSpamClassificationOptions
+        var reader = ReaderFor(Account(
+            PrimaryAccount,
+            new MailAccountSpamClassificationOptions
             {
                 Enabled = true,
-                Actions = new UserSpamActionOptions { MoveToJunkFolder = true },
+                Actions = new MailAccountSpamActionOptions { MoveToJunkFolder = true },
             }));
 
         // Act
-        var settings = reader.ActionsFor(SyntheticMailUser.Another);
+        var settings = reader.ActionsFor(SecondAccount);
 
         // Assert
         Assert.False(settings.IsAnyActionEnabled);
     }
 
+    /// <summary>An account nobody named is one no record answers for, which reads exactly as a mailbox this deployment does not serve.</summary>
     [Fact]
-    public void ActionsFor_NoUser_Throws()
+    public void ActionsFor_NoAccountAtAll_AsksForNothing()
     {
         // Arrange
-        var reader = ReaderFor(User(SyntheticMailUser.Deployment, new UserSpamClassificationOptions()));
+        var reader = ReaderFor(Account(PrimaryAccount, new MailAccountSpamClassificationOptions()));
 
-        // Act, Assert
-        Assert.Throws<ArgumentException>(() => reader.ActionsFor(default));
+        // Act
+        var settings = reader.ActionsFor(default);
+
+        // Assert
+        Assert.False(settings.IsAnyActionEnabled);
     }
 
-    private static ConfiguredSpamActionSettingsReader ReaderFor(params ServedMailUser[] served) =>
-        new(new MailSynchronizationOptions().WithServedUsers(served));
+    private static ConfiguredSpamActionSettingsReader ReaderFor(params MailSynchronizationAccountOptions[] accounts) =>
+        new(new MailSynchronizationOptions().WithServedUsers(
+        [
+            new ServedMailUser(
+                SyntheticMailUser.Deployment,
+                "the served user",
+                accounts),
+        ]));
 
-    private static ServedMailUser User(MailUserId user, UserSpamClassificationOptions classification) =>
-        new(user, $"user-{user.Value:D}", [], SpamClassification: classification);
+    private static MailSynchronizationAccountOptions Account(
+        MailAccountId account,
+        MailAccountSpamClassificationOptions classification) =>
+        new()
+        {
+            AccountId = account.Value,
+            DisplayName = $"The {account.Value} mailbox",
+            Host = "imap.example.test",
+            UserName = "mailfathom@example.test",
+            Secrets = new MailAccountSecretOptions
+            {
+                Password = new ConfiguredSecret
+                {
+                    SecretReference = "systemd-credential:imap-primary-password",
+                },
+            },
+            SpamClassification = classification,
+        };
 }

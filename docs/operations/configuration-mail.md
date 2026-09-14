@@ -1,6 +1,6 @@
 # Mail configuration
 
-<!-- describes: backend/src/Host/Configuration/Mail/**, backend/src/Host/Configuration/Rules/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs -->
+<!-- describes: backend/src/Host/Configuration/Mail/**, backend/src/Host/Configuration/Rules/**, backend/src/Host/Configuration/Spam/MailAccount*.cs, backend/src/Host/Configuration/SensitiveContent/MailAccount*.cs, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs -->
 
 Every key deciding which mail is fetched and how, what is sent, what a deployment records about either, what a mailbox
 query and a stored message may cost, and which rules run over what arrives. The tables read as
@@ -89,6 +89,8 @@ than met later by a run.
 | `…:TrustedSenders:<n>:Address` | string | unset | A single mailbox this account recognizes. It matches when the established author's domain is that address's own **and** the message's `From` displays exactly that address | reload |
 | `…:TrustedSenders:<n>:IncludeSubdomains` | bool | `false` | Whether a domain entry also reaches the names beneath that domain. Refused on an address entry, where it could mean nothing | reload |
 | `…:Folders` | list | inbox by role | Aliases unique; each entry below | reload |
+| `…:SpamClassification` | block | unset (nothing classified) | This mailbox's own classification posture and what a verdict does to it; [classifying this account's mail](#classifying-this-accounts-mail--spamclassification) holds every key | reload |
+| `…:SensitiveContent` | block | unset (the deployment's posture) | What this mailbox asks for over the mail in it, within what the deployment provides; [scanning this account's mail](#scanning-this-accounts-mail--sensitivecontent) holds every key | reload |
 
 `TrustedAuthenticationServiceIdentifier` names the one server whose `Authentication-Results` headers this account
 believes, which is what stops the check from being defeated by a header an attacker wrote upstream. There is nothing to
@@ -259,6 +261,97 @@ schedules it.
 [What a mapping decides beyond where the folder is](../features/imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
 states all three switches together, what an unmapped folder is instead, and what becomes of the local copy of a message
 relocated into a folder nothing mirrors.
+
+### Classifying this account's mail — `SpamClassification`
+
+`…:SpamClassification` is where a mailbox's own classification posture is written, and it is the only source of
+one: the deployment's [`SpamClassification`](configuration-ai.md#spamclassification) section registers the scanner and
+bounds what the process spends on it, and reaches no mailbox's scope at all. The two are never unioned, which is what
+makes switching classification off here actually switch it off. Every switch is off when the block is absent, so an
+account whose record states none of it is classified as nothing.
+
+It is the account's rather than its user's because the mail is one copy: a mailbox two people are assigned is
+classified once, and a verdict that filed a message moved it on the server for both of them whatever either would have
+asked for. [Spam classification](../features/spam-classification.md) records what a classification holds and what a
+verdict may do.
+
+```json
+{
+  "SpamClassification": {
+    "Enabled": true,
+    "UseScanner": true,
+    "ScannedFolders": [ "inbox" ],
+    "ScannerThreshold": 6.5,
+    "Actions": { "MoveToJunkFolder": true, "MarkAsRead": false, "JunkFolder": "role:Junk", "Threshold": 8 }
+  }
+}
+```
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `…:SpamClassification:Enabled` | bool | `false` | Whether the mail in this account is classified at all | reload; the next classification reads it |
+| `…:SpamClassification:UseScanner` | bool | `false` | Whether the deployment's scanner is consulted after the deterministic stage. Asking for it while `Enabled` is false is refused; asking for it where the deployment registered no scanner is accepted and answered by the deterministic stage alone | reload; the same |
+| `…:SpamClassification:ScannedFolders:<n>` | string | unset (this account's inbox) | A folder alias, resolved within this account's own `Folders` — one only another account maps reaches no mail. Writing no key takes whichever alias this account maps to the `Inbox` role, and writing an empty list asks for no folder at all | reload; the same |
+| `…:SpamClassification:ScannerThreshold` | double | unset (the scanner's own) | `0.1` – `1000`, the range the deployment states; outside it a value either files every message or can never be reached | reload; the same |
+| `…:SpamClassification:Actions:MoveToJunkFolder` | bool | `false` | Whether junk is filed into this account's junk destination. Asking for an action while `Enabled` is false is refused, there being no verdict to act on | reload; governs verdicts from then on |
+| `…:SpamClassification:Actions:MarkAsRead` | bool | `false` | Whether junk has this account's remote `\Seen` flag set; the same refusal | reload; the same |
+| `…:SpamClassification:Actions:JunkFolder` | string | `role:Junk` | A folder alias, or one of the special uses written as `role:<name>`. Once filing is switched on, **this account** has to map it, because MailFathom creates a folder on nobody's server; the syntax is judged whatever the switches say | reload; the same |
+| `…:SpamClassification:Actions:Threshold` | double | unset (every spam verdict) | The score a scanner has to reach before the mail is touched, judged against the same `0.1` – `1000` range | reload; the same |
+
+**A junk destination is judged against this account alone.** Junk is filed into the mailbox it was found in, so a
+destination this account does not map is refused exactly as one nobody maps — from inside the record the two are the
+same thing. That is what the block being the account's buys over one held on the person: an account no longer has to
+map a folder some other mailbox of the same user wanted junk filed into.
+
+**A record may hold only what is this mailbox's.** The daemon's address, the per-scan bounds, the scan concurrency, the
+classification wait, and the run batch sizes are what the process holds open or spends rather than a judgement about
+anybody's mailbox, so an account naming one of them is refused at the write, naming the key.
+
+### Scanning this account's mail — `SensitiveContent`
+
+`…:SensitiveContent` is this mailbox's half of [sensitive-content
+scanning](../features/sensitive-content-scanning.md#each-accounts-own-posture). It is content of the account's record
+rather than an overlay on the deployment's [`SensitiveContent`](configuration-ai.md#sensitivecontent) section: the two
+are composed, and what is in force over the mail in this account is the stricter of them. A record that says nothing at
+all is the ordinary case and reads the deployment's posture.
+
+It is the account's rather than its user's for the reason classification is, and for one more: what a posture decides is
+written into the one derived text a message has, so a mailbox two people are assigned is scanned once and neither of
+them reads mail the other's posture judged.
+
+```json
+{
+  "SensitiveContent": {
+    "Secrets": { "Enabled": true },
+    "ScreenOutgoingMailFor": ["Secrets", "Pii"]
+  }
+}
+```
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `…:SensitiveContent:Secrets:Enabled` | bool | unset (the deployment's answer) | `true` switches the secret scanner on over this account's mail whether or not the deployment switched it on for every mailbox; `false` stands only where the deployment declined it too, and is refused against a scanner the deployment requires | reload; mail derived under the old posture is re-derived where `SensitiveContent:RebuildStaleDerivedData` is on |
+| `…:SensitiveContent:Pii:Enabled` | bool | unset (the deployment's answer) | The same for the personal-data scanner, and `true` additionally needs `SensitiveContent:PersonalDataAnalyzer:Endpoint` to name an address — without one nothing could scan for it, so the write is refused rather than left to fail closed on the next message | reload; the same |
+| `…:SensitiveContent:ScreenOutgoingMailFor:<n>` | string | unset (the deployment's list) | Each entry names a scanner — `Secrets` or `Pii`, matched ignoring capitalization — whose findings stop mail leaving **this account**. Read as the account's whole answer rather than as an addition, so it names at least what the deployment screens for; an entry naming no scanner is refused rather than dropped | reload; the next send is screened against it |
+
+**Only tightening is accepted, and a loosening is refused where it is written.** Each refusal names the deployment
+setting behind it and repeats nothing the record itself carries: a scanner switched off that the deployment requires,
+because the obligation belongs to whoever holds the mail; the personal-data scanner asked for where no analyzer address
+is stated, which only an operator can state; and a `ScreenOutgoingMailFor` naming fewer scanners than
+`SensitiveContent:ScreenOutgoingMailFor` does — an account may add to that list and never take from it, and removing the
+key altogether takes the deployment's list as it stands.
+
+**A record this deployment already holds is composed rather than refused.** Those refusals are judged where a record is
+*written*; on the next start a stored record is read back and its block composed against the section as it stands. That
+is what keeps the tightening this feature exists for from being a trap: an operator who switches a scanner on
+deployment-wide, or widens the screening list, turns every record accepted before that into one that now asks for less,
+and refusing those would refuse the start itself over records their authors could no longer reach to rewrite. What is in
+force is the stricter of the two either way, so nothing is loosened by accepting them.
+
+Everything else about scanning stays the deployment's: the analyzer's address and the languages it is asked in, the
+confidence floor, the analyzed ceiling, the per-scan timeout, the process-wide scan concurrency — one budget every
+account shares — the categories either scanner looks for, the rules suppressed inside them, and the rebuild switch. An
+account naming one of them binds nothing and is refused as a property nothing binds, like any other.
 
 ### Contact collection
 

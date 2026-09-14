@@ -21,6 +21,9 @@ using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration.Mail.Readers;
+using MailFathom.Host.Configuration.Rules;
+using MailFathom.Host.Configuration.SensitiveContent;
+using MailFathom.Host.Configuration.Spam;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Mail;
@@ -867,6 +870,23 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// </remarks>
     public ContactCollectionOptions ContactCollection { get; set; } = new();
 
+    /// <summary>Gets or sets how this account's mail is classified as spam and what becomes of its junk.</summary>
+    /// <remarks>
+    /// Always present so that a record stating none of its keys still binds, and off in every switch, which is what
+    /// makes classification something a mailbox was configured for rather than something a deployment did to it. The
+    /// mail is one copy, so the decision is the account's and reaches every user it is assigned to; the engine and what
+    /// it costs stay the deployment's, and no key here shadows one of theirs.
+    /// </remarks>
+    public MailAccountSpamClassificationOptions SpamClassification { get; set; } = new();
+
+    /// <summary>Gets what this account asks to have its mail scanned for, within what the deployment provides.</summary>
+    /// <remarks>
+    /// An account that says nothing here reads the deployment's own posture, which is what every mailbox read before
+    /// this block existed. What it may say is judged against the deployment rather than on its own, so the rule lives
+    /// beside that section rather than in this type — <see cref="FindSensitiveContentErrors" /> is where it is asked.
+    /// </remarks>
+    public MailAccountSensitiveContentOptions SensitiveContent { get; } = new();
+
     /// <summary>Gets or sets the earliest date the mail server may have received an email on for it to be synchronized.</summary>
     /// <remarks>
     /// Omitting it synchronizes every email the server still holds, which is the default. It binds as a plain date such
@@ -1044,6 +1064,11 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield return result;
         }
 
+        foreach (var result in this.ValidateSpamClassification())
+        {
+            yield return result;
+        }
+
         // Checked here rather than through a data annotation because nothing binds the block as an options graph of its
         // own, so an annotation on it would be read by nothing. The window decides when personal data is destroyed, so
         // a typo in it fails startup instead of quietly selecting a period nobody wrote.
@@ -1146,6 +1171,49 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
                 yield return result;
             }
         }
+    }
+
+    /// <summary>Finds everything about the scanning block this deployment could not serve.</summary>
+    /// <param name="deployment">The deployment's own <c>SensitiveContent</c> section, which an account may only tighten.</param>
+    /// <param name="path">How the block is named in a refusal, such as <c>MailAccounts:0:SensitiveContent</c>.</param>
+    /// <returns>One result per refusal, empty when the block is one this deployment can serve.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="deployment" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Asked by whoever supplies the deployment's section rather than from the bound graph, for the reason the
+    /// synchronization window is asked that way: the answer depends on something outside the record, and a record
+    /// judged by every rule but this one would accept a posture the composition could not honour.
+    /// </remarks>
+    internal IEnumerable<ValidationResult> FindSensitiveContentErrors(SensitiveContentOptions deployment, string path)
+    {
+        ArgumentNullException.ThrowIfNull(deployment);
+
+        return MailAccountSensitiveContentRules
+            .FindRefusals(this.SensitiveContent, deployment, path)
+            .Select(refusal => new ValidationResult(refusal, [nameof(this.SensitiveContent)]));
+    }
+
+    /// <summary>Reports a spam classification block this account could not be classified under.</summary>
+    /// <remarks>
+    /// Judged against this account's own folders and against nothing else, which is what makes a junk destination or a
+    /// scanned folder resolve within the mailbox the block was written on: a name only another account maps is refused
+    /// exactly as one nobody maps. An account whose identifier is unusable is passed over here, because the declaration
+    /// it would be judged as cannot be read and the identifier is already reported above.
+    /// </remarks>
+    private IEnumerable<ValidationResult> ValidateSpamClassification()
+    {
+        if (this.SpamClassification is null)
+        {
+            return
+            [
+                new ValidationResult(
+                    $"Account '{this.AccountId}': the spam classification configuration must be a block.",
+                    [nameof(this.SpamClassification)]),
+            ];
+        }
+
+        return DeclaredMailAccounts.ReadFrom([this]).FirstOrDefault() is { } declared
+            ? this.SpamClassification.FindRefusals(declared)
+            : [];
     }
 
     /// <summary>Reports a contact collection block this account could not run under.</summary>

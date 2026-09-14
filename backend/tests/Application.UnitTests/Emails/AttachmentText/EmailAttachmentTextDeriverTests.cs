@@ -655,6 +655,7 @@ public sealed class EmailAttachmentTextDeriverTests
     private static EmailAwaitingAttachmentText Awaiting() => new(
         Message,
         ScanningSensitiveContentDerivation.User,
+        ScanningSensitiveContentDerivation.Account,
         DerivedWorkAdmission.Admitted);
 
     private EmailAttachmentTextDeriver Deriver(

@@ -48,7 +48,7 @@ public sealed class SensitiveContentEgressGuardTests
         var guard = new SensitiveContentEgressGuard(
             FixedSensitiveContentPostures.Of(
                 SensitiveContentPosture.ScanningNothing,
-                (SyntheticMailUser.Deployment, egress.Postures.ForUser(SyntheticMailUser.Deployment))),
+                (ScanningSensitiveContentEgress.Account.Id, egress.Postures.ForAccount(ScanningSensitiveContentEgress.Account.Id))),
             new RecordingSensitiveContentEgressTelemetry(),
             this.timeProvider);
 
@@ -80,10 +80,10 @@ public sealed class SensitiveContentEgressGuardTests
     /// <summary>
     /// A flow that reached the guard without stating whose mail it holds is a use case that skipped the resolution,
     /// which would otherwise be served under whatever the deployment happened to scan for. It fails loudly instead,
-    /// because the wrong answer here is one person's mail read under another person's posture.
+    /// because the wrong answer here is one mailbox's mail read under another mailbox's posture.
     /// </summary>
     [Fact]
-    public async Task GuardAsync_AFlowActingForNoUser_IsRefusedRatherThanReadUnderSomebodyElsesPosture()
+    public async Task GuardAsync_AFlowActingForNobodysMail_IsRefusedRatherThanReadUnderAnotherPosture()
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
@@ -95,7 +95,7 @@ public sealed class SensitiveContentEgressGuardTests
             TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Contains("acting for no user", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("acting for nobody's mail", refusal.Message, StringComparison.Ordinal);
     }
 
     /// <summary>A deployment nobody is scanned for needs no user stated, which is what keeps an opt-in nobody took free.</summary>
@@ -131,7 +131,7 @@ public sealed class SensitiveContentEgressGuardTests
         var guard = new SensitiveContentEgressGuard(
             FixedSensitiveContentPostures.Of(
                 SensitiveContentPosture.ScanningNothing,
-                (SyntheticMailUser.Deployment, egress.Postures.ForUser(SyntheticMailUser.Deployment))),
+                (ScanningSensitiveContentEgress.Account.Id, egress.Postures.ForAccount(ScanningSensitiveContentEgress.Account.Id))),
             new RecordingSensitiveContentEgressTelemetry(),
             this.timeProvider);
 

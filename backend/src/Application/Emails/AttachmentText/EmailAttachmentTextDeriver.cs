@@ -10,7 +10,7 @@ using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Detection;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.AttachmentText;
@@ -98,7 +98,7 @@ public sealed class EmailAttachmentTextDeriver
     }
 
     /// <summary>Reads the attachments of one message.</summary>
-    /// <param name="email">The message whose attachments are read, and the user whose posture redacts them.</param>
+    /// <param name="email">The message whose attachments are read, and the account whose posture redacts them.</param>
     /// <param name="runBudget">What the account run has left to read, which this decrements as it reads.</param>
     /// <param name="cancellationToken">Cancels the read between attachments and inside one.</param>
     /// <returns>What each attachment yielded, in walk order, beside what the reading spent and whether the run budget stopped it.</returns>
@@ -148,7 +148,7 @@ public sealed class EmailAttachmentTextDeriver
         // Read before the scan rather than at the write, exactly as the body's own redaction takes it: a posture
         // republished while this message is being read then leaves its rows stamped with the older configuration,
         // which reads as stale and is re-derived — the safe direction.
-        var redactedUnder = this.guard.StampFor(email.User);
+        var redactedUnder = this.guard.StampFor(email.Account);
 
         var content = await this.contentStore.FindStoredContentAsync(email.Id, cancellationToken);
 
@@ -252,7 +252,7 @@ public sealed class EmailAttachmentTextDeriver
 
                 reservedOctets += description.DecodedSizeOctets;
 
-                var read = await this.ReadAsync(position, attachment, email.User, cancellationToken);
+                var read = await this.ReadAsync(position, attachment, email.Account, cancellationToken);
 
                 derived.Add(read.Text);
                 extractedOctets += read.ExtractedOctetCount;
@@ -329,7 +329,7 @@ public sealed class EmailAttachmentTextDeriver
     private async Task<(DerivedAttachmentText Text, long ExtractedOctetCount, bool ReachedProvider)> ReadAsync(
         int position,
         IOpenedEmailAttachment attachment,
-        MailUserId user,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         var description = attachment.Description;
@@ -343,7 +343,7 @@ public sealed class EmailAttachmentTextDeriver
         {
             var text = await this.RedactAsync(
                 DerivedAttachmentText.FromExtraction(position, mediaType, fileName, extracted),
-                user,
+                account,
                 cancellationToken);
 
             return (text, extractedOctets, ReachedProvider: false);
@@ -354,7 +354,7 @@ public sealed class EmailAttachmentTextDeriver
         return (
             await this.RedactAsync(
                 DerivedAttachmentText.FromDescription(position, mediaType, fileName, described),
-                user,
+                account,
                 cancellationToken),
             extractedOctets,
             described.ReachedProvider);
@@ -396,10 +396,10 @@ public sealed class EmailAttachmentTextDeriver
         return await this.describer.DescribeAsync(mediaType, buffer.ToReadableStream(), cancellationToken);
     }
 
-    /// <summary>Replaces what the user's switched-on scanner finds before the words leave this method.</summary>
+    /// <summary>Replaces what the account's switched-on scanner finds before the words leave this method.</summary>
     private async Task<DerivedAttachmentText> RedactAsync(
         DerivedAttachmentText derived,
-        MailUserId user,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         if (derived.Text is not { } text)
@@ -407,6 +407,6 @@ public sealed class EmailAttachmentTextDeriver
             return derived;
         }
 
-        return derived.WithRedactedText(await this.guard.GuardTextAsync(user, text, cancellationToken));
+        return derived.WithRedactedText(await this.guard.GuardTextAsync(account, text, cancellationToken));
     }
 }

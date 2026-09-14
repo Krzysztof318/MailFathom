@@ -146,6 +146,14 @@ internal sealed class UserAccountDocumentBinder(
     /// quoted list the framework writes, carrying no control character. What fails either test falls back to the
     /// general sentence, which is also what a message shaped differently by a later runtime gets.
     /// </para>
+    /// <para>
+    /// Both sentences are looked for on the failure and on the one inside it, because where the unknown property sits
+    /// decides which carries it: one written at the top of the record names the type the record binds as and arrives
+    /// on the failure itself, while one written inside a mail account is met while that element is bound and arrives
+    /// as an inner failure under a sentence saying only that binding failed. A mailbox's classification and scanning
+    /// settings are that second shape, so reading the failure alone would answer every mistyped key in either block
+    /// with the general sentence.
+    /// </para>
     /// </remarks>
     private static string BindingRefusalFor(InvalidOperationException refusal)
     {
@@ -153,11 +161,13 @@ internal sealed class UserAccountDocumentBinder(
         const string pathOpening = " at '";
         const string pathClosing = "' to type '";
 
-        var message = refusal.Message;
+        var unknown = new[] { refusal.Message, refusal.InnerException?.Message }
+            .OfType<string>()
+            .FirstOrDefault(message => message.Contains(unknownProperties, StringComparison.Ordinal));
 
-        if (message.Contains(unknownProperties, StringComparison.Ordinal)
-            && message.LastIndexOf(": ", StringComparison.Ordinal) is var named and > 0
-            && QuotedNamesIn(message[(named + 2)..]) is { } names)
+        if (unknown is not null
+            && unknown.LastIndexOf(": ", StringComparison.Ordinal) is var named and > 0
+            && QuotedNamesIn(unknown[(named + 2)..]) is { } names)
         {
             return $"The user record names {names}, which is not a setting a user's record carries. Remove it, or correct the spelling of the setting it was meant to be.";
         }

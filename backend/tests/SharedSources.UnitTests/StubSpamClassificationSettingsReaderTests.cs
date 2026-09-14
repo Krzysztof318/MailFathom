@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Spam;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
@@ -25,7 +24,7 @@ public sealed class StubSpamClassificationSettingsReaderTests
 
         // Act
         var answered = new StubSpamClassificationSettingsReader(settings, MailAccountId.Create("primary"))
-            .SettingsFor(MailUserId.Create(Guid.NewGuid()));
+            .SettingsFor(MailAccountId.Create("anything"));
 
         // Assert
         Assert.Same(settings, answered);
@@ -74,8 +73,8 @@ public sealed class StubSpamClassificationSettingsReaderTests
         var reader = StubSpamClassificationSettingsReader.Disabled;
 
         // Assert
-        Assert.False(reader.SettingsFor(MailUserId.Create(Guid.NewGuid())).IsEnabled);
-        Assert.Empty(reader.SettingsFor(MailUserId.Create(Guid.NewGuid())).ScannedFolderAliases);
+        Assert.False(reader.SettingsFor(MailAccountId.Create("anything")).IsEnabled);
+        Assert.Empty(reader.SettingsFor(MailAccountId.Create("anything")).ScannedFolderAliases);
         Assert.Empty(reader.ScopeInForce.ClassifyingAccounts);
     }
 }

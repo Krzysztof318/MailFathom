@@ -379,7 +379,7 @@ internal static class HostComposition
         // The detectors arrive behind a delegate rather than resolved, so a deployment where nobody is scanned for never
         // constructs one. Everything that scans reads this port, and nothing reads the deployment's own section for a
         // posture: composing the two answers is this type's and no caller's.
-        builder.Services.AddSingleton<ISensitiveContentPostures>(provider => new UserSensitiveContentPostures(
+        builder.Services.AddSingleton<ISensitiveContentPostures>(provider => new MailAccountSensitiveContentPostures(
             provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value,
             provider.GetServices<ISensitiveContentCatalog>(),
             provider.GetServices<ISensitiveContentScanner>,
