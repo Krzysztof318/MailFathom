@@ -132,7 +132,7 @@ public sealed class MailRuleEvaluationPass
     }
 
     /// <summary>Takes one bounded pass over the account's arrivals, and over its requested run where it has one.</summary>
-    /// <param name="account">The account whose mail is evaluated, named by its user and its identifier together.</param>
+    /// <param name="account">The account whose mail is evaluated, by its generated identifier together.</param>
     /// <param name="cancellationToken">Cancels the pass between emails and between batches; committed batches stay durable.</param>
     /// <returns>What each walk did, under the revision the pass read when it began.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">

@@ -14,7 +14,7 @@ using MailFathom.Application.Emails.ReplyDrafts;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -196,12 +196,13 @@ public sealed class ReplyDraftAgentTests
     private static ReplyDraftBrief Brief(
         string text = "It is 4 200 zloty.",
         IReadOnlyList<string>? styleSamples = null,
-        MailUserLanguage language = MailUserLanguage.English)
+        MailAccountLanguage language = MailAccountLanguage.English)
     {
         EmailAddress.TryCreate("Karolina", "karolina@example.test", out var karolina);
 
         return new ReplyDraftBrief(
             new ReplyDraftSources(
+                MailAccountId.Create("work"),
                 "The racking quotation",
                 [
                     new ReplyDraftMessage(

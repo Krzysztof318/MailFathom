@@ -4,7 +4,7 @@
 
 using MailFathom.AI.Chat;
 using MailFathom.AI.Orchestration;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -33,7 +33,7 @@ internal static class ThreadStateAgentComposition
     internal static ChatClientAgent Compose(
         IChatClient chatClient,
         ChatGenerationPlan plan,
-        MailUserLanguage language,
+        MailAccountLanguage language,
         IAgentInstructionEnvelope instructionEnvelope,
         ILoggerFactory loggerFactory)
     {

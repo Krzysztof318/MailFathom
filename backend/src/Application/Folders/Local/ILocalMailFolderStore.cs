@@ -11,8 +11,9 @@ namespace MailFathom.Application.Folders.Local;
 
 /// <summary>Persists the folders MailFathom keeps for an account whose mailbox it holds, and which messages are in them.</summary>
 /// <remarks>
-/// Every read is narrowed to one user's one account, so an account identifier the caller does not hold reads as no
-/// account at all rather than as somebody else's.
+/// Every read is narrowed to one account, by the generated identifier the whole mail graph is keyed by. Which caller
+/// may name that account is settled before this port is reached — <see cref="MailFolderEditor" /> resolves it against
+/// the assignments — so an identifier nothing here recognizes reads as no account at all.
 /// </remarks>
 public interface ILocalMailFolderStore
 {
@@ -20,7 +21,7 @@ public interface ILocalMailFolderStore
     /// <param name="session">The transaction the edit commits in.</param>
     /// <param name="account">The account.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>The holding, or <see langword="null" /> where the user holds no such account.</returns>
+    /// <returns>The holding, or <see langword="null" /> where the deployment holds no such account.</returns>
     /// <remarks>
     /// A later <see cref="SaveAsync" /> in the same session is conditional on the hierarchy not having changed since
     /// this read, so two edits reaching one account at once conflict and the loser decides again from what the winner
@@ -34,7 +35,7 @@ public interface ILocalMailFolderStore
     /// <summary>Reads the account's phase and folders, joining no transaction.</summary>
     /// <param name="account">The account.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>The holding, or <see langword="null" /> where the user holds no such account.</returns>
+    /// <returns>The holding, or <see langword="null" /> where the deployment holds no such account.</returns>
     Task<LocalMailFolderHolding?> ReadAsync(MailAccountId account, CancellationToken cancellationToken);
 
     /// <summary>Writes what an edit decided.</summary>

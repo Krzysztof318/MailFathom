@@ -28,6 +28,12 @@ namespace MailFathom.Application.Emails.AttachmentText.Limits;
 /// under their ceiling, and what it consumed is charged to each. That fan-out lives here rather than in the pass, so
 /// the reading and the charge cannot come to disagree about who a mailbox is for.
 /// </para>
+/// <para>
+/// The deployment's figure is not the sum of those per-user charges and is never derived from them. Counting a shared
+/// mailbox in full against each of its users is what the per-user ceiling means, so the per-user figures add up to
+/// more than was read, and a deployment ceiling taken off their sum would stop a mailbox three people share after a
+/// third of what the operator declared. The ledger counts what one reading consumed once, separately.
+/// </para>
 /// </remarks>
 public sealed class AttachmentDerivationSpendGate
 {
@@ -67,8 +73,10 @@ public sealed class AttachmentDerivationSpendGate
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
     /// The strictest assigned user decides, because a shared mailbox's mail counts in full against each of them: a
-    /// reading proceeds only while every one is under their ceiling. A mailbox assigned to nobody leaves only the
-    /// deployment's own figure, which is what the empty case answers with.
+    /// reading proceeds only while every one is under their ceiling. A mailbox assigned to nobody is refused by the
+    /// same rule read the other way: there is no user for the per-user ceiling to admit, so the answer is an exhausted
+    /// per-user period rather than a fresh one. Admitting it instead would read attachments no caller can reach — every
+    /// caller-facing scope narrows to the accounts somebody is assigned — under no per-user ceiling at all.
     /// <para>
     /// ponytail: one indexed read per assigned user, beside a parse and a provider call that cost orders of magnitude
     /// more. A grouped read is worth writing only if a deployment assigns a mailbox widely enough for it to show.
@@ -115,7 +123,7 @@ public sealed class AttachmentDerivationSpendGate
         }
 
         return new AttachmentDerivationAdmission(
-            strictestUser ?? this.PeriodOf(derivationStep, periodStart, 0, userCeiling),
+            strictestUser ?? this.ExhaustedPeriod(derivationStep, periodStart),
             deployment);
     }
 
@@ -130,9 +138,11 @@ public sealed class AttachmentDerivationSpendGate
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the count is negative.</exception>
     /// <remarks>
     /// Charged to whoever is assigned at the moment the reading happens, and never recharged when an assignment
-    /// changes: consumption is a record of an event rather than a running apportionment.
+    /// changes: consumption is a record of an event rather than a running apportionment. The deployment's own figure
+    /// is charged once by the same write, so a mailbox assigned to nobody still moves it and a mailbox three people
+    /// share moves it by what was read rather than by three times it.
     /// </remarks>
-    public async Task RecordAccountSpendAsync(
+    public Task RecordAccountSpendAsync(
         IPersistenceSession session,
         AttachmentDerivationStep derivationStep,
         MailAccountId account,
@@ -142,18 +152,13 @@ public sealed class AttachmentDerivationSpendGate
         ArgumentNullException.ThrowIfNull(session);
         ArgumentOutOfRangeException.ThrowIfNegative(unitCount);
 
-        var periodStart = this.CurrentPeriodStart();
-
-        foreach (var user in this.assignments.UsersAssignedTo(account))
-        {
-            await this.ledger.RecordSpendAsync(
-                session,
-                periodStart,
-                derivationStep,
-                user,
-                unitCount,
-                cancellationToken);
-        }
+        return this.ledger.RecordSpendAsync(
+            session,
+            this.CurrentPeriodStart(),
+            derivationStep,
+            this.assignments.UsersAssignedTo(account),
+            unitCount,
+            cancellationToken);
     }
 
     /// <summary>Reads where one user stands on one step in the current period, which is what a pass consults before it reads.</summary>
@@ -231,7 +236,7 @@ public sealed class AttachmentDerivationSpendGate
             session,
             this.CurrentPeriodStart(),
             derivationStep,
-            user,
+            [user],
             unitCount,
             cancellationToken);
     }
@@ -244,4 +249,15 @@ public sealed class AttachmentDerivationSpendGate
         long consumed,
         long ceiling) =>
         new(derivationStep, periodStart, periodStart + this.budget.Period, consumed, ceiling == 0 ? null : ceiling);
+
+    /// <summary>The per-user standing of a mailbox no user is assigned, which admits nothing whatever is configured.</summary>
+    /// <remarks>
+    /// A ceiling of nothing rather than the configured one, because the configured one may be absent and an absent
+    /// ceiling admits everything. There is no user here for a per-user ceiling to be about, so the honest answer is
+    /// that no per-user allowance exists rather than that the deployment declared none.
+    /// </remarks>
+    private AttachmentDerivationPeriod ExhaustedPeriod(
+        AttachmentDerivationStep derivationStep,
+        DateTimeOffset periodStart) =>
+        new(derivationStep, periodStart, periodStart + this.budget.Period, 0, 0);
 }

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Jobs;
@@ -83,6 +84,34 @@ public sealed class MailFolderEditorTests
 
         // Assert
         Assert.Null(management);
+    }
+
+    /// <summary>
+    /// The account arrives as a generated identifier and neither editor beneath knows who asked, so this is the one
+    /// place an act is narrowed to the caller's own mailboxes. A mailbox somebody else is assigned answers exactly as
+    /// one this deployment never served, so a refusal tells nobody which mailboxes exist beside their own.
+    /// </summary>
+    [Theory]
+    [InlineData(MailAccountCustodyPhase.Held)]
+    [InlineData(MailAccountCustodyPhase.Mirrored)]
+    public async Task CreateAsync_AnAccountTheCallerIsNotAssigned_IsRefusedAsMissingWithoutReachingTheMailbox(
+        MailAccountCustodyPhase phase)
+    {
+        // Arrange
+        await using var deployment = new EditorDeployment(phase);
+        deployment.Accounts.AssignedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("theirs"))]);
+
+        // Act
+        var outcome = await deployment.Editor.CreateAsync(
+            Account,
+            parentId: null,
+            "Projects",
+            role: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFolderActRefusal.AccountMissing, outcome.Refusal);
+        Assert.Equal(0, deployment.Store.SaveCount);
     }
 
     [Fact]
@@ -270,6 +299,9 @@ public sealed class MailFolderEditorTests
             var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
             sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
+            this.Accounts = Substitute.For<ICallerMailAccountCatalog>();
+            this.Accounts.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+
             var authorization = AccessAuthorizations.ForUserGranted(
                 SyntheticMailUser.Deployment,
                 granted.Length > 0 ? granted : [MailFathomPermission.MailRead, MailFathomPermission.MailFoldersWrite]);
@@ -293,7 +325,8 @@ public sealed class MailFolderEditorTests
                     this.Signals,
                     Substitute.For<IJobStore>(),
                     authorization),
-                authorization);
+                authorization,
+                this.Accounts);
         }
 
         internal FakeTimeProvider Clock { get; } = new();
@@ -303,6 +336,8 @@ public sealed class MailFolderEditorTests
         internal ClientSignals Signals { get; }
 
         internal MailFolderEditor Editor { get; }
+
+        internal ICallerMailAccountCatalog Accounts { get; }
 
         /// <summary>States what the whole of configuration declares for a mirrored account.</summary>
         internal void Declares(params MailFolderMapping[] declared) => this.folders = declared;

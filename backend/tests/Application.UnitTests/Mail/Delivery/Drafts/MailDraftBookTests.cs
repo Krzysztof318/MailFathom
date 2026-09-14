@@ -373,6 +373,40 @@ public sealed class MailDraftBookTests
         Assert.Equal(1, harness.Drafts.Peek(draft.Id)!.Revision);
     }
 
+    /// <summary>
+    /// ADR 0014 lets two people be assigned one mailbox, so the account alone stops saying whose draft it is. A draft
+    /// another assigned user wrote answers exactly as one of another account does — nobody learns from a revision
+    /// which drafts the person beside them is part-way through.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_RevisingADraftAnotherUserOfTheSameAccountWrote_IsRefused()
+    {
+        // Arrange
+        var harness = Harness();
+        harness.MapDraftsFolder(Account);
+        var theirs = await harness.Book.SaveAsync(
+            Account,
+            SyntheticMailUser.Another,
+            OutgoingEmailRequester.Command("mfctl-7b19"),
+            Composed("their first version"),
+            revises: null,
+            CancellationToken.None);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
+            () => harness.Book.SaveAsync(
+                Account,
+                SyntheticMailUser.Deployment,
+                OutgoingEmailRequester.Command("mfctl-7b19"),
+                Composed("second version"),
+                theirs.Id,
+                CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailDraftNotFound, refusal.ErrorCode);
+        Assert.Equal(1, harness.Drafts.Peek(theirs.Id)!.Revision);
+    }
+
     /// <summary>The sending grant does not carry the drafting one, because no permission here implies another.</summary>
     /// <remarks>
     /// The pair of refusals is what makes the two halves of authoring separable at all. A deployment that granted
@@ -734,7 +768,41 @@ public sealed class MailDraftBookTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
-            () => harness.Book.ReadStagedAttachmentsAsync(Account, theirs.Id, CancellationToken.None));
+            () => harness.Book.ReadStagedAttachmentsAsync(
+                Account,
+                SyntheticMailUser.Deployment,
+                theirs.Id,
+                CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailDraftNotFound, refusal.ErrorCode);
+    }
+
+    /// <summary>
+    /// The files are the other half of the same claim: a draft of somebody the mailbox is also assigned to reads no
+    /// octet of theirs, so the refusal is the same size and the same code as one nobody holds.
+    /// </summary>
+    [Fact]
+    public async Task ReadStagedAttachmentsAsync_ADraftAnotherUserOfTheSameAccountHolds_IsRefusedBeforeAnyOctetIsRead()
+    {
+        // Arrange
+        var harness = Harness();
+        harness.MapDraftsFolder(Account);
+        var theirs = await harness.Book.SaveAsync(
+            Account,
+            SyntheticMailUser.Another,
+            OutgoingEmailRequester.Command("mfctl-2d70"),
+            Composed("their first version"),
+            revises: null,
+            CancellationToken.None);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
+            () => harness.Book.ReadStagedAttachmentsAsync(
+                Account,
+                SyntheticMailUser.Deployment,
+                theirs.Id,
+                CancellationToken.None));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.MailDraftNotFound, refusal.ErrorCode);
@@ -751,6 +819,7 @@ public sealed class MailDraftBookTests
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
             () => harness.Book.ReadStagedAttachmentsAsync(
                 Account,
+                SyntheticMailUser.Deployment,
                 MailDraftId.Create(Guid.CreateVersion7()),
                 CancellationToken.None));
 

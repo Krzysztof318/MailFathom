@@ -4,7 +4,7 @@
 
 using System.Globalization;
 using System.Text;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.Spam;
@@ -32,35 +32,50 @@ public sealed class UserAccountDocumentBinderTests
     /// <summary>The instant every binding here is judged against, so a date-bound rule is decided rather than drawn.</summary>
     private static readonly DateTimeOffset Today = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
 
-    /// <summary>A user is provisioned before their first mailbox, so a record of their language alone is an ordinary one.</summary>
+    /// <summary>A user is provisioned before their first mailbox, so a record declaring nothing is an ordinary one.</summary>
     [Fact]
-    public void Bind_ADocumentNamingOnlyALanguage_IsAUserAssignedNoMailAccount()
-    {
-        // Arrange
-        var binder = CreateBinder();
-
-        // Act
-        var binding = binder.Bind("""{"Language":"Polish"}""", UserRecordArrival.BeingWritten);
-
-        // Assert
-        Assert.True(binding.IsBound);
-        Assert.Empty(binding.User!.MailAccounts);
-        Assert.Equal(MailUserLanguage.Polish, binding.User!.ReadingLanguage);
-    }
-
-    /// <summary>
-    /// The one property a record must state. What this deployment writes for somebody comes out in some language
-    /// whether or not anybody chose it, so an unstated one is a record written before the property existed rather than
-    /// a user who asked for nothing.
-    /// </summary>
-    [Fact]
-    public void Bind_ADocumentNamingNoLanguage_IsRefusedNamingBothItTakes()
+    public void Bind_ADocumentDeclaringNothing_IsAUserAssignedNoMailAccount()
     {
         // Arrange
         var binder = CreateBinder();
 
         // Act
         var binding = binder.Bind("{}", UserRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.True(binding.IsBound);
+        Assert.Empty(binding.User!.MailAccounts);
+    }
+
+    /// <summary>An account states the language its mail is read in, and the record around it states none.</summary>
+    [Fact]
+    public void Bind_ADeclaredAccountNamingALanguage_BindsThatLanguageOntoTheAccount()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind(DocumentDeclaringAccountReading(("work", "The work mailbox"), "Polish"), UserRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.True(binding.IsBound);
+        var account = Assert.Single(binding.User!.MailAccounts);
+        Assert.Equal(MailAccountLanguage.Polish, account.ReadingLanguage);
+    }
+
+    /// <summary>
+    /// The one property a declaration must state. What this deployment writes about a mailbox comes out in some
+    /// language whether or not anybody chose it, so an unstated one is an account recorded before the property
+    /// existed rather than a mailbox nobody asked anything of.
+    /// </summary>
+    [Fact]
+    public void Bind_ADeclaredAccountNamingNoLanguage_IsRefusedNamingBothItTakes()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind(DocumentDeclaringAccountReading(("work", "The work mailbox"), language: null), UserRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -76,13 +91,13 @@ public sealed class UserAccountDocumentBinderTests
     [InlineData("pl")]
     [InlineData("0")]
     [InlineData("")]
-    public void Bind_ADocumentNamingALanguageThisBuildDoesNotWriteIn_IsRefused(string language)
+    public void Bind_ADeclaredAccountNamingALanguageThisBuildDoesNotWriteIn_IsRefused(string language)
     {
         // Arrange
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind($$"""{"Language":"{{language}}"}""", UserRecordArrival.BeingWritten);
+        var binding = binder.Bind(DocumentDeclaringAccountReading(("work", "The work mailbox"), language), UserRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -92,22 +107,23 @@ public sealed class UserAccountDocumentBinderTests
     }
 
     /// <summary>
-    /// A record committed before the property existed states no language and could not have stated one, so a start
-    /// reads it rather than refusing it — the surface an administrator would add the line from is behind the gate that
-    /// would be failing.
+    /// An account recorded before the property existed states no language and could not have stated one, so a start
+    /// reads it rather than refusing it — the surface an administrator would add the line from is behind the gate
+    /// that would be failing.
     /// </summary>
     [Fact]
-    public void Bind_AHeldRecordNamingNoLanguage_BindsAndIsReadAsEnglish()
+    public void Bind_AHeldAccountNamingNoLanguage_BindsAndIsReadAsEnglish()
     {
         // Arrange
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("{}", UserRecordArrival.AlreadyHeld);
+        var binding = binder.Bind(DocumentDeclaringAccountReading(("work", "The work mailbox"), language: null), UserRecordArrival.AlreadyHeld);
 
         // Assert
         Assert.True(binding.IsBound);
-        Assert.Null(binding.User!.ReadingLanguage);
+        var account = Assert.Single(binding.User!.MailAccounts);
+        Assert.Null(account.ReadingLanguage);
     }
 
     /// <summary>
@@ -115,13 +131,13 @@ public sealed class UserAccountDocumentBinderTests
     /// the absence alone rather than the property.
     /// </summary>
     [Fact]
-    public void Bind_AHeldRecordNamingALanguageThisBuildDoesNotWriteIn_IsRefused()
+    public void Bind_AHeldAccountNamingALanguageThisBuildDoesNotWriteIn_IsRefused()
     {
         // Arrange
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("""{"Language":"German"}""", UserRecordArrival.AlreadyHeld);
+        var binding = binder.Bind(DocumentDeclaringAccountReading(("work", "The work mailbox"), "German"), UserRecordArrival.AlreadyHeld);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -130,21 +146,22 @@ public sealed class UserAccountDocumentBinderTests
             refusal => refusal.Contains("not a language MailFathom writes in", StringComparison.Ordinal));
     }
 
-    /// <summary>The name is written by hand in a document, so it is read the way it was typed.</summary>
+    /// <summary>The name is written by hand in a declaration, so it is read the way it was typed.</summary>
     [Theory]
-    [InlineData("polish", MailUserLanguage.Polish)]
-    [InlineData("ENGLISH", MailUserLanguage.English)]
-    public void Bind_ALanguageNamedInAnotherCase_BindsToTheSameLanguage(string written, MailUserLanguage expected)
+    [InlineData("polish", MailAccountLanguage.Polish)]
+    [InlineData("ENGLISH", MailAccountLanguage.English)]
+    public void Bind_ALanguageNamedInAnotherCase_BindsToTheSameLanguage(string written, MailAccountLanguage expected)
     {
         // Arrange
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind($$"""{"Language":"{{written}}"}""", UserRecordArrival.BeingWritten);
+        var binding = binder.Bind(DocumentDeclaringAccountReading(("work", "The work mailbox"), written), UserRecordArrival.BeingWritten);
 
         // Assert
         Assert.True(binding.IsBound);
-        Assert.Equal(expected, binding.User!.ReadingLanguage);
+        var account = Assert.Single(binding.User!.MailAccounts);
+        Assert.Equal(expected, account.ReadingLanguage);
     }
 
     /// <summary>A declaration in the record is the same declaration a file carried, bound by the same type.</summary>
@@ -695,7 +712,7 @@ public sealed class UserAccountDocumentBinderTests
 
         // Act
         var binding = binder.Bind(
-            """{"Language":"English","MailAccounts":[],"Nonsense":1}""",
+            """{"MailAccounts":[],"Nonsense":1}""",
             UserRecordArrival.AlreadyHeld);
 
         // Assert
@@ -725,7 +742,7 @@ public sealed class UserAccountDocumentBinderTests
 
         // Act
         var binding = binder.Bind(
-            $$"""{"Language":"English","MailAccounts":[],"{{property}}":{{block}}}""",
+            $$"""{"MailAccounts":[],"{{property}}":{{block}}}""",
             arrival);
 
         // Assert
@@ -747,11 +764,11 @@ public sealed class UserAccountDocumentBinderTests
     private static string DocumentDeclaringAccountCarrying(string block) =>
         $$"""
           {
-            "Language": "English",
             "MailAccounts": [
               {
                 "AccountId": "work",
                 "DisplayName": "The work mailbox",
+                "Language": "English",
                 "Host": "imap.example.test",
                 "UserName": "mailfathom@example.test",
                 "Secrets": { "Password": { "Name": "work-password", "SecretReference": "{{PasswordReference}}" } },
@@ -763,28 +780,41 @@ public sealed class UserAccountDocumentBinderTests
 
     private static string DocumentDeclaring(
         params (string AccountId, string DisplayName)[] accounts) =>
-        DocumentDeclaring(accounts, PasswordReference);
+        DocumentDeclaring(accounts, PasswordReference, "English");
 
     private static string DocumentDeclaring(
         (string AccountId, string DisplayName) account,
         string passwordReference) =>
-        DocumentDeclaring([account], passwordReference);
+        DocumentDeclaring([account], passwordReference, "English");
+
+    private static string DocumentDeclaringAccountReading(
+        (string AccountId, string DisplayName) account,
+        string? language) =>
+        DocumentDeclaring([account], PasswordReference, language);
 
     private static string DocumentDeclaring(
         IReadOnlyList<(string AccountId, string DisplayName)> accounts,
-        string passwordReference)
+        string passwordReference,
+        string? language)
     {
+        var declared = language is null
+            ? string.Empty
+            : $$"""
+                "Language": "{{language}}",
+                """;
+
         var declarations = accounts.Select(account =>
             $$"""
               {
                 "AccountId": "{{account.AccountId}}",
                 "DisplayName": "{{account.DisplayName}}",
+                {{declared}}
                 "Host": "imap.example.test",
                 "UserName": "mailfathom@example.test",
                 "Secrets": { "Password": { "Name": "{{account.AccountId}}-password", "SecretReference": "{{passwordReference}}" } }
               }
               """);
 
-        return $$"""{ "Language": "English", "MailAccounts": [ {{string.Join(",", declarations)}} ] }""";
+        return $$"""{ "MailAccounts": [ {{string.Join(",", declarations)}} ] }""";
     }
 }

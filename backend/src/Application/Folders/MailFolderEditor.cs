@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Folders.Local;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -29,39 +30,57 @@ namespace MailFathom.Application.Folders;
 /// its source is being filled back up from them, so an act on either side would be an act against a mailbox that is
 /// half in each place; the acts come back when the restore ends.
 /// </para>
+/// <para>
+/// An account is narrowed to the caller's assignments here, which is the only place it is: both editors beneath take
+/// the account's generated identifier and neither knows who asked, and the transport surface passes on whatever a
+/// request named. An account this caller is not assigned is answered exactly as one the deployment never served, so a
+/// refusal never says which mailboxes exist beside their own.
+/// </para>
 /// </remarks>
 public sealed class MailFolderEditor
 {
     private readonly LocalMailFolderEditor local;
     private readonly MirroredMailFolderEditor mirrored;
     private readonly AccessAuthorization authorization;
+    private readonly ICallerMailAccountCatalog accounts;
 
     /// <summary>Initializes a new instance of the <see cref="MailFolderEditor" /> class.</summary>
     /// <param name="local">Acts on the folders of an account whose mailbox MailFathom holds.</param>
     /// <param name="mirrored">Acts on the folders of an account whose mail server is the truth.</param>
     /// <param name="authorization">Answers which user the caller acts for.</param>
+    /// <param name="accounts">Answers which accounts that user is assigned, which is what an act is narrowed to.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailFolderEditor(
         LocalMailFolderEditor local,
         MirroredMailFolderEditor mirrored,
-        AccessAuthorization authorization)
+        AccessAuthorization authorization,
+        ICallerMailAccountCatalog accounts)
     {
         ArgumentNullException.ThrowIfNull(local);
         ArgumentNullException.ThrowIfNull(mirrored);
         ArgumentNullException.ThrowIfNull(authorization);
+        ArgumentNullException.ThrowIfNull(accounts);
 
         this.local = local;
         this.mirrored = mirrored;
         this.authorization = authorization;
+        this.accounts = accounts;
     }
 
     /// <summary>Reads the account's folders and which acts each of them and the account itself allow.</summary>
-    /// <param name="account">The caller's account.</param>
+    /// <param name="account">The account, by its generated identifier.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>The folders and their acts, or <see langword="null" /> where the caller holds no such account.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <c>mailfathom.mail.read</c>.</exception>
+    /// <returns>The folders and their acts, or <see langword="null" /> where this caller is assigned no such account.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <c>mailfathom.mail.read</c>, or acts for no user at all.</exception>
     public async Task<MailFolderManagement?> ReadAsync(MailAccountId account, CancellationToken cancellationToken)
     {
+        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+
+        if (!this.IsAssigned(account))
+        {
+            return null;
+        }
+
         var holding = await this.local.ReadAsync(account, cancellationToken);
 
         if (holding is null)
@@ -168,6 +187,11 @@ public sealed class MailFolderEditor
     {
         this.authorization.RequirePermission(MailFathomPermission.MailFoldersWrite);
 
+        if (!this.IsAssigned(account))
+        {
+            return MailFolderActOutcome.Refused(MailFolderActRefusal.AccountMissing);
+        }
+
         var holding = await this.local.ReadAsync(account, cancellationToken);
 
         return holding switch
@@ -217,6 +241,14 @@ public sealed class MailFolderEditor
 
         return Describe(await this.local.CreateAsync(account, parent, name, cancellationToken), holding);
     }
+
+    /// <summary>Answers whether the user this unit of work acts for is assigned the account a read or an act named.</summary>
+    /// <remarks>
+    /// A principal acting for no user is refused by the catalog rather than answered, because an empty set of
+    /// assignments would let that mistake read as a person who is assigned nothing.
+    /// </remarks>
+    private bool IsAssigned(MailAccountId account) =>
+        this.accounts.AssignedAccounts.Any(assigned => assigned.Id == account);
 
     private static MailFolderManagement DescribeHeld(LocalMailFolderHolding holding)
     {

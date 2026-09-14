@@ -32,9 +32,6 @@ public sealed record SpamClassificationRun
     /// <summary>Gets the account whose mail the run walks.</summary>
     public required MailAccountId Account { get; init; }
 
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one user names.</summary>
-    public MailAccountId AccountId => this.Account;
-
     /// <summary>Gets when the run was asked for.</summary>
     public required DateTimeOffset RequestedAt { get; init; }
 

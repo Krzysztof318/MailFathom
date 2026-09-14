@@ -287,7 +287,9 @@ has open.
 **Reaching a ceiling waits rather than fails.** Both are read before a message is opened, so the account run ends where
 it is with that message untouched and unstamped. The surrounding synchronization run succeeds, nothing is dropped — a
 message with no attachment reading is exactly what the next pass selects on — and the first run after the period rolls
-over reaches it. A per-user ceiling stops that user's mail alone. It is the same degradation an exhausted embedding
+over reaches it. A per-user ceiling stops that user's mail alone, read of every user the
+mailbox is assigned to with the strictest of them deciding; a mailbox assigned to nobody reads as one reached, and
+nothing of it is parsed until somebody is assigned it. It is the same degradation an exhausted embedding
 budget produces, which is what makes the two readable together.
 
 The run says which one it met, at information level and naming both halves: the step, which is the key to raise, and

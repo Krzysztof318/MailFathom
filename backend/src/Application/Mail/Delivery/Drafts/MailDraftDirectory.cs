@@ -38,7 +38,7 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// would be a walk over their unsent mail rather than a page of it.
 /// </para>
 /// </remarks>
-/// <param name="accountCatalog">Says which accounts the caller's user owns, and therefore which one a caller may name.</param>
+/// <param name="accountCatalog">Says which accounts the caller's user is assigned, and therefore which one a caller may name.</param>
 /// <param name="drafts">Holds the durable account of every draft.</param>
 /// <param name="contentStore">Holds the composed MIME each revision is.</param>
 /// <param name="text">Reads back what a composed message says, so an author gets their own words to go on editing.</param>
@@ -58,11 +58,11 @@ public sealed class MailDraftDirectory(
     public const int MaximumCount = 200;
 
     /// <summary>Reads the drafts the caller's user is writing, newest edit first.</summary>
-    /// <param name="account">The account to narrow to, or <see langword="null" /> for every account this user owns.</param>
+    /// <param name="account">The account to narrow to, or <see langword="null" /> for every account this user is assigned.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The drafts, at most <see cref="MaximumCount" /> of them, empty where the user is writing none.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />, or is acting for no user.</exception>
-    /// <exception cref="MailAccountNotAccessibleException">Thrown when <paramref name="account" /> names an account the caller's user does not own, which includes every account this deployment does not serve.</exception>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when <paramref name="account" /> names an account the caller's user is not assigned, which includes every account this deployment does not serve.</exception>
     public async Task<IReadOnlyList<MailDraftRecord>> ReadAsync(
         MailAccountSelector? account,
         CancellationToken cancellationToken)
@@ -70,7 +70,7 @@ public sealed class MailDraftDirectory(
         authorization.RequirePermission(MailFathomPermission.MailDraftsWrite);
 
         var narrowed = account is { } named
-            ? (accountCatalog.AssignedAccounts.FirstOrDefault(owned => owned.IsNamedBy(named))
+            ? (accountCatalog.AssignedAccounts.FirstOrDefault(assigned => assigned.IsNamedBy(named))
                 ?? throw new MailAccountNotAccessibleException(named)).Id
             : (MailAccountId?)null;
 

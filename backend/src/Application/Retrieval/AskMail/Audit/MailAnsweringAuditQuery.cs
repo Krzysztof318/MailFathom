@@ -49,8 +49,6 @@ public sealed record MailAnsweringAuditQuery
 
     /// <summary>Gets the account whose record is read.</summary>
     public MailAccountId Account { get; }
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one user names.</summary>
-    public MailAccountId AccountId => this.Account;
 
     /// <summary>Gets the earliest completion instant served, inclusive, or <see langword="null" /> when the page reaches back as far as the record does.</summary>
     public DateTimeOffset? CompletedFrom { get; }

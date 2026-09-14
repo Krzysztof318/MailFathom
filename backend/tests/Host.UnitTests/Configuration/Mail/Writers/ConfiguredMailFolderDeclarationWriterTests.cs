@@ -22,7 +22,8 @@ namespace MailFathom.Host.UnitTests.Configuration.Mail.Writers;
 /// </summary>
 public sealed class ConfiguredMailFolderDeclarationWriterTests
 {
-    private const string LanguageOnlyRecord = """{"Language":"English"}""";
+    /// <summary>The record a provisioning leaves behind, which declares nothing until its user asks for something.</summary>
+    private const string EmptyRecord = "{}";
 
     private static readonly MailUserId Alex = SyntheticMailUser.Deployment;
 
@@ -169,7 +170,7 @@ public sealed class ConfiguredMailFolderDeclarationWriterTests
         // Arrange
         var work = Mailbox("work@example.test", "work");
         var deployment = new UserRecordDeployment([MailFathomPermission.MailRead], Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
         var writer = new ConfiguredMailFolderDeclarationWriter(deployment.MailAccounts);
 
         // Act, Assert
@@ -186,7 +187,7 @@ public sealed class ConfiguredMailFolderDeclarationWriterTests
         deployment = new UserRecordDeployment(
             [MailFathomPermission.MailRead, MailFathomPermission.MailFoldersWrite],
             Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, account);
+        deployment.Holding(Alex, EmptyRecord, version: 1, account);
 
         return new ConfiguredMailFolderDeclarationWriter(deployment.MailAccounts);
     }
@@ -221,6 +222,7 @@ public sealed class ConfiguredMailFolderDeclarationWriterTests
             displayName,
             $$"""
               {
+                "Language": "English",
                 "Host": "imap.example.test",
                 "UserName": "{{emailAddress}}",
                 "Secrets": { "Password": { "Name": "{{secretName}}-password", "SecretReference": "file:/run/secrets/{{secretName}}-password" } }{{folders}}

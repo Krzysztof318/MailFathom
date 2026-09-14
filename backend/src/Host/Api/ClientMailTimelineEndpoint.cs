@@ -426,7 +426,7 @@ internal sealed record ClientMailTimelineEntryResponse(
         EmailEnrichment? enrichment,
         int? threadMessageCount) => new(
         email.StoredEmailId.Value,
-        email.AccountId.Value,
+        email.Account.Value,
         email.FolderAlias.Value,
         email.ThreadId?.Value,
         email.Subject,

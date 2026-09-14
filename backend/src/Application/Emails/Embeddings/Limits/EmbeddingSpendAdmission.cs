@@ -6,7 +6,7 @@ namespace MailFathom.Application.Emails.Embeddings.Limits;
 
 /// <summary>Where one user stands inside the current budget period, against both ceilings that bound them.</summary>
 /// <param name="User">What the named user has spent in this period and what their own ceiling admits.</param>
-/// <param name="Deployment">What every user together has spent in this period and what the deployment's ceiling admits.</param>
+/// <param name="Deployment">What this deployment actually sent in this period and what its ceiling admits, counted once per call rather than summed out of the per-user figures.</param>
 /// <remarks>
 /// <para>
 /// The two halves are the same shape because they are the same question asked of two populations, and both are needed

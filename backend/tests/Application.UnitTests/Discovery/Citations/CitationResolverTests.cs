@@ -424,7 +424,7 @@ public sealed class CitationResolverTests
         IReadOnlyList<EmailSummary> summaries) => new(
         accountCatalog,
         StubMailFolderParticipation.Mapping(
-            [.. summaries.Select(summary => new MailFolderIdentity(summary.AccountId, summary.FolderAlias))]),
+            [.. summaries.Select(summary => new MailFolderIdentity(summary.Account, summary.FolderAlias))]),
         StubJunkMailFolderCatalog.None,
         StubMailFolderMappings.ResolvingNothing);
 

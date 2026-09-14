@@ -58,7 +58,7 @@ public sealed class OrchestratedEmailContentReadTests(MailFathomOrchestrationFix
         Assert.NotNull(summary);
         Assert.Equal(storedEmailId, summary.StoredEmailId);
         Assert.Equal("Content lookup", summary.Subject);
-        Assert.Equal(occurrenceId.AccountId, summary.AccountId);
+        Assert.Equal(occurrenceId.AccountId, summary.Account);
         Assert.Equal(FolderAlias.ToUpperInvariant(), summary.FolderAlias.Value);
 
         // An identifier nothing stored is an ordinary answer rather than a failure, which is what lets the use case

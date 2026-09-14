@@ -298,7 +298,7 @@ public sealed class AuthoredResponseDraftingTests
             Substitute.For<IEmailContentRepairRequestStore>(),
             new MailboxScopeResolver(
                 catalog,
-                StubMailFolderParticipation.Mapping(new MailFolderIdentity(answered.AccountId, answered.FolderAlias)),
+                StubMailFolderParticipation.Mapping(new MailFolderIdentity(answered.Account, answered.FolderAlias)),
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             senderIdentities,

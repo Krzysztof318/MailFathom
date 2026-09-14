@@ -116,7 +116,7 @@ public sealed class MailboxSynchronizer
     }
 
     /// <summary>Synchronizes one configured folder alias without mutating remote mailbox flags.</summary>
-    /// <param name="account">The account to synchronize, named by its user and its identifier.</param>
+    /// <param name="account">The account to synchronize, by its generated identifier.</param>
     /// <param name="folderMapping">What configuration says the alias names.</param>
     /// <param name="cancellationToken">Cancels the run between remote reads and local writes.</param>
     /// <returns>The bounded progress this run committed, or the reason the alias named no remote folder.</returns>

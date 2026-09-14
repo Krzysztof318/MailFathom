@@ -55,7 +55,7 @@ public sealed class OutboxOperations
     }
 
     /// <summary>Reports how much stands at each stage of an outbox.</summary>
-    /// <param name="account">The account to report on, named by its user and its identifier, or <see langword="null" /> for every account this deployment serves.</param>
+    /// <param name="account">The account to report on, by its generated identifier, or <see langword="null" /> for every account this deployment serves.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The summary, with one count per declared stage.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminRead" />.</exception>

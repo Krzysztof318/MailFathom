@@ -45,7 +45,7 @@ internal sealed class InMemoryMailRuleExecutionStore : IMailRuleExecutionStore
         ArgumentNullException.ThrowIfNull(query);
 
         var matching = this.committed
-            .Where(execution => execution.Account == query.AccountId)
+            .Where(execution => execution.Account == query.Account)
             .Where(execution => query.RuleName is not { } ruleName
                 || StringComparer.Ordinal.Equals(execution.RuleName, ruleName))
             .Where(execution => query.StoredEmailId is not { } emailId || execution.StoredEmailId == emailId)

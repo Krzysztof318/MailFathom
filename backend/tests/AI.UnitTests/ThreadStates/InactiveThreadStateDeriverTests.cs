@@ -4,7 +4,7 @@
 
 using MailFathom.AI.ThreadStates;
 using MailFathom.Application.Emails.ThreadStates;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using Xunit;
 
@@ -31,7 +31,7 @@ public sealed class InactiveThreadStateDeriverTests
         // Act
         var derivation = await InactiveThreadStateDeriver.Instance.DeriveAsync(
             Derivable(),
-            MailUserLanguage.English,
+            MailAccountLanguage.English,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -55,7 +55,7 @@ public sealed class InactiveThreadStateDeriverTests
         // Act
         var derivation = await InactiveThreadStateDeriver.Instance.DeriveAsync(
             beyondTheBound,
-            MailUserLanguage.English,
+            MailAccountLanguage.English,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -71,7 +71,7 @@ public sealed class InactiveThreadStateDeriverTests
 
         // Act and assert
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            InactiveThreadStateDeriver.Instance.DeriveAsync(Derivable(), MailUserLanguage.English, cancellation.Token));
+            InactiveThreadStateDeriver.Instance.DeriveAsync(Derivable(), MailAccountLanguage.English, cancellation.Token));
     }
 
     private static DerivableThread Derivable() =>

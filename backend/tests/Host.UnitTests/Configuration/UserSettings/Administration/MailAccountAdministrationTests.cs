@@ -26,8 +26,8 @@ namespace MailFathom.Host.UnitTests.Configuration.UserSettings.Administration;
 /// </summary>
 public sealed class MailAccountAdministrationTests
 {
-    /// <summary>A record of a user's language and nothing else, which is what a provisioning leaves behind.</summary>
-    private const string LanguageOnlyRecord = """{"Language":"English"}""";
+    /// <summary>The record a provisioning leaves behind, which declares nothing until its user asks for something.</summary>
+    private const string EmptyRecord = "{}";
 
     private static readonly MailUserId Alex = SyntheticMailUser.Deployment;
 
@@ -38,7 +38,7 @@ public sealed class MailAccountAdministrationTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 4);
+        deployment.Holding(Alex, EmptyRecord, version: 4);
 
         // Act
         var created = await deployment.MailAccounts.CreateAsync(
@@ -76,8 +76,8 @@ public sealed class MailAccountAdministrationTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Sam, LanguageOnlyRecord, version: 1, Mailbox("shared@example.test", "theirs"));
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 2);
+        deployment.Holding(Sam, EmptyRecord, version: 1, Mailbox("shared@example.test", "theirs"));
+        deployment.Holding(Alex, EmptyRecord, version: 2);
 
         // Act
         var created = await deployment.MailAccounts.CreateAsync(
@@ -98,8 +98,8 @@ public sealed class MailAccountAdministrationTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Sam, LanguageOnlyRecord, version: 1, Mailbox("shared@example.test", "theirs"));
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 2);
+        deployment.Holding(Sam, EmptyRecord, version: 1, Mailbox("shared@example.test", "theirs"));
+        deployment.Holding(Alex, EmptyRecord, version: 2);
 
         // Act
         var outcome = await deployment.MailAccounts.AddOwnAsync(
@@ -121,7 +121,7 @@ public sealed class MailAccountAdministrationTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 2);
+        deployment.Holding(Alex, EmptyRecord, version: 2);
 
         // Act
         var outcome = await deployment.MailAccounts.AddOwnAsync(
@@ -143,12 +143,12 @@ public sealed class MailAccountAdministrationTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1);
+        deployment.Holding(Alex, EmptyRecord, version: 1);
 
         // Act
         var created = await deployment.MailAccounts.CreateAsync(
             Alex,
-            """{"AccountId":"archive","EmailAddress":"archive@example.test","DisplayName":"archive","Host":"imap.example.test"}""",
+            """{"AccountId":"archive","EmailAddress":"archive@example.test","DisplayName":"archive","Language":"English","Host":"imap.example.test"}""",
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -163,7 +163,7 @@ public sealed class MailAccountAdministrationTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, Mailbox("work@example.test", "work"));
+        deployment.Holding(Alex, EmptyRecord, version: 1, Mailbox("work@example.test", "work"));
 
         // Act
         var created = await deployment.MailAccounts.CreateAsync(
@@ -183,7 +183,7 @@ public sealed class MailAccountAdministrationTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1);
+        deployment.Holding(Alex, EmptyRecord, version: 1);
 
         // Act
         var outcome = await deployment.MailAccounts.AddOwnAsync(
@@ -223,8 +223,8 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var shared = Mailbox("shared@example.test", "shared");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Sam, LanguageOnlyRecord, version: 1, shared);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 5);
+        deployment.Holding(Sam, EmptyRecord, version: 1, shared);
+        deployment.Holding(Alex, EmptyRecord, version: 5);
 
         // Act
         var outcome = await deployment.MailAccounts.AssignAsync(shared.Id, Alex, TestContext.Current.CancellationToken);
@@ -243,7 +243,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var unassignment = await deployment.MailAccounts.UnassignAsync(work.Id, Alex, TestContext.Current.CancellationToken);
@@ -259,8 +259,8 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var shared = Mailbox("shared@example.test", "shared");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, shared);
-        deployment.Holding(Sam, LanguageOnlyRecord, version: 1, shared);
+        deployment.Holding(Alex, EmptyRecord, version: 1, shared);
+        deployment.Holding(Sam, EmptyRecord, version: 1, shared);
 
         // Act
         var unassignment = await deployment.MailAccounts.UnassignAsync(shared.Id, Alex, TestContext.Current.CancellationToken);
@@ -277,7 +277,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
@@ -295,7 +295,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"));
         var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 3, work);
+        deployment.Holding(Alex, EmptyRecord, version: 3, work);
 
         // Act
         var outcome = await deployment.MailAccounts.AddOwnFolderAsync(
@@ -317,8 +317,8 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var theirs = Mailbox("sam@example.test", "sam");
         var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Sam, LanguageOnlyRecord, version: 1, theirs);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1);
+        deployment.Holding(Sam, EmptyRecord, version: 1, theirs);
+        deployment.Holding(Alex, EmptyRecord, version: 1);
 
         // Act
         var outcome = await deployment.MailAccounts.AddOwnFolderAsync(
@@ -339,9 +339,9 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var erased = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"));
         var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 3);
+        deployment.Holding(Alex, EmptyRecord, version: 3);
         deployment.Documents.ReadAsync(Alex, Arg.Any<CancellationToken>())
-            .Returns(new UserSettingsDocument(Alex, "alex", LanguageOnlyRecord, 3) { MailAccounts = [erased] });
+            .Returns(new UserSettingsDocument(Alex, "alex", EmptyRecord, 3) { MailAccounts = [erased] });
 
         // Act
         var outcome = await deployment.MailAccounts.AddOwnFolderAsync(
@@ -360,7 +360,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"), folderAlias: "INBOX");
         var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var outcome = await deployment.MailAccounts.ReplaceOwnFolderAsync(
@@ -381,7 +381,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"), folderAlias: "INBOX/OLD");
         var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 2, work);
+        deployment.Holding(Alex, EmptyRecord, version: 2, work);
 
         // Act
         var outcome = await deployment.MailAccounts.RemoveOwnFolderAsync(
@@ -403,7 +403,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"));
         var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var outcome = await deployment.MailAccounts.AddOwnFolderAsync(
@@ -428,7 +428,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"));
         var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var outcome = await deployment.MailAccounts.AddOwnFolderAsync(
@@ -450,7 +450,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"), folderAlias: "JUNK", folderRole: "Junk");
         var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var outcome = await deployment.MailAccounts.AddOwnFolderAsync(
@@ -472,7 +472,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"), folderAlias: "JUNK", folderRole: "Junk");
         var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var outcome = await deployment.MailAccounts.ReplaceOwnFolderAsync(
@@ -493,7 +493,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"), folderAlias: "JUNK", folderRole: "Junk");
         var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var outcome = await deployment.MailAccounts.ReplaceOwnFolderAsync(
@@ -516,7 +516,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"), folderAlias: "DRAFTS", folderRole: "Drafts");
         var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var outcome = await deployment.MailAccounts.RemoveOwnFolderAsync(
@@ -537,7 +537,7 @@ public sealed class MailAccountAdministrationTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.MailAccountsWrite], Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1);
+        deployment.Holding(Alex, EmptyRecord, version: 1);
 
         // Act
         var outcome = await deployment.MailAccounts.AddOwnAsync(
@@ -558,7 +558,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work", ProvisionedFor(Alex, "work"), folderAlias: "DRAFTS", folderRole: "Drafts");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite], Alex);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var outcome = await deployment.MailAccounts.SaveAsync(
@@ -581,7 +581,7 @@ public sealed class MailAccountAdministrationTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 4);
+        deployment.Holding(Alex, EmptyRecord, version: 4);
         var heard = await RosterAnnouncementListener.ListenAsync(deployment.Backplane, deployment.ServedUsers);
 
         // Act
@@ -604,7 +604,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var archive = Mailbox("archive@example.test", "archive");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 4);
+        deployment.Holding(Alex, EmptyRecord, version: 4);
         deployment.MailAccountRecords.HoldAccount(archive);
         var heard = await RosterAnnouncementListener.ListenAsync(deployment.Backplane, deployment.ServedUsers);
 
@@ -626,7 +626,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
         var heard = await RosterAnnouncementListener.ListenAsync(deployment.Backplane, deployment.ServedUsers);
 
         // Act
@@ -645,7 +645,7 @@ public sealed class MailAccountAdministrationTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 4);
+        deployment.Holding(Alex, EmptyRecord, version: 4);
         deployment.Documents.ReadVersionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new UserSettingsUnreadableException("The user records could not be read."));
 
@@ -668,7 +668,7 @@ public sealed class MailAccountAdministrationTests
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
         deployment.Holding(
             Alex,
-            LanguageOnlyRecord,
+            EmptyRecord,
             version: 1,
             [.. Enumerable.Range(0, MailAccountAdministration.MaximumListed + 1)
                 .Select(index => Mailbox($"box{index}@example.test", $"box{index}"))]);
@@ -687,7 +687,7 @@ public sealed class MailAccountAdministrationTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 4);
+        deployment.Holding(Alex, EmptyRecord, version: 4);
         var heard = await RosterAnnouncementListener.ListenAsync(deployment.Backplane, deployment.ServedUsers);
 
         // Act
@@ -707,7 +707,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var reading = await deployment.MailAccounts.ReadAsync(work.Id, TestContext.Current.CancellationToken);
@@ -729,7 +729,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite, MailFathomPermission.AdminRead]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
         var reading = await deployment.MailAccounts.ReadAsync(work.Id, TestContext.Current.CancellationToken);
 
         // Act
@@ -757,7 +757,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work", $"file:{RegisteredSchemeSecretReferenceResolver.UnreadableTarget}/work-password");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var outcome = await deployment.MailAccounts.SaveAsync(
@@ -788,7 +788,7 @@ public sealed class MailAccountAdministrationTests
         var deployment = new UserRecordDeployment(
             [MailFathomPermission.AdminConfigurationWrite],
             scanning: scanning);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var outcome = await deployment.MailAccounts.SaveAsync(
@@ -822,7 +822,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work", $"file:{RegisteredSchemeSecretReferenceResolver.UnreadableTarget}/work-password");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var outcome = await deployment.MailAccounts.SaveAsync(
@@ -842,7 +842,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work") with { Version = 7 };
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var outcome = await deployment.MailAccounts.SaveAsync(
@@ -863,8 +863,8 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
-        deployment.Holding(Sam, LanguageOnlyRecord, version: 1, Mailbox("archive@example.test", "archive"));
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
+        deployment.Holding(Sam, EmptyRecord, version: 1, Mailbox("archive@example.test", "archive"));
 
         // Act
         var outcome = await deployment.MailAccounts.SaveAsync(
@@ -886,7 +886,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var work = Mailbox("work@example.test", "work");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, work);
+        deployment.Holding(Alex, EmptyRecord, version: 1, work);
 
         // Act
         var outcome = await deployment.MailAccounts.SaveAsync(
@@ -906,7 +906,7 @@ public sealed class MailAccountAdministrationTests
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, Mailboxes(MailAccountRecord.MaximumAssignedPerUser));
+        deployment.Holding(Alex, EmptyRecord, version: 1, Mailboxes(MailAccountRecord.MaximumAssignedPerUser));
 
         // Act
         var created = await deployment.MailAccounts.CreateAsync(
@@ -929,7 +929,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var spare = Mailbox("spare@example.test", "spare");
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, Mailboxes(MailAccountRecord.MaximumAssignedPerUser));
+        deployment.Holding(Alex, EmptyRecord, version: 1, Mailboxes(MailAccountRecord.MaximumAssignedPerUser));
         deployment.MailAccountRecords.HoldAccount(spare);
 
         // Act
@@ -951,7 +951,7 @@ public sealed class MailAccountAdministrationTests
         // Arrange
         var held = Mailboxes(MailAccountRecord.MaximumAssignedPerUser);
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(Alex, LanguageOnlyRecord, version: 1, held);
+        deployment.Holding(Alex, EmptyRecord, version: 1, held);
 
         // Act
         var outcome = await deployment.MailAccounts.SaveAsync(
@@ -1025,6 +1025,7 @@ public sealed class MailAccountAdministrationTests
     /// <summary>The settings every mailbox here is read with, without the braces around them.</summary>
     private static string Settings(string secretName, string userName, string secretReference) =>
         $$"""
+          "Language": "English",
           "Host": "imap.example.test",
           "UserName": "{{userName}}",
           "Secrets": { "Password": { "Name": "{{secretName}}-password", "SecretReference": "{{secretReference}}" } }

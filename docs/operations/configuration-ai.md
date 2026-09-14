@@ -302,7 +302,7 @@ generation](../features/embedding-generation.md#what-an-instance-is-willing-to-s
 | `Embeddings:MaxCharactersPerEmail` | int | `200000` | 1000 – 10000000; how much of one message's extracted text is cut into passages. A message beyond it is bounded rather than refused — its opening is embedded and the length its text had is recorded on the message. Charged twice per message and never more: once against the body, and once against every attachment of that message together, in walk order | restart |
 | `Embeddings:MaxRequestsPerMinute` | int | `0` | 0 – 100000; `0` paces nothing, which is the default. For a provider whose quota is stated per minute; a caller takes the next free slot and waits for it. **The deployment's, not each replica's** — the slot marker is a row every replica moves forward, which is what makes the declared rate the one the provider sees | restart |
 | `Embeddings:MaxInputCharactersPerPeriod` | long | `50000000` | zero or positive; the characters one period may send a provider, counted as sent rather than as stored. `0` declares no ceiling at all, which is supported and means an enabled feature can produce a bill nobody agreed to | restart |
-| `Embeddings:MaxInputCharactersPerPeriodPerUser` | long | `0` | zero or positive; the characters one period may send for any **one** user. `0` declares no per-user ceiling, which is what a deployment serving one user wants and what leaves a deployment serving several exposed to one person's backfill spending the whole window | restart |
+| `Embeddings:MaxInputCharactersPerPeriodPerUser` | long | `0` | zero or positive; the characters one period may send for any **one** user. `0` declares no per-user ceiling, which is what a deployment serving one user wants and what leaves a deployment serving several exposed to one person's backfill spending the whole window. A mailbox several users are assigned counts in full against each of them, so its mail is embedded only while every one of them is under their share | restart |
 | `Embeddings:SpendPeriod` | TimeSpan | `1.00:00:00` | 1 min – 31 days; the fixed window the ceiling is counted over, anchored at the Unix epoch so every restart places it identically | restart |
 
 Reaching `MaxInputCharactersPerPeriod` pauses embedding until the period rolls over, and resumes without anybody
@@ -315,6 +315,15 @@ the bill; `MaxInputCharactersPerPeriodPerUser` bounds any one person's share of 
 unit. Reaching the deployment's pauses the worker and ends the backfill sweep, because nothing more can be spent for
 anybody. Reaching one user's stops that user's mail alone: the worker carries on with the next message and the
 backfill steps past theirs, so everybody else keeps being embedded and their own passages wait for the roll-over.
+Mail belongs to the mailbox rather than to a person, so the ceiling is read of every user a mailbox is assigned to and
+the strictest of them decides: a mailbox two people share waits as soon as either has spent their share, which is the
+cost [ADR 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
+accepts for counting a shared mailbox in full against each of them rather than dividing the window between them.
+
+**A mailbox assigned to nobody is not embedded at all**, and reads as a per-user ceiling reached rather than as an
+error. There is no user for the per-user share to admit, every caller-facing scope narrows to the accounts somebody is
+assigned, and so a mailbox left unassigned would otherwise be spent on to produce vectors nobody could search.
+Assigning it to somebody is what starts it; the same holds for what reading its attachments costs.
 
 Which of the two a refusal met is read from the log line, which names the key to raise — and raising a user's share
 answers nothing while the deployment itself has stopped spending, so the distinction is the whole point of reporting it.

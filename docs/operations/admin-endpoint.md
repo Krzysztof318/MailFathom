@@ -1277,7 +1277,7 @@ switches are the record's `EndpointAccess:McpEndpoint` and `EndpointAccess:Clien
 changes them too, and `mfctl user show` reads them back once either has been written:
 
 ```json
-{ "Language": "English", "EndpointAccess": { "McpEndpoint": "false" } }
+{ "EndpointAccess": { "McpEndpoint": "false" } }
 ```
 
 Whichever of the two writes them, the commit that stores the record copies both onto the user's row in the same
@@ -1470,6 +1470,7 @@ account by from then on.
   "EmailAddress": "alex@example.test",
   "DisplayName": "Work mail",
   "Host": "imap.example.test",
+  "Language": "English",
   "UserName": "alex@example.test",
   "Secrets": { "Password": { "Name": "alex-work-password", "SecretReference": "file:/etc/mailfathom/secrets/alex-work-password" } }
 }

@@ -22,7 +22,7 @@ namespace MailFathom.Application.Mail.Delivery.Tracking;
 /// </para>
 /// <para>
 /// <b>A listing names an account and never the deployment.</b> The narrowing is resolved against the accounts the
-/// caller's user owns, so there is no unnarrowed reading here at all: one that fell back to every account would page
+/// caller's user is assigned, so there is no unnarrowed reading here at all: one that fell back to every account would page
 /// through every user's outgoing mail, which is the deployment-wide catalog a user-facing surface must never
 /// compose. An account another user is assigned is refused exactly as one nobody configured.
 /// </para>
@@ -38,7 +38,7 @@ namespace MailFathom.Application.Mail.Delivery.Tracking;
 /// part of sending rather than a power beside it, which is the same reading the per-caller cancellation takes.
 /// </para>
 /// </remarks>
-/// <param name="accountCatalog">Says which accounts the caller's user owns, and therefore which one a listing may name.</param>
+/// <param name="accountCatalog">Says which accounts the caller's user is assigned, and therefore which one a listing may name.</param>
 /// <param name="outgoingEmails">Holds the durable record of every send.</param>
 /// <param name="outbox">Performs the two conditional decisions, in the one place each is decided.</param>
 /// <param name="authorization">Answers whether the caller that reached this holds the grant that lets it send.</param>
@@ -56,7 +56,7 @@ public sealed class UserOutbox(
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The page, or the reason the request named none.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />, or is acting for no user.</exception>
-    /// <exception cref="MailAccountNotAccessibleException">Thrown when <paramref name="account" /> names an account the caller's user does not own.</exception>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when <paramref name="account" /> names an account the caller's user is not assigned.</exception>
     public async Task<UserOutboxPageResult> ReadPageAsync(
         MailAccountSelector account,
         OutgoingEmailStage? stage,

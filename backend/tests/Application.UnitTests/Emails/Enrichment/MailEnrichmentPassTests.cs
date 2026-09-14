@@ -2,12 +2,9 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Access;
-using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
@@ -103,7 +100,7 @@ public sealed class MailEnrichmentPassTests
         Assert.True(report.EmailsRemain);
         await enricher.Received(1).DeriveAsync(
             Arg.Any<EnrichableEmail>(),
-            Arg.Any<MailUserLanguage>(),
+            Arg.Any<MailAccountLanguage>(),
             Arg.Any<CancellationToken>());
         await store.DidNotReceiveWithAnyArgs().SaveAsync(
             Arg.Any<IPersistenceSession>(),
@@ -152,7 +149,7 @@ public sealed class MailEnrichmentPassTests
         Assert.False(report.EmailsRemain);
         await enricher.DidNotReceiveWithAnyArgs().DeriveAsync(
             Arg.Any<EnrichableEmail>(),
-            Arg.Any<MailUserLanguage>(),
+            Arg.Any<MailAccountLanguage>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -258,7 +255,7 @@ public sealed class MailEnrichmentPassTests
         var enricher = Substitute.For<IEmailEnricher>();
         enricher.IsActive.Returns(true);
         enricher
-            .DeriveAsync(Arg.Any<EnrichableEmail>(), Arg.Any<MailUserLanguage>(), Arg.Any<CancellationToken>())
+            .DeriveAsync(Arg.Any<EnrichableEmail>(), Arg.Any<MailAccountLanguage>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(answer(call.ArgAt<EnrichableEmail>(0))));
 
         return enricher;
@@ -270,9 +267,9 @@ public sealed class MailEnrichmentPassTests
     /// than resolving one.
     /// </summary>
     [Theory]
-    [InlineData(MailUserLanguage.Polish)]
-    [InlineData(MailUserLanguage.English)]
-    public async Task RunAsync_AnAccountWhoseOwnerReadsALanguage_DerivesInIt(MailUserLanguage language)
+    [InlineData(MailAccountLanguage.Polish)]
+    [InlineData(MailAccountLanguage.English)]
+    public async Task RunAsync_AnAccountWhoseOwnerReadsALanguage_DerivesInIt(MailAccountLanguage language)
     {
         // Arrange
         var store = StoreReturning([Enrichable()]);
@@ -289,16 +286,9 @@ public sealed class MailEnrichmentPassTests
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>Resolves the mailbox's language through the users assigned it, as a deployment's reader does.</summary>
-    private static AccountLanguages LanguagesAnswering(MailUserLanguage language)
-    {
-        var languages = Substitute.For<IMailUserLanguages>();
-        languages.ForUser(Arg.Any<MailUserId>()).Returns(language);
-
-        return SyntheticAccountLanguages.Of(
-            new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, Account),
-            languages);
-    }
+    /// <summary>States the language the mailbox under test is read in, as its own record does.</summary>
+    private static SyntheticAccountLanguages LanguagesAnswering(MailAccountLanguage language) =>
+        new SyntheticAccountLanguages().Reading(Account, language);
 
     /// <summary>Composes the pass over a deployment with no scanner switched on, which is the ordinary shape.</summary>
     /// <remarks>
@@ -308,7 +298,7 @@ public sealed class MailEnrichmentPassTests
     private static MailEnrichmentPass CreatePass(
         IStoredEmailEnrichmentStore store,
         IEmailEnricher enricher,
-        MailUserLanguage language = MailUserLanguage.English)
+        MailAccountLanguage language = MailAccountLanguage.English)
     {
         var timeProvider = new FakeTimeProvider(DerivedAt);
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();

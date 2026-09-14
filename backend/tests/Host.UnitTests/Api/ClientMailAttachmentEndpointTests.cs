@@ -244,7 +244,7 @@ public sealed class ClientMailAttachmentEndpointTests
                 : OpenedEmailAttachmentResult.Opened(attachment)));
 
         var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
-        accountCatalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(summary.AccountId)]);
+        accountCatalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(summary.Account)]);
 
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(AuthorizedPrincipal.Caller("client-key", [MailFathomPermission.MailRead]));
@@ -259,7 +259,7 @@ public sealed class ClientMailAttachmentEndpointTests
             new MailboxScopeResolver(
                 accountCatalog,
                 StubMailFolderParticipation.Mapping(
-                    new MailFolderIdentity(summary.AccountId, summary.FolderAlias)),
+                    new MailFolderIdentity(summary.Account, summary.FolderAlias)),
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             new AccessAuthorization(principals));

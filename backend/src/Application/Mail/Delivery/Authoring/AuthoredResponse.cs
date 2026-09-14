@@ -38,9 +38,6 @@ public sealed record AuthoredResponse
     /// </remarks>
     public MailAccountId Account { get; }
 
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one user names.</summary>
-    public MailAccountId AccountId => this.Account;
-
     /// <summary>Gets the authored message, or <see langword="null" /> when the answer was refused.</summary>
     public AuthoredEmail? Email { get; }
 
@@ -51,7 +48,7 @@ public sealed record AuthoredResponse
     public bool IsAuthored => this.Email is not null;
 
     /// <summary>Reports the answer somebody wrote to a stored email.</summary>
-    /// <param name="account">The account the answer is sent as, named by its user and its identifier.</param>
+    /// <param name="account">The account the answer is sent as, by its generated identifier.</param>
     /// <param name="email">The authored message.</param>
     /// <returns>An authored result.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="email" /> is <see langword="null" />.</exception>

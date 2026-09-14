@@ -319,7 +319,7 @@ internal sealed record ClientMailSearchResultResponse(
     /// <returns>The response body.</returns>
     internal static ClientMailSearchResultResponse For(BrowsedSearchResult result) => new(
         result.Email.StoredEmailId.Value,
-        result.Email.AccountId.Value,
+        result.Email.Account.Value,
         result.Email.FolderAlias.Value,
         result.Email.ThreadId?.Value,
         result.Email.Subject,

@@ -334,7 +334,7 @@ public sealed class MailBodyCleaningTests
             accountCatalog,
             StubMailFolderParticipation.Mapping(summary is null
                 ? []
-                : [new MailFolderIdentity(summary.AccountId, summary.FolderAlias)]),
+                : [new MailFolderIdentity(summary.Account, summary.FolderAlias)]),
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing);
     }

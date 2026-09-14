@@ -16,7 +16,7 @@ using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -59,7 +59,7 @@ public sealed class EmailEnrichmentAgentTests
         var agent = provider.EnricherOver();
 
         // Act
-        var derivation = await agent.DeriveAsync(Enrichable(), MailUserLanguage.English, TestContext.Current.CancellationToken);
+        var derivation = await agent.DeriveAsync(Enrichable(), MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(derivation.IsSettled);
@@ -82,7 +82,7 @@ public sealed class EmailEnrichmentAgentTests
         var agent = provider.EnricherOver();
 
         // Act
-        var derivation = await agent.DeriveAsync(Enrichable(), MailUserLanguage.English, TestContext.Current.CancellationToken);
+        var derivation = await agent.DeriveAsync(Enrichable(), MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(derivation.IsSettled);
@@ -98,7 +98,7 @@ public sealed class EmailEnrichmentAgentTests
         var agent = provider.EnricherOver();
 
         // Act
-        var derivation = await agent.DeriveAsync(Enrichable(), MailUserLanguage.English, TestContext.Current.CancellationToken);
+        var derivation = await agent.DeriveAsync(Enrichable(), MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmailEnrichmentWithholding.ProviderUnavailable, derivation.Withheld);
@@ -113,7 +113,7 @@ public sealed class EmailEnrichmentAgentTests
             "The provider key of AI endpoint 'a-chat-endpoint' could not be resolved."));
 
         // Act
-        var derivation = await agent.DeriveAsync(Enrichable(), MailUserLanguage.English, TestContext.Current.CancellationToken);
+        var derivation = await agent.DeriveAsync(Enrichable(), MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmailEnrichmentWithholding.ProviderUnavailable, derivation.Withheld);
@@ -134,7 +134,7 @@ public sealed class EmailEnrichmentAgentTests
         var agent = provider.EnricherOver(spendLedger: spendLedger);
 
         // Act
-        var derivation = await agent.DeriveAsync(Enrichable(), MailUserLanguage.English, TestContext.Current.CancellationToken);
+        var derivation = await agent.DeriveAsync(Enrichable(), MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmailEnrichmentWithholding.AllowanceExhausted, derivation.Withheld);
@@ -151,7 +151,7 @@ public sealed class EmailEnrichmentAgentTests
         var agent = provider.EnricherOver(spendLedger: spendLedger);
 
         // Act
-        await agent.DeriveAsync(Enrichable(), MailUserLanguage.English, TestContext.Current.CancellationToken);
+        await agent.DeriveAsync(Enrichable(), MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         await spendLedger.Received(1).RecordSpendAsync(new ChatTokenUsage(11, 7), Arg.Any<CancellationToken>());
@@ -171,7 +171,7 @@ public sealed class EmailEnrichmentAgentTests
             []);
 
         // Act
-        var derivation = await agent.DeriveAsync(withoutPassages, MailUserLanguage.English, TestContext.Current.CancellationToken);
+        var derivation = await agent.DeriveAsync(withoutPassages, MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(derivation.IsSettled);
@@ -199,7 +199,7 @@ public sealed class EmailEnrichmentAgentTests
             ]);
 
         // Act
-        await agent.DeriveAsync(carryingASecret, MailUserLanguage.English, TestContext.Current.CancellationToken);
+        await agent.DeriveAsync(carryingASecret, MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.DoesNotContain(Marker, provider.RequestBodies[0], StringComparison.Ordinal);
@@ -214,7 +214,7 @@ public sealed class EmailEnrichmentAgentTests
         var agent = provider.EnricherOver();
 
         // Act
-        await agent.DeriveAsync(Enrichable(), MailUserLanguage.English, TestContext.Current.CancellationToken);
+        await agent.DeriveAsync(Enrichable(), MailAccountLanguage.English, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, provider.RequestCount);

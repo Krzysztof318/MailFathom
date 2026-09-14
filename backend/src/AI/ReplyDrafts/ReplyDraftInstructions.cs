@@ -6,7 +6,7 @@ using System.Collections.Frozen;
 using System.Globalization;
 using System.Text;
 using MailFathom.Application.Emails.ReplyDrafts;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.AI.ReplyDrafts;
 
@@ -39,22 +39,22 @@ internal static class ReplyDraftInstructions
 {
     /// <summary>The instruction for each language this deployment writes in, composed once per language.</summary>
     /// <remarks>Composed from the members rather than written out twice, so the set is the enumeration's and a language added to it arrives here without this file being edited.</remarks>
-    private static readonly FrozenDictionary<MailUserLanguage, string> TextByLanguage = Enum
-        .GetValues<MailUserLanguage>()
+    private static readonly FrozenDictionary<MailAccountLanguage, string> TextByLanguage = Enum
+        .GetValues<MailAccountLanguage>()
         .ToFrozenDictionary(static language => language, Compose);
 
     /// <summary>Gets the instruction the agent is composed with for one person's language.</summary>
     /// <param name="language">The language this deployment writes for the person the draft is for, which decides a draft answering no correspondence.</param>
     /// <returns>The instruction text.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the value names no language this deployment writes in.</exception>
-    internal static string TextFor(MailUserLanguage language) => TextByLanguage.TryGetValue(language, out var text)
+    internal static string TextFor(MailAccountLanguage language) => TextByLanguage.TryGetValue(language, out var text)
         ? text
         : throw new ArgumentOutOfRangeException(
             nameof(language),
             language,
             "The reply-drafting agent is composed for a language MailFathom writes in.");
 
-    private static string Compose(MailUserLanguage language) => string.Create(
+    private static string Compose(MailAccountLanguage language) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
         You draft a reply to one email conversation from somebody's own mailbox, in their own voice. What you write is

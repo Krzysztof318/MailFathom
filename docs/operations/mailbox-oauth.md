@@ -222,6 +222,7 @@ configuration source:
 {
   "EmailAddress": "mailbox@example.com",
   "DisplayName": "Workspace mail",
+  "Language": "English",
   "Host": "imap.gmail.com",
   "Port": 993,
   "UserName": "mailbox@example.com",

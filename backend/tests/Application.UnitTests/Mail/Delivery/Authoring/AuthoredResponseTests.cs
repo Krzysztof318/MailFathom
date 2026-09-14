@@ -26,7 +26,7 @@ public sealed class AuthoredResponseTests
 
         // Assert
         Assert.True(response.IsAuthored);
-        Assert.Equal(Account, response.AccountId);
+        Assert.Equal(Account, response.Account);
         Assert.NotNull(response.Email);
         Assert.Null(response.Refusal);
     }
@@ -43,7 +43,7 @@ public sealed class AuthoredResponseTests
         Assert.Null(response.Email);
         Assert.Equal(AuthoredResponseRefusalReason.BoundExceeded, response.Refusal!.Reason);
         Assert.Equal(64, response.Refusal.Bound);
-        Assert.Equal(default, response.AccountId);
+        Assert.Equal(default, response.Account);
     }
 
     /// <summary>An answer is a required value rather than something an authored result may be composed without.</summary>

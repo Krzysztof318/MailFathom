@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Emails.ThreadStates;
 
@@ -44,6 +44,6 @@ public interface IThreadStateDeriver
     /// </remarks>
     Task<ThreadStateDerivation> DeriveAsync(
         DerivableThread thread,
-        MailUserLanguage language,
+        MailAccountLanguage language,
         CancellationToken cancellationToken);
 }

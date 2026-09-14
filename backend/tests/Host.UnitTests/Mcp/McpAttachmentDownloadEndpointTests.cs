@@ -442,7 +442,7 @@ public sealed class McpAttachmentDownloadEndpointTests
                 : OpenedEmailAttachmentResult.Opened(attachment)));
 
         var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
-        accountCatalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(summary.AccountId)]);
+        accountCatalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(summary.Account)]);
 
         return new EmailAttachmentDownloadReader(
             summaryReader,
@@ -458,7 +458,7 @@ public sealed class McpAttachmentDownloadEndpointTests
                 // far as MailFathom is concerned and every download of it would be refused before the endpoint is
                 // reached — which is not the refusal any test here is about.
                 StubMailFolderParticipation.Mapping(
-                    new MailFolderIdentity(summary.AccountId, summary.FolderAlias)),
+                    new MailFolderIdentity(summary.Account, summary.FolderAlias)),
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             new AccessAuthorization(principals));

@@ -24,7 +24,7 @@ namespace MailFathom.Application.Jobs.Scheduling;
 /// <param name="Id">The identity the schedule's durable state is keyed by.</param>
 /// <param name="Payload">The references the repeated work is described by, which also names its job type.</param>
 /// <param name="Recurrence">The occasions the work is dispatched on.</param>
-/// <param name="Account">The account the work belongs to, named by its user and its identifier, or <see langword="null" /> when it belongs to none.</param>
+/// <param name="Account">The account the work belongs to, by its generated identifier, or <see langword="null" /> when it belongs to none.</param>
 public sealed record ScheduledJob(
     JobScheduleId Id,
     IJobPayload Payload,

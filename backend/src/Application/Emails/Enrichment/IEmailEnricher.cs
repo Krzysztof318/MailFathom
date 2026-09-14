@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Emails.Enrichment;
 
@@ -46,6 +46,6 @@ public interface IEmailEnricher
     /// </remarks>
     Task<EmailEnrichmentDerivation> DeriveAsync(
         EnrichableEmail email,
-        MailUserLanguage language,
+        MailAccountLanguage language,
         CancellationToken cancellationToken);
 }

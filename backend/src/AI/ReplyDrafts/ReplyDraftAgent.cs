@@ -12,7 +12,7 @@ using MailFathom.Application.Emails.ReplyDrafts;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using Microsoft.Extensions.Logging;
 
@@ -252,7 +252,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
     /// </remarks>
     private async Task<ChatModelAnswer?> AskAsync(
         string turn,
-        MailUserLanguage language,
+        MailAccountLanguage language,
         CancellationToken cancellationToken)
     {
         try
@@ -276,7 +276,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
     private async Task<ChatModelAnswer> AskModelAsync(
         ChatGenerationPlan model,
         string turn,
-        MailUserLanguage language,
+        MailAccountLanguage language,
         CancellationToken cancellationToken)
     {
         // Against this model's own bounds rather than the main model's, because a fallback may be declared

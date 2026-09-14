@@ -331,7 +331,7 @@ public sealed class MailAttachmentTextPassTests
     {
         // Arrange
         var ledger = new InMemoryAttachmentDerivationSpendLedger();
-        ledger.Seed(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment, 4096);
+        ledger.SeedDeployment(PeriodStart, AttachmentDerivationStep.Extraction, 4096);
         var backlog = new RecordingEmailEmbeddingBacklog();
         var pass = CreatePass(
             StoreReturning([Awaiting(StoredEmailId.Create(Guid.CreateVersion7()))]),
@@ -359,7 +359,7 @@ public sealed class MailAttachmentTextPassTests
     {
         // Arrange
         var ledger = new InMemoryAttachmentDerivationSpendLedger();
-        ledger.Seed(PeriodStart, AttachmentDerivationStep.Description, SyntheticMailUser.Deployment, 25);
+        ledger.SeedDeployment(PeriodStart, AttachmentDerivationStep.Description, 25);
         var pass = CreatePass(
             StoreReturning([Awaiting(StoredEmailId.Create(Guid.CreateVersion7()))]),
             new RecordingEmailEmbeddingBacklog(),

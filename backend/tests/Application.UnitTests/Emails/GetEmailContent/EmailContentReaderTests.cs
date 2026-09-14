@@ -72,7 +72,7 @@ public sealed class EmailContentReaderTests
         Assert.Equal(
             ["report.pdf"],
             content.Attachments?.Select(attachment => attachment.Description.FileName?.Value));
-        Assert.Equal(summary.AccountId, content.AccountId);
+        Assert.Equal(summary.Account, content.AccountId);
         Assert.Equal(summary.FolderAlias, content.FolderAlias);
         Assert.Equal(summary.RemoteFlags, content.RemoteFlags);
     }
@@ -782,8 +782,8 @@ public sealed class EmailContentReaderTests
             RendererReturning(RenderingOf()),
             accountCatalog: AssignedMailAccountCatalogs.For(
                 authorization,
-                new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, summary.AccountId),
-                SyntheticServedAccount.Of(summary.AccountId)),
+                new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, summary.Account),
+                SyntheticServedAccount.Of(summary.Account)),
             authorization: authorization);
 
         // Act
@@ -821,8 +821,8 @@ public sealed class EmailContentReaderTests
         // Arrange
         var summary = SyntheticEmailSummaries.Create();
         var assignments = new StubMailAccountAssignments()
-            .Assigning(SyntheticMailUser.Deployment, summary.AccountId)
-            .Assigning(SyntheticMailUser.Another, summary.AccountId);
+            .Assigning(SyntheticMailUser.Deployment, summary.Account)
+            .Assigning(SyntheticMailUser.Another, summary.Account);
 
         // Act
         var readByOne = await ReadAsAsync(summary, assignments, SyntheticMailUser.Deployment);
@@ -837,7 +837,7 @@ public sealed class EmailContentReaderTests
 
         Assert.Equal(summary.StoredEmailId, forOne.StoredEmailId);
         Assert.Equal(summary.StoredEmailId, forTheOther.StoredEmailId);
-        Assert.Equal(summary.AccountId, forOne.AccountId);
+        Assert.Equal(summary.Account, forOne.AccountId);
         Assert.Equal(forOne.AccountId, forTheOther.AccountId);
         Assert.Equal(forOne.Body.PlainText.Text, forTheOther.Body.PlainText.Text);
 
@@ -860,7 +860,7 @@ public sealed class EmailContentReaderTests
             accountCatalog: AssignedMailAccountCatalogs.For(
                 authorization,
                 assignments,
-                SyntheticServedAccount.Of(summary.AccountId)),
+                SyntheticServedAccount.Of(summary.Account)),
             authorization: authorization)
             .ReadContentAsync(RequestFor([summary.StoredEmailId]), TestContext.Current.CancellationToken);
     }
@@ -875,8 +875,8 @@ public sealed class EmailContentReaderTests
             summary,
             RendererReturning(RenderingOf()),
             folderParticipation: StubMailFolderParticipation
-                .Mapping(new MailFolderIdentity(summary.AccountId, summary.FolderAlias))
-                .Hiding(new MailFolderIdentity(summary.AccountId, summary.FolderAlias)));
+                .Mapping(new MailFolderIdentity(summary.Account, summary.FolderAlias))
+                .Hiding(new MailFolderIdentity(summary.Account, summary.FolderAlias)));
 
         // Act
         var result = await reader.ReadContentAsync(
@@ -946,7 +946,7 @@ public sealed class EmailContentReaderTests
         var reader = ReaderOver(
             [served, unserved],
             RendererReturning(RenderingOf()),
-            accountCatalog: CatalogServing(served.AccountId));
+            accountCatalog: CatalogServing(served.Account));
 
         // Act
         var result = await reader.ReadContentAsync(
@@ -1900,7 +1900,7 @@ public sealed class EmailContentReaderTests
             .. conversation.Select((summary, ordinal) => (threadId, new ThreadedEmailSummary
             {
                 StoredEmailId = summary.StoredEmailId,
-                AccountId = summary.AccountId,
+                AccountId = summary.Account,
                 FolderAlias = summary.FolderAlias,
                 ParentStoredEmailId = asAChain && ordinal > 0 ? conversation[ordinal - 1].StoredEmailId : null,
                 Subject = summary.Subject,
@@ -1967,7 +1967,7 @@ public sealed class EmailContentReaderTests
         renderer,
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
         new MailboxScopeResolver(
-            accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.AccountId.Value ?? SyntheticEmailSummaries.DefaultAccountId)),
+            accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.Account.Value ?? SyntheticEmailSummaries.DefaultAccountId)),
             folderParticipation ?? MappingFoldersOf(summary is null ? [] : [summary]),
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing),
@@ -2013,7 +2013,7 @@ public sealed class EmailContentReaderTests
     /// </remarks>
     private static StubMailFolderParticipation MappingFoldersOf(IReadOnlyList<EmailSummary> summaries) =>
         StubMailFolderParticipation.Mapping(
-            [.. summaries.Select(summary => new MailFolderIdentity(summary.AccountId, summary.FolderAlias))]);
+            [.. summaries.Select(summary => new MailFolderIdentity(summary.Account, summary.FolderAlias))]);
 
     private static IStoredEmailSummaryReader SummaryReaderReturning(EmailSummary? summary)
     {

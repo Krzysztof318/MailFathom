@@ -21,7 +21,7 @@ namespace MailFathom.Application.Emails.Extraction;
 public interface IEmailMimeReader
 {
     /// <summary>Reads one message's normalized metadata.</summary>
-    /// <param name="account">The user and the account the message belongs to, which every path reaching this port already holds.</param>
+    /// <param name="account">The account the message belongs to, which every path reaching this port already holds.</param>
     /// <param name="rawMime">The raw MIME already fetched or already stored for the message.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The metadata, or the reason the message could not be read.</returns>
@@ -32,10 +32,10 @@ public interface IEmailMimeReader
     /// </para>
     /// <para>
     /// The account is named rather than the place a mail server holds the message, because it is a fact about the
-    /// derivation rather than about the bytes: whose mail it is decides how a body is redacted and whose authentication
-    /// statements are believed, while a stored message a server no longer holds is read exactly as one it still does.
-    /// Every caller holds the answer — synchronization is running one user's account and a re-derivation walk carries it
-    /// on each row — so nothing resolves it a second time.
+    /// derivation rather than about the bytes: which mailbox it is decides how a body is redacted and whose
+    /// authentication statements are believed, while a stored message a server no longer holds is read exactly as one
+    /// it still does. Every caller holds the answer — synchronization is running one account and a re-derivation walk
+    /// carries it on each row — so nothing resolves it a second time.
     /// </para>
     /// </remarks>
     Task<EmailMimeExtractionResult> ReadMetadataAsync(

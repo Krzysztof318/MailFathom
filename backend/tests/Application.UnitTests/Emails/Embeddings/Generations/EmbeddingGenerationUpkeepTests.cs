@@ -288,7 +288,9 @@ public sealed class EmbeddingGenerationUpkeepTests
                     concurrencyRetryPolicy,
                     new EmbeddingSpendGate(
                         new InMemoryEmbeddingSpendLedger(),
-                        new StubMailAccountAssignments(),
+                        new StubMailAccountAssignments().Assigning(
+                            SyntheticMailUser.Deployment,
+                            SyntheticMailAccount.Deployment),
                         EmbeddingSpendBudget.Unbounded,
                         new FakeTimeProvider()),
                     UnpacedEmbedding(),

@@ -52,7 +52,7 @@ public sealed class RecurringMailSubmission
     private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the use case from the accounts it serves and the two writes it commits together.</summary>
-    /// <param name="accountCatalog">Says which accounts the caller's user owns, and therefore which one a caller may name.</param>
+    /// <param name="accountCatalog">Says which accounts the caller's user is assigned, and therefore which one a caller may name.</param>
     /// <param name="recipientResolver">Turns the people the author named into the addresses every occurrence is offered to.</param>
     /// <param name="composer">Builds the draft, and decides every header this system owns rather than the author.</param>
     /// <param name="recurringSends">Holds the declaration and its idempotency identity.</param>
@@ -92,7 +92,7 @@ public sealed class RecurringMailSubmission
     /// <returns>The declaration, whether this call created it or an identical earlier one did.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />, or is acting for no user.</exception>
-    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account the caller's user does not own, which includes every account this deployment does not serve.</exception>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account the caller's user is not assigned, which includes every account this deployment does not serve.</exception>
     /// <exception cref="MailSubmissionRefusedException">Thrown when the repetition is unreadable, a recipient names nobody, a field cannot be composed, a bound is exceeded, or the account configures no address to send from.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when the write lost its race for the same identity on every allowed attempt.</exception>
     public async Task<RecurringSend> DeclareAsync(
@@ -103,10 +103,10 @@ public sealed class RecurringMailSubmission
 
         this.authorization.RequirePermission(MailFathomPermission.MailSend);
 
-        // Resolved against the accounts the caller's user owns for the reason the single send is, and here the
+        // Resolved against the accounts the caller's user is assigned for the reason the single send is, and here the
         // exposure repeats: a declaration written against somebody else's account would send as them on every occasion
         // the schedule names rather than once.
-        var account = this.accountCatalog.AssignedAccounts.FirstOrDefault(owned => owned.IsNamedBy(request.Account))
+        var account = this.accountCatalog.AssignedAccounts.FirstOrDefault(assigned => assigned.IsNamedBy(request.Account))
             ?? throw new MailAccountNotAccessibleException(request.Account);
 
         // First of the three, because it is the only one that costs nothing: a repetition nobody can resolve is

@@ -65,6 +65,7 @@ than met later by a run.
 | --- | --- | --- | --- | --- |
 | `…:EmailAddress` | string | — | Required; one `@` between a local part and a domain, no white space, at most 320 characters; unique across the deployment, compared without regard to case or surrounding white space. An account's identifier is generated rather than stated, and a declaration stating `AccountId` is refused | reload |
 | `…:DisplayName` | string | — | Required, with no default; at most 128 characters, no control characters, and it may not be another account's identifier or display name compared without regard to case | reload |
+| `…:Language` | enum | — | Required of a declaration being written; `English` or `Polish`, read however it was capitalized. The language everything MailFathom writes about this mailbox's mail comes out in; [the language this mailbox is read in](#the-language-this-mailbox-is-read-in--language) holds the rule and both refusals | reload; the next derivation is written in it |
 | `…:Host` | string | — | Required | reload |
 | `…:Port` | int | `993` | 1 – 65535 | reload |
 | `…:UserName` | string | — | Required; an identifier, not a secret | reload |
@@ -262,6 +263,52 @@ schedules it.
 [What a mapping decides beyond where the folder is](../features/imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
 states all three switches together, what an unmapped folder is instead, and what becomes of the local copy of a message
 relocated into a folder nothing mirrors.
+
+### The language this mailbox is read in — `Language`
+
+`…:Language` is the language every automatic reading of this mailbox's mail comes out in — the [mark on a message
+row](../features/message-enrichment.md), the [statement about a
+conversation](../features/thread-state.md) — whatever language the message itself was written in. It is not a claim
+about the mail, which is mixed by nature, and it changes nothing about an answer to a question somebody asked: that is
+still written in the language the question was.
+
+It is the account's rather than its user's for the reason the two blocks below are: the derived text is one copy. A
+mailbox two people are assigned is enriched once, and the sentence written onto a message row is the sentence both of
+them read, so a value held on the person would have to pick one of them at derivation time and would then be wrong for
+the other.
+
+It settles one thing that is not a derivation: a [reply draft](../features/reply-drafting.md) written for a message
+that answers none. A draft answering a message takes the language of the correspondence it answers, because what
+decides that is who will read it — but a composer opened with nothing in front of it has no correspondence to read,
+and the mailbox it is being written from is the only thing anything is known about. An instruction naming a language
+outranks either.
+
+```json
+{
+  "Language": "Polish"
+}
+```
+
+It is the one key a declaration being written must carry beyond the address, the name, and the server. Two refusals,
+and the next act differs between them:
+
+```
+Account 'The work mailbox': Language is not stated, and every mail account names the language MailFathom writes about
+its mail in — the reading on a message row, the statement about a conversation. State 'English' or 'Polish'.
+```
+
+```
+Account 'The work mailbox': Language states 'German', which is not a language MailFathom writes in. It takes 'English'
+or 'Polish'.
+```
+
+**An account recorded before this release states none, and reads as `English` until it is edited.** The key binds
+strictly, so nobody could have written one in advance, and refusing those accounts at the next start would refuse the
+start itself — for every user, through the surface the line would have been added from. So the requirement is asked of
+a declaration being written and of no other: a held account naming no language is read in English, and states one the
+first time anybody writes it. The operator's action after upgrading is therefore a single
+[`mfctl account edit`](admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) for each mailbox read in Polish,
+and nothing at all for the rest.
 
 ### Classifying this account's mail — `SpamClassification`
 

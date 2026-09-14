@@ -63,7 +63,7 @@ public sealed class ThreadStateDerivationPass
 
     private readonly IStoredThreadStateStore stateStore;
     private readonly IThreadStateDeriver deriver;
-    private readonly AccountLanguages accountLanguages;
+    private readonly IMailAccountLanguages accountLanguages;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly TimeProvider timeProvider;
@@ -79,7 +79,7 @@ public sealed class ThreadStateDerivationPass
     public ThreadStateDerivationPass(
         IStoredThreadStateStore stateStore,
         IThreadStateDeriver deriver,
-        AccountLanguages accountLanguages,
+        IMailAccountLanguages accountLanguages,
         SensitiveContentEgressGuard egressGuard,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         TimeProvider timeProvider)

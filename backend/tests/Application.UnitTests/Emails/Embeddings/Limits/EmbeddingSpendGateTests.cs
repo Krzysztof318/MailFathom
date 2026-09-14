@@ -17,6 +17,8 @@ public sealed class EmbeddingSpendGateTests
 {
     private static readonly DateTimeOffset Midday = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
 
+    private static readonly DateTimeOffset PeriodStart = new(2026, 8, 8, 0, 0, 0, TimeSpan.Zero);
+
     [Fact]
     public async Task ReadCurrentPeriodAsync_NothingSpentYet_ReportsTheWholeCeilingAsRemaining()
     {
@@ -237,6 +239,113 @@ public sealed class EmbeddingSpendGateTests
                 TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// ADR 0014 counts a shared mailbox in full against every user assigned it, so work on it proceeds only while
+    /// every one of them is under their ceiling and a refusal is the first that is not.
+    /// </summary>
+    [Fact]
+    public async Task ReadCurrentPeriodForAccountAsync_OneAssignedUserOfTwoHasSpentTheirShare_RefusesTheMailbox()
+    {
+        // Arrange
+        var ledger = new InMemoryEmbeddingSpendLedger();
+        ledger.Seed(PeriodStart, SyntheticMailUser.Another, inputCharacterCount: 500);
+        var gate = CreateGate(
+            ledger,
+            BoundedPerUser(10_000, 500),
+            new FakeTimeProvider(Midday),
+            new StubMailAccountAssignments()
+                .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
+                .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment));
+
+        // Act
+        var admission = await gate.ReadCurrentPeriodForAccountAsync(
+            SyntheticMailAccount.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(admission.AdmitsRequest);
+        Assert.Equal(EmbeddingSpendBound.User, admission.ReachedBound);
+    }
+
+    /// <summary>
+    /// A mailbox nobody is assigned has no per-user allowance to be admitted under, and every caller-facing scope
+    /// narrows to the accounts somebody is assigned — so embedding it would spend on mail nobody could read, under no
+    /// per-user ceiling at all, for as long as it stayed unassigned.
+    /// </summary>
+    [Fact]
+    public async Task ReadCurrentPeriodForAccountAsync_AMailboxNobodyIsAssigned_AdmitsNothingWhateverIsDeclared()
+    {
+        // Arrange
+        var gate = CreateGate(
+            new InMemoryEmbeddingSpendLedger(),
+            EmbeddingSpendBudget.Unbounded,
+            new FakeTimeProvider(Midday),
+            new StubMailAccountAssignments());
+
+        // Act
+        var admission = await gate.ReadCurrentPeriodForAccountAsync(
+            SyntheticMailAccount.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(admission.AdmitsRequest);
+        Assert.Equal(EmbeddingSpendBound.User, admission.ReachedBound);
+    }
+
+    /// <summary>
+    /// What one call sent is one figure however many people are assigned the mailbox, so the deployment's own row
+    /// moves by it once while each user is charged in full. A deployment total read off the users' sum would refuse a
+    /// mailbox three people share after a third of what the operator declared.
+    /// </summary>
+    [Fact]
+    public async Task RecordAccountSpendAsync_AMailboxTwoUsersShare_ChargesEachInFullAndTheDeploymentOnce()
+    {
+        // Arrange
+        var ledger = new InMemoryEmbeddingSpendLedger();
+        var gate = CreateGate(
+            ledger,
+            BoundedPerUser(10_000, 10_000),
+            new FakeTimeProvider(Midday),
+            new StubMailAccountAssignments()
+                .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
+                .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment));
+
+        // Act
+        await gate.RecordAccountSpendAsync(
+            Substitute.For<IPersistenceSession>(),
+            SyntheticMailAccount.Deployment,
+            inputCharacterCount: 900,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(900, ledger.ConsumedByPeriodAndUser[(PeriodStart, SyntheticMailUser.Deployment)]);
+        Assert.Equal(900, ledger.ConsumedByPeriodAndUser[(PeriodStart, SyntheticMailUser.Another)]);
+        Assert.Equal(900, ledger.ConsumedByPeriod[PeriodStart]);
+    }
+
+    /// <summary>A mailbox nobody is assigned still moves the deployment's figure, which is what an operator watches.</summary>
+    [Fact]
+    public async Task RecordAccountSpendAsync_AMailboxNobodyIsAssigned_StillChargesTheDeployment()
+    {
+        // Arrange
+        var ledger = new InMemoryEmbeddingSpendLedger();
+        var gate = CreateGate(
+            ledger,
+            BoundedPerUser(10_000, 10_000),
+            new FakeTimeProvider(Midday),
+            new StubMailAccountAssignments());
+
+        // Act
+        await gate.RecordAccountSpendAsync(
+            Substitute.For<IPersistenceSession>(),
+            SyntheticMailAccount.Deployment,
+            inputCharacterCount: 120,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(120, ledger.ConsumedByPeriod[PeriodStart]);
+    }
+
     [Fact]
     public void Constructor_AMissingCollaborator_IsRefused()
     {
@@ -260,6 +369,7 @@ public sealed class EmbeddingSpendGateTests
     private static EmbeddingSpendGate CreateGate(
         IEmbeddingSpendLedger ledger,
         EmbeddingSpendBudget budget,
-        TimeProvider timeProvider) =>
-        new(ledger, new StubMailAccountAssignments(), budget, timeProvider);
+        TimeProvider timeProvider,
+        StubMailAccountAssignments? assignments = null) =>
+        new(ledger, assignments ?? new StubMailAccountAssignments(), budget, timeProvider);
 }

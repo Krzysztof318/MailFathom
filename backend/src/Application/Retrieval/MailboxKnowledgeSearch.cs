@@ -120,7 +120,7 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
         return new EmailKnowledgePassage
         {
             StoredEmailId = summary.StoredEmailId,
-            AccountId = summary.AccountId,
+            AccountId = summary.Account,
             FolderAlias = summary.FolderAlias,
             Subject = summary.Subject,
             ReceivedAt = summary.ReceivedAt,

@@ -11,7 +11,7 @@ using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Accounts;
 
-/// <summary>Reads which accounts the caller's user owns and how current the local copy of each one is.</summary>
+/// <summary>Reads which accounts the caller's user is assigned and how current the local copy of each one is.</summary>
 /// <remarks>
 /// <para>
 /// It is the one use case that publishes the account set rather than using it as a bound. Every other reader asks the
@@ -22,7 +22,7 @@ namespace MailFathom.Application.Accounts;
 /// Publishing a set is why it reads the caller-scoped catalog rather than the deployment's. Naming the accounts a
 /// deployment serves is publishing that they exist, so answering from the deployment's own catalog would hand every
 /// caller holding <see cref="MailFathomPermission.MailRead" /> the names of accounts belonging to everybody. A user
-/// who owns none is answered with an empty directory rather than with the deployment's.
+/// assigned none is answered with an empty directory rather than with the deployment's.
 /// </para>
 /// <para>
 /// What it publishes is MailFathom's own configured names and the progress of synchronization against them. The mail
@@ -43,7 +43,7 @@ public sealed class MailAccountDirectoryReader
     private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the use case.</summary>
-    /// <param name="accountCatalog">Describes the accounts the caller's user owns.</param>
+    /// <param name="accountCatalog">Describes the accounts the caller's user is assigned.</param>
     /// <param name="freshnessReader">Reads how current the local copy of each folder is.</param>
     /// <param name="scopeResolver">Answers which folders of those accounts a tool may see.</param>
     /// <param name="readTelemetry">Publishes the read as the operation it is, beside the call it happened inside.</param>
@@ -69,7 +69,7 @@ public sealed class MailAccountDirectoryReader
         this.authorization = authorization;
     }
 
-    /// <summary>Reads the accounts the caller's user owns and their synchronization freshness.</summary>
+    /// <summary>Reads the accounts the caller's user is assigned and their synchronization freshness.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The user's accounts with their folders, and whether the deployment refreshes them.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" /> that is acting for a user.</exception>
@@ -91,9 +91,9 @@ public sealed class MailAccountDirectoryReader
             MailboxReadOperation.ReadAccountDirectory,
             cancellationToken);
 
-        var ownedAccounts = this.accountCatalog.AssignedAccounts;
+        var assignedAccounts = this.accountCatalog.AssignedAccounts;
 
-        if (ownedAccounts.Count is 0)
+        if (assignedAccounts.Count is 0)
         {
             read.Completed(0);
 
@@ -112,11 +112,11 @@ public sealed class MailAccountDirectoryReader
             .GroupBy(static freshness => freshness.AccountId)
             .ToDictionary(static group => group.Key, FoldersOrderedByAlias);
 
-        read.Completed(ownedAccounts.Count);
+        read.Completed(assignedAccounts.Count);
 
         return new MailAccountDirectory(
             this.accountCatalog.SynchronizationEnabled,
-            [.. ownedAccounts.Select(account => new DescribedMailAccount(account, FoldersOf(foldersByAccount, account.Id)))]);
+            [.. assignedAccounts.Select(account => new DescribedMailAccount(account, FoldersOf(foldersByAccount, account.Id)))]);
     }
 
     private static IReadOnlyList<MailboxFolderFreshness> FoldersOrderedByAlias(IGrouping<MailAccountId, MailboxFolderFreshness> group) =>

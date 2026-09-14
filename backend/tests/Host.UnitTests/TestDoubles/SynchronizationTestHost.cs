@@ -47,7 +47,6 @@ using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
@@ -296,8 +295,7 @@ internal static class SynchronizationTestHost
         // The language a derivation writes in is still stated per user while the mail it is derived from is the
         // mailbox's, so a pass reads it through the resolution the production graph registers rather than from a user
         // it has not got.
-        services.AddScoped<IMailUserLanguages>(_ => new EnglishForEveryUser());
-        services.AddScoped<AccountLanguages>();
+        services.AddScoped<IMailAccountLanguages>(_ => new EnglishForEveryAccount());
         services.AddScoped<DeterministicSpamClassifier>();
         services.AddScoped<EmailSpamClassifier>();
         services.AddScoped<SpamActionRecorder>();
@@ -476,10 +474,10 @@ internal static class SynchronizationTestHost
         return runStore;
     }
 
-    /// <summary>The language of a deployment that has not been told a user reads anything else.</summary>
-    private sealed class EnglishForEveryUser : IMailUserLanguages
+    /// <summary>The language of a deployment that has not been told a mailbox is read in anything else.</summary>
+    private sealed class EnglishForEveryAccount : IMailAccountLanguages
     {
-        public MailUserLanguage ForUser(MailUserId user) => MailUserLanguage.English;
+        public MailAccountLanguage LanguageOf(MailAccountId account) => MailAccountLanguage.English;
     }
 
     /// <summary>Answers with classification switched off, which is what a deployment configuring none of it runs with.</summary>

@@ -508,7 +508,7 @@ public sealed class ClientMailThreadEndpointTests
                 .. summaries.Select(summary => new ThreadedEmailSummary
                 {
                     StoredEmailId = summary.StoredEmailId,
-                    AccountId = summary.AccountId,
+                    AccountId = summary.Account,
                     FolderAlias = summary.FolderAlias,
                     Subject = summary.Subject,
                     SentAt = summary.SentAt,

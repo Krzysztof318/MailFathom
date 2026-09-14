@@ -135,12 +135,12 @@ public sealed class StoredEmailResponseAuthoring
         // An account this deployment no longer serves leaves its stored rows in place, and a folder an operator
         // withheld from tools keeps its own, so the row existing is not enough. All three cases produce one answer,
         // because telling them apart would let a caller learn which mail exists by trying to answer it.
-        if (summary is null || !this.scopeResolver.IsReadableByTools(summary.AccountId, summary.FolderAlias))
+        if (summary is null || !this.scopeResolver.IsReadableByTools(summary.Account, summary.FolderAlias))
         {
             return AuthoredResponse.Refused(AuthoredResponseRefusalReason.AnsweredEmailNotFound);
         }
 
-        if (this.senderIdentities.FindSenderIdentity(summary.AccountId) is not { } sender)
+        if (this.senderIdentities.FindSenderIdentity(summary.Account) is not { } sender)
         {
             return AuthoredResponse.Refused(AuthoredResponseRefusalReason.SenderUnconfigured);
         }

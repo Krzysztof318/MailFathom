@@ -53,6 +53,7 @@ the credential block, and, in one case, `TransportSecurity`:
 {
   "EmailAddress": "you@example.test",
   "DisplayName": "Personal mail",
+  "Language": "English",
   "Host": "imap.example.test",
   "Port": 993,
   "UserName": "you@example.test",

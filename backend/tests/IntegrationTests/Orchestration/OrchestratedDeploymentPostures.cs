@@ -2,9 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Spam.Actions;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 
 namespace MailFathom.IntegrationTests.Orchestration;
@@ -22,11 +21,11 @@ namespace MailFathom.IntegrationTests.Orchestration;
 /// that changed neither setting holds. A test about either states its own reader rather than moving these.
 /// </para>
 /// </remarks>
-internal sealed class OrchestratedDeploymentPostures : ISpamActionSettingsReader, IMailUserLanguages
+internal sealed class OrchestratedDeploymentPostures : ISpamActionSettingsReader, IMailAccountLanguages
 {
     /// <inheritdoc />
     public SpamActionSettings ActionsFor(MailAccountId account) => SpamActionSettings.None;
 
     /// <inheritdoc />
-    public MailUserLanguage ForUser(MailUserId user) => MailUserLanguage.English;
+    public MailAccountLanguage LanguageOf(MailAccountId account) => MailAccountLanguage.English;
 }

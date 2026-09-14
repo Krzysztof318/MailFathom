@@ -59,8 +59,6 @@ public sealed record MailRuleExecutionQuery
 
     /// <summary>Gets the account whose history is read.</summary>
     public MailAccountId Account { get; }
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one user names.</summary>
-    public MailAccountId AccountId => this.Account;
 
     /// <summary>Gets the rule the page is narrowed to, or <see langword="null" /> for every rule of the account.</summary>
     public string? RuleName { get; }

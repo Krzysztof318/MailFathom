@@ -32,6 +32,12 @@ namespace MailFathom.Application.Emails.Embeddings.Limits;
 /// every one of them is under their ceiling, and one call's characters are charged to each. That fan-out lives here
 /// rather than in each pass, so the reading and the charge cannot come to disagree about who a mailbox is for.
 /// </para>
+/// <para>
+/// The deployment's figure is not the sum of those per-user charges and is never derived from them. Counting a shared
+/// mailbox in full against each of its users is what the per-user ceiling means, so the per-user figures add up to
+/// more than was sent, and a deployment ceiling read off their sum would stop a mailbox three people share after a
+/// third of what the operator declared. The ledger counts what one call sent once, separately.
+/// </para>
 /// </remarks>
 public sealed class EmbeddingSpendGate
 {
@@ -71,9 +77,10 @@ public sealed class EmbeddingSpendGate
     /// <remarks>
     /// The strictest assigned user decides, because a shared mailbox's mail counts in full against each of them: work
     /// on it proceeds only while every one is under their ceiling, and a refusal therefore names the first that is
-    /// not. A mailbox assigned to nobody is refused by the same rule read the other way — there is no user for the
-    /// per-user ceiling to admit, so only the deployment's own figure remains, which is what the empty case answers
-    /// with.
+    /// not. A mailbox assigned to nobody is refused by the same rule read the other way: there is no user for the
+    /// per-user ceiling to admit, so the answer is an exhausted per-user period rather than a fresh one. Admitting it
+    /// instead would embed mail no caller can read — every caller-facing scope narrows to the accounts somebody is
+    /// assigned — and would do so under no per-user ceiling at all, for as long as the mailbox stayed unassigned.
     /// <para>
     /// ponytail: one indexed read per assigned user. A mailbox is shared by a handful of people and the read sits
     /// beside a provider call costing orders of magnitude more, so a grouped read is worth writing only if a
@@ -119,9 +126,7 @@ public sealed class EmbeddingSpendGate
             deployment = this.PeriodOf(periodStart, consumedEverywhere, this.budget.MaxInputCharactersPerPeriod);
         }
 
-        return new EmbeddingSpendAdmission(
-            strictestUser ?? this.PeriodOf(periodStart, 0, this.budget.MaxInputCharactersPerPeriodPerUser),
-            deployment);
+        return new EmbeddingSpendAdmission(strictestUser ?? this.ExhaustedPeriod(periodStart), deployment);
     }
 
     /// <summary>Charges one provider call to the period it happened in and to every user the mailbox is assigned to.</summary>
@@ -134,10 +139,11 @@ public sealed class EmbeddingSpendGate
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the count is negative.</exception>
     /// <remarks>
     /// Charged to whoever is assigned at the moment the call is made, and never recharged when an assignment changes:
-    /// spend is a record of an event rather than a running apportionment. A mailbox assigned to nobody writes no
-    /// per-user row, and the deployment's figure is the sum of what was written, so nothing is lost by it.
+    /// spend is a record of an event rather than a running apportionment. The deployment's own figure is charged once
+    /// by the same write, so a mailbox assigned to nobody still moves it and a mailbox three people share moves it by
+    /// what was sent rather than by three times it.
     /// </remarks>
-    public async Task RecordAccountSpendAsync(
+    public Task RecordAccountSpendAsync(
         IPersistenceSession session,
         MailAccountId account,
         long inputCharacterCount,
@@ -146,17 +152,12 @@ public sealed class EmbeddingSpendGate
         ArgumentNullException.ThrowIfNull(session);
         ArgumentOutOfRangeException.ThrowIfNegative(inputCharacterCount);
 
-        var periodStart = this.CurrentPeriodStart();
-
-        foreach (var user in this.assignments.UsersAssignedTo(account))
-        {
-            await this.ledger.RecordSpendAsync(
-                session,
-                periodStart,
-                user,
-                inputCharacterCount,
-                cancellationToken);
-        }
+        return this.ledger.RecordSpendAsync(
+            session,
+            this.CurrentPeriodStart(),
+            this.assignments.UsersAssignedTo(account),
+            inputCharacterCount,
+            cancellationToken);
     }
 
     /// <summary>Reads where one user stands in the current period, which is what work consults before it spends.</summary>
@@ -226,7 +227,7 @@ public sealed class EmbeddingSpendGate
         return this.ledger.RecordSpendAsync(
             session,
             this.CurrentPeriodStart(),
-            user,
+            [user],
             inputCharacterCount,
             cancellationToken);
     }
@@ -238,4 +239,13 @@ public sealed class EmbeddingSpendGate
 
     private EmbeddingSpendPeriod PeriodOf(DateTimeOffset periodStart, long consumed, long ceiling) =>
         new(periodStart, periodStart + this.budget.Period, consumed, ceiling == 0 ? null : ceiling);
+
+    /// <summary>The per-user standing of a mailbox no user is assigned, which admits nothing whatever is configured.</summary>
+    /// <remarks>
+    /// A ceiling of nothing rather than the configured one, because the configured one may be absent and an absent
+    /// ceiling admits everything. There is no user here for a per-user ceiling to be about, so the honest answer is
+    /// that no per-user allowance exists rather than that the deployment declared none.
+    /// </remarks>
+    private EmbeddingSpendPeriod ExhaustedPeriod(DateTimeOffset periodStart) =>
+        new(periodStart, periodStart + this.budget.Period, 0, 0);
 }

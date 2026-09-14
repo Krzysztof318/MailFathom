@@ -102,7 +102,7 @@ public sealed class SpamClassificationPass
     }
 
     /// <summary>Takes one bounded pass over the account's requested run, where it has one.</summary>
-    /// <param name="account">The account whose run is carried, named by its user and its identifier.</param>
+    /// <param name="account">The account whose run is carried, by its generated identifier.</param>
     /// <param name="cancellationToken">Cancels the pass between messages and between batches; committed batches stay durable.</param>
     /// <returns>What the pass did, and how the run ended where this pass ended it.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">

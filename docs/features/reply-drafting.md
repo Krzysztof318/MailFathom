@@ -65,11 +65,11 @@ than answering one. There is then no conversation to read and no manner to deriv
 instruction is the whole of what the message is written from, which is why it is required there and optional beside a
 message. The draft cites nothing and proposes nobody, because the exchange those would come out of does not exist.
 
-**The language is the correspondence's, and the person's where there is none.** A reply is written in the language the
-exchange it answers is written in, because that is what the person receiving it reads — nothing here asks which
+**The language is the correspondence's, and the mailbox's where there is none.** A reply is written in the language
+the exchange it answers is written in, because that is what the person receiving it reads — nothing here asks which
 language the *author* prefers for a message going to somebody else. A message answering none has no exchange to read
-that from, so it is written in the language this deployment recorded for the user. An instruction asking for a
-particular language outranks both, being the one thing the person said about the message themselves.
+that from, so it is written in [the language the mailbox it is written from is read in](../operations/configuration-mail.md#the-language-this-mailbox-is-read-in--language). An instruction asking
+for a particular language outranks both, being the one thing the person said about the message themselves.
 
 ## What reaches the provider, and what does not
 

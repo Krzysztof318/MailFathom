@@ -40,7 +40,7 @@ namespace MailFathom.Application.Mail.Delivery.Governance;
 /// </remarks>
 /// <param name="contacts">Reads which of a set of addresses the book already holds.</param>
 /// <param name="ownership">Answers whose book that is, which is the user the send is being authored for.</param>
-/// <param name="accounts">Says which accounts the caller's user owns.</param>
+/// <param name="accounts">Says which accounts the caller's user is assigned.</param>
 /// <param name="senderIdentities">Says which address each of those accounts sends as.</param>
 public sealed class RecipientVouching(
     IContactDirectory contacts,

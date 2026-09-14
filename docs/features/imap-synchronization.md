@@ -1936,6 +1936,7 @@ a configuration source. An account is declared like this:
 {
   "EmailAddress": "mailfathom@example.test",
   "DisplayName": "Personal mail",
+  "Language": "English",
   "Host": "imap.example.test",
   "Port": 993,
   "UserName": "mailfathom@example.test",

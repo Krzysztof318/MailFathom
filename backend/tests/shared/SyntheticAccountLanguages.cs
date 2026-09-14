@@ -2,33 +2,32 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.TestSupport;
 
-/// <summary>Builds the per-mailbox resolution of the one derived-reading setting that is still a user's.</summary>
+/// <summary>States what language each mailbox of a suite is read in.</summary>
 /// <remarks>
-/// Composed from the real <see cref="AccountLanguages" /> rather than substituted, because what a consumer needs from
-/// it is the answer it derives — which assigned user's language a shared mailbox is read in — and a substitute would
-/// let a test state that answer rather than exercise it. The default is a deployment writing English, so a suite
-/// arranging nothing gets the quiet answer instead of a roster.
+/// A deployment that has been told nothing writes English about every mailbox, which is what the real reader answers
+/// for an account it does not serve, so a suite arranging nothing gets the quiet answer rather than a roster.
 /// </remarks>
-internal static class SyntheticAccountLanguages
+internal sealed class SyntheticAccountLanguages : IMailAccountLanguages
 {
-    /// <summary>Builds the resolution over whichever of the two collaborators a test states.</summary>
-    /// <param name="assignments">Who reaches which mailbox, or <see langword="null" /> for a deployment assigning none.</param>
-    /// <param name="languages">What language each user reads, or <see langword="null" /> for English.</param>
-    /// <returns>The resolution the derivation passes read a mailbox's language through.</returns>
-    public static AccountLanguages Of(
-        IMailAccountAssignments? assignments = null,
-        IMailUserLanguages? languages = null) =>
-        new(assignments ?? new StubMailAccountAssignments(), languages ?? new EnglishForEveryUser());
+    private readonly Dictionary<MailAccountId, MailAccountLanguage> declared = [];
 
-    /// <summary>The language of a deployment that has not been told a user reads anything else.</summary>
-    private sealed class EnglishForEveryUser : IMailUserLanguages
+    /// <summary>States the language one mailbox is read in.</summary>
+    /// <param name="account">The mailbox.</param>
+    /// <param name="language">The language its derivations come out in.</param>
+    /// <returns>The same instance, so an arrangement reads as one expression.</returns>
+    public SyntheticAccountLanguages Reading(MailAccountId account, MailAccountLanguage language)
     {
-        public MailUserLanguage ForUser(MailUserId user) => MailUserLanguage.English;
+        this.declared[account] = language;
+
+        return this;
     }
+
+    /// <inheritdoc />
+    public MailAccountLanguage LanguageOf(MailAccountId account) =>
+        this.declared.GetValueOrDefault(account, MailAccountLanguage.English);
 }

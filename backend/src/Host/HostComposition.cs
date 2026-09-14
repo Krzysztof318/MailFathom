@@ -272,10 +272,6 @@ internal static class HostComposition
         builder.Services.AddSingleton<ServedMailUsers>();
         builder.Services.AddSingleton<IDeploymentMailUserSource>(provider =>
             provider.GetRequiredService<ServedMailUsers>());
-        // A singleton over that same roster, for the same reason: which language somebody reads is a fact about them
-        // rather than about the request being served, and a pass composing a derivation for them must reach it without
-        // a query.
-        builder.Services.AddSingleton<IMailUserLanguages, ServedUserLanguages>();
         // ReferenceOnly is the default, so a deployment that configures nothing gets the mode under which a plain-text value
         // where a reference belongs fails startup instead of authenticating.
         builder.Services.AddSecretResolution(
@@ -574,10 +570,10 @@ internal static class HostComposition
         builder.Services.AddScoped<IContactCollectionSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.ContactCollection);
         builder.Services.AddScoped<ISpamClassificationSettingsReader, ConfiguredSpamClassificationSettingsReader>();
         builder.Services.AddScoped<ISpamActionSettingsReader, ConfiguredSpamActionSettingsReader>();
-        // Registered beside the reader it resolves through rather than with the passes that ask it, because a derived
-        // reading of a mailbox two people are assigned has one language wherever it is written. It is scoped like the
-        // reader, so a work unit answers under one reload.
-        builder.Services.AddScoped<AccountLanguages>();
+        // Registered beside the other per-account readers, because a derived reading of a mailbox two people are
+        // assigned has one language wherever it is written. It is scoped like them, so a work unit answers under one
+        // reload.
+        builder.Services.AddScoped<IMailAccountLanguages, ConfiguredMailAccountLanguages>();
         builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();
         builder.Services.AddScoped<ISmtpAccountSettingsProvider, ConfiguredSmtpAccountSettingsProvider>();
         builder.Services.AddScoped<IMailOAuthSettingsProvider, ConfiguredMailOAuthSettingsProvider>();

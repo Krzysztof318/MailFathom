@@ -479,7 +479,7 @@ public sealed class MailRuleEndpointsTests
         // Assert
         await this.history.Received(1).ReadPageAsync(
             Arg.Is<MailRuleExecutionQuery>(query =>
-                query!.AccountId == Account
+                query!.Account == Account
                 && query.RuleName == "file-invoices"
                 && query.StoredEmailId!.Value.Value == email
                 && query.PageSize == 10),

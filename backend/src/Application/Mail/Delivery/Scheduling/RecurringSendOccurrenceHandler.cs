@@ -162,8 +162,9 @@ public sealed class RecurringSendOccurrenceHandler : IJobHandler
             declaration.AccountId,
 
             // The occasion is the declaration's author's send, not the pass's: nothing is acting for a user here, and
-            // a send this deployment attributed to nobody would share an idempotency identity with one somebody else
-            // declared on the same mailbox under the same schedule.
+            // ADR 0014 keeps a recurring send's author beside the account, so an occasion of it is that person's send
+            // exactly as the declaration was. The idempotency identity is settled elsewhere — the requester composes
+            // the declaration's own identifier with the occasion — so this carries provenance rather than uniqueness.
             declaration.User,
             OutgoingEmailRequester.Schedule(declaration.Id, occurrence),
             declaration.Recipients,

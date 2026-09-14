@@ -48,8 +48,6 @@ public sealed record MailboxMutationAuditQuery
 
     /// <summary>Gets the account whose trail is read.</summary>
     public MailAccountId Account { get; }
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one user names.</summary>
-    public MailAccountId AccountId => this.Account;
 
     /// <summary>Gets the mutation the page is narrowed to, or the unspecified default when every mutation is served.</summary>
     public MailboxMutation Mutation { get; }

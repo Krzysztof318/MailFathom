@@ -61,7 +61,7 @@ public sealed class MailEnrichmentPass
 
     private readonly IStoredEmailEnrichmentStore enrichmentStore;
     private readonly IEmailEnricher enricher;
-    private readonly AccountLanguages accountLanguages;
+    private readonly IMailAccountLanguages accountLanguages;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly TimeProvider timeProvider;
@@ -77,7 +77,7 @@ public sealed class MailEnrichmentPass
     public MailEnrichmentPass(
         IStoredEmailEnrichmentStore enrichmentStore,
         IEmailEnricher enricher,
-        AccountLanguages accountLanguages,
+        IMailAccountLanguages accountLanguages,
         SensitiveContentEgressGuard egressGuard,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         TimeProvider timeProvider)

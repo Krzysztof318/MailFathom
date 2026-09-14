@@ -90,7 +90,7 @@ public sealed class MirroredMailFolderEditor
     }
 
     /// <summary>Reads the account's folders and the acts each of them allows.</summary>
-    /// <param name="account">The account, named by its user and its identifier.</param>
+    /// <param name="account">The account, by its generated identifier.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The folders and what may be done to them.</returns>
     public async Task<MailFolderManagement> ReadAsync(
@@ -113,7 +113,7 @@ public sealed class MirroredMailFolderEditor
     }
 
     /// <summary>Creates a folder on the mail server and declares it.</summary>
-    /// <param name="account">The account, named by its user and its identifier.</param>
+    /// <param name="account">The account, by its generated identifier.</param>
     /// <param name="parentAlias">The folder to create it beneath, or <see langword="null" /> for the top of the hierarchy.</param>
     /// <param name="name">The name as supplied, which a creation naming a role ignores.</param>
     /// <param name="role">The role the folder is to play, or <see langword="null" /> for an ordinary folder.</param>
@@ -184,7 +184,7 @@ public sealed class MirroredMailFolderEditor
     }
 
     /// <summary>Renames a folder on the mail server and points its declaration at the new path.</summary>
-    /// <param name="account">The account, named by its user and its identifier.</param>
+    /// <param name="account">The account, by its generated identifier.</param>
     /// <param name="folderAlias">The folder.</param>
     /// <param name="name">The new name as supplied.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
@@ -224,7 +224,7 @@ public sealed class MirroredMailFolderEditor
     }
 
     /// <summary>Moves a folder, with everything beneath it, and points its declaration at the new path.</summary>
-    /// <param name="account">The account, named by its user and its identifier.</param>
+    /// <param name="account">The account, by its generated identifier.</param>
     /// <param name="folderAlias">The folder.</param>
     /// <param name="parentAlias">The folder to move it beneath, or <see langword="null" /> for the top of the hierarchy.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
@@ -274,7 +274,7 @@ public sealed class MirroredMailFolderEditor
     }
 
     /// <summary>Deletes a folder, on the mail server as well where the account's setting says so.</summary>
-    /// <param name="account">The account, named by its user and its identifier.</param>
+    /// <param name="account">The account, by its generated identifier.</param>
     /// <param name="folderAlias">The folder.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The folder as it stood at its deletion, or the refusal.</returns>

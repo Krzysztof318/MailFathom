@@ -96,7 +96,7 @@ internal sealed class MailRuleExecutionStore(
 
         if (unreadableCount > 0)
         {
-            telemetry.RecordUnreadableExecutions(query.AccountId, unreadableCount);
+            telemetry.RecordUnreadableExecutions(query.Account, unreadableCount);
         }
 
         // The boundary is the last row read rather than the last execution presented, so a row this build cannot

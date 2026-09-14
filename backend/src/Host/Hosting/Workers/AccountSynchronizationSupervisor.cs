@@ -60,7 +60,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     private readonly ILogger<AccountSynchronizationSupervisor> logger;
 
     /// <summary>Initializes a supervisor for one configured account.</summary>
-    /// <param name="account">The account this supervisor synchronizes, named by its user and its identifier together; the identifier is what it logs.</param>
+    /// <param name="account">The account this supervisor synchronizes, by its generated identifier together; the identifier is what it logs.</param>
     /// <param name="scopeFactory">Creates the scope each folder work unit runs in.</param>
     /// <param name="settings">Supplies the snapshot every run is scheduled from.</param>
     /// <param name="accountRunSlots">Bounds how many accounts run at once; owned by the coordinator and never released beyond what this supervisor took.</param>

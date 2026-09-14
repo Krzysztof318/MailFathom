@@ -35,15 +35,17 @@ public sealed class StoredEmailEmbeddingGeneratorTests
     /// <summary>A moment the daily period places on a whole day, so a test's expected roll-over is arithmetic rather than a guess.</summary>
     private static readonly DateTimeOffset PeriodStart = new(2026, 8, 8, 0, 0, 0, TimeSpan.Zero);
 
-    /// <summary>One mailbox each, which is what turns a message's mailbox back into the person a spend is charged to.</summary>
+    /// <summary>Every mailbox these tests reach, assigned, which is what turns one back into the person charged.</summary>
     /// <remarks>
     /// A run holds the mailbox a message belongs to and never a person, so the ceiling, the charge, and the posture
     /// all resolve through this. One user per mailbox keeps every claim here about the resolution rather than about
-    /// which of several assigned readers a rule picked.
+    /// which of several assigned readers a rule picked, and every mailbox is assigned to somebody because a mailbox
+    /// nobody is assigned is refused before a provider is reached — which is a claim of its own rather than the
+    /// background these tests are written against.
     /// </remarks>
     private static readonly StubMailAccountAssignments Assignments = new StubMailAccountAssignments()
         .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
-        .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Another);
+        .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Another, ScannedMailbox);
 
     [Fact]
     public async Task EmbedAsync_ActiveProfileAndOutstandingPassages_EmbedsEveryPassage()
@@ -279,7 +281,7 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         var store = new InMemoryEmailEmbeddingStore();
         store.AddPassages(Message, CreatePassages(3));
         var ledger = new InMemoryEmbeddingSpendLedger();
-        ledger.Seed(PeriodStart, SyntheticMailUser.Deployment, inputCharacterCount: 500);
+        ledger.SeedDeployment(PeriodStart, inputCharacterCount: 500);
         var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8);
         var generator = CreateGenerator(
             store,

@@ -104,7 +104,7 @@ internal sealed class MailAnsweringAuditEntryStore(
 
         if (unreadableCount > 0)
         {
-            telemetry.RecordUnreadableEntries(query.AccountId, unreadableCount);
+            telemetry.RecordUnreadableEntries(query.Account, unreadableCount);
         }
 
         // The boundary is the last row read rather than the last entry presented, so a row this build cannot interpret

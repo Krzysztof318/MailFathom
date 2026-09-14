@@ -228,7 +228,6 @@ internal sealed class UserRecordAdministration(
             inForce,
             SettingsDocumentPatch.Apply(inForce.Json, edits),
             UserRecordAuthority.Administrator,
-            UserRecordArrival.AlreadyHeld,
             cancellationToken);
 
         return outcome is null
@@ -288,7 +287,6 @@ internal sealed class UserRecordAdministration(
                 inForce,
                 SettingsDocumentPatch.Apply(inForce.Json, [edit]),
                 UserRecordAuthority.User,
-                UserRecordArrival.AlreadyHeld,
                 cancellationToken);
 
             if (outcome is null)
@@ -398,7 +396,6 @@ internal sealed class UserRecordAdministration(
             inForce,
             SettingsDocumentPatch.Apply(inForce.Json, edits),
             authority,
-            UserRecordArrival.BeingWritten,
             cancellationToken);
     }
 
@@ -440,17 +437,16 @@ internal sealed class UserRecordAdministration(
         UserSettingsDocument inForce,
         string candidateJson,
         UserRecordAuthority authority,
-        UserRecordArrival arrival,
         CancellationToken cancellationToken)
     {
         // Judged with the accounts assigned to the user composed back in, because that is the record a start serves them
-        // from: a language is judged against the mailboxes it applies to. The blocks themselves arrive as records the
-        // deployment already holds, because this route cannot write one — a saved record naming MailAccounts is
-        // refused above — so judging them here would refuse a user's own record over a posture the account route is
-        // the only thing that could correct.
+        // from: a rule over the whole set — that two of their mailboxes cannot share a name, that a junk destination
+        // resolves within them — is only askable against it. The blocks themselves arrive as records the deployment
+        // already holds, because this route cannot write one — a saved record naming MailAccounts is refused above —
+        // so judging them here would refuse a user's own record over a posture or a language the account route is the
+        // only thing that could correct.
         var binding = binder.Bind(
             MailAccountRecordComposition.Compose(candidateJson, inForce.MailAccounts),
-            arrival,
             UserRecordArrival.AlreadyHeld);
 
         if (binding.User is not { } bound)

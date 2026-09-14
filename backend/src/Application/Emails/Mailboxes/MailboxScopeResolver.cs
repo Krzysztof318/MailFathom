@@ -88,10 +88,11 @@ public sealed class MailboxScopeResolver
     /// A request that names no account is restricted to the accounts the user is assigned rather than left
     /// unrestricted. Two separate things make that necessary: removing an account from configuration leaves its stored rows in place, so an
     /// absent account predicate would keep publishing mail from an account this deployment no longer serves, and the rows
-    /// of every other user are in the same table. A user assigned nothing therefore resolves to a scope that reads
-    /// nothing rather than to an empty account list, because an empty list is read as unrestricted by every narrowing
-    /// site — <see cref="MailboxScope.Create" /> answers <see cref="MailboxScope.NothingReadable" /> for exactly that
-    /// reason. The resolved accounts, not the requested ones, take part in a continuation cursor's fingerprint.
+    /// of every other user are in the same table. A user assigned nothing therefore resolves to
+    /// <see cref="MailboxScope.NothingReadable" /> rather than to a scope carrying an empty account list: the account
+    /// containment is composed unconditionally, so an empty list admits no row, but such a scope would still carry the
+    /// deployment's folder decisions and read as a scope over every mailbox's folders. Leaving early is what keeps the
+    /// two apart. The resolved accounts, not the requested ones, take part in a continuation cursor's fingerprint.
     /// </para>
     /// <para>
     /// The folders a tool may read are named here, once, rather than by each read model — which is what makes "no tool

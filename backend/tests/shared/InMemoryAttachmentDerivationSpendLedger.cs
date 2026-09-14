@@ -12,7 +12,9 @@ namespace MailFathom.TestSupport;
 /// <remarks>
 /// Hand-written for the reason the embedding spend ledger double beside it is, and keyed by the step as well as by the
 /// period and the user: the two steps count in units that do not convert, so a fake summing octets read into
-/// description calls would let either ceiling pass a test that never enforced it.
+/// description calls would let either ceiling pass a test that never enforced it. The deployment's own total is kept
+/// under the user identity that names nobody, exactly as the table keeps it, so a test can tell what was read from
+/// what was charged.
 /// </remarks>
 internal sealed class InMemoryAttachmentDerivationSpendLedger : IAttachmentDerivationSpendLedger
 {
@@ -34,6 +36,13 @@ internal sealed class InMemoryAttachmentDerivationSpendLedger : IAttachmentDeriv
         long unitCount) =>
         this.consumed[(periodStart, derivationStep, user)] =
             this.consumed.GetValueOrDefault((periodStart, derivationStep, user)) + unitCount;
+
+    /// <summary>Charges a period's deployment total, which is what was read rather than what a user was charged.</summary>
+    /// <param name="periodStart">The period to charge.</param>
+    /// <param name="derivationStep">The step the units belong to.</param>
+    /// <param name="unitCount">The units to charge it, in that step's own unit.</param>
+    public void SeedDeployment(DateTimeOffset periodStart, AttachmentDerivationStep derivationStep, long unitCount) =>
+        this.Seed(periodStart, derivationStep, default, unitCount);
 
     /// <inheritdoc />
     public Task<AttachmentDerivationTotals> ReadConsumedAsync(
@@ -65,11 +74,12 @@ internal sealed class InMemoryAttachmentDerivationSpendLedger : IAttachmentDeriv
         IPersistenceSession session,
         DateTimeOffset periodStart,
         AttachmentDerivationStep derivationStep,
-        MailUserId user,
+        IReadOnlyCollection<MailUserId> users,
         long unitCount,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(users);
         ArgumentOutOfRangeException.ThrowIfNegative(unitCount);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -78,12 +88,16 @@ internal sealed class InMemoryAttachmentDerivationSpendLedger : IAttachmentDeriv
             return Task.CompletedTask;
         }
 
-        this.Seed(periodStart, derivationStep, user, unitCount);
+        this.Seed(periodStart, derivationStep, default, unitCount);
+
+        foreach (var user in users)
+        {
+            this.Seed(periodStart, derivationStep, user, unitCount);
+        }
 
         return Task.CompletedTask;
     }
 
-    private long ConsumedInPeriod(DateTimeOffset periodStart, AttachmentDerivationStep derivationStep) => this.consumed
-        .Where(charge => charge.Key.PeriodStart == periodStart && charge.Key.Step == derivationStep)
-        .Sum(charge => charge.Value);
+    private long ConsumedInPeriod(DateTimeOffset periodStart, AttachmentDerivationStep derivationStep) =>
+        this.consumed.GetValueOrDefault((periodStart, derivationStep, default));
 }

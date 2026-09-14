@@ -17,6 +17,7 @@ using MailFathom.AI.Retrieval;
 using MailFathom.AI.Search;
 using MailFathom.AI.ThreadStates;
 using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Discovery.Planning;
@@ -438,7 +439,7 @@ public static class AiServiceCollectionExtensions
             provider.GetRequiredService<MailboxScopeResolver>(),
             provider.GetRequiredService<SensitiveContentEgressGuard>(),
             provider.GetRequiredService<AccessAuthorization>(),
-            provider.GetRequiredService<IMailUserLanguages>(),
+            provider.GetRequiredService<IMailAccountLanguages>(),
             derivesStyleFromSentMail));
 
         return services;

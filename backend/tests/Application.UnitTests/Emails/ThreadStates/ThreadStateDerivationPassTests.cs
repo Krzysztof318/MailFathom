@@ -2,11 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Access;
-using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
@@ -152,7 +149,7 @@ public sealed class ThreadStateDerivationPassTests
         Assert.True(report.ThreadsRemain);
         await deriver.Received(1).DeriveAsync(
             Arg.Any<DerivableThread>(),
-            Arg.Any<MailUserLanguage>(),
+            Arg.Any<MailAccountLanguage>(),
             Arg.Any<CancellationToken>());
         await store.DidNotReceiveWithAnyArgs().SaveAsync(
             Arg.Any<IPersistenceSession>(),
@@ -201,7 +198,7 @@ public sealed class ThreadStateDerivationPassTests
         Assert.False(report.ThreadsRemain);
         await deriver.DidNotReceiveWithAnyArgs().DeriveAsync(
             Arg.Any<DerivableThread>(),
-            Arg.Any<MailUserLanguage>(),
+            Arg.Any<MailAccountLanguage>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -320,7 +317,7 @@ public sealed class ThreadStateDerivationPassTests
         var deriver = Substitute.For<IThreadStateDeriver>();
         deriver.IsActive.Returns(true);
         deriver
-            .DeriveAsync(Arg.Any<DerivableThread>(), Arg.Any<MailUserLanguage>(), Arg.Any<CancellationToken>())
+            .DeriveAsync(Arg.Any<DerivableThread>(), Arg.Any<MailAccountLanguage>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(answer(call.ArgAt<DerivableThread>(0))));
 
         return deriver;
@@ -332,9 +329,9 @@ public sealed class ThreadStateDerivationPassTests
     /// language rather than resolving one.
     /// </summary>
     [Theory]
-    [InlineData(MailUserLanguage.Polish)]
-    [InlineData(MailUserLanguage.English)]
-    public async Task RunAsync_AnAccountWhoseOwnerReadsALanguage_DerivesInIt(MailUserLanguage language)
+    [InlineData(MailAccountLanguage.Polish)]
+    [InlineData(MailAccountLanguage.English)]
+    public async Task RunAsync_AnAccountWhoseOwnerReadsALanguage_DerivesInIt(MailAccountLanguage language)
     {
         // Arrange
         var store = StoreReturning([Derivable()]);
@@ -351,22 +348,15 @@ public sealed class ThreadStateDerivationPassTests
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>Resolves the mailbox's language through the users assigned it, as a deployment's reader does.</summary>
-    private static AccountLanguages LanguagesAnswering(MailUserLanguage language)
-    {
-        var languages = Substitute.For<IMailUserLanguages>();
-        languages.ForUser(Arg.Any<MailUserId>()).Returns(language);
-
-        return SyntheticAccountLanguages.Of(
-            new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, Account),
-            languages);
-    }
+    /// <summary>States the language the mailbox under test is read in, as its own record does.</summary>
+    private static SyntheticAccountLanguages LanguagesAnswering(MailAccountLanguage language) =>
+        new SyntheticAccountLanguages().Reading(Account, language);
 
     /// <summary>Composes the pass over a deployment with no scanner switched on, which is the ordinary shape.</summary>
     private static ThreadStateDerivationPass CreatePass(
         IStoredThreadStateStore store,
         IThreadStateDeriver deriver,
-        MailUserLanguage language = MailUserLanguage.English)
+        MailAccountLanguage language = MailAccountLanguage.English)
     {
         var timeProvider = new FakeTimeProvider(DerivedAt);
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();

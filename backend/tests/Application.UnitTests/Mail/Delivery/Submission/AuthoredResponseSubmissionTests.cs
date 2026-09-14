@@ -95,7 +95,7 @@ public sealed class AuthoredResponseSubmissionTests
         var record = await submission.SubmitAsync(Request(), TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(summary.AccountId, record.AccountId);
+        Assert.Equal(summary.Account, record.AccountId);
     }
 
     /// <summary>A reply goes where the message asked for answers to go, and the caller never states it.</summary>
@@ -664,12 +664,12 @@ public sealed class AuthoredResponseSubmissionTests
             ContentReaderOpening(),
             repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
             new MailboxScopeResolver(
-                CatalogServing(answered.AccountId),
+                CatalogServing(answered.Account),
                 folderParticipation ?? StubMailFolderParticipation.Mapping(
-                    new MailFolderIdentity(answered.AccountId, answered.FolderAlias)),
+                    new MailFolderIdentity(answered.Account, answered.FolderAlias)),
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
-            senderIdentities ?? SenderIdentitiesFor(answered.AccountId),
+            senderIdentities ?? SenderIdentitiesFor(answered.Account),
             new NamedRecipientResolver(new InMemoryContactBookStore(), ContactBookOwnerships.For(granted)),
             Bounds(),
             granted);

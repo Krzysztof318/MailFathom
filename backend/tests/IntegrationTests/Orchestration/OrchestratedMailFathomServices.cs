@@ -531,8 +531,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
 
         builder.Services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ScanningNothing());
         builder.Services.AddSingleton<ISpamActionSettingsReader>(deploymentPostures);
-        builder.Services.AddSingleton<IMailUserLanguages>(deploymentPostures);
-        builder.Services.AddScoped<AccountLanguages>();
+        builder.Services.AddSingleton<IMailAccountLanguages>(deploymentPostures);
 
         // The same arrangement for the other decision a composition root reads out of the account's own section: the
         // synchronizer resolves the collector for every folder run, the collector asks this what the user switched on,

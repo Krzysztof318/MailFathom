@@ -94,7 +94,7 @@ public sealed class MailDraftBook
     /// <returns>The draft as it stands once the mailbox has been brought into step with it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="author" /> or <paramref name="composed" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the act the author names is not what reached this.</exception>
-    /// <exception cref="MailDraftRefusedException">Thrown when <paramref name="revises" /> names no draft of this account that is still being written, or when the message carries material this deployment screens outgoing mail for.</exception>
+    /// <exception cref="MailDraftRefusedException">Thrown when <paramref name="revises" /> names no draft of this account that <paramref name="writtenBy" /> wrote and is still being written, or when the message carries material this deployment screens outgoing mail for.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the message carries, which refuses the draft rather than filing it unscreened.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when the write did not commit on any allowed attempt.</exception>
     /// <remarks>
@@ -117,7 +117,7 @@ public sealed class MailDraftBook
 
         if (revises is { } revisedDraftId)
         {
-            await this.RequireRevisableAsync(account, revisedDraftId, cancellationToken);
+            await this.RequireRevisableAsync(account, writtenBy, revisedDraftId, cancellationToken);
         }
 
         // Before the write, so a refused draft leaves neither a record nor a message nor a copy in the mailbox — and
@@ -195,10 +195,11 @@ public sealed class MailDraftBook
 
     /// <summary>Reads the files staged against the draft a revision replaces, so the new revision carries them too.</summary>
     /// <param name="account">The account the caller's own resolution named, which the draft has to belong to.</param>
+    /// <param name="writtenBy">The user asking, who has to be the one the draft was written by.</param>
     /// <param name="revises">The draft being revised, or <see langword="null" /> where a new one is being written.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The staged files with their octets, empty for a new draft and for one nothing is attached to.</returns>
-    /// <exception cref="MailDraftRefusedException">Thrown when <paramref name="revises" /> names no draft this account still holds as a revisable one.</exception>
+    /// <exception cref="MailDraftRefusedException">Thrown when <paramref name="revises" /> names no draft this account holds as a revisable one of <paramref name="writtenBy" />'s.</exception>
     /// <remarks>
     /// <para>
     /// A file is uploaded once and belongs to the draft rather than to one revision of it, so every composition after
@@ -206,16 +207,17 @@ public sealed class MailDraftBook
     /// boundary that composes a draft.
     /// </para>
     /// <para>
-    /// <b>The draft is established as this account's before a single octet is read.</b> The identifier arrived from
-    /// whoever asked, and the write beneath this establishes ownership too — but it does so after a composition that
-    /// these files are part of, so a read placed before it would carry another user's attachments into this request
+    /// <b>The draft is established as this user's own before a single octet is read.</b> The identifier arrived from
+    /// whoever asked, and the write beneath this establishes authorship too — but it does so after a composition that
+    /// these files are part of, so a read placed before it would carry another person's attachments into this request
     /// and answer a bound-exceeded refusal where a foreign identifier has to answer exactly as an unknown one. Reading
     /// nothing until the check has passed is what leaves the two indistinguishable, in the size of the answer as well
-    /// as in its code.
+    /// as in its code. The account alone would not settle it, two people being assignable to one mailbox.
     /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<AuthoredEmailAttachment>> ReadStagedAttachmentsAsync(
         MailAccountId account,
+        MailUserId writtenBy,
         MailDraftId? revises,
         CancellationToken cancellationToken)
     {
@@ -224,7 +226,7 @@ public sealed class MailDraftBook
             return [];
         }
 
-        await this.RequireRevisableAsync(account, draftId, cancellationToken);
+        await this.RequireRevisableAsync(account, writtenBy, draftId, cancellationToken);
 
         return await this.drafts.ReadAttachmentContentAsync(draftId, cancellationToken);
     }
@@ -280,20 +282,24 @@ public sealed class MailDraftBook
         return await this.filer.SettleAsync(discarded, cancellationToken);
     }
 
-    /// <summary>Requires that the draft a revision names is one of this account's that is still being written.</summary>
+    /// <summary>Requires that the draft a revision names is one this user wrote in this account and is still writing.</summary>
     /// <remarks>
-    /// The three refusals are one answer on purpose. A draft of another account, a draft already given up, and a draft
-    /// nobody holds are all a caller naming something it may not revise, and telling them apart would let it learn
-    /// which drafts exist by asking to revise them.
+    /// The four refusals are one answer on purpose. A draft of another account, a draft another of the account's
+    /// assigned users wrote, a draft already given up, and a draft nobody holds are all a caller naming something it
+    /// may not revise, and telling them apart would let it learn which drafts exist by asking to revise them.
+    /// The author is asked as well as the account because ADR 0014 keeps a draft on the person rather than on the
+    /// mailbox: once two people are assigned one account, the account alone stops saying whose draft it is.
     /// </remarks>
     private async Task RequireRevisableAsync(
         MailAccountId accountId,
+        MailUserId writtenBy,
         MailDraftId draftId,
         CancellationToken cancellationToken)
     {
         if (await this.drafts.FindAsync(draftId, cancellationToken)
             is not { IsDiscarded: false, PromotedTo: null } draft
-            || draft.AccountId != accountId)
+            || draft.AccountId != accountId
+            || draft.User != writtenBy)
         {
             throw MailDraftRefusedException.NotFound();
         }

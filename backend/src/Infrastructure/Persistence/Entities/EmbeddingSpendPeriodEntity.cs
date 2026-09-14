@@ -14,9 +14,16 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// anywhere. Nothing allocates a period: the first spend inside one inserts its row and every later spend adds to it.
 /// </para>
 /// <para>
+/// One further row per period carries the deployment's own total, under the user identity that names nobody. It is a
+/// row of its own rather than the sum of the others because
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+/// counts a shared mailbox in full against each of its assigned users: the per-user rows are meant to add up to more
+/// than was sent, so a deployment ceiling read off their sum would stop a mailbox two people share at half of what
+/// the operator declared. No user row ever carries that identity — every write of one names a specified user.
+/// </para>
+/// <para>
 /// The key is ordered period first so that one index answers both bounds this table exists for: what a named user has
-/// spent inside a period is the whole key, and what the deployment has spent inside it is the rows sharing its
-/// leading column.
+/// spent inside a period is the whole key, and so is the deployment's own row.
 /// </para>
 /// <para>
 /// The user is a plain column with no foreign key onto the user record, and that is the one place in the mail graph
@@ -54,7 +61,7 @@ internal sealed class EmbeddingSpendPeriodEntity
     /// <summary>Gets or sets when the period began, in UTC.</summary>
     public DateTimeOffset PeriodStartsAt { get; set; }
 
-    /// <summary>Gets or sets the user this spend was incurred for.</summary>
+    /// <summary>Gets or sets the user this spend was incurred for, or the empty identity on the deployment's own row.</summary>
     public Guid UserId { get; set; }
 
     /// <summary>Gets or sets the characters this period has sent to a provider.</summary>
