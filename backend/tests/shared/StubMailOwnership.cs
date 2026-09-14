@@ -17,13 +17,6 @@ namespace MailFathom.TestSupport;
 /// </remarks>
 internal sealed class StubMailOwnership(MailUserId defaultUser) : IMailOwnership
 {
-    /// <summary>The mailbox a message nothing names an account for is answered as being in.</summary>
-    /// <remarks>
-    /// One account per user rather than one for the whole stub, so two messages arranged to two users are two mailboxes
-    /// — which is what a posture held per account is read against.
-    /// </remarks>
-    private static readonly MailAccountId DefaultAccount = MailAccountId.Create("stub-account");
-
     private readonly Dictionary<Guid, MailAccountIdentity> accountsByStoredEmail = [];
 
     /// <summary>Initializes ownership answering for the deployment's own user unless a test says otherwise.</summary>
@@ -37,7 +30,7 @@ internal sealed class StubMailOwnership(MailUserId defaultUser) : IMailOwnership
     /// <param name="user">Whose it is, in that user's own default mailbox.</param>
     /// <returns>This stub, so arrangements read as one expression.</returns>
     public StubMailOwnership Owns(StoredEmailId storedEmailId, MailUserId user) =>
-        this.Owns(storedEmailId, MailAccountIdentity.Create(user, DefaultAccount));
+        this.Owns(storedEmailId, MailAccountIdentity.Create(user, DefaultAccountOf(user)));
 
     /// <summary>Says which mailbox one message is in, and who that mailbox is assigned to.</summary>
     /// <param name="storedEmailId">The message.</param>
@@ -59,6 +52,18 @@ internal sealed class StubMailOwnership(MailUserId defaultUser) : IMailOwnership
 
         return Task.FromResult(this.accountsByStoredEmail.GetValueOrDefault(
             storedEmailId.Value,
-            MailAccountIdentity.Create(defaultUser, DefaultAccount)));
+            MailAccountIdentity.Create(defaultUser, DefaultAccountOf(defaultUser))));
     }
+
+    /// <summary>The mailbox a message nothing names an account for is answered as being in.</summary>
+    /// <remarks>
+    /// Derived from the user rather than fixed for the whole stub, so two messages arranged to two users are two
+    /// mailboxes — which is what a posture held per account is read against. A single identifier would put both users'
+    /// mail in one mailbox, and a suite asserting that one account is scanned and another is not would then be
+    /// arranging one account twice.
+    /// </remarks>
+    /// <param name="user">Whose default mailbox to name.</param>
+    /// <returns>That user's own default mailbox.</returns>
+    private static MailAccountId DefaultAccountOf(MailUserId user) =>
+        MailAccountId.Create($"stub-account-{user.Value}");
 }

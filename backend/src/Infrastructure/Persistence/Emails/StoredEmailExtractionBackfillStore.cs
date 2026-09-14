@@ -305,20 +305,28 @@ internal sealed class StoredEmailExtractionBackfillStore(
             await StaleReadingsFor(derived, postures, unserved).CountAsync(cancellationToken));
     }
 
-    /// <summary>Unions one branch per posture in force, so every row is judged against the stamp of the account holding it.</summary>
+    /// <summary>Unions one branch per stamp in force, so every row is judged against the stamp of the account holding it.</summary>
     /// <param name="postures">What each account this deployment serves has its mail derived under.</param>
     /// <param name="unserved">What mail whose account the roster no longer names is judged against, or nothing.</param>
     /// <param name="nothing">The empty set to answer with where no posture carries a stamp at all.</param>
-    /// <param name="ofAccount">Builds one served account's branch from its identifier and its stamp.</param>
+    /// <param name="ofAccounts">Builds the branch of the accounts deriving under one stamp, from their identifiers and that stamp.</param>
     /// <param name="ofEverythingElse">Builds the branch for the accounts the roster does not name, from the roster and the deployment's stamp.</param>
     /// <returns>The branches concatenated, which stay disjoint because each names a different set of accounts.</returns>
     /// <remarks>
     /// <para>
-    /// One branch per account, unioned, rather than one predicate over a set of pairs: a row is stale against its own
-    /// account's stamp alone, and comparing it against every stamp in force would call a message fresh because another
-    /// mailbox's posture happens to match the configuration it was actually written under. Each branch is an equality
-    /// on the account column beside an inequality on the stamp, so PostgreSQL walks the same index a per-account read
-    /// walks.
+    /// A row is stale against its own account's stamp alone: comparing it against every stamp in force would call a
+    /// message fresh because another mailbox's posture happens to match the configuration it was actually written
+    /// under. So the accounts are grouped by the stamp they derive under, and each branch is a membership test on the
+    /// account column beside an inequality on the stamp — one branch per *distinct posture* rather than per account,
+    /// which is one branch on every deployment whose accounts are scanned alike however many of them there are, and
+    /// the same index walk either way.
+    /// </para>
+    /// <para>
+    /// Grouping rather than a join against the (account, stamp) pairs themselves, because there is nothing to join
+    /// against: the pairs are this process's own values rather than a table, and EF Core translates a parameterized
+    /// collection of primitives and not one of tuples. Concatenating a key column with a stamp column to compare
+    /// against pre-joined text would reach the same shape and lose the null handling — a row that has never carried a
+    /// stamp is stale, and a concatenation over a null column is null rather than unmatched.
     /// </para>
     /// <para>
     /// One further branch covers the rows whose account the roster does not name — mail still stored for a mailbox a
@@ -328,20 +336,23 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// is exactly what the deployment-wide predicate this replaced did not do.
     /// </para>
     /// <para>
-    /// An account whose mail nothing scans has no stamp to be stale against, so it contributes no branch at all: its
-    /// derived rows carry none and are exactly what a deployment that scans nobody writes.
+    /// An account whose mail nothing scans has no stamp to be stale against, so it contributes to no branch at all:
+    /// its derived rows carry none and are exactly what a deployment that scans nobody writes.
     /// </para>
     /// </remarks>
     private static IQueryable<TRow> AcrossPostures<TRow>(
         IReadOnlyList<MailAccountSensitiveContentPosture> postures,
         SensitiveContentDerivationStamp? unserved,
         IQueryable<TRow> nothing,
-        Func<string, string, IQueryable<TRow>> ofAccount,
+        Func<string[], string, IQueryable<TRow>> ofAccounts,
         Func<string[], string, IQueryable<TRow>> ofEverythingElse)
     {
         var branches = postures
             .Where(posture => posture.Posture.Stamp is not null)
-            .Select(posture => ofAccount(posture.Account.Value, posture.Posture.Stamp!.Value.Value))
+            .GroupBy(posture => posture.Posture.Stamp!.Value.Value)
+            .Select(derivingAlike => ofAccounts(
+                [.. derivingAlike.Select(posture => posture.Account.Value)],
+                derivingAlike.Key))
             .ToList();
 
         if (unserved is { } deployment)
@@ -362,8 +373,8 @@ internal sealed class StoredEmailExtractionBackfillStore(
         postures,
         unserved,
         derived.Take(0),
-        (account, stamp) => derived.Where(email =>
-            email.MailboxAccountId == account && email.SearchDocument!.SensitiveContentStamp != stamp),
+        (accounts, stamp) => derived.Where(email =>
+            accounts.Contains(email.MailboxAccountId) && email.SearchDocument!.SensitiveContentStamp != stamp),
         (served, stamp) => derived.Where(email =>
             !served.Contains(email.MailboxAccountId) && email.SearchDocument!.SensitiveContentStamp != stamp));
 
@@ -384,8 +395,8 @@ internal sealed class StoredEmailExtractionBackfillStore(
         postures,
         unserved,
         derived.Take(0),
-        (account, stamp) => derived.Where(email =>
-            email.MailboxAccountId == account
+        (accounts, stamp) => derived.Where(email =>
+            accounts.Contains(email.MailboxAccountId)
             && (email.SearchDocument!.SensitiveContentStamp != stamp
                 || email.AttachmentTexts.Any(reading => reading.SensitiveContentStamp != stamp))),
         (served, stamp) => derived.Where(email =>
@@ -406,8 +417,8 @@ internal sealed class StoredEmailExtractionBackfillStore(
         postures,
         unserved,
         derived.SelectMany(email => email.AttachmentTexts).Take(0),
-        (account, stamp) => derived
-            .Where(email => email.MailboxAccountId == account)
+        (accounts, stamp) => derived
+            .Where(email => accounts.Contains(email.MailboxAccountId))
             .SelectMany(email => email.AttachmentTexts)
             .Where(reading => reading.SensitiveContentStamp != stamp),
         (served, stamp) => derived

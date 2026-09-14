@@ -117,6 +117,7 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
 
     /// <inheritdoc />
     /// <remarks>
+    /// <para>
     /// The candidate that already covers every other, rather than a union composed here: this double is handed built
     /// postures instead of the ingredients of one, and a union of two would need a redactor running both their
     /// scanners and a screening policy resolved from both their category lists, neither of which can be composed out
@@ -125,8 +126,17 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
     /// would be a posture it would never produce, and a suite asserting redaction against one would be asserting
     /// against an answer no deployment gives. A test that needs such a posture states the composed one as the
     /// deployment's own.
+    /// </para>
+    /// <para>
+    /// Covering is read strictly on the screening half, and one candidate screening at all is the most that can be
+    /// covered. <c>SensitiveContentScreeningPolicy</c> publishes whether it refuses anything and never which
+    /// categories it refuses, so a candidate that screens secrets cannot be told apart here from one that screens
+    /// personal data — and answering with the first of two screening postures would hand a suite one that refuses
+    /// less than the union the composition builds. Two candidates that screen are therefore refused as an unbuildable
+    /// union exactly as two disjoint scanner sets are, even where both screen the same category.
+    /// </para>
     /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when the user's accounts ask for things no one of their postures covers, which this double cannot compose.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the user's accounts ask for scanning or screening no one of their postures covers, which this double cannot compose.</exception>
     public SensitiveContentPosture AcrossAccountsOf(MailUserId user)
     {
         var candidates = this.assignees
@@ -137,9 +147,9 @@ internal sealed class FixedSensitiveContentPostures : ISensitiveContentPostures
 
         return candidates.FirstOrDefault(candidate => candidates.All(other =>
                 other.Scanners.All(candidate.Runs)
-                && (candidate.ScreensAnything || !other.ScreensAnything)))
+                && (!other.ScreensAnything || ReferenceEquals(other, candidate))))
             ?? throw new InvalidOperationException(
-                $"The accounts assigned to user {user.Value} ask for scanning no one of their postures covers, so the strictest of them is a union this double cannot build. State the composed posture as the deployment's own instead.");
+                $"The accounts assigned to user {user.Value} ask for scanning or screening no one of their postures covers, so the strictest of them is a union this double cannot build. State the composed posture as the deployment's own instead.");
     }
 
     /// <inheritdoc />

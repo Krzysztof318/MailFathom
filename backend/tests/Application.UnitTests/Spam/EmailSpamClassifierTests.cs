@@ -31,6 +31,8 @@ public sealed class EmailSpamClassifierTests
 
     private static readonly MailAccountId Account = MailAccountId.Create("acct-1");
 
+    private static readonly MailAccountId Archive = MailAccountId.Create("acct-2");
+
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
     private static readonly MailFolderAlias Junk = MailFolderAlias.Create("JUNK");
@@ -473,6 +475,49 @@ public sealed class EmailSpamClassifierTests
         return scanner;
     }
 
+    /// <summary>
+    /// Two mailboxes of one user, one of them classified and one not. The settings are read for the mailbox the
+    /// message is in, so the archive is left alone while the other mailbox is classified — a classifier reading the
+    /// user's settings instead would answer for whichever of their mailboxes it resolved first, and file a message
+    /// under a switch its own mailbox never had on.
+    /// </summary>
+    [Fact]
+    public async Task ClassifyAsync_TwoMailboxesClassifiedDifferently_FollowsTheSettingsOfTheOneTheMessageIsIn()
+    {
+        // Arrange
+        var flagged = FactsSaying("X-Spam-Flag", "YES");
+
+        var inTheArchive = this.Classifier(
+            SettingsCovering(Inbox),
+            flagged,
+            new ClassifiableEmail(Occurrence, Archive, Inbox),
+            classifying: Account);
+
+        var inTheClassifiedMailbox = this.Classifier(
+            SettingsCovering(Inbox),
+            flagged,
+            new ClassifiableEmail(Occurrence, Account, Inbox),
+            classifying: Account);
+
+        // Act
+        var archived = await inTheArchive.ClassifyAsync(
+            SyntheticMailUser.Deployment,
+            Occurrence,
+            SpamClassificationMode.FirstTimeOnly,
+            TestContext.Current.CancellationToken);
+
+        var classified = await inTheClassifiedMailbox.ClassifyAsync(
+            SyntheticMailUser.Deployment,
+            Occurrence,
+            SpamClassificationMode.FirstTimeOnly,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(SpamClassificationOutcome.Disabled, archived.Outcome);
+        Assert.Equal(SpamClassificationOutcome.Classified, classified.Outcome);
+        Assert.Equal(SpamVerdict.Spam, Assert.Single(this.store.Saved).Verdict);
+    }
+
     private static SpamHeaderFacts FactsSaying(string fieldName, string value) =>
         SpamHeaderFacts.Create([], [new ProviderSpamHeaderValue(fieldName, value)]);
 
@@ -494,6 +539,21 @@ public sealed class EmailSpamClassifierTests
         [],
         EvaluatedAt.AddDays(-1));
 
+    /// <summary>Builds the classifier over one mailbox's settings, every other mailbox classifying nothing.</summary>
+    /// <param name="settings">What the classified mailbox asked for.</param>
+    /// <param name="facts">What the header reader answers with.</param>
+    /// <param name="email">The message the reader resolves, which carries the mailbox it is in.</param>
+    /// <param name="junkFolders">Which folder each account files junk into.</param>
+    /// <param name="scanner">The content scanner, where the deployment runs one.</param>
+    /// <param name="withEmail">Whether the reader resolves the message at all.</param>
+    /// <param name="withContent">Whether the content store holds its mail.</param>
+    /// <param name="classifying">Whose mailbox <paramref name="settings" /> belong to, defaulting to the one the message is in.</param>
+    /// <returns>The classifier under test.</returns>
+    /// <remarks>
+    /// The settings are answered for one account rather than for whichever one is asked about, because that is what the
+    /// deployed reader does: an account its roster does not resolve classifies nothing. A double answering every
+    /// account alike would let a classifier that read the wrong mailbox's settings pass every test here.
+    /// </remarks>
     private EmailSpamClassifier Classifier(
         SpamClassificationSettings settings,
         SpamHeaderFacts facts,
@@ -501,7 +561,8 @@ public sealed class EmailSpamClassifierTests
         StubJunkMailFolderCatalog? junkFolders = null,
         ISpamScanner? scanner = null,
         bool withEmail = true,
-        bool withContent = true)
+        bool withContent = true,
+        MailAccountId? classifying = null)
     {
         var emailReader = Substitute.For<IClassifiableEmailReader>();
         emailReader
@@ -516,7 +577,8 @@ public sealed class EmailSpamClassifierTests
         headerReader.ReadAsync(Arg.Any<StoredEmailContent>(), Arg.Any<CancellationToken>()).Returns(facts);
 
         var settingsReader = Substitute.For<ISpamClassificationSettingsReader>();
-        settingsReader.SettingsFor(Arg.Any<MailAccountId>()).Returns(settings);
+        settingsReader.SettingsFor(Arg.Any<MailAccountId>()).Returns(SpamClassificationSettings.Disabled);
+        settingsReader.SettingsFor(classifying ?? Account).Returns(settings);
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());

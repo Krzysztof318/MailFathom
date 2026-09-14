@@ -9,7 +9,7 @@ using MailFathom.Domain.Folders;
 
 namespace MailFathom.TestSupport;
 
-/// <summary>Answers with one posture for every account, for the paths that only read whether the feature is on.</summary>
+/// <summary>Answers with one posture for the accounts it was given, for the paths that only read whether the feature is on.</summary>
 /// <remarks>
 /// The accounts are stated rather than derived because the deployed reader resolves them from the account roster and the
 /// mail section, neither of which a use-case test binds. Naming them is what lets a test reach the set-based half of the
@@ -21,8 +21,8 @@ internal sealed class StubSpamClassificationSettingsReader : ISpamClassification
 
     private readonly MailAccountId[] accounts;
 
-    /// <summary>Builds a reader answering one posture for every account, over the accounts that posture classifies.</summary>
-    /// <param name="settings">The posture every account is answered with.</param>
+    /// <summary>Builds a reader answering one posture for the accounts that posture classifies.</summary>
+    /// <param name="settings">The posture each named account is answered with; every other account classifies nothing.</param>
     /// <param name="accounts">The accounts that classify, which the scope is composed from.</param>
     /// <exception cref="ArgumentNullException">Thrown when either argument is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the posture is switched on and no account is named.</exception>
@@ -63,5 +63,11 @@ internal sealed class StubSpamClassificationSettingsReader : ISpamClassification
         : SpamClassificationScope.None;
 
     /// <inheritdoc />
-    public SpamClassificationSettings SettingsFor(MailAccountId account) => this.settings;
+    /// <remarks>
+    /// An account this reader's scope does not name is answered as the deployed reader answers one its roster does not
+    /// resolve: classifying nothing. Anything else would let a use case that resolved a message's account and then
+    /// failed to narrow by it read back a posture belonging to somebody else's mailbox and pass.
+    /// </remarks>
+    public SpamClassificationSettings SettingsFor(MailAccountId account) =>
+        this.accounts.Contains(account) ? this.settings : SpamClassificationSettings.Disabled;
 }

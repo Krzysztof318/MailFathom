@@ -702,6 +702,37 @@ public sealed class UserAccountDocumentBinderTests
         Assert.False(binding.IsBound);
     }
 
+    /// <summary>
+    /// Both blocks are the mail account's now, so a record naming either one beside the user's own settings names a
+    /// property nothing binds and is refused by the name it wrote. Held records are judged the same way as one being
+    /// written, because a record written before the move carries the block where it no longer reads: dropping it
+    /// quietly would leave every one of that user's mailboxes scanned under the deployment's posture while the record
+    /// on file still says what it asked for.
+    /// </summary>
+    [Theory]
+    [InlineData(false, "SensitiveContent", """{"Secrets":{"Enabled":true}}""")]
+    [InlineData(false, "SpamClassification", """{"IsEnabled":true}""")]
+    [InlineData(true, "SensitiveContent", """{"Secrets":{"Enabled":true}}""")]
+    [InlineData(true, "SpamClassification", """{"IsEnabled":true}""")]
+    public void Bind_ARecordNamingABlockThatMovedOntoTheMailAccount_IsRefusedByThePropertyItWrote(
+        bool alreadyHeld,
+        string property,
+        string block)
+    {
+        // Arrange
+        var binder = CreateBinder();
+        var arrival = alreadyHeld ? UserRecordArrival.AlreadyHeld : UserRecordArrival.BeingWritten;
+
+        // Act
+        var binding = binder.Bind(
+            $$"""{"Language":"English","MailAccounts":[],"{{property}}":{{block}}}""",
+            arrival);
+
+        // Assert
+        Assert.False(binding.IsBound);
+        Assert.Contains(binding.Refusals, refusal => refusal.Contains(property, StringComparison.Ordinal));
+    }
+
     /// <summary>Builds the binder, over a deployment that scans nothing unless a test says otherwise.</summary>
     /// <param name="deployment">The deployment's own scanning section, which a record's scanning block is judged against.</param>
     private static UserAccountDocumentBinder CreateBinder(SensitiveContentOptions? deployment = null) =>

@@ -1195,9 +1195,12 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <summary>Reports a spam classification block this account could not be classified under.</summary>
     /// <remarks>
     /// Judged against this account's own folders and against nothing else, which is what makes a junk destination or a
-    /// scanned folder resolve within the mailbox the block was written on: a name only another account maps is refused
-    /// exactly as one nobody maps. An account whose identifier is unusable is passed over here, because the declaration
-    /// it would be judged as cannot be read and the identifier is already reported above.
+    /// scanned folder resolve within the mailbox the block was written on. The two are answered differently, and
+    /// deliberately: a junk destination only another account maps is refused exactly as one nobody maps, because filing
+    /// a message into a folder that does not exist here is an act this account could not perform, while a scanned
+    /// folder naming one reaches no mail at all — the same answer a folder this deployment does not serve gets. An
+    /// account whose identifier is unusable is passed over here, because the declaration it would be judged as cannot
+    /// be read and the identifier is already reported above.
     /// </remarks>
     private IEnumerable<ValidationResult> ValidateSpamClassification()
     {

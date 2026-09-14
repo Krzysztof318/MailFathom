@@ -68,4 +68,29 @@ public sealed class FixedSensitiveContentPosturesTests
         // Assert
         Assert.Contains("this double cannot build", refusal.Message, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Two mailboxes that screen, running the same scanner. A screening policy says whether it refuses anything and
+    /// never which categories it refuses, so neither of the two can be shown to cover the other's refusals; answering
+    /// with the first would hand the suite a posture that may refuse less than the union does.
+    /// </summary>
+    [Fact]
+    public void AcrossAccountsOf_TwoAccountsThatBothScreen_SaysItCannotComposeTheUnion()
+    {
+        // Arrange
+        using var mine = ScanningSensitiveContentEgress.Finding("AKIAEXAMPLEKEY", this.timeProvider);
+        using var theirs = ScanningSensitiveContentEgress.Finding("AKIAEXAMPLEKEY", this.timeProvider);
+
+        var postures = FixedSensitiveContentPostures.Of(
+            SensitiveContentPosture.ScanningNothing,
+            (FixedSensitiveContentPostures.SoleAccount, mine.Postures.ForAccount(FixedSensitiveContentPostures.SoleAccount)),
+            (Archive, theirs.Postures.ForAccount(FixedSensitiveContentPostures.SoleAccount)));
+
+        // Act
+        var refusal = Assert.Throws<InvalidOperationException>(
+            () => postures.AcrossAccountsOf(SyntheticMailUser.Deployment));
+
+        // Assert
+        Assert.Contains("this double cannot build", refusal.Message, StringComparison.Ordinal);
+    }
 }

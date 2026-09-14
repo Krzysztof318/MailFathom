@@ -288,9 +288,9 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
             SensitiveContentDerivationStamp.Compute(plan, registered));
     }
 
-    /// <summary>One answer about one user's mail, which two users asking the same thing share a posture for.</summary>
-    /// <param name="SwitchedOn">Which scanners run, deployment and user composed.</param>
-    /// <param name="Screening">Which of their findings stop an outgoing message, deployment and user composed.</param>
+    /// <summary>One answer about one mailbox's mail, which two accounts asking the same thing share a posture for.</summary>
+    /// <param name="SwitchedOn">Which scanners run, deployment and account composed.</param>
+    /// <param name="Screening">Which of their findings stop a message sent from it, deployment and account composed.</param>
     private readonly record struct EffectivePosture(
         SensitiveContentScannerKind[] SwitchedOn,
         SensitiveContentScannerKind[] Screening)
@@ -298,7 +298,8 @@ internal sealed class MailAccountSensitiveContentPostures : ISensitiveContentPos
         /// <inheritdoc />
         /// <remarks>
         /// Compared by what the two arrays hold rather than by their identity, which is the whole point of the key: two
-        /// users who asked for the same thing must meet the same posture rather than compose one each.
+        /// mailboxes that asked for the same thing must meet the same posture rather than compose one each — and a
+        /// deployment serving a mailbox per user asks this once per account rather than once per person.
         /// </remarks>
         public bool Equals(EffectivePosture other) =>
             this.SwitchedOn.SequenceEqual(other.SwitchedOn) && this.Screening.SequenceEqual(other.Screening);

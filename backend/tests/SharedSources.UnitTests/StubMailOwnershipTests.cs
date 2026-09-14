@@ -48,6 +48,28 @@ public sealed class StubMailOwnershipTests
         Assert.Equal(SyntheticMailUser.Deployment, fallback.User);
     }
 
+    /// <summary>
+    /// The default mailbox is the user's own. A stub naming one mailbox for everybody would put two users' mail in a
+    /// single account, so a suite asserting that one account is scanned and another is not would be arranging the same
+    /// account twice and passing on an answer no deployment gives.
+    /// </summary>
+    [Fact]
+    public async Task ReadStoredEmailAccountAsync_TwoUsersWithNoMailboxStated_AnswersEachWithTheirOwn()
+    {
+        // Arrange
+        var ownership = new StubMailOwnership().Owns(Message, SyntheticMailUser.Another);
+        var unarranged = StoredEmailId.Create(Guid.NewGuid());
+
+        // Act
+        var another = await ownership.ReadStoredEmailAccountAsync(Message, TestContext.Current.CancellationToken);
+        var deployment = await ownership.ReadStoredEmailAccountAsync(
+            unarranged,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotEqual(deployment.Id, another.Id);
+    }
+
     /// <summary>The mailbox is what a posture is read against, so a test that is about one states it.</summary>
     [Fact]
     public async Task ReadStoredEmailAccountAsync_AMessageArrangedToOneMailbox_AnswersWithThatMailbox()

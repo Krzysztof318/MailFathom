@@ -42,7 +42,7 @@ public readonly record struct SensitiveContentDerivationStamp
     private const string HashDomain = "mailfathom.sensitive-content-derivation.v1";
 
     /// <summary>Names the composite scheme separately, so a set of one posture cannot collide with that posture.</summary>
-    private const string CompositeHashDomain = "mailfathom.sensitive-content-derivation-across-users.v1";
+    private const string CompositeHashDomain = "mailfathom.sensitive-content-derivation-across-accounts.v1";
 
     private SensitiveContentDerivationStamp(string value) => this.Value = value;
 
