@@ -160,12 +160,13 @@ public sealed class MailboxMutationConverger
             outstandingCounts);
     }
 
-    /// <summary>Takes one record of a held account in hand, which can only be an erasure whose window has passed.</summary>
+    /// <summary>Takes one record of a held account in hand, running every delete record whose window has passed as an erasure.</summary>
     /// <remarks>
-    /// A held account writes no record for anything but an erasure, so this issues no IMAP command at all. A record of
-    /// another kind is one left from before the account became held, which the switch waits out; it is left where it is
-    /// rather than carried to a source that is no longer the truth. The isolation is the one a remote change gets, for
-    /// the same reason.
+    /// A held account writes no record for anything but an erasure, so this issues no IMAP command at all. It does not
+    /// tell an erasure apart from a delete recorded before the account became held: every delete record is erased, whatever
+    /// disposition it carries, and #2007 owns telling the two apart. A record of another kind is one left from before the
+    /// account became held; it is left where it is rather than carried to a source that is no longer the truth. The
+    /// isolation is the one a remote change gets, for the same reason.
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A pass isolates one erasure's failure so the account's remaining records are still taken in hand; the record stays outstanding and the next pass tries it again.")]
     private async Task EraseHeldAsync(

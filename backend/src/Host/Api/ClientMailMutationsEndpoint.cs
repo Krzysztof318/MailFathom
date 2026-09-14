@@ -20,7 +20,9 @@ namespace MailFathom.Host.Api;
 /// <summary>Takes the changes a person makes to their own mailbox from the client, and reports where each one got to.</summary>
 /// <remarks>
 /// <para>
-/// Nothing here reaches a mail server. Every route writes a durable record per change and answers with it, and the
+/// Nothing here reaches a mail server. On an account MailFathom holds itself a flag, a keyword, a move, and a first
+/// delete are committed to stored state in the request's own transaction and answered <c>applied</c>, with no record to
+/// follow. Otherwise every route writes a durable record per change and answers with it, and the
 /// account's own convergence pass issues the IMAP command later — which is
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>'s
 /// arrangement rather than a second one. So a screen never waits on IMAP, a crash between the record and the command

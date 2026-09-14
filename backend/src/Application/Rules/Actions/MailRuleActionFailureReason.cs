@@ -79,4 +79,13 @@ public enum MailRuleActionFailureReason
     /// reason rather than <see cref="EmailNotOnMailServer" />.
     /// </remarks>
     EmailNoLongerStored = 8,
+
+    /// <summary>The account is held, and no local folder corresponds to the destination the rule names.</summary>
+    /// <remarks>
+    /// A held account files into the local folder a protected role names, or into the one the destination's source folder
+    /// created. That source folder has delivered nothing locally, or its local folder was deleted into the trash. No
+    /// folder run will supply one on a held account, so the remedy is the rule's destination rather than waiting, which is
+    /// why this is not <see cref="DestinationFolderUnresolved" />.
+    /// </remarks>
+    LocalDestinationFolderMissing = 9,
 }

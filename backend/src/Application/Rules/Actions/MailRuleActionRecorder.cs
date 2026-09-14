@@ -22,13 +22,19 @@ namespace MailFathom.Application.Rules.Actions;
 /// identity, the order, and the refusal of an action whose account or destination has stopped permitting it.
 /// </para>
 /// <para>
+/// A held account is the exception, because it has no server to converge with. There the action is committed to the
+/// stored email in the caller's session and no record is opened, so an action reaches the recorded list with no record
+/// identifier, and what it applied is handed back for <see cref="Announce" /> to publish once the batch has committed.
+/// </para>
+/// <para>
 /// What an account permits is read here as well as when the rule set is read, and the second reading is not redundant:
 /// the two configuration sections reload independently, so narrowing what an account permits leaves a rule set nobody
 /// edited in force. Without this, a revoked permission would take effect at the next edit of the rules rather than at
 /// the next pass, which for a deletion is the wrong way round.
 /// </para>
 /// <para>
-/// The records join the caller's session, so a batch's evaluations and the requests they produced commit together. A
+/// The records, and a held account's committed changes, join the caller's session, so a batch's evaluations and the
+/// requests they produced commit together. A
 /// crash between them is therefore impossible in the direction that matters: an email is never recorded as evaluated
 /// while the change its rules asked for was lost, and a rolled-back batch is evaluated again and asks again under the
 /// same identity.
@@ -76,7 +82,7 @@ public sealed class MailRuleActionRecorder
     /// <param name="revision">The rule set revision the pass ran under, which is part of every request's identity.</param>
     /// <param name="destinations">Where the folders this batch's actions name currently are, resolved before the transaction opened.</param>
     /// <param name="cancellationToken">Cancels the staging.</param>
-    /// <returns>Every action a record was opened for, with the record that carries it, and every action nothing was opened for.</returns>
+    /// <returns>Every action a record was opened for, with the record that carries it, or a held account committed, with none; every action nothing was done for; and the committed changes, which the caller hands to <see cref="Announce" /> once its transaction has committed.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="revision" /> names no rule set.</exception>
     public async Task<MailRuleActionRecording> RecordAsync(
@@ -194,7 +200,7 @@ public sealed class MailRuleActionRecorder
     /// <summary>Names the refusal a submission that wrote nothing is reported to the operator as.</summary>
     private static MailRuleActionFailureReason RefusalOf(MailboxChangeSubmissionOutcome outcome) => outcome switch
     {
-        MailboxChangeSubmissionOutcome.DestinationMissing => MailRuleActionFailureReason.DestinationFolderUnresolved,
+        MailboxChangeSubmissionOutcome.DestinationMissing => MailRuleActionFailureReason.LocalDestinationFolderMissing,
         MailboxChangeSubmissionOutcome.NotAvailableLocally => MailRuleActionFailureReason.ActionNotAvailableOnHeldAccount,
         MailboxChangeSubmissionOutcome.MessageMissing => MailRuleActionFailureReason.EmailNoLongerStored,
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "The outcome wrote something, so it is not a refusal."),

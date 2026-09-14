@@ -47,6 +47,44 @@ public sealed class MailboxDestinationResolverTests
         Assert.Equal(0, context.ListedFolderCount);
     }
 
+    /// <summary>A mirrored mapping to a role carries that role, which is how a held account finds the role's own local folder.</summary>
+    [Fact]
+    public async Task ResolveAsync_AMirroredMappingToARole_CarriesTheRole()
+    {
+        // Arrange
+        var context = new DestinationContext();
+        context.Mappings.With(Account.Id, MailFolderMapping.ToSpecialUse(Junk, MailFolderSpecialUse.Junk));
+        context.Bindings.Bind(Account.Id, Junk, "INBOX/Junk");
+
+        // Act
+        var resolution = await context.ResolveAsync(MailFolderReference.ToAlias(Junk));
+
+        // Assert
+        Assert.Equal(MailboxDestinationOutcome.Resolved, resolution.Outcome);
+        Assert.True(resolution.Destination!.IsMirrored);
+        Assert.Equal(MailFolderSpecialUse.Junk, resolution.Destination.Role);
+    }
+
+    /// <summary>A role resolved on demand carries the role as well, so both answering paths hand a held account the same thing.</summary>
+    [Fact]
+    public async Task ResolveAsync_AnUnmirroredMappingToARole_CarriesTheRole()
+    {
+        // Arrange
+        var context = new DestinationContext(
+            new RemoteFolder(RemoteFolderPath.Create("INBOX.Junk", '.'), [MailFolderSpecialUse.Junk]));
+        context.Mappings.With(
+            Account.Id,
+            MailFolderMapping.ToSpecialUse(Junk, MailFolderSpecialUse.Junk, MailFolderParticipation.MappedOnly));
+
+        // Act
+        var resolution = await context.ResolveAsync(MailFolderReference.ToRole(MailFolderSpecialUse.Junk));
+
+        // Assert
+        Assert.Equal(MailboxDestinationOutcome.Resolved, resolution.Outcome);
+        Assert.False(resolution.Destination!.IsMirrored);
+        Assert.Equal(MailFolderSpecialUse.Junk, resolution.Destination.Role);
+    }
+
     /// <summary>No run schedules an unmirrored folder, so the moment it is needed as a destination is when it is resolved.</summary>
     [Fact]
     public async Task ResolveAsync_AnUnmirroredDestination_ResolvesItAgainstTheServerAndRecordsTheBinding()

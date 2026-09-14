@@ -432,6 +432,7 @@ Each is recorded against the rule that asked, and the actions beside it are stil
 | `EmailNotOnMailServer` | The stored email carries no occurrence, because no mail server holds it any longer, so there is nowhere a change could be carried to |
 | `ActionNotAvailableOnHeldAccount` | The account's mailbox is one MailFathom holds itself, and the action is a copy, which a held account does not offer |
 | `EmailNoLongerStored` | The account's mailbox is one MailFathom holds itself, and the email was erased between the pass reading it and the change being made |
+| `LocalDestinationFolderMissing` | The account's mailbox is one MailFathom holds itself, and no local folder corresponds to the destination: its source folder has delivered nothing locally, or its local folder was deleted into the trash. No run will supply one, so the rule's destination is what to correct |
 
 Nothing is written down in any of these cases: filing into whichever folder looked closest to the name is precisely
 what a stale destination must not do. The account run reports how many changes it asked for, how many it withheld because

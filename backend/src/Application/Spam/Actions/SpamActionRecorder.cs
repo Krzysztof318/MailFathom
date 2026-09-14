@@ -20,7 +20,8 @@ namespace MailFathom.Application.Spam.Actions;
 /// This is the whole join between a classification and a mailbox. Nothing here issues an IMAP command, opens a write
 /// session, or touches the local row: it opens a durable record per change, and the account's own convergence pass
 /// carries each one exactly as it carries a change somebody authored by hand. The local folder and flags change later,
-/// because synchronization observed the server — never because this decided they should.
+/// because synchronization observed the server — never because this decided they should. A held account has no server
+/// to observe, so there the flag and the filing are committed to the stored row instead, and no record is opened.
 /// </para>
 /// <para>
 /// Two rules keep filing from turning into an argument with the mailbox's user, and they are the reason this type is
@@ -29,7 +30,8 @@ namespace MailFathom.Application.Spam.Actions;
 /// somebody moved it back, which is exactly the correction a false positive is supposed to have, and repeating the
 /// filing would undo their decision on every pass. The second rule is read from the durable record rather than from the
 /// message, because the record is what survives the message moving — and it holds equally for a filing still in flight,
-/// which the same reading makes idempotent.
+/// which the same reading makes idempotent. That second rule is the record's, so it does not see a held account's
+/// local filing: a message moved back out of the local junk folder there is filed again by the next pass.
 /// </para>
 /// <para>
 /// The caller's posture decides whether the last step happens at all. A dry run takes every decision above and opens no

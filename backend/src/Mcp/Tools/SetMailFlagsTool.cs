@@ -25,7 +25,8 @@ namespace MailFathom.Mcp.Tools;
 /// still not the thing that talks to a mail server: the use case behind it writes a durable record per value asked for,
 /// and the account's own convergence pass issues the <c>STORE</c>. So a protocol request never waits on IMAP, never
 /// opens a connection against an account's budget, and a crash between the record and the command leaves a change that
-/// converges rather than a value that quietly disagrees with the mailbox.
+/// converges rather than a value that quietly disagrees with the mailbox. On an account MailFathom holds itself there is
+/// no server to issue it to, so the use case commits the change to the stored email at once and writes no record.
 /// </para>
 /// <para>
 /// The three values are one tool because they are one act. A caller triaging a message decides what to do with it once,

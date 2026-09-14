@@ -384,6 +384,26 @@ public sealed class MailboxChangeSubmissionTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>A person who withdrew the delete after the pass read its record keeps the message: the erasure claims the record, and a cancelled one refuses.</summary>
+    [Fact]
+    public async Task EraseAsync_ARecordWithdrawnAfterThePassReadIt_ErasesNothing()
+    {
+        // Arrange
+        this.Store();
+        var submission = this.Held();
+        await submission.SubmitAsync(this.session, DeleteRequest(), null, null, Token);
+        var submitted = await submission.SubmitAsync(this.session, DeleteRequest(), null, Now.AddSeconds(30), Token);
+        var readByThePass = submitted.Record!;
+        await this.records.WithdrawAsync(this.session, Account.User, [readByThePass.Id], Token);
+
+        // Act
+        var erasure = submission.EraseAsync(this.session, readByThePass, Token);
+
+        // Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(() => erasure);
+        Assert.Contains(Email, this.states.States.Keys);
+    }
+
     /// <summary>A committed flag change reaches the clients watching the account as a flag change, which they apply without a re-read.</summary>
     [Fact]
     public async Task Announce_ACommittedFlagChange_PublishesItToTheAccountsClients()

@@ -619,8 +619,10 @@ transaction that authored it, beside its audit entry where the account keeps one
 [client endpoint](../operations/client-endpoint.md#the-local-folder-routes) holds what each act does there. The exception
 is a delete of a message already in the local trash: it erases the message and every row derived from it, so it is
 recorded like any delete and held for its withdrawal window, and once that window passes the account's run erases the
-message instead of opening a write session. A record an account opened before it became held, other than such a delete,
-is left where it is rather than issued, because the server it named is no longer the mailbox's truth.
+message instead of opening a write session. The run does not tell such a delete from any other delete record: every
+outstanding delete record on a held account is run as an erasure once its window has passed, including one opened
+before the account became held, whatever local disposition it was authored with. A record of any other change opened
+before then is left where it is rather than issued, because the server it named is no longer the mailbox's truth.
 
 **A change somebody asked for also ends the account's wait** — a change recorded by the client's mutation routes or by
 `set_mail_flags`, and not the other two origins above. What issues any of them is the account's ordinary

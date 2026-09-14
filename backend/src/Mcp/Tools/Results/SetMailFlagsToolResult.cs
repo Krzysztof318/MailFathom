@@ -12,7 +12,8 @@ namespace MailFathom.Mcp.Tools.Results;
 /// <para>
 /// It answers with records rather than with a mailbox, because at the moment it is produced no IMAP command has gone
 /// out. Saying that plainly is what stops a caller reading the result as the star already being on the message: the
-/// account's own run carries each record to the server, and a change that never arrives is found by its record.
+/// account's own run carries each record to the server, and a change that never arrives is found by its record. A held
+/// account has no server: it applies the change at once, says so, and publishes no record.
 /// </para>
 /// <para>
 /// Nothing derived from the message appears. The email's own identifier, the account, the folder alias, and MailFathom's

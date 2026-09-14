@@ -187,6 +187,10 @@ public sealed class MailboxChangeSubmission
             return null;
         }
 
+        // The record was read at the start of the pass, and a person may have withdrawn it since. Advancing it here is the
+        // claim: a stage only moves forward, so a cancelled record refuses and the transaction ends before the cascade.
+        await this.records.AdvanceAsync(session, record.Id, MailboxMutationStage.Completed, placement: null, cancellationToken);
+
         var now = this.timeProvider.GetUtcNow();
 
         if (record.IsAudited)

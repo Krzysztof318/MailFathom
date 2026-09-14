@@ -789,6 +789,22 @@ describe('MailboxActsProvider', () => {
         expect(recordsOf(recording.recorded, 'act_refused')).toStrictEqual([]);
     });
 
+    it('reports a delete in the trash the deployment applied as a move into the trash, never as a permanent delete', async () => {
+        const deployment = deploymentAnswering({ 'message-3': 'applied' });
+        const { held } = acting(deployment);
+
+        await waitFor(() => {
+            expect(held().deletesPermanently([discarded])).toBe(true);
+        });
+
+        perform(held, 'delete', [discarded]);
+
+        await screen.findByText('Moved to the trash');
+
+        expect(screen.queryByText('Deleting permanently…')).toBeNull();
+        expect(held().asked.has('message-3')).toBe(false);
+    });
+
     it('says an act that never reached the deployment changed nothing, and claims nothing about the message', async () => {
         const deployment = deploymentAnswering({}, 403);
         const { held } = acting(deployment);

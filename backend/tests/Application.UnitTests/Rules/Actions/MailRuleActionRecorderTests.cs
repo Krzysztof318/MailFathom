@@ -602,6 +602,43 @@ public sealed class MailRuleActionRecorderTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>A held account files into a local folder, so one with no local folder for the destination says that, rather than waiting for a run it will never have.</summary>
+    [Fact]
+    public async Task RecordAsync_AHeldAccountWithNoLocalFolderForTheDestination_RefusesItAsLocallyMissing()
+    {
+        // Arrange
+        this.MapMirrored(Archive, "INBOX/Archive");
+        this.folders.Bind(Account.Id, Archive);
+        var states = new InMemoryLocalEmailStateStore(Account);
+        states.Store(
+            LocalEmail,
+            new LocalEmailState(
+                MailFolderResolution.FirstBindingOf(Inbox, RemoteFolderPath.Create("INBOX")),
+                Folder: null,
+                IsSeen: false,
+                IsFlagged: false,
+                RemoteEmailKeywords.Create([])));
+        var recorder = new MailRuleActionRecorder(
+            MailboxChangeSubmissions.Over(
+                this.records,
+                new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held),
+                states),
+            this.dispositions,
+            this.permissions);
+
+        // Act
+        var recording = await this.RecordAsync(
+            recorder,
+            LocalEmail,
+            OccurrenceAt(7),
+            Planned("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))),
+            Revision);
+
+        // Assert
+        Assert.Equal(0, recording.RecordedCount);
+        Assert.Equal(MailRuleActionFailureReason.LocalDestinationFolderMissing, Assert.Single(recording.Failures).Reason);
+    }
+
     [Fact]
     public async Task RecordAsync_APlanThatAsksForNothing_WritesNothing()
     {
