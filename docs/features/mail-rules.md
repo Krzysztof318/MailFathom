@@ -371,8 +371,10 @@ each is the point of the arrangement:
   rule, *who asked* is the rule's name together with the revision of the rule set that matched. So a whole-mailbox run
   over mail a rule has already acted on issues nothing, while an edit to the rule set is a new revision and therefore a
   fresh request. A user who moved the message back by hand is not overruled by the rule that filed it. A held account
-  opens no record to match against, so there a repeat is harmless for a different reason: a flag already set, a message
-  already in the folder, and a message already in the trash each leave nothing to do.
+  opens no record to match against, so there a repeat is harmless only where the stored state already matches: a flag
+  already set, a message already in the folder, and a message already in the trash each leave nothing to do. A person is
+  not protected there the same way — a message moved out of the folder a rule filed it into is filed there again by the
+  next whole-mailbox run.
 
 **A change MailFathom made does not come back as something to act on.** A rule filing a message would otherwise meet it
 in its new folder, match again, and file it again for as long as the folder is watched;

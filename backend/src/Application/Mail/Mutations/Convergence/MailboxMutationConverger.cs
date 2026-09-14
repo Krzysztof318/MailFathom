@@ -122,10 +122,11 @@ public sealed class MailboxMutationConverger
             ? await this.store.ReadOutstandingAsync(account, MailboxMutation.Delete, this.options.MaxMutationsPerPass, cancellationToken)
             : await this.store.ReadOutstandingAsync(account, this.options.MaxMutationsPerPass, cancellationToken);
 
-        if (outstanding.Count == 0)
+        if (outstanding.Count == 0 && !isHeld)
         {
-            // Nothing outstanding is nothing to count: the lifecycle read answers over the same rows, so an account with
-            // no unfinished mutation — which is nearly every account on nearly every run — spares that query.
+            // An empty unfiltered page is nothing to count: the lifecycle read answers over the same rows, so an account with
+            // no unfinished mutation — which is nearly every account on nearly every run — spares that query. A held
+            // account's page holds only its deletes, so an empty one can still leave inherited records to report.
             return new MailboxConvergenceReport(0, 0, 0, 0, []);
         }
 

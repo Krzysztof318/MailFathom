@@ -155,6 +155,7 @@ public sealed class MailboxMutationConvergerTests
         // Assert
         Assert.Equal((0, 0), (report.CompletedCount, report.DeferredCount));
         Assert.NotEqual(MailboxMutationStage.Completed, context.Store.RecordOf(move).Stage);
+        Assert.NotEmpty(report.Outstanding);
         Assert.Empty(states.Erased);
         await context.WriteSessionFactory.DidNotReceive().OpenForWritingAsync(
             Arg.Any<MailAccountId>(),
