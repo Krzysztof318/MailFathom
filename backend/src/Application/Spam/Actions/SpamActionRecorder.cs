@@ -6,7 +6,6 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Mutations;
@@ -101,7 +100,6 @@ public sealed class SpamActionRecorder
     }
 
     /// <summary>Asks for whatever the account's switches say should happen to one classified message.</summary>
-    /// <param name="user">The user the mutation is recorded as having been made for.</param>
     /// <param name="classification">What classification concluded about the occurrence.</param>
     /// <param name="posture">Whether the changes are written down or only worked out.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
@@ -122,7 +120,6 @@ public sealed class SpamActionRecorder
     /// </para>
     /// </remarks>
     public async Task<SpamActionResult> RecordAsync(
-        MailUserId user,
         SpamClassification classification,
         SpamActionPosture posture,
         CancellationToken cancellationToken)

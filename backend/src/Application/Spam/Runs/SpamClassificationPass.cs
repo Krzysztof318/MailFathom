@@ -273,7 +273,6 @@ public sealed class SpamClassificationPass
         }
 
         var action = await this.actionRecorder.RecordAsync(
-            run.Account.User,
             classification,
             run.Terms.Posture,
             cancellationToken);

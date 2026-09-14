@@ -90,7 +90,6 @@ public sealed class EmailSpamClassificationHandler : IJobHandler
         if (classification is not null)
         {
             await this.actionRecorder.RecordAsync(
-                account.User,
                 classification,
                 SpamActionPosture.Acting,
                 cancellationToken);
