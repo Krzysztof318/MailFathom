@@ -12,7 +12,6 @@ using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Synchronization;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
@@ -1660,20 +1659,18 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     }
 
     /// <summary>Builds what this account is published as, or nothing when its configuration cannot name it.</summary>
-    /// <param name="user">The user a configured account belongs to, which configuration itself cannot name.</param>
     /// <returns>The served account, or <see langword="null" /> when the identifier or the display name is unusable.</returns>
     /// <remarks>
     /// The absence is the reload case rather than an ordinary one: startup refuses configuration this returns nothing
     /// for, so the only way to reach it is a reload being rejected while the previous snapshot is still serving.
-    /// The user is a parameter rather than a configured key because no account block names one: an account declared in
-    /// a file belongs to the one user such a deployment holds, and the caller is what knows which that is.
+    /// No user takes part: the identifier is generated and unique across the deployment, so an account is published
+    /// once whoever is assigned it, and who reaches it is the assignment relation's answer rather than this one's.
     /// </remarks>
-    internal ServedMailAccount? CreateServedAccount(MailUserId user)
+    internal ServedMailAccount? CreateServedAccount()
     {
         try
         {
             return new ServedMailAccount(
-                user,
                 MailAccountId.Create(this.AccountId),
                 MailAccountDisplayName.Create(this.DisplayName),
                 this.Mode);

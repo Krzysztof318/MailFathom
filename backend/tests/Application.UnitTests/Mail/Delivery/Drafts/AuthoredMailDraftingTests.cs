@@ -27,8 +27,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Drafts;
 /// <summary>Covers what asking to draft a new message does, and what it refuses before anything is written.</summary>
 public sealed class AuthoredMailDraftingTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     private static readonly DateTimeOffset Moment = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -48,7 +48,7 @@ public sealed class AuthoredMailDraftingTests
         var draft = await drafting.SaveAsync(
             new MailDraftRequest
             {
-                Account = MailAccountSelector.For(Account.Id),
+                Account = MailAccountSelector.For(Account),
                 Recipients = [NamedRecipient.AtAddress(OutgoingRecipientRole.To, "someone@example.test")],
                 Subject = "a draft",
                 PlainTextBody = "Hello.",
@@ -92,7 +92,7 @@ public sealed class AuthoredMailDraftingTests
     /// somebody else's own Drafts folder for them to read as theirs.
     /// </summary>
     [Fact]
-    public async Task SaveAsync_AnAccountTheCallersUserDoesNotOwn_IsRefusedAndWritesNoDraft()
+    public async Task SaveAsync_AnAccountTheCallersUserIsNotAssigned_IsRefusedAndWritesNoDraft()
     {
         // Arrange
         var harness = Harness(new InMemoryOutgoingEmailStore());
@@ -106,7 +106,7 @@ public sealed class AuthoredMailDraftingTests
         var refusal = () => drafting.SaveAsync(
             new MailDraftRequest
             {
-                Account = MailAccountSelector.For(Account.Id),
+                Account = MailAccountSelector.For(Account),
                 Subject = "a draft",
                 PlainTextBody = "Hello.",
                 Author = OutgoingEmailRequester.Command("mfctl-4f2a"),
@@ -118,7 +118,7 @@ public sealed class AuthoredMailDraftingTests
 
         // The refusal repeats what the caller named and nothing else, which is what keeps an account another user owns
         // from being told apart from one this deployment never served.
-        Assert.Equal(MailAccountSelector.For(Account.Id), refused.RequestedAccount);
+        Assert.Equal(MailAccountSelector.For(Account), refused.RequestedAccount);
         Assert.Empty(harness.Drafts.Drafts);
     }
 
@@ -136,7 +136,7 @@ public sealed class AuthoredMailDraftingTests
             () => drafting.SaveAsync(
                 new MailDraftRequest
                 {
-                    Account = MailAccountSelector.For(Account.Id),
+                    Account = MailAccountSelector.For(Account),
                     Recipients =
                     [
                         .. Enumerable
@@ -166,7 +166,7 @@ public sealed class AuthoredMailDraftingTests
         var composer = Substitute.For<IAuthoredEmailComposer>();
         composer
             .ComposeDraft(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())
             .Returns(MailDraftComposition.Refused(new AuthoredEmailRefusal(
@@ -181,7 +181,7 @@ public sealed class AuthoredMailDraftingTests
             () => drafting.SaveAsync(
                 new MailDraftRequest
                 {
-                    Account = MailAccountSelector.For(Account.Id),
+                    Account = MailAccountSelector.For(Account),
                     Subject = "a draft",
                     PlainTextBody = "Hello.",
                     Author = OutgoingEmailRequester.Command("mfctl-4f2a"),
@@ -211,7 +211,7 @@ public sealed class AuthoredMailDraftingTests
         var draft = await drafting.SaveAsync(
             new MailDraftRequest
             {
-                Account = MailAccountSelector.For(Account.Id),
+                Account = MailAccountSelector.For(Account),
                 Subject = "a draft",
                 PlainTextBody = "Hello.",
                 Author = OutgoingEmailRequester.Command("mfctl-4f2a"),
@@ -229,7 +229,7 @@ public sealed class AuthoredMailDraftingTests
         await drafting.SaveAsync(
             new MailDraftRequest
             {
-                Account = MailAccountSelector.For(Account.Id),
+                Account = MailAccountSelector.For(Account),
                 Subject = "a draft, edited",
                 PlainTextBody = "Hello again.",
                 Author = OutgoingEmailRequester.Command("mfctl-4f2a"),
@@ -263,7 +263,7 @@ public sealed class AuthoredMailDraftingTests
                 TimeSpan.FromHours(1),
                 TimeSpan.FromHours(8)));
 
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
 
         return harness;
     }
@@ -281,7 +281,7 @@ public sealed class AuthoredMailDraftingTests
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailDraftsWrite);
 
         return new AuthoredMailDrafting(
-            OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account.Id)),
+            AssignedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account)),
             new NamedRecipientResolver(
                 book ?? new InMemoryContactBookStore(),
                 ContactBookOwnerships.For(callerAuthorization)),

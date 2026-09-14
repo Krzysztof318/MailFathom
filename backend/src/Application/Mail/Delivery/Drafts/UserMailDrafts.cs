@@ -88,7 +88,7 @@ public sealed class UserMailDrafts(
     private async Task RequireOwnAsync(MailDraftId draftId, CancellationToken cancellationToken)
     {
         if (await drafts.FindAsync(draftId, cancellationToken) is not { } draft
-            || draft.Account.User != accountCatalog.User)
+            || draft.User != accountCatalog.User)
         {
             throw MailDraftRefusedException.NotFound();
         }

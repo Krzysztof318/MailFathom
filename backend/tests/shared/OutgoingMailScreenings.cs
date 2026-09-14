@@ -5,6 +5,7 @@
 using System.Text;
 using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.TestSupport;
 
@@ -25,6 +26,15 @@ namespace MailFathom.TestSupport;
 /// </remarks>
 internal static class OutgoingMailScreenings
 {
+    /// <summary>Gets the mailbox both shapes resolve a posture for, which is what a consumer screens against.</summary>
+    /// <remarks>
+    /// Named here rather than per suite because the screening resolves the user it scans under from the mailbox's
+    /// assignments, so the mailbox a test names and the assignment behind it have to be the same pair. It is assigned
+    /// to <see cref="SyntheticMailUser.Deployment" />, whose posture <see cref="ScanningSensitiveContentEgress" />
+    /// states.
+    /// </remarks>
+    internal static MailAccountId Account => SyntheticMailAccount.Deployment;
+
     /// <summary>Builds the screening of a deployment that screens nothing at all.</summary>
     /// <returns>A screening that answers without parsing the message or constructing a detector.</returns>
     internal static OutgoingMailScreening Inactive() =>
@@ -51,9 +61,7 @@ internal static class OutgoingMailScreenings
     {
         ArgumentNullException.ThrowIfNull(screen);
 
-        return new OutgoingMailScreening(
-            new PlainTextOutgoingMailTextReader(attachmentRefusal),
-            screen);
+        return new OutgoingMailScreening(new PlainTextOutgoingMailTextReader(attachmentRefusal), screen);
     }
 
     /// <summary>Builds the reader the two shapes above are composed over, for a suite that drives it directly.</summary>

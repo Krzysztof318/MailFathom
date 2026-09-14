@@ -38,8 +38,8 @@ public sealed class ClientSignalPayloadTests
 
     private const string AttachmentName = "figures-revised.xlsx";
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
 

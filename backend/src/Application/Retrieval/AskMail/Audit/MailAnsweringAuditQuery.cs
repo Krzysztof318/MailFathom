@@ -34,7 +34,7 @@ public sealed record MailAnsweringAuditQuery
     public const int MaximumPageSize = 100;
 
     private MailAnsweringAuditQuery(
-        MailAccountIdentity account,
+        MailAccountId account,
         DateTimeOffset? completedFrom,
         DateTimeOffset? completedBefore,
         int pageSize,
@@ -48,9 +48,9 @@ public sealed record MailAnsweringAuditQuery
     }
 
     /// <summary>Gets the account whose record is read.</summary>
-    public MailAccountIdentity Account { get; }
+    public MailAccountId Account { get; }
     /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one user names.</summary>
-    public MailAccountId AccountId => this.Account.Id;
+    public MailAccountId AccountId => this.Account;
 
     /// <summary>Gets the earliest completion instant served, inclusive, or <see langword="null" /> when the page reaches back as far as the record does.</summary>
     public DateTimeOffset? CompletedFrom { get; }
@@ -82,7 +82,7 @@ public sealed record MailAnsweringAuditQuery
     /// <param name="cursor">The boundary a continued walk reads beyond, or <see langword="null" /> for the first page.</param>
     /// <returns>The accepted query, or the refusal naming what the caller has to change.</returns>
     public static MailAnsweringAuditQueryResult Create(
-        MailAccountIdentity account,
+        MailAccountId account,
         DateTimeOffset? completedFrom,
         DateTimeOffset? completedBefore,
         int? pageSize,
@@ -118,12 +118,11 @@ public sealed record MailAnsweringAuditQuery
 
     /// <summary>Reduces the filters to the short stable text a cursor carries to prove it belongs to this walk.</summary>
     private static string ComputeFingerprint(
-        MailAccountIdentity account,
+        MailAccountId account,
         DateTimeOffset? completedFrom,
         DateTimeOffset? completedBefore) =>
         PageFilterFingerprint.Of(
-            account.User.Value.ToString("N", CultureInfo.InvariantCulture),
-            account.Id.Value,
+            account.Value,
             completedFrom?.UtcTicks.ToString(CultureInfo.InvariantCulture),
             completedBefore?.UtcTicks.ToString(CultureInfo.InvariantCulture));
 }

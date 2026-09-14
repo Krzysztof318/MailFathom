@@ -10,7 +10,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.Spam.Scanning;
 using MailFathom.Application.Spam.Signals;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Spam;
 
@@ -59,7 +59,7 @@ public sealed class EmailSpamClassifier
     private readonly ISpamScanner? scanner;
 
     /// <summary>Initializes the use case.</summary>
-    /// <param name="emailReader">Finds the account and folder of the email, within the user who holds it.</param>
+    /// <param name="emailReader">Finds the folder of the email, within the account that holds it.</param>
     /// <param name="contentStore">Reads the raw MIME already stored for it.</param>
     /// <param name="headerReader">Reads the spam-relevant headers out of that content.</param>
     /// <param name="junkFolders">Answers whether the occurrence's folder is its account's junk folder.</param>
@@ -121,10 +121,10 @@ public sealed class EmailSpamClassifier
         this.scanner = scanner;
     }
 
-    /// <summary>Classifies one occurrence, on the terms written on the account it was stored from.</summary>
-    /// <param name="user">
-    /// The user the email is read as. It is read only within this user's mail, so a user who does not hold it finds
-    /// nothing and the attempt ends as <see cref="SpamClassificationOutcome.OccurrenceMissing" />.
+    /// <summary>Classifies one occurrence, on the terms decided for the mailbox it belongs to.</summary>
+    /// <param name="account">
+    /// The account whose posture decides everything below. The email is read only within this account's mail, so an account which
+    /// does not hold it finds nothing and the attempt ends as <see cref="SpamClassificationOutcome.OccurrenceMissing" />.
     /// </param>
     /// <param name="emailId">The occurrence to classify.</param>
     /// <param name="mode">What to do about an occurrence that already carries a classification.</param>
@@ -133,16 +133,14 @@ public sealed class EmailSpamClassifier
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="mode" /> is not a defined member.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when every allowed commit attempt conflicted.</exception>
     /// <remarks>
-    /// The order of the checks is the order of what they cost, after the one that settles which account's posture is
-    /// being read at all: the email is looked up within the user's own mail — an email the user does not hold ends
-    /// here, before anything else about it is read — then whether that account classifies and whether the folder is in
-    /// scope are free, the existing record is one lookup, and only then is content read. So an occurrence outside the
-    /// scope still costs no read of its mail, which is the property that keeps a switched-off feature free; what it
-    /// costs that it did not before is one row for a message nobody classifies, because the settings hang on the
-    /// account the row names rather than on the caller.
+    /// The order of the checks is the order of what they cost. Whether this account is classified at all is free, then the email
+    /// is looked up within the account's own mail — an email the account does not hold ends here, before anything else about it
+    /// is read — then the scope and the existing record are one lookup each, and only then is content read, so an
+    /// occurrence outside the scope costs no read of its mail, which is the property that keeps a switched-off feature
+    /// free.
     /// </remarks>
     public async Task<SpamClassificationResult> ClassifyAsync(
-        MailUserId user,
+        MailAccountId account,
         StoredEmailId emailId,
         SpamClassificationMode mode,
         CancellationToken cancellationToken)
@@ -155,18 +153,18 @@ public sealed class EmailSpamClassifier
                 "A classification either leaves an existing record alone or replaces it.");
         }
 
-        var email = await this.emailReader.FindAsync(user, emailId, cancellationToken);
-
-        if (email is null)
-        {
-            return SpamClassificationResult.NotClassified(SpamClassificationOutcome.OccurrenceMissing);
-        }
-
-        var settings = this.settingsReader.SettingsFor(email.AccountId);
+        var settings = this.settingsReader.SettingsFor(account);
 
         if (!settings.IsEnabled)
         {
             return SpamClassificationResult.NotClassified(SpamClassificationOutcome.Disabled);
+        }
+
+        var email = await this.emailReader.FindAsync(account, emailId, cancellationToken);
+
+        if (email is null)
+        {
+            return SpamClassificationResult.NotClassified(SpamClassificationOutcome.OccurrenceMissing);
         }
 
         if (!settings.Covers(email.FolderAlias))

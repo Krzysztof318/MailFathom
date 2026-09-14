@@ -56,21 +56,26 @@ internal sealed class OutgoingEmailConfiguration : IEntityTypeConfiguration<Outg
         // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
         entity.Property(message => message.ConcurrencyVersion).IsRowVersion();
 
+        // The author stands in the identity and the account leads it. Two users assigned one mailbox retrying the
+        // same requester's submission are two submissions, which is what the author is here for; a rule and a
+        // recurring occasion name no author at all, and `NULLS NOT DISTINCT` is what makes those two rows collide as
+        // one instead of letting a re-evaluation send a second copy.
         entity.HasIndex(message => new
         {
-            message.UserId,
             message.MailboxAccountId,
+            message.UserId,
             message.RequesterOrigin,
             message.RequesterIdentity,
         })
             .IsUnique()
+            .AreNullsDistinct(false)
             .HasDatabaseName(PersistenceConstraintNames.OutgoingEmailIdentityUniqueIndexName);
 
         // Filtered to the sends that have not finished, so the structure holds what is queued and in flight rather
         // than every message the deployment has ever sent. A refused send stays in for the reason an abandoned
         // mutation does: giving up on it is what stops it being attempted, and it would be worth nothing if it also
         // stopped it being seen — so the filter names the three terminal stages rather than only the successful one.
-        entity.HasIndex(message => new { message.UserId, message.MailboxAccountId, message.RecordedAt })
+        entity.HasIndex(message => new { message.MailboxAccountId, message.RecordedAt })
             .HasDatabaseName(PersistenceConstraintNames.OutgoingEmailOutstandingIndexName)
             .HasFilter(
                 $"\"{nameof(OutgoingEmailEntity.Stage)}\" NOT IN ("
@@ -83,7 +88,6 @@ internal sealed class OutgoingEmailConfiguration : IEntityTypeConfiguration<Outg
         // orders, so the batch it takes is a range read rather than a sort over everything the account has queued.
         entity.HasIndex(message => new
         {
-            message.UserId,
             message.MailboxAccountId,
             message.AvailableAt,
             message.Id,
@@ -91,7 +95,7 @@ internal sealed class OutgoingEmailConfiguration : IEntityTypeConfiguration<Outg
             .HasDatabaseName(PersistenceConstraintNames.OutgoingEmailClaimableIndexName)
             .HasFilter($"\"{nameof(OutgoingEmailEntity.Stage)}\" = '{nameof(OutgoingEmailStage.Recorded)}'");
 
-        entity.HasIndex(message => new { message.RecordedAt, message.UserId, message.MailboxAccountId })
+        entity.HasIndex(message => new { message.RecordedAt, message.MailboxAccountId })
             .HasDatabaseName(PersistenceConstraintNames.OutgoingEmailPeriodUsageIndexName);
     }
 }

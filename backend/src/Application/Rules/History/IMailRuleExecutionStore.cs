@@ -58,7 +58,7 @@ public interface IMailRuleExecutionStore
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is not positive.</exception>
     Task<int> EraseEvaluatedBeforeAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         DateTimeOffset evaluatedBefore,
         int limit,
         CancellationToken cancellationToken);

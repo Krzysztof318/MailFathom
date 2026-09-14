@@ -21,16 +21,14 @@ internal sealed class SpamClassificationRunStore(MailFathomDbContext dbContext) 
 {
     /// <inheritdoc />
     public async Task<SpamClassificationRun?> FindOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
-        var user = account.User.Value;
-        var mailboxAccountId = account.Id.Value;
+        var mailboxAccountId = account.Value;
         var outstanding = await dbContext.SpamClassificationRuns
             .AsNoTracking()
             .SingleOrDefaultAsync(
-                run => run.UserId == user
-                    && run.MailboxAccountId == mailboxAccountId
+                run => run.MailboxAccountId == mailboxAccountId
                     && run.EndedAt == null,
                 cancellationToken);
 
@@ -40,15 +38,14 @@ internal sealed class SpamClassificationRunStore(MailFathomDbContext dbContext) 
     /// <inheritdoc />
     /// <remarks>One row per account, so the account's key is the whole of the lookup and no ordering is needed.</remarks>
     public async Task<SpamClassificationRun?> FindLatestAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
-        var user = account.User.Value;
-        var mailboxAccountId = account.Id.Value;
+        var mailboxAccountId = account.Value;
         var latest = await dbContext.SpamClassificationRuns
             .AsNoTracking()
             .SingleOrDefaultAsync(
-                run => run.UserId == user && run.MailboxAccountId == mailboxAccountId,
+                run => run.MailboxAccountId == mailboxAccountId,
                 cancellationToken);
 
         return latest is null ? null : Read(latest, account);
@@ -69,18 +66,17 @@ internal sealed class SpamClassificationRunStore(MailFathomDbContext dbContext) 
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var stored = await sessionContext.SpamClassificationRuns.FindAsync(
-            [run.Account.User.Value, run.Account.Id.Value],
+            [run.Account.Value],
             cancellationToken);
 
         if (stored is null)
         {
             stored = new SpamClassificationRunEntity
             {
-                MailboxAccountId = run.Account.Id.Value,
+                MailboxAccountId = run.Account.Value,
 
                 // Written from the identity the request resolved through the deployment's catalog, which is the account
                 // this run walks. A run belongs to the user whose mail it classifies.
-                UserId = run.Account.User.Value,
                 FolderAliases = [],
             };
 
@@ -92,7 +88,7 @@ internal sealed class SpamClassificationRunStore(MailFathomDbContext dbContext) 
 
     private static SpamClassificationRun Read(
         SpamClassificationRunEntity entity,
-        MailAccountIdentity account) => new()
+        MailAccountId account) => new()
         {
             Account = account,
             RequestedAt = entity.RequestedAt,

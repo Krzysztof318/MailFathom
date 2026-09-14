@@ -431,7 +431,7 @@ public sealed class CitationResolverTests
     private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))]);
+        catalog.AssignedAccounts.Returns([.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))]);
         catalog.User.Returns(SyntheticMailUser.Deployment);
 
         return catalog;

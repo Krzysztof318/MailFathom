@@ -7,7 +7,6 @@ using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Jobs;
@@ -15,7 +14,6 @@ namespace MailFathom.Application.UnitTests.Jobs;
 public sealed class JobEnqueueRequestTests
 {
     private static ClassifyEmailSpamJobPayload Payload => ClassifyEmailSpamJobPayload.For(
-        SyntheticMailUser.Deployment,
         EmailOccurrenceId.Create(
         MailAccountId.Create("account-a"),
         new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
@@ -30,7 +28,7 @@ public sealed class JobEnqueueRequestTests
         var request = JobEnqueueRequest.Create(
             JobIdempotencyKey.Create("account-a/inbox#1/12345/4711"),
             Payload,
-            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("account-a")));
+            MailAccountId.Create("account-a"));
 
         // Assert
         Assert.Equal(JobType.ClassifyEmailSpam, request.JobType);
@@ -44,7 +42,7 @@ public sealed class JobEnqueueRequestTests
         var request = JobEnqueueRequest.Create(
             JobIdempotencyKey.Create("account-a/inbox#1/12345/4711"),
             Payload,
-            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("account-a")));
+            MailAccountId.Create("account-a"));
 
         // Assert
         Assert.Null(request.AvailableAt);
@@ -60,7 +58,7 @@ public sealed class JobEnqueueRequestTests
         var request = JobEnqueueRequest.CreateAvailableAt(
             JobIdempotencyKey.Create("account-a/inbox#1/12345/4711"),
             Payload,
-            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("account-a")),
+            MailAccountId.Create("account-a"),
             availableAt);
 
         // Assert

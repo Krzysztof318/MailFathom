@@ -288,7 +288,7 @@ public sealed class EmailThreadContextsTests
         SensitiveContentEgressGuard? egressGuard = null)
     {
         var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
-        accountCatalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        accountCatalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
 
         return new EmailThreadContexts(
             threadReader,

@@ -8,7 +8,6 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
-using MailFathom.TestSupport;
 
 namespace MailFathom.Infrastructure.UnitTests.TestDoubles;
 
@@ -27,9 +26,7 @@ internal static class MimeFixtures
         ImapUid.Create(10));
 
     /// <summary>Gets the account every fixture is read for, which is the account its occurrence identity names.</summary>
-    public static MailAccountIdentity Account { get; } = MailAccountIdentity.Create(
-        SyntheticMailUser.Deployment,
-        MailAccountId.Create("primary"));
+    public static MailAccountId Account { get; } = MailAccountId.Create("primary");
 
     /// <summary>Turns MIME lines into the fetched content an extraction reads.</summary>
     /// <param name="lines">The message's lines, joined with CRLF as a mail transport writes them.</param>

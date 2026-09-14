@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 
@@ -43,7 +42,6 @@ public interface IAuthoredMailboxTargetReader
 }
 
 /// <summary>Where one stored email is, as a mutation has to name it.</summary>
-/// <param name="User">The user whose account the email belongs to, which every record the change writes carries.</param>
 /// <param name="Occurrence">The account, folder binding, UIDVALIDITY, and UID an IMAP command is issued against.</param>
 /// <param name="Folder">The binding the occurrence belongs to, including the remote path a write session selects.</param>
 /// <remarks>
@@ -52,6 +50,5 @@ public interface IAuthoredMailboxTargetReader
 /// Nothing derived from the message is carried, so deciding whether a change may be made never reads mail.
 /// </remarks>
 public sealed record AuthoredMailboxTarget(
-    MailUserId User,
     EmailOccurrenceId Occurrence,
     MailFolderResolution Folder);

@@ -4,7 +4,7 @@
 
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Synchronization;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -50,7 +50,7 @@ public sealed class OrchestratedStoredContentRoomIdempotencyTests(MailFathomOrch
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var onOneHost = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         await using var onAnotherHost = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var user = OrchestratedDeploymentUser.Shared.User;
+        var account = SyntheticMailAccount.Account;
         var roomForOne = await CeilingsWithRoomForOnePayloadAsync(onOneHost, cancellationToken);
 
         // Act
@@ -59,7 +59,7 @@ public sealed class OrchestratedStoredContentRoomIdempotencyTests(MailFathomOrch
             CompetingClaimants,
             (claimant, token) => ClaimAsync(
                 claimant % 2 == 0 ? onOneHost : onAnotherHost,
-                user,
+                account,
                 roomForOne,
                 token),
             cancellationToken);
@@ -109,11 +109,11 @@ public sealed class OrchestratedStoredContentRoomIdempotencyTests(MailFathomOrch
 
     private static Task<StoredContentClaimRecord> ClaimAsync(
         OrchestratedMailFathomServices services,
-        MailUserId user,
+        MailAccountId account,
         StoredContentCeilings ceilings,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IStoredContentClaimStore>()
-                .ClaimAsync(user, PayloadByteCount, ceilings, ClaimLifetime, token),
+                .ClaimAsync(account, PayloadByteCount, ceilings, ClaimLifetime, token),
             cancellationToken);
 
     private static Task<Guid> ReleaseAsync(

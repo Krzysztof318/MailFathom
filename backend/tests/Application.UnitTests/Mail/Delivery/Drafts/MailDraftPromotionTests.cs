@@ -30,8 +30,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Drafts;
 /// <summary>Covers where a draft stops being one, and everything that leaves it standing instead.</summary>
 public sealed class MailDraftPromotionTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     private static readonly DateTimeOffset Moment = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -317,7 +317,7 @@ public sealed class MailDraftPromotionTests
                 send != null
                 && send.Act == AuthoredSendAct.PromotedDraft
                 && send.OutgoingEmailId == record.Id
-                && send.AccountId == Account.Id
+                && send.AccountId == Account
                 && send.RecipientCount == 1
                 && send.UnvouchedRecipientCount == 1),
             Arg.Any<CancellationToken>());
@@ -434,7 +434,7 @@ public sealed class MailDraftPromotionTests
                 TimeSpan.FromHours(1),
                 TimeSpan.FromHours(8)));
 
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
 
         return harness;
     }
@@ -502,6 +502,7 @@ public sealed class MailDraftPromotionTests
         MailDraftRecipient? recipient = null) =>
         harness.Book.SaveAsync(
             Account,
+            SyntheticMailUser.Deployment,
             OutgoingEmailRequester.Command($"mfctl-{Guid.CreateVersion7(Moment)}"),
             new ComposedMailDraft(
                 addressed ? [recipient ?? Recipient()] : [],

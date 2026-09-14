@@ -110,7 +110,7 @@ public sealed class MailboxMutationConverger
     /// means here.
     /// </remarks>
     public async Task<MailboxConvergenceReport> ConvergeAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         var isHeld = await this.localFolders.ReadAsync(account, cancellationToken) is { Phase: MailAccountCustodyPhase.Held };
@@ -130,7 +130,7 @@ public sealed class MailboxMutationConverger
             return new MailboxConvergenceReport(0, 0, 0, 0, []);
         }
 
-        var transportSecurityPolicy = this.transportSecurityPolicyReader.GetPolicy(account.Id);
+        var transportSecurityPolicy = this.transportSecurityPolicyReader.GetPolicy(account);
         var tally = new ConvergenceTally();
 
         foreach (var candidate in outstanding)

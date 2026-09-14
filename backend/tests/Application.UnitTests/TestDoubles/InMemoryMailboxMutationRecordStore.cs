@@ -5,7 +5,6 @@
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -94,17 +93,19 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
     /// <inheritdoc />
     public Task<IReadOnlyList<MailboxMutationRecord>> ReleaseAsync(
         IPersistenceSession session,
-        MailUserId user,
+        IReadOnlyList<MailAccountId> accounts,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(recordIds);
 
         var released = new List<MailboxMutationRecord>(recordIds.Count);
 
         foreach (var recordId in recordIds.Distinct())
         {
-            if (this.recordsById.GetValueOrDefault(recordId) is not { } record || record.User != user)
+            if (this.recordsById.GetValueOrDefault(recordId) is not { } record
+                || !accounts.Contains(record.Request.Account))
             {
                 continue;
             }
@@ -130,17 +131,20 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
 
     /// <inheritdoc />
     public Task<IReadOnlyList<MailboxMutationRecord>> ReadAsync(
-        MailUserId user,
+        IReadOnlyList<MailAccountId> accounts,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(recordIds);
+
         IReadOnlyList<MailboxMutationRecord> held =
         [
             .. recordIds
                 .Distinct()
                 .Select(recordId => this.recordsById.GetValueOrDefault(recordId))
                 .OfType<MailboxMutationRecord>()
-                .Where(record => record.User == user)
+                .Where(record => accounts.Contains(record.Request.Account))
                 .OrderBy(record => record.RecordedAt)
                 .ThenBy(record => record.Id.Value),
         ];
@@ -151,10 +155,11 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
     /// <inheritdoc />
     public Task<IReadOnlyList<MailboxMutationRecord>> WithdrawAsync(
         IPersistenceSession session,
-        MailUserId user,
+        IReadOnlyList<MailAccountId> accounts,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(recordIds);
 
         // One instant for the whole call, as the real store takes one, so a test asserting when a record was withdrawn
@@ -164,7 +169,8 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
 
         foreach (var recordId in recordIds.Distinct())
         {
-            if (this.recordsById.GetValueOrDefault(recordId) is not { } record || record.User != user)
+            if (this.recordsById.GetValueOrDefault(recordId) is not { } record
+                || !accounts.Contains(record.Request.Account))
             {
                 continue;
             }
@@ -259,7 +265,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
 
     /// <inheritdoc />
     public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         int limit,
         CancellationToken cancellationToken)
     {
@@ -267,7 +273,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
 
         IReadOnlyList<OutstandingMailboxMutation> outstanding =
         [
-            .. this.OutstandingOf(account.Id)
+            .. this.OutstandingOf(account)
                 .OrderBy(record => record.RecordedAt)
                 .Take(limit)
                 .Select(record => new OutstandingMailboxMutation(record, this.BindingOf(record))),
@@ -278,7 +284,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
 
     /// <inheritdoc />
     public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailboxMutation mutation,
         int limit,
         CancellationToken cancellationToken)
@@ -287,7 +293,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
 
         IReadOnlyList<OutstandingMailboxMutation> outstanding =
         [
-            .. this.OutstandingOf(account.Id)
+            .. this.OutstandingOf(account)
                 .Where(record => record.Request.Mutation == mutation)
                 .OrderBy(record => record.RecordedAt)
                 .Take(limit)
@@ -299,12 +305,12 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
 
     /// <inheritdoc />
     public Task<IReadOnlyList<MailboxMutationLifecycleCount>> ReadLifecycleCountsAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         IReadOnlyList<MailboxMutationLifecycleCount> counts =
         [
-            .. this.UnsettledOf(account.Id)
+            .. this.UnsettledOf(account)
                 .GroupBy(record => new { record.Request.Mutation, record.Lifecycle })
                 .Select(group => new MailboxMutationLifecycleCount(
                     group.Key.Mutation,

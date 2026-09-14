@@ -85,7 +85,8 @@ public sealed class MailDraftBook
     }
 
     /// <summary>Writes a composed draft down, as a new one or as the next revision of one that already exists.</summary>
-    /// <param name="account">The account the draft belongs to, named by its user and its identifier.</param>
+    /// <param name="account">The account the draft belongs to, by its generated identifier.</param>
+    /// <param name="writtenBy">The user writing it, who is the one person among the account's assigned users who reads it.</param>
     /// <param name="author">The authored act writing it down.</param>
     /// <param name="composed">The composed message, its recipients, and the identity this revision carries.</param>
     /// <param name="revises">The draft this replaces, or <see langword="null" /> to write a new one.</param>
@@ -102,7 +103,8 @@ public sealed class MailDraftBook
     /// the removal leaves one draft in the folder rather than two or none.
     /// </remarks>
     public async Task<MailDraftRecord> SaveAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
+        MailUserId writtenBy,
         OutgoingEmailRequester author,
         ComposedMailDraft composed,
         MailDraftId? revises,
@@ -115,7 +117,7 @@ public sealed class MailDraftBook
 
         if (revises is { } revisedDraftId)
         {
-            await this.RequireRevisableAsync(account.Id, revisedDraftId, cancellationToken);
+            await this.RequireRevisableAsync(account, revisedDraftId, cancellationToken);
         }
 
         // Before the write, so a refused draft leaves neither a record nor a message nor a copy in the mailbox — and
@@ -155,6 +157,7 @@ public sealed class MailDraftBook
                     : await this.drafts.OpenAsync(
                         session,
                         account,
+                        writtenBy,
                         author,
                         composed.Recipients,
                         composed.Subject,

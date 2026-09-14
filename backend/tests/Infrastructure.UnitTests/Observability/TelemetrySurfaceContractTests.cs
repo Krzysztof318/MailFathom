@@ -552,7 +552,7 @@ public sealed class TelemetrySurfaceContractTests
     {
         var observation = new MailAnsweringRunObservation(
             MailAnsweringRunId.Create(Guid.CreateVersion7(Moment)),
-            MailboxScope.Create(SyntheticMailUser.Deployment, [Account], []),
+            MailboxScope.Create([Account], []),
             Moment);
 
         observation.RecordComposition(TelemetryRedactionContract.ConfiguredAliasSentinel, "0a1b2c3d4e5f");
@@ -584,6 +584,7 @@ public sealed class TelemetrySurfaceContractTests
             using var guarded = Egress.BeginGuardedOperation(
                 egressPoint,
                 SyntheticMailUser.Deployment,
+                account: null,
                 CancellationToken.None);
             guarded.TextGuarded();
             guarded.Completed();
@@ -682,7 +683,6 @@ public sealed class TelemetrySurfaceContractTests
         Id = MailboxMutationAuditEntryId.Create(Guid.CreateVersion7()),
         MutationRecordId = MailboxMutationRecordId.Create(Guid.CreateVersion7()),
         AccountId = Account,
-        User = SyntheticMailUser.Deployment,
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
         Mutation = MailboxMutation.Relocate,
         SourceFolderPath = RemoteFolderPath.Create(TelemetryRedactionContract.MailDerivedSentinel),

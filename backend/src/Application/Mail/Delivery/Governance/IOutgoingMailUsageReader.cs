@@ -34,7 +34,7 @@ public interface IOutgoingMailUsageReader
     /// or while a second process is sending against the same period.
     /// </remarks>
     Task<OutgoingMailUsage> ReadUsageSinceAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         DateTimeOffset periodStart,
         CancellationToken cancellationToken);
 }

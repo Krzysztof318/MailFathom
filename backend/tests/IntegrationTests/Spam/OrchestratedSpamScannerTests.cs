@@ -202,7 +202,7 @@ public sealed class OrchestratedSpamScannerTests(MailFathomOrchestrationFixture 
         // Act
         var result = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<EmailSpamClassifier>().ClassifyAsync(
-                SyntheticMailAccount.User,
+                SyntheticMailAccount.Account,
                 storedEmailId,
                 SpamClassificationMode.Reclassify,
                 token),
@@ -305,7 +305,7 @@ public sealed class OrchestratedSpamScannerTests(MailFathomOrchestrationFixture 
             async (scope, session, token) =>
             {
                 storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session, SyntheticMailAccount.User,
+                    session,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, "Notes from Tuesday", rawMime.Length),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,

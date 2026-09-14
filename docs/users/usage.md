@@ -61,11 +61,11 @@ configured and the `displayName` they gave it — and **either one names the acc
 matched without regard to case. Quote the display name to a person; the identifier is what other results report and what
 stays stable if the readable name is changed.
 
-**Both names belong to the account's user and are unique within that user rather than across the deployment.** Either
-one may be stored to remember which mailbox somebody meant, and the identifier is the one to store, because it survives
-a rename. What neither may be treated as is a name for the mailbox on its own: two users may each call an account
-`work`, so a stored name is only ever this user's name and is never compared with one read for somebody else or from a
-second deployment. A name that reaches none of your own accounts is refused rather than answered emptily, and it is the
+**The identifier names one mailbox across the deployment, and the display name only within the set you are assigned.**
+Either one may be stored to remember which mailbox somebody meant, and the identifier is the one to store, because it
+survives a rename and is the same name whoever reads it. What the display name may not be treated as is a name for the
+mailbox on its own: two people's accounts may each be called `work`, so a stored display name is only ever a name
+within one person's set and is never compared with one read for somebody else or from a second deployment. A name that reaches none of your own accounts is refused rather than answered emptily, and it is the
 same refusal whether nothing carries that name or somebody else's mailbox does.
 
 Each account also lists its folders with the same freshness statement a listing carries, and the result says whether
@@ -627,9 +627,9 @@ which are counts and nothing about what they were spent on.
   saw, with `wasObserved` saying whether any run has looked; reading through MailFathom never changes them. A change you
   asked for with `set_mail_flags` shows up in those fields once the next run has both issued it and read the folder
   back, so a listing taken immediately afterwards still reports the value the server was last seen to hold.
-- **Removing an account erases its stored mail**, with its folders and attachments, and so does unassigning its user,
-  since an account is served to one user at a time. Disabling synchronization does not — the copy already stored stays
-  readable.
+- **Removing an account erases its stored mail**, with its folders and attachments, and so does unassigning its last
+  user; unassigning one of several erases only what that person authored there and leaves the mail for whoever is still
+  assigned. Disabling synchronization erases nothing — the copy already stored stays readable.
 - **What happens to locally stored mail the server deleted is per account**: the default keeps a hidden tombstone,
   and a deployment can choose erasure instead. [IMAP synchronization](../features/imap-synchronization.md) records
   both dispositions.

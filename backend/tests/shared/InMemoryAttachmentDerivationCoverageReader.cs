@@ -17,13 +17,13 @@ namespace MailFathom.TestSupport;
 /// </remarks>
 internal sealed class InMemoryAttachmentDerivationCoverageReader : IAttachmentDerivationCoverageReader
 {
-    private readonly List<MailAccountIdentity?> reads = [];
+    private readonly List<MailAccountId?> reads = [];
 
     /// <summary>Gets or sets what every read answers with.</summary>
     public AttachmentDerivationCoverage Coverage { get; set; } = AttachmentDerivationCoverage.Nothing;
 
     /// <summary>Gets the account each read was scoped to, in the order the reads happened.</summary>
-    public IReadOnlyList<MailAccountIdentity?> Reads => this.reads;
+    public IReadOnlyList<MailAccountId?> Reads => this.reads;
 
     /// <summary>Composes a status reader over this coverage and a budget that declares no ceiling.</summary>
     /// <param name="now">The instant the periods are anchored to.</param>
@@ -46,13 +46,14 @@ internal sealed class InMemoryAttachmentDerivationCoverageReader : IAttachmentDe
             coverage,
             new AttachmentDerivationSpendGate(
                 new InMemoryAttachmentDerivationSpendLedger(),
+                new StubMailAccountAssignments(),
                 budget,
                 new FakeTimeProvider(now))));
     }
 
     /// <inheritdoc />
     public Task<AttachmentDerivationCoverage> ReadCoverageAsync(
-        MailAccountIdentity? account,
+        MailAccountId? account,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

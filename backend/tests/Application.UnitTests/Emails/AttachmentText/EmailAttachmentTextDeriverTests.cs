@@ -14,6 +14,7 @@ using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -28,6 +29,8 @@ public sealed class EmailAttachmentTextDeriverTests
     private const string Contract = "The tenant pays for the roof above the west stairwell.";
 
     private static readonly StoredEmailId Message = StoredEmailId.Create(Guid.Parse("11111111-1111-1111-1111-111111111111"));
+
+    private static readonly MailAccountId Account = SyntheticMailAccount.Deployment;
 
     private readonly IEmailContentStore contentStore = Substitute.For<IEmailContentStore>();
     private readonly IEmailAttachmentContentReader attachmentReader = Substitute.For<IEmailAttachmentContentReader>();
@@ -654,8 +657,7 @@ public sealed class EmailAttachmentTextDeriverTests
 
     private static EmailAwaitingAttachmentText Awaiting() => new(
         Message,
-        ScanningSensitiveContentDerivation.User,
-        ScanningSensitiveContentDerivation.Account,
+        Account,
         DerivedWorkAdmission.Admitted);
 
     private EmailAttachmentTextDeriver Deriver(

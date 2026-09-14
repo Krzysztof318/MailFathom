@@ -275,7 +275,7 @@ public sealed class ClientMailSearchEndpointTests
     private static EmailSummary SyntheticMatchedEmail() => new()
     {
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
-        Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")),
+        Account = MailAccountId.Create("work"),
         FolderAlias = MailFolderAlias.Create("INBOX"),
         Subject = "the invoice",
         SentAt = FirstJuly,
@@ -355,7 +355,7 @@ public sealed class ClientMailSearchEndpointTests
     private MailSearchBrowser Browser()
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
+        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
 
         var readTelemetry = Substitute.For<IMailboxReadTelemetry>();
         readTelemetry.BeginRead(Arg.Any<MailboxReadOperation>(), Arg.Any<CancellationToken>())

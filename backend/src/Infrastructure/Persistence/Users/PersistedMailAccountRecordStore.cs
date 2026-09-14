@@ -225,19 +225,16 @@ internal sealed class PersistedMailAccountRecordStore(
                      """,
                     token);
 
-                // Nothing inserted: the account or the user is gone, or the conflict clause met an assignment already
-                // standing — this user's, or another user's under the index that keeps an account to one user.
+                // Nothing inserted: the account or the user is gone, or the conflict clause met this user's own
+                // assignment already standing. Somebody else's is not a conflict — the key is the pair — so an
+                // account several people are assigned takes each of them without the others being consulted.
                 if (assigned == 0)
                 {
-                    var holders = await context.MailAccountAssignments
-                        .Where(row => row.MailAccountId == accountId)
-                        .Select(row => row.UserId)
-                        .ToListAsync(token);
+                    var alreadyAssigned = await context.MailAccountAssignments
+                        .AnyAsync(row => row.MailAccountId == accountId && row.UserId == userId, token);
 
                     return new MailAccountWrite(
-                        holders.Contains(userId) ? MailAccountWriteResult.NothingToChange
-                        : holders.Count > 0 ? MailAccountWriteResult.AssignedElsewhere
-                        : MailAccountWriteResult.NotFound,
+                        alreadyAssigned ? MailAccountWriteResult.NothingToChange : MailAccountWriteResult.NotFound,
                         0);
                 }
 
@@ -285,16 +282,19 @@ internal sealed class PersistedMailAccountRecordStore(
                 var nobodyElse = !await context.MailAccountAssignments
                     .AnyAsync(row => row.MailAccountId == accountId, token);
 
-                // ponytail: the mail graph is still keyed by the user beside the account, so a user unassigned from a shared
-                // account takes the copy stored under them; issue 1325 keys it by the account alone and removes this.
-                await UserAccountErasure.EraseMailOfAccountAsync(
+                // The mail is the mailbox's, so an unassignment that leaves somebody else reading it erases none of it.
+                // What goes either way is what this user authored there — a draft only its author reads, and a standing
+                // instruction only its author gave — because neither is readable by anyone once they are not assigned.
+                await UserAccountErasure.EraseAuthoredRowsOfAccountAsync(
                     session,
                     accountId.ToString("D"),
-                    nobodyElse ? null : userId,
+                    userId,
                     token);
 
                 if (nobodyElse)
                 {
+                    await UserAccountErasure.EraseMailOfAccountAsync(session, accountId.ToString("D"), token);
+
                     await context.Database.ExecuteSqlAsync(
                         $"""DELETE FROM settings_mail_accounts WHERE "Id" = {accountId}""",
                         token);
@@ -321,7 +321,7 @@ internal sealed class PersistedMailAccountRecordStore(
                 }
 
                 await StepAssignedUsersAsync(context, accountId, now, token);
-                await UserAccountErasure.EraseMailOfAccountAsync(session, accountId.ToString("D"), userId: null, token);
+                await UserAccountErasure.EraseMailOfAccountAsync(session, accountId.ToString("D"), token);
 
                 await context.Database.ExecuteSqlAsync(
                     $"""DELETE FROM settings_mail_accounts WHERE "Id" = {accountId}""",

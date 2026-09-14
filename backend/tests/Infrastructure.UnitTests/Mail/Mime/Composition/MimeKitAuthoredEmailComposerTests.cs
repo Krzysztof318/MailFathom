@@ -29,8 +29,8 @@ public sealed class MimeKitAuthoredEmailComposerTests
     /// <summary>A value carrying a line break, which is what every injected header begins with.</summary>
     private const string Injection = "Quarterly report\r\nBcc: elsewhere@example.test";
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("primary");
 
     private static readonly DateTimeOffset ComposedAt = new(2026, 8, 17, 9, 30, 0, TimeSpan.Zero);
 
@@ -46,7 +46,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         var composer = CreateComposer();
 
         // Act
-        var composition = composer.Compose(Account, Requester(), Authored(), Capabilities());
+        var composition = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), Authored(), Capabilities());
 
         // Assert
         var sender = Assert.IsType<MailboxAddress>(Assert.Single(Parse(composition).From));
@@ -60,11 +60,11 @@ public sealed class MimeKitAuthoredEmailComposerTests
     {
         // Arrange
         var senderIdentities = Substitute.For<IOutgoingSenderIdentityReader>();
-        senderIdentities.FindSenderIdentity(Account.Id).Returns((OutgoingSenderIdentity?)null);
+        senderIdentities.FindSenderIdentity(Account).Returns((OutgoingSenderIdentity?)null);
         var composer = new MimeKitAuthoredEmailComposer(senderIdentities, Bounds(), new FakeTimeProvider(ComposedAt));
 
         // Act
-        var composition = composer.Compose(Account, Requester(), Authored(), Capabilities());
+        var composition = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), Authored(), Capabilities());
 
         // Assert
         AssertRefused(
@@ -82,7 +82,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         var composer = CreateComposer();
 
         // Act
-        var composition = composer.Compose(Account, Requester(), Authored(), Capabilities());
+        var composition = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), Authored(), Capabilities());
 
         // Assert
         var messageId = composition.Email!.MessageId;
@@ -101,8 +101,8 @@ public sealed class MimeKitAuthoredEmailComposerTests
         var composer = CreateComposer();
 
         // Act
-        var first = composer.Compose(Account, Requester(), Authored(), Capabilities());
-        var second = composer.Compose(Account, Requester(), Authored(), Capabilities());
+        var first = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), Authored(), Capabilities());
+        var second = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), Authored(), Capabilities());
 
         // Assert
         Assert.NotEqual(first.Email!.MessageId, second.Email!.MessageId);
@@ -116,7 +116,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         var composer = CreateComposer();
 
         // Act
-        var composition = composer.Compose(Account, Requester(), Authored(), Capabilities());
+        var composition = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), Authored(), Capabilities());
 
         // Assert
         Assert.Equal(ComposedAt, Parse(composition).Date);
@@ -141,7 +141,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+        var composition = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         var recipient = Assert.Single(composition.Email!.Request.Recipients);
@@ -169,7 +169,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+        var composition = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         var recipient = Assert.Single(composition.Email!.Request.Recipients);
@@ -197,6 +197,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         // Act
         var composition = composer.Compose(
             Account,
+            SyntheticMailUser.Deployment,
             Requester(),
             authored,
             Capabilities(acceptsInternationalizedAddresses: false));
@@ -228,7 +229,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+        var composition = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         var recipient = Assert.Single(composition.Email!.Request.Recipients);
@@ -253,7 +254,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+        var composition = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         Assert.Equal(2, composition.Email!.Request.Recipients.Count);
@@ -287,7 +288,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+        var composition = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         AssertRefused(
@@ -305,7 +306,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         var composer = CreateComposer();
 
         // Act
-        var composition = composer.Compose(Account, Requester(), Authored() with { Recipients = [] }, Capabilities());
+        var composition = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), Authored() with { Recipients = [] }, Capabilities());
 
         // Assert
         AssertRefused(
@@ -509,6 +510,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         // Act
         var composition = composer.Compose(
             Account,
+            SyntheticMailUser.Deployment,
             Requester(),
             Authored() with { Subject = Injection },
             Capabilities());
@@ -533,7 +535,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+        var composition = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         AssertRefused(
@@ -555,7 +557,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+        var composition = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         AssertRefused(
@@ -577,7 +579,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+        var composition = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         AssertRefused(
@@ -601,6 +603,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         // Act
         var composition = composer.Compose(
             Account,
+            SyntheticMailUser.Deployment,
             Requester(),
             authored,
             Capabilities(acceptsInternationalizedAddresses: false));
@@ -627,6 +630,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         // Act
         var composition = composer.Compose(
             Account,
+            SyntheticMailUser.Deployment,
             Requester(),
             authored,
             Capabilities(acceptsInternationalizedAddresses: true));
@@ -655,6 +659,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         // Act
         var composition = composer.Compose(
             Account,
+            SyntheticMailUser.Deployment,
             Requester(),
             authored,
             Capabilities(acceptsEightBitContent: false, acceptsInternationalizedAddresses: true));
@@ -681,6 +686,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         // Act
         var composition = composer.Compose(
             Account,
+            SyntheticMailUser.Deployment,
             Requester(),
             Authored(),
             Capabilities(acceptsInternationalizedAddresses: false));
@@ -703,6 +709,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         // Act
         var composition = composer.Compose(
             Account,
+            SyntheticMailUser.Deployment,
             Requester(),
             Authored() with { Subject = "Zażółć gęślą" },
             Capabilities(acceptsInternationalizedAddresses: false));
@@ -717,7 +724,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
     public void Compose_PlainTextOnly_ProducesAPlainTextMessage()
     {
         // Act
-        var composition = CreateComposer().Compose(Account, Requester(), Authored(), Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, Requester(), Authored(), Capabilities());
 
         // Assert
         var message = Parse(composition);
@@ -733,7 +740,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         var authored = Authored() with { HtmlBody = "<p>The <b>report</b> is attached.</p>" };
 
         // Act
-        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         var message = Parse(composition);
@@ -753,7 +760,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         var attachment = Assert.IsAssignableFrom<MimePart>(Assert.Single(Parse(composition).Attachments));
@@ -772,7 +779,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         AssertRefused(
@@ -798,7 +805,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         AssertBoundExceeded(composition, AuthoredEmailField.Recipients, Bounds().MaxRecipientCount);
@@ -824,7 +831,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         AssertBoundExceeded(composition, AuthoredEmailField.Recipients, Bounds().MaxRecipientCount);
@@ -847,7 +854,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         AssertRefused(
@@ -865,7 +872,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         var authored = Authored() with { HtmlBody = "   " };
 
         // Act
-        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         AssertRefused(
@@ -883,7 +890,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         var authored = Authored() with { PlainTextBody = new string('a', Bounds().MaxBodyCharacters + 1) };
 
         // Act
-        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         AssertBoundExceeded(composition, AuthoredEmailField.PlainTextBody, Bounds().MaxBodyCharacters);
@@ -897,7 +904,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         var authored = Authored() with { HtmlBody = new string('a', Bounds().MaxBodyCharacters + 1) };
 
         // Act
-        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         AssertBoundExceeded(composition, AuthoredEmailField.HtmlBody, Bounds().MaxBodyCharacters);
@@ -920,7 +927,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         AssertBoundExceeded(composition, AuthoredEmailField.Attachment, Bounds().MaxAttachmentCount);
@@ -943,7 +950,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         AssertBoundExceeded(composition, AuthoredEmailField.Attachment, Bounds().MaxAttachmentBytes);
@@ -970,7 +977,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         };
 
         // Act
-        var composition = CreateComposer(bounds).Compose(Account, Requester(), authored, Capabilities());
+        var composition = CreateComposer(bounds).Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         AssertBoundExceeded(composition, AuthoredEmailField.Message, bounds.MaxMessageBytes);
@@ -988,7 +995,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         var composer = CreateComposer(bounds);
 
         // Act
-        var composition = composer.Compose(Account, Requester(), Authored(), Capabilities());
+        var composition = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), Authored(), Capabilities());
 
         // Assert
         AssertBoundExceeded(composition, AuthoredEmailField.Message, 64);
@@ -1002,7 +1009,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         var composer = CreateComposer();
 
         // Act
-        var composition = composer.Compose(Account, Requester(), Authored(), Capabilities(maxMessageBytes: 64));
+        var composition = composer.Compose(Account, SyntheticMailUser.Deployment, Requester(), Authored(), Capabilities(maxMessageBytes: 64));
 
         // Assert
         AssertBoundExceeded(composition, AuthoredEmailField.Message, 64);
@@ -1019,6 +1026,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         // Act
         var composition = composer.Compose(
             Account,
+            SyntheticMailUser.Deployment,
             Requester(),
             authored,
             Capabilities(acceptsEightBitContent: false));
@@ -1034,7 +1042,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
     public void Compose_ComposedMessage_IsWrittenWithNetworkLineEndings()
     {
         // Act
-        var composition = CreateComposer().Compose(Account, Requester(), Authored(), Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, Requester(), Authored(), Capabilities());
 
         // Assert
         var text = Encoding.UTF8.GetString(composition.Email!.RawMime.Span);
@@ -1050,7 +1058,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         var requester = Requester();
 
         // Act
-        var composition = CreateComposer().Compose(Account, requester, Authored(), Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, requester, Authored(), Capabilities());
 
         // Assert
         Assert.Equal(Account, composition.Email!.Request.Account);
@@ -1072,7 +1080,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         var authored = Authored() with { Threading = OutgoingThreadPlacement.Answering(answered) };
 
         // Act
-        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, Requester(), authored, Capabilities());
 
         // Assert
         var message = Parse(composition);
@@ -1085,7 +1093,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
     public void Compose_MessageAnsweringNothing_WritesNeitherThreadingHeader()
     {
         // Act
-        var composition = CreateComposer().Compose(Account, Requester(), Authored(), Capabilities());
+        var composition = CreateComposer().Compose(Account, SyntheticMailUser.Deployment, Requester(), Authored(), Capabilities());
 
         // Assert
         var message = Parse(composition);
@@ -1145,7 +1153,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
     {
         var senderIdentities = Substitute.For<IOutgoingSenderIdentityReader>();
         Assert.True(EmailAddress.TryCreate("MailFathom", sendingAddress, out var address));
-        senderIdentities.FindSenderIdentity(Account.Id).Returns(OutgoingSenderIdentity.Create(Account.Id, address));
+        senderIdentities.FindSenderIdentity(Account).Returns(OutgoingSenderIdentity.Create(Account, address));
 
         return new MimeKitAuthoredEmailComposer(senderIdentities, bounds, new FakeTimeProvider(ComposedAt));
     }

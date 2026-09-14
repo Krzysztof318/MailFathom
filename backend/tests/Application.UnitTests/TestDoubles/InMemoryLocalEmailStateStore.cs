@@ -10,7 +10,7 @@ using MailFathom.Domain.Emails;
 namespace MailFathom.Application.UnitTests.TestDoubles;
 
 /// <summary>Keeps one account's stored message state in memory, answering for no other account as the real store answers.</summary>
-internal sealed class InMemoryLocalEmailStateStore(MailAccountIdentity account) : ILocalEmailStateStore
+internal sealed class InMemoryLocalEmailStateStore(MailAccountId account) : ILocalEmailStateStore
 {
     private readonly Dictionary<StoredEmailId, LocalEmailState> states = [];
 
@@ -22,14 +22,14 @@ internal sealed class InMemoryLocalEmailStateStore(MailAccountIdentity account) 
 
     public Task<LocalEmailState?> ReadAsync(
         IPersistenceSession session,
-        MailAccountIdentity account1,
+        MailAccountId account1,
         StoredEmailId email,
         CancellationToken cancellationToken) =>
         Task.FromResult(account1 == account ? this.states.GetValueOrDefault(email) : null);
 
     public Task WriteAsync(
         IPersistenceSession session,
-        MailAccountIdentity account1,
+        MailAccountId account1,
         StoredEmailId email,
         LocalEmailState state,
         CancellationToken cancellationToken)
@@ -46,7 +46,7 @@ internal sealed class InMemoryLocalEmailStateStore(MailAccountIdentity account) 
 
     public Task EraseAsync(
         IPersistenceSession session,
-        MailAccountIdentity account1,
+        MailAccountId account1,
         StoredEmailId email,
         CancellationToken cancellationToken)
     {

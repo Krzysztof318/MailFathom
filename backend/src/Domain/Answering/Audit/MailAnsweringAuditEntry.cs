@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Domain.Answering.Audit;
@@ -43,19 +42,13 @@ public sealed record MailAnsweringAuditEntry
     /// <summary>Gets the run this entry records, which the entries of the run's other accounts share.</summary>
     public required MailAnsweringRunId RunId { get; init; }
 
-    /// <summary>Gets the account whose mailbox the run was allowed to read, named by its user and its identifier.</summary>
+    /// <summary>Gets the account whose mailbox the run was allowed to read, named by its generated identifier.</summary>
     /// <remarks>
-    /// The user comes from the scope the run resolved, which settled whose accounts were reachable before anything was
-    /// read, so the entry records whose mailbox was queried without asking the account table again. It travels as one
-    /// value with the identifier because an identifier names an account within its user and nowhere else.
+    /// The trail records what happened to the mailbox rather than what one reader did, so the account is the whole of
+    /// what addresses an entry and no user travels beside it: every user assigned the account reads the whole trail
+    /// rather than the part they caused.
     /// </remarks>
-    public required MailAccountIdentity Account { get; init; }
-
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is the name an operator wrote.</summary>
-    public MailAccountId AccountId => this.Account.Id;
-
-    /// <summary>Gets the user whose account the question was asked of.</summary>
-    public MailUserId User => this.Account.User;
+    public required MailAccountId AccountId { get; init; }
 
     /// <summary>Gets the emails of this account the run retrieved, in the order it first reached each, and which of them the answer named.</summary>
     /// <remarks>

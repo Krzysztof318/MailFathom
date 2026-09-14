@@ -425,7 +425,7 @@ public sealed class MailContactCollectorTests
     }
 
     private static ContactCollectionRun RunOver(MailContactCollector collector, MailFolderSpecialUse? folderRole) =>
-        collector.OpenRun(MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary")), folderRole);
+        collector.OpenRun(MailAccountId.Create("primary"), folderRole);
 
     private static ContactCollectionSettings SettingsCollecting(
         int minimumMessages,

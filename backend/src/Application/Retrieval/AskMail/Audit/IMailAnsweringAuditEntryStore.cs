@@ -58,7 +58,7 @@ public interface IMailAnsweringAuditEntryStore
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is not positive.</exception>
     Task<int> EraseCompletedBeforeAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         DateTimeOffset completedBefore,
         int limit,
         CancellationToken cancellationToken);

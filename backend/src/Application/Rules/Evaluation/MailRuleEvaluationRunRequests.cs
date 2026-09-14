@@ -84,7 +84,7 @@ public sealed class MailRuleEvaluationRunRequests
     /// </para>
     /// </remarks>
     public Task<MailRuleEvaluationRunRequest> SubmitAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
@@ -125,7 +125,7 @@ public sealed class MailRuleEvaluationRunRequests
     /// </remarks>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when anything but this deployment's own process reached the use case.</exception>
     public Task<MailRuleEvaluationRunRequest> SubmitScheduledAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         this.authorization.RequireProcessIdentity();

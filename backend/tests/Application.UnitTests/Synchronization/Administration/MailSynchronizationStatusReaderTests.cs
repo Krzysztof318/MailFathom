@@ -333,7 +333,7 @@ public sealed class MailSynchronizationStatusReaderTests
                 Assert.Equal(25, account.AttachmentText.ReadEmailCount);
                 Assert.Equal(7, account.AttachmentText.DescribedImageCount);
             });
-        MailAccountId[] scopedTo = [.. coverage.Reads.Select(read => read!.Value.Id)];
+        MailAccountId[] scopedTo = [.. coverage.Reads.Select(read => read!.Value)];
         Assert.Equal([Work, personal], scopedTo);
     }
 
@@ -380,7 +380,7 @@ public sealed class MailSynchronizationStatusReaderTests
             :
             [
                 .. servedAccounts.Select(account => new WorkLease(
-                    MailAccountSupervisionScope.For(account.Identity),
+                    MailAccountSupervisionScope.For(account.Id),
                     WorkLeaseHolder.Create("a-hold"),
                     supervisedBy,
                     HoldExpiresAt)),

@@ -70,7 +70,7 @@ public sealed class MailDraftDirectory(
         authorization.RequirePermission(MailFathomPermission.MailDraftsWrite);
 
         var narrowed = account is { } named
-            ? (accountCatalog.OwnedAccounts.FirstOrDefault(owned => owned.IsNamedBy(named))
+            ? (accountCatalog.AssignedAccounts.FirstOrDefault(owned => owned.IsNamedBy(named))
                 ?? throw new MailAccountNotAccessibleException(named)).Id
             : (MailAccountId?)null;
 
@@ -98,7 +98,7 @@ public sealed class MailDraftDirectory(
 
         var draft = await drafts.FindAsync(draftId, cancellationToken);
 
-        return draft is not null && draft.Account.User == accountCatalog.User ? draft : null;
+        return draft is not null && draft.User == accountCatalog.User ? draft : null;
     }
 
     /// <summary>Reads one of the caller's own drafts back as the words its author wrote, so editing can go on.</summary>

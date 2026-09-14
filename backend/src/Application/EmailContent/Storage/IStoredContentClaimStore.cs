@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.EmailContent.Storage;
 
@@ -30,13 +30,20 @@ namespace MailFathom.Application.EmailContent.Storage;
 public interface IStoredContentClaimStore
 {
     /// <summary>Claims room for one payload against both ceilings, or reports which of them had none.</summary>
-    /// <param name="user">The user whose mail the payload is.</param>
+    /// <remarks>
+    /// The per-user ceiling is answered from the accounts assigned to the users the claiming account is assigned to,
+    /// which is what
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+    /// means by counting a shared mailbox in full against each of them: the payload is admitted only while every one
+    /// of those users is under the ceiling.
+    /// </remarks>
+    /// <param name="account">The account whose mail the payload is.</param>
     /// <param name="bytes">What the payload is expected to occupy.</param>
     /// <param name="ceilings">What the deployment and any one user may occupy, where either is bounded at all.</param>
     /// <param name="claimLifetime">How long the claim binds before it expires unreleased.</param>
     /// <param name="cancellationToken">Cancels the claim.</param>
     /// <returns>The claim that was taken, or the bound that refused it.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="account" /> names nothing.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="bytes" /> is not positive, or the lifetime is not.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the caller already holds a transaction the claim would join.</exception>
     /// <remarks>
@@ -45,7 +52,7 @@ public interface IStoredContentClaimStore
     /// Claim before opening a session, as synchronization does.
     /// </remarks>
     Task<StoredContentClaimRecord> ClaimAsync(
-        MailUserId user,
+        MailAccountId account,
         long bytes,
         StoredContentCeilings ceilings,
         TimeSpan claimLifetime,

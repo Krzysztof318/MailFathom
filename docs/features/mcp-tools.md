@@ -440,7 +440,7 @@ outcome they distinguish.
 
 ## `list_accounts`
 
-Returns the mail accounts the caller's user owns, with the names a request may use for each and how current the local
+Returns the mail accounts the caller is assigned, with the names a request may use for each and how current the local
 copy of each of their folders is.
 
 It is the tool a client calls first. Every other tool takes an account filter, and a caller that cannot see the accounts
@@ -455,26 +455,26 @@ get wrong and nothing to bound.
 
 ### Result
 
-`accounts` carries one entry per account the caller's user owns, ordered by account identifier, and
+`accounts` carries one entry per account the caller is assigned, ordered by account identifier, and
 `synchronizationEnabled` says whether the deployment is refreshing its local copy at all.
 
 | Field | Meaning |
 |---|---|
 | `accountId` | The identifier the deployment generated for the account, unique across the whole deployment. It is what every other result reports as `accountId`, and it is stable across a change of the display name |
-| `displayName` | The readable name given to the account, unique within that user |
+| `displayName` | The readable name given to the account, unique within the set the reading user is assigned |
 | `synchronizationMode` | `polling` or `push`, stating what the operator asked to start the account's next pass |
 | `folders` | One entry per folder this deployment maps and lets tools read, in the same shape `folderFreshness` takes elsewhere: the alias, when synchronization last committed progress for it, and whether it ever has |
 
 **Either name may be used to select the account.** The identifier is matched exactly and the display name without regard
-to case, and configuration refuses a display name that another of the same user's accounts already carries as an
+to case, and configuration refuses a display name that another account the same user is assigned already carries as an
 identifier or as a display name, so a name always names one mailbox for the caller who reads it here. Both spellings
 resolve to one identity before a query runs, which is why a continuation cursor issued for one stays valid for the
 other.
 
-**The identifier is unique across the deployment, and the display name only within the account's user.** That is what
-a client storing one may assume and no more: two users may each call an account `Work mail`, so a display name read here
-is this user's name for the mailbox, while the identifier is the deployment's key for it — though it names nothing a
-caller may use unless `list_accounts` returned it to that caller. Nothing about another user is published — not the
+**The identifier is unique across the deployment, and the display name only within one user's assigned set.** That is
+what a client storing one may assume and no more: two people's accounts may each be called `Work mail`, so a display
+name read here names one mailbox within this caller's set, while the identifier is the deployment's key for it — though
+it names nothing a caller may use unless `list_accounts` returned it to that caller. Nothing about another user is published — not the
 account, not its names, and not that it exists — which is why naming one is refused rather than answered. Keep the
 identifier if a client needs to remember which mailbox a person meant, and keep a display name against the user it was
 read for.
@@ -515,7 +515,7 @@ Every argument is optional.
 
 | Argument | Type | Meaning |
 |---|---|---|
-| `accounts` | `string[]` | Accounts to read, each named by the identifier the deployment generated for it or by the display name it is published under; the identifier is unique across the deployment and the display name within the account's user. Omitted reads every account the caller's user owns; a name reaching none of them is refused with `53001` |
+| `accounts` | `string[]` | Accounts to read, each named by the identifier the deployment generated for it or by the display name it is published under; the identifier is unique across the deployment and the display name within the caller's assigned set. Omitted reads every account the caller is assigned; a name reaching none of them is refused with `53001` |
 | `folders` | `string[]` | Folders to read, each named by its MailFathom alias such as `INBOX` or by the role it plays, written `role:Junk`. Omitted reads every folder of the accounts in scope. Case is normalized, so a repeated spelling names one folder; a role no folder of an account in scope carries is refused with `53003` |
 | `senderAddress` | `string` | The whole address the sender must carry, in any case — not a fragment |
 | `recipientAddress` | `string` | The whole address a `To` or `Cc` recipient must carry. `Reply-To` is stored and filterable through the use case but not searched here |
@@ -886,7 +886,7 @@ how the extracts are cut, and why there is no cursor — where those are enforce
 | Argument | Type | Meaning |
 |---|---|---|
 | `queryText` | `string` | **Required.** The text to search for, up to 512 characters, worded in the language the mail was written in. Blank is refused with `51002`, because a search with no text is a listing |
-| `accounts` | `string[]` | Accounts to search, each named by the identifier the deployment generated for it or by the display name it is published under; the identifier is unique across the deployment and the display name within the account's user. Omitted searches every account the caller's user owns; a name reaching none of them is refused with `53001` |
+| `accounts` | `string[]` | Accounts to search, each named by the identifier the deployment generated for it or by the display name it is published under; the identifier is unique across the deployment and the display name within the caller's assigned set. Omitted searches every account the caller is assigned; a name reaching none of them is refused with `53001` |
 | `folders` | `string[]` | Folders to search, each named by its MailFathom alias such as `INBOX` or by the role it plays, written `role:Junk`. Omitted searches every folder of the accounts in scope; a role no folder of an account in scope carries is refused with `53003` |
 | `senderAddress` | `string` | The whole address the sender must carry, in any case — not a fragment |
 | `recipientAddress` | `string` | The whole address a `To` or `Cc` recipient must carry |
@@ -1183,7 +1183,7 @@ bound is checked against the stored length by the delivery pass, so nothing is l
 
 | Argument | Type | Meaning |
 |---|---|---|
-| `account` | `string` | **Required.** The account to send as, named by the `accountId` or the display name `list_accounts` returned; the `accountId` is unique across the deployment and the display name within the account's user. Blank, over 256 characters, or carrying a control character is refused with `51013`; a name reaching none of the caller's own accounts is `53001`; one of theirs carrying no `Delivery` block is `56002` |
+| `account` | `string` | **Required.** The account to send as, named by the `accountId` or the display name `list_accounts` returned; the `accountId` is unique across the deployment and the display name within the caller's assigned set. Blank, over 256 characters, or carrying a control character is refused with `51013`; a name reaching none of the caller's own accounts is `53001`; one of theirs carrying no `Delivery` block is `56002` |
 | `to` | `string[]` | **Required.** The addresses the message is addressed to, one entry per person, each a plain address without a display name |
 | `cc` | `string[]` | The addresses to copy. Everybody the message reaches can see them. Omitted copies nobody |
 | `bcc` | `string[]` | The addresses to copy without naming them to anybody else. They receive the message and no other recipient sees that they did. Omitted blind-copies nobody |
@@ -1793,7 +1793,7 @@ messages, search when the messages themselves are what is wanted.
 | Argument | Type | Meaning |
 |---|---|---|
 | `question` | `string` | **Required.** The question to answer, up to 1000 characters. It is not a search query: its words are not matched against the mail, and the lookups are written by the model |
-| `accounts` | `string[]` | Accounts the answer may be drawn from, each named by the identifier the deployment generated for it or by the display name it is published under; the identifier is unique across the deployment and the display name within the account's user. Omitted draws on every account the caller's user owns; a name reaching none of them is refused with `53001` |
+| `accounts` | `string[]` | Accounts the answer may be drawn from, each named by the identifier the deployment generated for it or by the display name it is published under; the identifier is unique across the deployment and the display name within the caller's assigned set. Omitted draws on every account the caller is assigned; a name reaching none of them is refused with `53001` |
 | `folders` | `string[]` | Folders the answer may be drawn from, each named by its MailFathom alias such as `INBOX` or by the role it plays, written `role:Junk`. Omitted draws on every folder of the accounts in scope. Case is normalized, so a repeated spelling names one folder; a role no folder of an account in scope carries is refused with `53003` |
 
 There is no structured filter beside the scope, and that is a decision rather than an omission. A sender or a date range

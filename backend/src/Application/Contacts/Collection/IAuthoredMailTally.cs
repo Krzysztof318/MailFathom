@@ -35,7 +35,7 @@ public interface IAuthoredMailTally
     /// it is counted per stored copy, since nothing else distinguishes two of them.
     /// </remarks>
     Task<int> CountMessagesAuthoredByAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         EmailAddress author,
         int ceiling,
         CancellationToken cancellationToken);

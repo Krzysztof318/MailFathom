@@ -31,7 +31,6 @@ namespace MailFathom.AI.UnitTests.Orchestration;
 public sealed class MailAnsweringAgentCompositionTests
 {
     private static readonly MailboxScope OnePrimaryAccount = MailboxScope.Create(
-        SyntheticMailUser.Deployment,
         [MailAccountId.Create("primary")],
         [new MailFolderIdentity(MailAccountId.Create("primary"), MailFolderAlias.Create("INBOX"))]);
 

@@ -51,7 +51,7 @@ internal static class OutgoingMailGovernors
     private sealed class StatedUsage(OutgoingMailUsage usage) : IOutgoingMailUsageReader
     {
         public Task<OutgoingMailUsage> ReadUsageSinceAsync(
-            MailAccountIdentity account,
+            MailAccountId account,
             DateTimeOffset periodStart,
             CancellationToken cancellationToken) => Task.FromResult(usage);
     }

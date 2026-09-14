@@ -200,7 +200,6 @@ public sealed class OrchestratedEmbeddingSweepHoldTests(MailFathomOrchestrationF
                 .GetRequiredService<IEmailMetadataRepository>()
                 .UpsertMetadataAsync(
                     session,
-                    SyntheticMailAccount.User,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                     SyntheticEmail.ExtractionOf(
                         occurrenceId,

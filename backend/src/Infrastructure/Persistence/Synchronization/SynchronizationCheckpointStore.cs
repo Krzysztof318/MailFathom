@@ -25,20 +25,18 @@ internal sealed class SynchronizationCheckpointStore(MailFathomDbContext readCon
 {
     /// <inheritdoc />
     public async Task<SynchronizationCheckpoint?> GetCheckpointAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         CancellationToken cancellationToken)
     {
-        var user = account.User.Value;
-        var accountId = account.Id.Value;
+        var accountId = account.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
 
         var entity = await readContext.SynchronizationCheckpoints
             .AsNoTracking()
             .SingleOrDefaultAsync(
-                checkpoint => checkpoint.MailFolder.UserId == user
-                    && checkpoint.MailFolder.MailboxAccountId == accountId
+                checkpoint => checkpoint.MailFolder.MailboxAccountId == accountId
                     && checkpoint.MailFolder.Alias == alias
                     && checkpoint.MailFolder.ResolutionGeneration == generation,
                 cancellationToken);
@@ -49,7 +47,7 @@ internal sealed class SynchronizationCheckpointStore(MailFathomDbContext readCon
     /// <inheritdoc />
     public async Task SaveCheckpointAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         SynchronizationCheckpoint? expectedCheckpoint,
         SynchronizationCheckpoint checkpoint,
@@ -101,21 +99,19 @@ internal sealed class SynchronizationCheckpointStore(MailFathomDbContext readCon
     /// <inheritdoc />
     public async Task<IReadOnlyList<MailFolderAlias>> DiscardCheckpointsAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias? folderAlias,
         CancellationToken cancellationToken)
     {
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var user = account.User.Value;
-        var accountId = account.Id.Value;
+        var accountId = account.Value;
         var alias = folderAlias?.Value;
 
         // Tracked rather than deleted in one statement, because the removal joins the caller's transaction and an
         // ExecuteDelete would run outside the change tracker and commit on its own.
         var checkpoints = await writeContext.SynchronizationCheckpoints
             .Include(checkpoint => checkpoint.MailFolder)
-            .Where(checkpoint => checkpoint.MailFolder.UserId == user
-                && checkpoint.MailFolder.MailboxAccountId == accountId
+            .Where(checkpoint => checkpoint.MailFolder.MailboxAccountId == accountId
                 && (alias == null || checkpoint.MailFolder.Alias == alias))
             .ToArrayAsync(cancellationToken);
 

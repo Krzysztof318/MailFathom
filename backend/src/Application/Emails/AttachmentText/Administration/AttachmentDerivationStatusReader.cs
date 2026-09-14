@@ -45,7 +45,7 @@ public sealed class AttachmentDerivationStatusReader
     /// figure nothing enforces.
     /// </remarks>
     public async Task<AttachmentDerivationStatus> ReadAsync(
-        MailAccountIdentity? account,
+        MailAccountId? account,
         CancellationToken cancellationToken) =>
         new(
             await this.coverageReader.ReadCoverageAsync(account, cancellationToken),

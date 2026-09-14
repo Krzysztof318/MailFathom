@@ -34,8 +34,8 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Authoring;
 /// </remarks>
 public sealed class MailRelocationRecorderTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("personal");
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -128,7 +128,7 @@ public sealed class MailRelocationRecorderTests
         // Arrange
         this.MapUnmirrored(Archive, "Archive");
         this.dispositions
-            .GetAuthoredDeleteDisposition(Account.Id)
+            .GetAuthoredDeleteDisposition(Account)
             .Returns(AuthoredDeleteEmailDisposition.EraseLocalCopy);
         var recorder = this.Recorder(TargetIn(Inbox));
 
@@ -281,7 +281,7 @@ public sealed class MailRelocationRecorderTests
         // Arrange
         this.MapUnmirrored(Archive, "Archive");
         this.dispositions
-            .GetAuthoredDeleteDisposition(Account.Id)
+            .GetAuthoredDeleteDisposition(Account)
             .Throws(new InvalidOperationException("No account carries the identifier personal."));
         var recorder = this.Recorder(TargetIn(Inbox));
 
@@ -333,8 +333,8 @@ public sealed class MailRelocationRecorderTests
     /// <summary>Maps a folder the account mirrors, and records the binding its own synchronization run would have.</summary>
     private void MapMirrored(MailFolderAlias alias, string remotePath)
     {
-        this.mappings.With(Account.Id, MailFolderMapping.ToRemotePath(alias, RemoteFolderPath.Create(remotePath)));
-        this.bindings.Bind(Account.Id, alias, remotePath);
+        this.mappings.With(Account, MailFolderMapping.ToRemotePath(alias, RemoteFolderPath.Create(remotePath)));
+        this.bindings.Bind(Account, alias, remotePath);
     }
 
     /// <summary>A move a person watched themselves ask for must not sit under <i>moving to trash</i> until the interval is out.</summary>
@@ -350,7 +350,7 @@ public sealed class MailRelocationRecorderTests
         await recorder.RecordAsync(LocalEmail, Archive, Requester, TestContext.Current.CancellationToken);
 
         // Assert
-        using var waiting = runSignal.Register(Account.Id, TestContext.Current.CancellationToken);
+        using var waiting = runSignal.Register(Account, TestContext.Current.CancellationToken);
 
         Assert.True(waiting.Token.IsCancellationRequested);
     }
@@ -359,7 +359,7 @@ public sealed class MailRelocationRecorderTests
     private void MapUnmirrored(MailFolderAlias alias, string remotePath)
     {
         this.mappings.With(
-            Account.Id,
+            Account,
             MailFolderMapping.ToRemotePath(
                 alias,
                 RemoteFolderPath.Create(remotePath),
@@ -374,7 +374,7 @@ public sealed class MailRelocationRecorderTests
     {
         var callerAuthorization =
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailMove);
-        var accountCatalog = OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account.Id));
+        var accountCatalog = AssignedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account));
 
         var targets = Substitute.For<IAuthoredMailboxTargetReader>();
         targets.FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(target));
@@ -388,9 +388,9 @@ public sealed class MailRelocationRecorderTests
                 accountCatalog,
                 StubMailFolderParticipation
                     .Mapping(
-                        new MailFolderIdentity(Account.Id, Inbox),
-                        new MailFolderIdentity(Account.Id, Archive))
-                    .Hiding(new MailFolderIdentity(Account.Id, Withheld)),
+                        new MailFolderIdentity(Account, Inbox),
+                        new MailFolderIdentity(Account, Archive))
+                    .Hiding(new MailFolderIdentity(Account, Withheld)),
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             targets,
@@ -437,8 +437,7 @@ public sealed class MailRelocationRecorderTests
         var folder = MailFolderResolution.FirstBindingOf(folderAlias, RemoteFolderPath.Create(folderAlias.Value));
 
         return new AuthoredMailboxTarget(
-            Account.User,
-            EmailOccurrenceId.Create(Account.Id, folder.Id, ImapUidValidity.Create(42), ImapUid.Create(7)),
+            EmailOccurrenceId.Create(Account, folder.Id, ImapUidValidity.Create(42), ImapUid.Create(7)),
             folder);
     }
 

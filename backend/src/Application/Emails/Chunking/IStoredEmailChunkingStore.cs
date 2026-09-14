@@ -30,7 +30,7 @@ public interface IStoredEmailChunkingStore
     /// ones.
     /// </remarks>
     Task<IReadOnlyList<StoredEmailAwaitingChunking>> GetEmailsAwaitingChunkingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         int batchSize,
         CancellationToken cancellationToken);
 

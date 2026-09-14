@@ -45,8 +45,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Submission;
 /// </remarks>
 public sealed class AuthoredMailSubmissionTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     private static readonly DateTimeOffset Recorded = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -66,7 +66,7 @@ public sealed class AuthoredMailSubmissionTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(Account.Id, record.AccountId);
+        Assert.Equal(Account, record.AccountId);
         Assert.Equal(OutgoingEmailStage.Recorded, record.Stage);
         Assert.Equal(ComposedMime.Length, record.MimeByteLength);
         Assert.Equal(1, signal.Depth);
@@ -80,7 +80,7 @@ public sealed class AuthoredMailSubmissionTests
         var submission = SubmissionOver(new InMemoryOutgoingEmailStore(), out var composer, out _);
         var request = RequestTo("anna@example.test") with
         {
-            Account = MailAccountSelector.Create(SyntheticServedAccount.Of(Account.Id).DisplayName.Value),
+            Account = MailAccountSelector.Create(SyntheticServedAccount.Of(Account).DisplayName.Value),
         };
 
         // Act
@@ -89,6 +89,7 @@ public sealed class AuthoredMailSubmissionTests
         // Assert
         composer.Received(1).Compose(
             Account,
+            SyntheticMailUser.Deployment,
             request.Requester,
             Arg.Any<AuthoredEmail>(),
             Arg.Any<MailDeliveryCapabilities>());
@@ -135,7 +136,8 @@ public sealed class AuthoredMailSubmissionTests
 
         // Assert
         composer.Received(1).Compose(
-            Arg.Any<MailAccountIdentity>(),
+            Arg.Any<MailAccountId>(),
+            SyntheticMailUser.Deployment,
             Arg.Any<OutgoingEmailRequester>(),
             Arg.Any<AuthoredEmail>(),
             MailDeliveryCapabilities.BeforeAnyServerHasSpoken);
@@ -187,7 +189,7 @@ public sealed class AuthoredMailSubmissionTests
         Assert.Equal(MailFathomPermission.MailSend, refusal.RequiredPermission);
         Assert.Empty(store.OpenRequests);
         Assert.Equal(0, signal.Depth);
-        composer.DidNotReceiveWithAnyArgs().Compose(default, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticMailUser.Deployment, default!, default!, default!);
     }
 
     /// <summary>An account nobody serves and text naming no account at all are one answer, and neither writes anything down.</summary>
@@ -206,7 +208,52 @@ public sealed class AuthoredMailSubmissionTests
         // Assert
         Assert.Equal(MailFathomErrorCode.MailAccountNotAccessible, refusal.ErrorCode);
         Assert.Empty(store.OpenRequests);
-        composer.DidNotReceiveWithAnyArgs().Compose(default, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticMailUser.Deployment, default!, default!, default!);
+    }
+
+    /// <summary>
+    /// A deployment serving two mailboxes assigns each of them separately, so an author assigned one of them is
+    /// refused a send from the other — which is the submission half of what keys the mail graph by the account alone.
+    /// </summary>
+    /// <remarks>
+    /// The two accounts are both served and both real, which is what makes this a claim about the assignment rather
+    /// than about an account nothing configured. The refusal is the same one an unserved account meets, so a caller
+    /// cannot learn from it that the mailbox exists.
+    /// </remarks>
+    [Fact]
+    public async Task SubmitAsync_AnAccountBesideTheOneTheAuthorIsAssigned_RefusesAndWritesNothing()
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+        var theOther = MailAccountId.Create("the-other-mailbox");
+        var submission = SubmissionOver(
+            store,
+            out var composer,
+            out var signal,
+            assignments: new StubMailAccountAssignments()
+                .Assigning(SyntheticMailUser.Deployment, Account)
+                .Assigning(SyntheticMailUser.Another, theOther),
+            servedAccounts: [SyntheticServedAccount.Of(Account), SyntheticServedAccount.Of(theOther)]);
+        var fromTheOther = RequestTo("anna@example.test") with { Account = MailAccountSelector.For(theOther) };
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(
+            () => submission.SubmitAsync(fromTheOther, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailAccountNotAccessible, refusal.ErrorCode);
+        Assert.Equal(MailAccountSelector.For(theOther), refusal.RequestedAccount);
+        Assert.Empty(store.OpenRequests);
+        Assert.Equal(0, signal.Depth);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticMailUser.Deployment, default!, default!, default!);
+
+        // The control: the mailbox this author is assigned still sends, so the refusal above is the assignment rather
+        // than an arrangement in which nothing could have been queued at all.
+        Assert.Equal(
+            Account,
+            (await submission.SubmitAsync(
+                RequestTo("anna@example.test"),
+                TestContext.Current.CancellationToken)).AccountId);
     }
 
     /// <summary>
@@ -214,7 +261,7 @@ public sealed class AuthoredMailSubmissionTests
     /// whose mailbox this caller may not even read.
     /// </summary>
     [Fact]
-    public async Task SubmitAsync_AnAccountTheCallersUserDoesNotOwn_RefusesAndWritesNothing()
+    public async Task SubmitAsync_AnAccountTheCallersUserIsNotAssigned_RefusesAndWritesNothing()
     {
         // Arrange
         var store = new InMemoryOutgoingEmailStore();
@@ -235,10 +282,10 @@ public sealed class AuthoredMailSubmissionTests
 
         // The refusal repeats what the caller named and says nothing else, which is what keeps an account another user
         // owns from being told apart from one this deployment never served.
-        Assert.Equal(MailAccountSelector.For(Account.Id), refusal.RequestedAccount);
+        Assert.Equal(MailAccountSelector.For(Account), refusal.RequestedAccount);
         Assert.Empty(store.OpenRequests);
         Assert.Equal(0, signal.Depth);
-        composer.DidNotReceiveWithAnyArgs().Compose(default, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticMailUser.Deployment, default!, default!, default!);
     }
 
     /// <summary>
@@ -272,7 +319,7 @@ public sealed class AuthoredMailSubmissionTests
             OutgoingEmailRequest.MaximumRecipientCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
             refusal.Message,
             StringComparison.Ordinal);
-        composer.DidNotReceiveWithAnyArgs().Compose(default, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticMailUser.Deployment, default!, default!, default!);
     }
 
     /// <summary>One recipient that resolves to nobody refuses the whole message, and the refusal names nobody it counted.</summary>
@@ -300,7 +347,7 @@ public sealed class AuthoredMailSubmissionTests
         Assert.DoesNotContain("anna@example.test", refusal.Message, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Nobody At All", refusal.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(store.OpenRequests);
-        composer.DidNotReceiveWithAnyArgs().Compose(default, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, SyntheticMailUser.Deployment, default!, default!, default!);
     }
 
     /// <summary>A name several people carry addresses nobody, and what the caller is told is how many rather than which.</summary>
@@ -344,7 +391,8 @@ public sealed class AuthoredMailSubmissionTests
         var submission = SubmissionOver(store, out var composer, out var signal);
         composer
             .Compose(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
+                SyntheticMailUser.Deployment,
                 Arg.Any<OutgoingEmailRequester>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())
@@ -368,7 +416,8 @@ public sealed class AuthoredMailSubmissionTests
         var submission = SubmissionOver(new InMemoryOutgoingEmailStore(), out var composer, out _);
         composer
             .Compose(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
+                SyntheticMailUser.Deployment,
                 Arg.Any<OutgoingEmailRequester>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())
@@ -536,7 +585,7 @@ public sealed class AuthoredMailSubmissionTests
     private static AuthoredEmail ComposedMessage(IAuthoredEmailComposer composer) => (AuthoredEmail)composer
         .ReceivedCalls()
         .Single(call => call.GetMethodInfo().Name == nameof(IAuthoredEmailComposer.Compose))
-        .GetArguments()[2]!;
+        .GetArguments()[3]!;
 
     /// <summary>
     /// A message written for a time that has already gone is refused where the author is still present to be told,
@@ -562,7 +611,7 @@ public sealed class AuthoredMailSubmissionTests
         Assert.Equal(MailFathomErrorCode.AuthoredMailScheduleRefused, refusal.ErrorCode);
         Assert.Empty(store.OpenRequests);
         Assert.Equal(0, signal.Depth);
-        composer.DidNotReceiveWithAnyArgs().Compose(default!, default!, default!, default!);
+        composer.DidNotReceiveWithAnyArgs().Compose(default!, SyntheticMailUser.Deployment, default!, default!, default!);
     }
 
     /// <summary>The refusal states the rule and never repeats the time, the address, or anything else the caller sent.</summary>
@@ -609,7 +658,7 @@ public sealed class AuthoredMailSubmissionTests
 
     private static MailSubmissionRequest RequestTo(string address) => new()
     {
-        Account = MailAccountSelector.For(Account.Id),
+        Account = MailAccountSelector.For(Account),
         Recipients = [NamedRecipient.AtAddress(OutgoingRecipientRole.To, address)],
         Subject = "Hello",
         PlainTextBody = "Hello.",
@@ -622,7 +671,9 @@ public sealed class AuthoredMailSubmissionTests
         out MailOutboxSignal signal,
         InMemoryContactBookStore? book = null,
         AccessAuthorization? authorization = null,
-        AuthoredSendGovernor? governor = null)
+        AuthoredSendGovernor? governor = null,
+        IMailAccountAssignments? assignments = null,
+        ServedMailAccount[]? servedAccounts = null)
     {
         composer = ComposingAuthoredEmails.ThatComposes(ComposedMime);
         signal = new MailOutboxSignal(capacity: 8);
@@ -631,7 +682,10 @@ public sealed class AuthoredMailSubmissionTests
         // the book the recipients are resolved out of, and the caller the send is judged for are one scoped instance in
         // production.
         var granted = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
-        var accountCatalog = OwnedMailAccountCatalogs.For(granted, SyntheticServedAccount.Of(Account.Id));
+        ServedMailAccount[] served = servedAccounts ?? [SyntheticServedAccount.Of(Account)];
+        var accountCatalog = assignments is null
+            ? AssignedMailAccountCatalogs.For(granted, served)
+            : AssignedMailAccountCatalogs.For(granted, assignments, served);
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>

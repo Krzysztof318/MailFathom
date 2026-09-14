@@ -31,7 +31,7 @@ public interface IStoredMailFolderMirrorStore
     /// </remarks>
     Task<MailFolderMirrorErasure> EraseFolderMirrorAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias folderAlias,
         int maxEmails,
         CancellationToken cancellationToken);

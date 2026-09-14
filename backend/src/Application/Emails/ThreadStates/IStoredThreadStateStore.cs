@@ -32,7 +32,7 @@ public interface IStoredThreadStateStore
     /// <returns>The conversations, each carrying the shape it was read at and the messages a derivation reads — or no messages at all where it is past the bound.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when any bound is below one.</exception>
     Task<IReadOnlyList<DerivableThread>> GetThreadsAwaitingStateAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         int batchSize,
         int maximumMessagesPerThread,
         int maximumCharactersPerMessage,

@@ -46,7 +46,6 @@ public sealed class ThreadAwaitingStateQueryTests
 
         var counted = StoredThreadStateStore.Selecting(
             context.StoredEmails.AsNoTracking(),
-            Guid.CreateVersion7(),
             "work",
             [new MailFolderIdentity(MailAccountId.Create("work"), MailFolderAlias.Create("INBOX"))],
             new DerivedWorkAdmissionTerms([], [], [], Now));
@@ -85,7 +84,6 @@ public sealed class ThreadAwaitingStateQueryTests
         var sql = StoredThreadStateReader.OwedADerivation(
                 context.StoredEmails.AsNoTracking(),
                 context.EmailThreadStates.AsNoTracking(),
-                Guid.CreateVersion7(),
                 Guid.CreateVersion7(),
                 "work",
                 [new MailFolderIdentity(MailAccountId.Create("work"), MailFolderAlias.Create("INBOX"))],

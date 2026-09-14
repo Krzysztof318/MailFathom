@@ -18,7 +18,7 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// A conversation is the one mail screen a folder cannot be the scope of: the question is in the inbox, the answer is
 /// in the sent folder, and a forwarded copy is somewhere else again. So the route names a conversation and nothing
-/// else — no account, no folder — and reads it across everything the signed-in user owns, junk included, because a
+/// else — no account, no folder — and reads it across every account the signed-in user is assigned, junk included, because a
 /// reply that landed in junk is still part of the exchange somebody is reading.
 /// </para>
 /// <para>

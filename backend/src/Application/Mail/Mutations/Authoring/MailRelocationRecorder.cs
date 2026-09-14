@@ -8,7 +8,6 @@ using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
@@ -139,7 +138,7 @@ public sealed class MailRelocationRecorder
             return AuthoredMailRelocationResult.NotRecorded(MailRelocationOutcome.DestinationNotFound);
         }
 
-        var account = MailAccountIdentity.Create(target.User, target.Occurrence.AccountId);
+        var account = target.Occurrence.AccountId;
         var reference = MailFolderReference.ToAlias(destination);
         var resolved = await this.destinations.ResolveAsync(account, [reference], cancellationToken);
 
@@ -163,7 +162,6 @@ public sealed class MailRelocationRecorder
 
         var request = MailboxMutationRequest.Relocate(
             storedEmailId,
-            target.User,
             target.Occurrence,
             requester,
             folder.Path,

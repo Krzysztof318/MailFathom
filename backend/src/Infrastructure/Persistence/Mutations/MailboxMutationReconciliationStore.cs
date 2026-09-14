@@ -44,7 +44,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<MailboxMutationRecord>> ReadPlacementsAtAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         RemoteFolderPath destinationPath,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -57,8 +57,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
             return [];
         }
 
-        var userValue = account.User.Value;
-        var accountValue = account.Id.Value;
+        var accountValue = account.Value;
         var destinationValue = destinationPath.Value;
         var uidValidityValue = uidValidity.Value;
         string[] placingMutations = [MailboxMutation.Relocate.Name, MailboxMutation.Copy.Name];
@@ -70,8 +69,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
         var entities = await readContext.MailboxMutations
             .AsNoTracking()
             .Include(mutation => mutation.MailFolder)
-            .Where(mutation => mutation.UserId == userValue
-                && mutation.MailboxAccountId == accountValue
+            .Where(mutation => mutation.MailboxAccountId == accountValue
                 && placingMutations.Contains(mutation.Mutation)
                 && mutation.Stage == MailboxMutationStage.Completed
                 && mutation.PlacementObservedAt == null
@@ -87,7 +85,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<MailboxMutationRecord>> ReadFlagChangesOnAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -101,8 +99,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
             return [];
         }
 
-        var userValue = account.User.Value;
-        var accountValue = account.Id.Value;
+        var accountValue = account.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
         var uidValidityValue = uidValidity.Value;
@@ -125,8 +122,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
         // server reported.
         var storedValues = await readContext.MailboxMutations
             .AsNoTracking()
-            .Where(mutation => mutation.UserId == userValue
-                && mutation.MailboxAccountId == accountValue
+            .Where(mutation => mutation.MailboxAccountId == accountValue
                 && mutation.MailFolder.Alias == alias
                 && mutation.MailFolder.ResolutionGeneration == generation
                 && mutation.UidValidity == uidValidityValue
@@ -176,7 +172,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<MailboxMutationRecord>> ReadMutationsRemovingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -189,8 +185,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
             return [];
         }
 
-        var userValue = account.User.Value;
-        var accountValue = account.Id.Value;
+        var accountValue = account.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
         var uidValidityValue = uidValidity.Value;
@@ -200,8 +195,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
         var entities = await readContext.MailboxMutations
             .AsNoTracking()
             .Include(mutation => mutation.MailFolder)
-            .Where(mutation => mutation.UserId == userValue
-                && mutation.MailboxAccountId == accountValue
+            .Where(mutation => mutation.MailboxAccountId == accountValue
                 && mutation.MailFolder.Alias == alias
                 && mutation.MailFolder.ResolutionGeneration == generation
                 && mutation.UidValidity == uidValidityValue

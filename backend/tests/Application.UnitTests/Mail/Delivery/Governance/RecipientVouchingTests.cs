@@ -197,7 +197,7 @@ public sealed class RecipientVouchingTests
         // drift apart, and an empty book vouches for nobody — so a suite arranging a refusing posture would change
         // verdict with nothing able to say why.
         var caller = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
-        var accounts = OwnedMailAccountCatalogs.For(caller, SyntheticServedAccount.Of(Account));
+        var accounts = AssignedMailAccountCatalogs.For(caller, SyntheticServedAccount.Of(Account));
 
         var senderIdentities = Substitute.For<IOutgoingSenderIdentityReader>();
         senderIdentities.FindSenderIdentity(Account).Returns(

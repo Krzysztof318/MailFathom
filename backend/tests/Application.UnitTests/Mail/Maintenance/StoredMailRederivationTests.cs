@@ -51,7 +51,7 @@ public sealed class StoredMailRederivationTests
     /// <summary>A payload of which that many emails pass the ceiling, rounded up so the tenth is what reaches it.</summary>
     private const int BytesPerEmail = ((64 * 1024 * 1024) / EmailsReachingTheByteCeiling) + 1;
 
-    private static readonly StoredMailScope WholeAccount = new(MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")), null);
+    private static readonly StoredMailScope WholeAccount = new(MailAccountId.Create("work"), null);
 
     private static readonly byte[] ReadableMime = [1, 2, 3];
 
@@ -477,9 +477,9 @@ public sealed class StoredMailRederivationTests
     {
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountId>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(
-                MetadataOf(call.Arg<MailAccountIdentity>().Id, bodyText))));
+                MetadataOf(call.Arg<MailAccountId>(), bodyText))));
 
         return mimeReader;
     }
@@ -490,10 +490,10 @@ public sealed class StoredMailRederivationTests
         var mimeReader = Substitute.For<IEmailMimeReader>();
 
         mimeReader
-            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountId>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(call.Arg<ReadOnlyMemory<byte>>().Span.SequenceEqual(UnreadableMime)
                 ? EmailMimeExtractionResult.MalformedContent()
-                : EmailMimeExtractionResult.Extracted(MetadataOf(call.Arg<MailAccountIdentity>().Id, "Body"))));
+                : EmailMimeExtractionResult.Extracted(MetadataOf(call.Arg<MailAccountId>(), "Body"))));
 
         return mimeReader;
     }

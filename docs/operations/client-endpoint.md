@@ -1958,18 +1958,20 @@ surface](admin-endpoint.md#users-and-their-records) is where a roster is read, a
 credential issued for this one.
 
 **A mailbox added here is the user's own, and an address somebody holds is refused without saying whose.** The account
-is created assigned to the signed-in user and nobody else, and an account is served to one user at a time. One address
-is held by one account in the whole deployment, and an address already held — by anybody — is refused with the same
-sentence whoever holds it. It tells the caller the address cannot be added, and it never says who holds it:
+is created assigned to the signed-in user and nobody else; an administrator is who assigns it to a second person
+afterwards. One address is held by one account in the whole deployment, and an address already held — by anybody — is
+refused with the same sentence whoever holds it. It tells the caller the address cannot be added, and it never says who holds it:
 
 ```
 This mail account cannot be added for you. Ask whoever administers this deployment to add it.
 ```
 
-**Removing a mailbox erases its mail.** A removal ends the signed-in user's assignment and erases the mail this
-deployment stored for them under the account. An account nobody else is assigned to — which, with an account served to
-one user at a time, is every account a removal reaches — goes with it, together with every message, folder, and
-attachment this deployment holds for it, because an account nobody is assigned to serves nobody. The removal asks
+**Removing a mailbox ends this user's hold on it, and erases its mail once nobody else holds it.** A removal ends the
+signed-in user's assignment and erases what they authored under the account — their drafts and their standing
+instructions — because neither is readable by anybody once they are not assigned. Where that was the last assignment
+the account goes with it, together with every message, folder, and attachment this deployment holds for it, because an
+account nobody is assigned to serves nobody; where somebody else is still assigned, the mail stays whole and is theirs
+to read. The removal asks
 `mailfathom.mail.accounts.write` and nothing more, because the grant is the person's own and the mailbox they dispose of
 is their own; an administrator ending somebody else's assignment takes `mailfathom.admin.erase` instead.
 
@@ -2264,7 +2266,7 @@ route to promote one into the other.
 | `POST /api/client/drafts/{draftId}/send` | Queues the message the draft holds, which is the one act here that reaches anybody else |
 
 **Every route is scoped to the caller's own user, and a draft another user holds answers exactly as one nobody
-holds.** A save names the account it belongs to and that name is resolved against the accounts the caller's user owns;
+holds.** A save names the account it belongs to and that name is resolved against the accounts the caller is assigned;
 every other act names a draft, and the identifier becomes a draft this user holds before anything acts on it. So a
 `404` here says nothing about whether such a draft exists somewhere in the deployment.
 

@@ -442,7 +442,7 @@ public sealed class McpAttachmentDownloadEndpointTests
                 : OpenedEmailAttachmentResult.Opened(attachment)));
 
         var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
-        accountCatalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(summary.AccountId)]);
+        accountCatalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(summary.AccountId)]);
 
         return new EmailAttachmentDownloadReader(
             summaryReader,
@@ -467,7 +467,7 @@ public sealed class McpAttachmentDownloadEndpointTests
     private static EmailSummary SummaryOf() => new()
     {
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
-        Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary")),
+        Account = MailAccountId.Create("primary"),
         FolderAlias = MailFolderAlias.Create("INBOX"),
         InternetMessageId = "<abc@example.test>",
         Subject = "Quarterly invoice",

@@ -66,7 +66,7 @@ public sealed class EmailThreadAssembly
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="email" /> is <see langword="null" />.</exception>
     public async Task<EmailThreadId> AssembleAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         ThreadedEmail email,
         EmailThreadId? currentThreadId,
         CancellationToken cancellationToken)
@@ -113,7 +113,7 @@ public sealed class EmailThreadAssembly
     /// </remarks>
     private async Task<EmailThreadId> ThreadOfAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         IReadOnlyList<EmailThreadBinding> bindings,
         EmailThreadId? currentThreadId,
         CancellationToken cancellationToken)
@@ -149,7 +149,7 @@ public sealed class EmailThreadAssembly
     /// <summary>Binds every identifier the email carries that this account did not bind already.</summary>
     private async Task BindMissingAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         IReadOnlyList<string> identifiers,
         IReadOnlyList<EmailThreadBinding> bindings,
         EmailThreadId threadId,

@@ -13,15 +13,6 @@ internal sealed class MailFolderEntity
 
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the user whose account this folder belongs to.</summary>
-    /// <remarks>
-    /// Half of the foreign key onto the account rather than a value beside one: an account is identified by its user
-    /// and its identifier together, so this column and the one above it are the reference, and the cascade that erases
-    /// a folder with its account runs through both. It is also what the binding index leads with, which is the read
-    /// this column had before it was part of the key.
-    /// </remarks>
-    public required Guid UserId { get; set; }
-
     public required string Alias { get; set; }
 
     public int ResolutionGeneration { get; set; }

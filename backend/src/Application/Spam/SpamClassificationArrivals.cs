@@ -5,7 +5,6 @@
 using System.Globalization;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Payloads;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 
@@ -52,7 +51,7 @@ public sealed class SpamClassificationArrivals
 
     /// <summary>Initializes the trigger over the queue it writes to and the settings that decide whether it does.</summary>
     /// <param name="jobs">The durable queue one classification is enqueued into.</param>
-    /// <param name="settingsReader">Answers whether the occurrence's account is classified and which of its folders are covered.</param>
+    /// <param name="settingsReader">Answers whether the occurrence's mailbox is classified and which folders that covers.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public SpamClassificationArrivals(IJobStore jobs, ISpamClassificationSettingsReader settingsReader)
     {
@@ -66,7 +65,7 @@ public sealed class SpamClassificationArrivals
     /// <summary>Asks for one committed message to be classified.</summary>
     /// <param name="emailId">The local identity the occurrence was stored as, which the execution is keyed by.</param>
     /// <param name="occurrenceId">The occurrence synchronization has just stored, with its content.</param>
-    /// <param name="user">The user the run resolved the account under, which the queued work is recorded against.</param>
+    /// <param name="account">The account the run is over, which the queued work is recorded against.</param>
     /// <param name="cancellationToken">Cancels the enqueue.</param>
     /// <returns>A task that completes once the queue has answered, or at once where no classification is wanted.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrenceId" /> is <see langword="null" />.</exception>
@@ -78,7 +77,7 @@ public sealed class SpamClassificationArrivals
     public async Task ScheduleAsync(
         StoredEmailId emailId,
         EmailOccurrenceId occurrenceId,
-        MailUserId user,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(occurrenceId);
@@ -90,9 +89,8 @@ public sealed class SpamClassificationArrivals
             return;
         }
 
-        // Composed from the user the run already resolved rather than looked up here: the queue row records whose
-        // account the classification is about, and the synchronization run settled that once for the whole run.
-        var account = MailAccountIdentity.Create(user, occurrenceId.AccountId);
+        // The account the run is over rather than one read off the occurrence: the queue row records which mailbox
+        // the classification is about, and the synchronization run settled that once for the whole run.
         var request = JobEnqueueRequest.Create(
             KeyOf(emailId),
             ClassifyStoredEmailSpamJobPayload.For(account, emailId),

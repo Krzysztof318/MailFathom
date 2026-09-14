@@ -25,9 +25,9 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// </para>
 /// <para>
 /// An administrator names the account by the identifier this deployment generated and names users by theirs, and is the
-/// only caller that assigns an account to a user. An account is served to one user at a time, so an assignment reaches
-/// only an account nobody holds: the mail graph is still stored per user, and serving one mailbox under two users would
-/// synchronize it, and apply every rule and mutation to it, once per assignee. A user adds an account for themselves
+/// only caller that assigns an account to a user. An account is served to as many users as an administrator assigns it
+/// to: the mail graph is keyed by the account alone, so one mailbox is synchronized once, holds one copy of its mail,
+/// and applies each rule and mutation once, whoever reads it. A user adds an account for themselves
 /// alone, withdraws one of their own, and changes the folders of one — and every one of those writes states the version
 /// of their own record, which is what every account write moves, so the version a client already holds is the one it
 /// composes against.
@@ -213,7 +213,7 @@ internal sealed class MailAccountAdministration(
         };
     }
 
-    /// <summary>Assigns an account nobody holds to a user.</summary>
+    /// <summary>Assigns an account to a user, beside whoever else is already assigned it.</summary>
     /// <param name="accountId">The account.</param>
     /// <param name="user">The user it is assigned to.</param>
     /// <param name="cancellationToken">Cancels the reads and the commit.</param>
@@ -221,9 +221,10 @@ internal sealed class MailAccountAdministration(
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
     /// <remarks>
-    /// An account another user already holds is refused, because an account is served to one user at a time. The account
-    /// is judged against the user's own set, so an account whose display name one of their accounts already carries is
-    /// refused rather than served under a name that no longer tells two apart.
+    /// An account somebody else is already assigned is assigned again rather than refused, which is what serving one
+    /// mailbox to several people is. The account is judged against this user's own set, so an account whose display
+    /// name one of their accounts already carries is refused rather than served under a name that no longer tells two
+    /// apart — a judgement the other assignees' sets are unaffected by.
     /// </remarks>
     internal async Task<UserRecordWriteOutcome?> AssignAsync(
         Guid accountId,
@@ -248,12 +249,6 @@ internal sealed class MailAccountAdministration(
                 "The account is already assigned to this user, so nothing was written.");
         }
 
-        // ponytail: one user per account until issue 1325 keys the mail graph by the account alone; lift this refusal there.
-        if (holding.Users.Count > 0)
-        {
-            return AssignedElsewhere(account.Version);
-        }
-
         var judgement = await this.JudgeAsync(account, account.Document, [user], actingUser: null, cancellationToken);
 
         if (judgement.Refusals.Count > 0)
@@ -272,7 +267,6 @@ internal sealed class MailAccountAdministration(
             MailAccountWriteResult.NothingToChange => UserRecordWriteOutcome.NothingToChange(
                 account.Version,
                 "The account is already assigned to this user, so nothing was written."),
-            MailAccountWriteResult.AssignedElsewhere => AssignedElsewhere(account.Version),
             _ => Superseded(record.Version, await this.VersionOfAsync(record, cancellationToken), "user record"),
         };
     }
@@ -357,8 +351,10 @@ internal sealed class MailAccountAdministration(
     /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> is <see langword="null" />, empty, or white space.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailAccountsWrite" />.</exception>
     /// <remarks>
-    /// Every removal ends the caller's assignment and, because an account is served to one user at a time, erases the
-    /// account and every message, folder, and attachment stored for it. It stays under
+    /// Every removal ends the caller's assignment, and erases the account and every message, folder, and attachment
+    /// stored for it only where nobody else is assigned it — a mailbox somebody else still reads keeps its mail, and
+    /// what goes with the departing user is what they alone could read there: their drafts and their recurring sends.
+    /// It stays under
     /// <see cref="MailFathomPermission.MailAccountsWrite" /> rather than <see cref="MailFathomPermission.AdminErase" />
     /// because a person removing their own mailbox disposes of their own data, unlike an administrator unassigning
     /// somebody else's.
@@ -638,12 +634,6 @@ internal sealed class MailAccountAdministration(
             [
                 $"Another mail account already holds '{emailAddress}', and one address is held by one account in this deployment, so nothing was written.",
             ]);
-
-    private static UserRecordWriteOutcome AssignedElsewhere(long version) =>
-        UserRecordWriteOutcome.Refused(
-            MailFathomErrorCode.ConfigurationCandidateInvalid,
-            version,
-            ["This mail account is already assigned to another user, and an account is served to one user at a time, so nothing was written."]);
 
     /// <summary>The refusal a user receives for an address somebody's account already holds, or one that is not an address at all.</summary>
     /// <remarks>The same sentence for both, so the answer never tells a held address from an unusable one, and never names whose mailbox a held address is.</remarks>

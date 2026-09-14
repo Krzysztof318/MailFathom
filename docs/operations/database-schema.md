@@ -41,7 +41,7 @@ inserts are guarded against a row already being there, so applying the file twic
 one configuration document, and neither apply writes over what a running deployment has since put in them.
 
 Some migrations in the chain carry existing data onto a new shape as well, and one of them reads a table rather than
-only rewriting a column: the per-user stored-content counter is seeded from what the message payloads already hold, so
+only rewriting a column: the per-account stored-content counter is seeded from what the message payloads already hold, so
 that apply scans the content table once. It reads the recorded lengths rather than the payloads beside them, so the cost
 is a sequential scan rather than a detoast, but on a mailbox of hundreds of thousands of messages it is the part of the
 apply that takes noticeable time.
@@ -310,12 +310,32 @@ has taken in hand always gets. Nothing is deleted that was not asked for; what t
 one's mind.
 
 **`KeyMailAccountByUserAndIdentifier` also asks one thing of you after the rollout: authorize every OAuth mailbox
-again.** A sealed refresh token is bound to the account it was stored for, and the account is now the user and the
+again.** A sealed refresh token is bound to the account it was stored for, and the account was then the user and the
 identifier together rather than the identifier alone — so a token sealed by an earlier release **does not open**. The
 account's next token request fails with a cryptographic error rather than with `invalid_grant`, and nothing falls back
 to the configured reference, which is why [mailbox OAuth](mailbox-oauth.md#troubleshooting) carries a row of its own
 for that symptom. The repair is the ordinary one and needs no database access: `mfctl mailbox authorize --account <id>`
 for each of them.
+
+**`KeyTheMailGraphByTheAccountIdentifier` asks for that same authorization once more, and for the same reason.** It
+takes the user out of every mail key, so a mail row, a derived row, a job payload, a lease scope, and a settings
+lookup all name the generated identifier and nothing else. The binding a refresh token is sealed under moves with
+them — from the user and the identifier together to the identifier alone — so a token sealed by the release before
+this one **does not open** either, and `mfctl mailbox authorize --account <id>` is the whole repair again.
+
+**No mail is discarded by it.** An account was served to one user before this release, so taking the user out of a key
+can collide with nothing: every row keeps its account, its folder, and its message, and nothing is rewritten or
+refetched. What the release permits rather than performs is discarding stored mail and resynchronizing, which stays an
+operator's choice on any release. The one table that loses its meaning is `stored_content_claims`, whose rows gain an
+account column with an empty default: a claim lives five minutes and is swept by the next one, so a claim outstanding
+across the upgrade reserves nothing and blocks nothing.
+
+**What it costs while it runs is locks rather than a rewrite, again.** Eighteen tables drop a `UserId` column,
+fourteen have a primary key rebuilt, and fifty-six indexes are rebuilt around the account. Dropping a column is a
+catalog change on a table of any size in PostgreSQL and an index build changes no row, so nothing here is proportional
+to the bytes a row holds — but the two corpus-proportional tables, `email_thread_identifiers` and `stored_emails`, are
+what to size the window from, and everything runs in one transaction so a deployment that cannot take a lock retries
+rather than resuming a half-applied migration.
 
 **What the migration costs while it runs is locks rather than a rewrite.** No column is added, dropped, or filled and
 no table is rewritten, so nothing is proportional to the bytes a row holds. It locks **ten** tables inside one

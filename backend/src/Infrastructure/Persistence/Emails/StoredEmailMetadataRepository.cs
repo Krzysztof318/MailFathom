@@ -8,7 +8,6 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.Synchronization;
 using MailFathom.CodeCoverage;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Filing;
@@ -34,7 +33,6 @@ internal sealed class StoredEmailMetadataRepository(
     /// <inheritdoc />
     public async Task<StoredEmailId> UpsertMetadataAsync(
         IPersistenceSession session,
-        MailUserId user,
         RemoteEmailMetadata metadata,
         ExtractedEmailMetadata? extractedMetadata,
         StoredEmailContentAvailability contentAvailability,
@@ -44,7 +42,7 @@ internal sealed class StoredEmailMetadataRepository(
 
         var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var occurrenceId = metadata.OccurrenceId;
-        var account = MailAccountIdentity.Create(user, occurrenceId.AccountId);
+        var account = occurrenceId.AccountId;
         var entity = await FindByOccurrenceAsync(dbContext, account, occurrenceId, cancellationToken);
 
         if (entity is null)
@@ -63,7 +61,6 @@ internal sealed class StoredEmailMetadataRepository(
                 // Both copied off the binding row this occurrence is being attached to, which is the row folder
                 // resolution wrote from the account. Nothing re-reads the account: the folder already says whose
                 // mailbox this is, and taking the pair from one place is what keeps them from ever disagreeing.
-                UserId = folder.UserId,
                 MailFolder = folder,
                 UidValidity = occurrenceId.UidValidity.Value,
                 Uid = occurrenceId.Uid.Value,
@@ -110,9 +107,7 @@ internal sealed class StoredEmailMetadataRepository(
         // conversation of one rather than a message with no conversation.
         await threadAssembly.AssembleAsync(
             session,
-            MailAccountIdentity.Create(
-                MailUserId.Create(entity.UserId),
-                MailAccountId.Create(entity.MailboxAccountId)),
+            MailAccountId.Create(entity.MailboxAccountId),
             ThreadedEmails.Of(entity),
             entity.EmailThreadId is { } currentThreadId ? EmailThreadId.Create(currentThreadId) : null,
             cancellationToken);
@@ -123,7 +118,6 @@ internal sealed class StoredEmailMetadataRepository(
     /// <inheritdoc />
     public async Task<bool> TryCarryToOccurrenceAsync(
         IPersistenceSession session,
-        MailUserId user,
         StoredEmailId storedEmailId,
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken)
@@ -131,7 +125,7 @@ internal sealed class StoredEmailMetadataRepository(
         ArgumentNullException.ThrowIfNull(occurrenceId);
 
         var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var account = MailAccountIdentity.Create(user, occurrenceId.AccountId);
+        var account = occurrenceId.AccountId;
         var occupant = await FindByOccurrenceAsync(dbContext, account, occurrenceId, cancellationToken);
 
         // A row already sitting on the occurrence is either this same email, which a previous attempt of this commit
@@ -187,7 +181,7 @@ internal sealed class StoredEmailMetadataRepository(
     /// <inheritdoc />
     public async Task<StoredEmailId?> StoreFiledEmailAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId binding,
         ExtractedEmailMetadata? extractedMetadata,
         long sizeOctets,
@@ -208,7 +202,6 @@ internal sealed class StoredEmailMetadataRepository(
         {
             Id = Guid.CreateVersion7(storedAt),
             MailboxAccountId = folder.MailboxAccountId,
-            UserId = folder.UserId,
             MailFolder = folder,
             StoredAt = storedAt,
             SizeOctets = sizeOctets,
@@ -244,7 +237,7 @@ internal sealed class StoredEmailMetadataRepository(
                 entity,
                 subject: null,
                 storedAt,
-                derivationGuard.StampFor(account.Id),
+                derivationGuard.StampFor(account),
                 cancellationToken);
         }
 
@@ -260,7 +253,7 @@ internal sealed class StoredEmailMetadataRepository(
 
     /// <inheritdoc />
     public async Task<IReadOnlyDictionary<string, StoredEmailId>> FindFiledSentCopiesAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         IReadOnlyCollection<string> internetMessageIds,
         CancellationToken cancellationToken)
     {
@@ -271,13 +264,11 @@ internal sealed class StoredEmailMetadataRepository(
             return new Dictionary<string, StoredEmailId>(StringComparer.Ordinal);
         }
 
-        var user = account.User.Value;
-        var accountValue = account.Id.Value;
+        var accountValue = account.Value;
 
         var filedCopies = await readContext.StoredEmails
             .AsNoTracking()
-            .Where(email => email.UserId == user
-                && email.MailboxAccountId == accountValue
+            .Where(email => email.MailboxAccountId == accountValue
                 && email.InternetMessageId != null
                 && internetMessageIds.Contains(email.InternetMessageId)
                 && email.FiledFromOutgoingEmailId != null
@@ -295,20 +286,18 @@ internal sealed class StoredEmailMetadataRepository(
     /// <summary>Reads whatever row already occupies one occurrence, including one this session has staged and not committed.</summary>
     private static Task<StoredEmailEntity?> FindByOccurrenceAsync(
         MailFathomDbContext dbContext,
-        MailAccountIdentity account,
+        MailAccountId account,
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken)
     {
-        var user = account.User.Value;
-        var accountValue = account.Id.Value;
+        var accountValue = account.Value;
         var alias = occurrenceId.FolderResolutionId.Alias.Value;
         var generation = occurrenceId.FolderResolutionId.Generation.Value;
 
         return TrackedEntityLookup.SinglePendingOrPersistedAsync(
             dbContext.StoredEmails,
             dbContext.StoredEmails.Include(candidate => candidate.MailFolder),
-            candidate => candidate.UserId == user
-                && candidate.MailFolder.MailboxAccountId == accountValue
+            candidate => candidate.MailFolder.MailboxAccountId == accountValue
                 && candidate.MailFolder.Alias == alias
                 && candidate.MailFolder.ResolutionGeneration == generation
                 && candidate.UidValidity == occurrenceId.UidValidity.Value

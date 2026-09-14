@@ -21,6 +21,9 @@
          other suite arranges. -->
     <Compile Include="..\shared\SyntheticMailUser.cs" Link="SyntheticMailUser.cs" />
     <Compile Include="..\shared\FixedSensitiveContentPostures.cs" Link="FixedSensitiveContentPostures.cs" />
+    <Compile Include="..\shared\StubMailAccountAssignments.cs" Link="StubMailAccountAssignments.cs" />
+    <Compile Include="..\shared\StubSpamClassificationSettingsReader.cs" Link="StubSpamClassificationSettingsReader.cs" />
+    <Compile Include="..\shared\SyntheticAccountLanguages.cs" Link="SyntheticAccountLanguages.cs" />
     <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
     <!-- The bounded metadata handler is the one Infrastructure type that speaks HTTP, and the suite's single HTTP test
          double is hand-written because a substitute cannot override the protected send path. -->

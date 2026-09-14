@@ -435,7 +435,7 @@ public sealed record SubmittedMailboxChange(
 /// <param name="Email">The message.</param>
 /// <param name="Flags">Where a flag change left the message, or <see langword="null" /> for a change that is not about a flag.</param>
 public sealed record AppliedMailboxChange(
-    MailAccountIdentity Account,
+    MailAccountId Account,
     MailFolderAlias Folder,
     StoredEmailId Email,
     SignalledEmailFlags? Flags);

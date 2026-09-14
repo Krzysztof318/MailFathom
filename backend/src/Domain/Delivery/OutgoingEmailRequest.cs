@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Scheduling;
 
@@ -39,24 +40,34 @@ public sealed record OutgoingEmailRequest
     public const int MaximumRecipientCount = 256;
 
     private OutgoingEmailRequest(
-        MailAccountIdentity account,
+        MailAccountId account,
+        MailUserId? author,
         OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients,
         ZonedInstant? dueAt)
     {
         this.Account = account;
+        this.Author = author;
         this.Requester = requester;
         this.Recipients = recipients;
         this.DueAt = dueAt;
     }
 
-    /// <summary>Gets the account the message is submitted through and sent as, named by its user and its identifier.</summary>
+    /// <summary>Gets the account the message is submitted through and sent as, by its generated identifier.</summary>
     /// <remarks>
-    /// The pair rather than the identifier alone, because an identifier names one account within its user and the row
-    /// this request becomes records whose send it was. The user is the one the catalog resolved the account through, so
-    /// the write that keeps the request supplies it without asking the account table again.
+    /// The identifier alone, because it names one mailbox across the deployment. Who is assigned that mailbox is the
+    /// assignment relation's answer and no part of the request: every user assigned it may send as it, and the record
+    /// this request becomes belongs to the mailbox rather than to whoever asked.
     /// </remarks>
-    public MailAccountIdentity Account { get; }
+    public MailAccountId Account { get; }
+
+    /// <summary>Gets the user who asked, and <see langword="null" /> where the deployment's own configuration did.</summary>
+    /// <remarks>
+    /// It is recorded beside the requester and stands in the idempotency identity with it, so two users assigned one
+    /// mailbox retrying the same requester's submission are two submissions. A rule and a recurring occasion name
+    /// nobody, because neither is an act a person took.
+    /// </remarks>
+    public MailUserId? Author { get; }
 
     /// <summary>Gets the authored act that asked, which is what makes the same request twice one delivery.</summary>
     public OutgoingEmailRequester Requester { get; }
@@ -74,7 +85,8 @@ public sealed record OutgoingEmailRequest
     public ZonedInstant? DueAt { get; }
 
     /// <summary>Asks for one message to be submitted through an account and delivered to the recipients it names.</summary>
-    /// <param name="account">The account the message is sent as, named by its user and its identifier.</param>
+    /// <param name="account">The account the message is sent as, by its generated identifier.</param>
+    /// <param name="author">The user who asked, or <see langword="null" /> where the deployment's own configuration did.</param>
     /// <param name="requester">The authored act asking.</param>
     /// <param name="recipients">The people the message is offered to.</param>
     /// <param name="dueAt">The time the message is to leave at, or <see langword="null" /> for as soon as it can.</param>
@@ -82,7 +94,8 @@ public sealed record OutgoingEmailRequest
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="requester" /> or <paramref name="recipients" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="recipients" /> is empty, holds more than <see cref="MaximumRecipientCount" /> entries, or names one mailbox more than once.</exception>
     public static OutgoingEmailRequest Create(
-        MailAccountIdentity account,
+        MailAccountId account,
+        MailUserId? author,
         OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients,
         ZonedInstant? dueAt = null)
@@ -113,7 +126,7 @@ public sealed record OutgoingEmailRequest
                 nameof(recipients));
         }
 
-        return new OutgoingEmailRequest(account, requester, [.. recipients], dueAt);
+        return new OutgoingEmailRequest(account, author, requester, [.. recipients], dueAt);
     }
 
     /// <summary>States the same send, held until the time the author named.</summary>
@@ -129,6 +142,6 @@ public sealed record OutgoingEmailRequest
     {
         ArgumentNullException.ThrowIfNull(dueAt);
 
-        return new OutgoingEmailRequest(this.Account, this.Requester, this.Recipients, dueAt);
+        return new OutgoingEmailRequest(this.Account, this.Author, this.Requester, this.Recipients, dueAt);
     }
 }

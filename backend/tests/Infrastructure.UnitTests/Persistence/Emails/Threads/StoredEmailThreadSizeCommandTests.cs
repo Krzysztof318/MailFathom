@@ -7,7 +7,6 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Emails.Threads;
 using MailFathom.Infrastructure.Persistence.Entities;
-using MailFathom.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -22,7 +21,6 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails.Threads;
 public sealed class StoredEmailThreadSizeCommandTests
 {
     private static MailboxScope WholeMailbox { get; } = MailboxScope.Create(
-        SyntheticMailUser.Deployment,
         [MailAccountId.Create("primary")],
         []);
 
@@ -53,7 +51,6 @@ public sealed class StoredEmailThreadSizeCommandTests
         var narrowing = NarrowingIn(CountCommand());
 
         // Assert
-        Assert.Contains(nameof(StoredEmailEntity.UserId), narrowing, StringComparison.Ordinal);
         Assert.Contains(nameof(StoredEmailEntity.MailboxAccountId), narrowing, StringComparison.Ordinal);
     }
 

@@ -211,9 +211,14 @@ public sealed class MailAccountAdministrationTests
                 TestContext.Current.CancellationToken));
     }
 
-    /// <summary>An account is served to one user at a time, so one somebody already holds is not handed to a second person.</summary>
+    /// <summary>A mailbox somebody already holds is served to a second person as well, which is what sharing one is.</summary>
+    /// <remarks>
+    /// One mailbox stays one record and one copy of the mail: the assignment is what is added, so both users read the
+    /// same account rather than a mailbox each. That is the whole of what ADR 0014 turned on, and the refusal that
+    /// used to stand here — an account is served to one user at a time — is what it replaced.
+    /// </remarks>
     [Fact]
-    public async Task AssignAsync_AnAccountAnotherUserIsAssigned_IsRefusedAndWritesNothing()
+    public async Task AssignAsync_AnAccountAnotherUserIsAssigned_ServesItToBoth()
     {
         // Arrange
         var shared = Mailbox("shared@example.test", "shared");
@@ -225,13 +230,10 @@ public sealed class MailAccountAdministrationTests
         var outcome = await deployment.MailAccounts.AssignAsync(shared.Id, Alex, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
-        Assert.Equal(
-            "This mail account is already assigned to another user, and an account is served to one user at a time, so nothing was written.",
-            Assert.Single(outcome.Messages));
-        var alex = deployment.MailAccountRecords.DocumentOf(Alex)!;
-        Assert.Empty(alex.MailAccounts);
-        Assert.Equal(5, alex.Version);
+        Assert.True(outcome!.IsCommitted);
+        Assert.Equal([shared.Id], deployment.MailAccountRecords.DocumentOf(Alex)!.MailAccounts.Select(account => account.Id));
+        Assert.Equal([shared.Id], deployment.MailAccountRecords.DocumentOf(Sam)!.MailAccounts.Select(account => account.Id));
+        Assert.Equal(shared, Assert.Single(deployment.MailAccountRecords.Accounts));
     }
 
     /// <summary>An account nobody is assigned any longer is erased with it, because mail nobody is served is mail nobody asked to keep.</summary>

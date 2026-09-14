@@ -6,8 +6,6 @@ using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Mail.Maintenance;
@@ -176,7 +174,6 @@ public sealed class StoredMailRederivation
 
             var outcome = await this.ReadBatchAsync(
                 batch,
-                scope.Account.User,
                 readByteCount,
                 cancellationToken);
 
@@ -225,12 +222,10 @@ public sealed class StoredMailRederivation
 
     /// <summary>Re-reads a batch's emails outside any transaction, stopping early once either ceiling is reached.</summary>
     /// <param name="batch">The emails the walk offered, in the order it visits them.</param>
-    /// <param name="user">The user whose mail the run is re-deriving, whose posture each read is scanned under.</param>
     /// <param name="bytesAlreadyReadThisPass">What earlier batches of this pass read, which the byte ceiling is against.</param>
     /// <param name="cancellationToken">Cancels between emails.</param>
     private async Task<BatchReadOutcome> ReadBatchAsync(
         IReadOnlyList<StoredMailAwaitingRederivation> batch,
-        MailUserId user,
         long bytesAlreadyReadThisPass,
         CancellationToken cancellationToken)
     {
@@ -269,7 +264,7 @@ public sealed class StoredMailRederivation
             readByteCount += storedContent.RawMime.Length;
 
             var extraction = await this.mimeReader.ReadMetadataAsync(
-                MailAccountIdentity.Create(user, email.AccountId),
+                email.AccountId,
                 storedContent.RawMime,
                 cancellationToken);
 

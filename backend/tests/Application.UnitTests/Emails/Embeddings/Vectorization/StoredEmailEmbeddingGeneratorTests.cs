@@ -28,13 +28,22 @@ public sealed class StoredEmailEmbeddingGeneratorTests
     private static readonly StoredEmailId Message = StoredEmailId.Create(Guid.CreateVersion7());
 
     /// <summary>The mailbox whose own record switched a scanner on, which is what the passages out of it are read under.</summary>
-    private static readonly MailAccountIdentity ScannedMailbox =
-        MailAccountIdentity.Create(SyntheticMailUser.Another, MailAccountId.Create("secondary"));
+    private static readonly MailAccountId ScannedMailbox = MailAccountId.Create("secondary");
 
     private static readonly EmbeddingProfileId ProfileId = EmbeddingProfileId.Create(Guid.CreateVersion7());
 
     /// <summary>A moment the daily period places on a whole day, so a test's expected roll-over is arithmetic rather than a guess.</summary>
     private static readonly DateTimeOffset PeriodStart = new(2026, 8, 8, 0, 0, 0, TimeSpan.Zero);
+
+    /// <summary>One mailbox each, which is what turns a message's mailbox back into the person a spend is charged to.</summary>
+    /// <remarks>
+    /// A run holds the mailbox a message belongs to and never a person, so the ceiling, the charge, and the posture
+    /// all resolve through this. One user per mailbox keeps every claim here about the resolution rather than about
+    /// which of several assigned readers a rule picked.
+    /// </remarks>
+    private static readonly StubMailAccountAssignments Assignments = new StubMailAccountAssignments()
+        .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
+        .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Another);
 
     [Fact]
     public async Task EmbedAsync_ActiveProfileAndOutstandingPassages_EmbedsEveryPassage()
@@ -382,7 +391,7 @@ public sealed class StoredEmailEmbeddingGeneratorTests
             store,
             textEmbeddingGenerator,
             CreateSpendGate(ledger, EmbeddingSpendBudget.Create(10_000, 500, TimeSpan.FromDays(1))),
-            new StubMailOwnership().Owns(Message, SyntheticMailUser.Another));
+            new StubMailOwnership().Owns(Message, SyntheticMailAccount.Another));
 
         // Act
         var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
@@ -412,7 +421,7 @@ public sealed class StoredEmailEmbeddingGeneratorTests
             store,
             new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8),
             CreateSpendGate(ledger, EmbeddingSpendBudget.Create(10_000, 500, TimeSpan.FromDays(1))),
-            new StubMailOwnership().Owns(Message, SyntheticMailUser.Another));
+            new StubMailOwnership().Owns(Message, SyntheticMailAccount.Another));
 
         // Act
         var refused = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
@@ -436,7 +445,7 @@ public sealed class StoredEmailEmbeddingGeneratorTests
             store,
             new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8),
             CreateSpendGate(ledger, EmbeddingSpendBudget.Unbounded),
-            new StubMailOwnership().Owns(Message, SyntheticMailUser.Another));
+            new StubMailOwnership().Owns(Message, SyntheticMailAccount.Another));
 
         // Act
         var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
@@ -475,12 +484,12 @@ public sealed class StoredEmailEmbeddingGeneratorTests
 
         var postures = FixedSensitiveContentPostures.Of(
             SensitiveContentPosture.ScanningNothing,
-            (ScannedMailbox.Id, SensitiveContentPosture.Scanning(
+            (ScannedMailbox, SensitiveContentPosture.Scanning(
                 [scanner.Scanner],
                 new SensitiveContentRedactor(plan, [scanner], TimeProvider.System, permits),
                 SensitiveContentScreeningPolicy.ScreeningNothing(),
                 SensitiveContentDerivationStamp.Compute(plan, [scanner])),
-                ScannedMailbox.User));
+                SyntheticMailUser.Another));
 
         var store = new InMemoryEmailEmbeddingStore();
         store.AddPassages(Message, PassageCarrying(marker));
@@ -564,7 +573,7 @@ public sealed class StoredEmailEmbeddingGeneratorTests
     private static EmbeddingSpendGate CreateSpendGate(
         IEmbeddingSpendLedger ledger,
         EmbeddingSpendBudget budget) =>
-        new(ledger, budget, new FakeTimeProvider(PeriodStart));
+        new(ledger, Assignments, budget, new FakeTimeProvider(PeriodStart));
 
     /// <summary>A pacer that never waits, over a clock of the test's own so no arrangement here can measure a real one.</summary>
     /// <remarks>

@@ -27,7 +27,7 @@ public interface ILocalMailFolderChangeAuditor
 /// <param name="ErasedFolderCount">How many folders the act erased, which is the folder and everything beneath it, or zero.</param>
 /// <param name="OccurredAt">When the change committed.</param>
 public sealed record LocalMailFolderChange(
-    MailAccountIdentity Account,
+    MailAccountId Account,
     LocalMailFolderId Folder,
     MailFolderChangeKind Kind,
     int ErasedFolderCount,

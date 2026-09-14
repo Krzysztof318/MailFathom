@@ -28,8 +28,8 @@ namespace MailFathom.Application.UnitTests.Rules.Actions;
 /// <summary>Covers what a matched rule writes down, what identity it writes it under, and what it refuses to write.</summary>
 public sealed class MailRuleActionRecorderTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
     private static readonly MailFolderAlias Junk = MailFolderAlias.Create("junk");
@@ -75,7 +75,7 @@ public sealed class MailRuleActionRecorderTests
     {
         // Arrange
         this.MapMirrored(Archive, "INBOX/Archive");
-        var binding = this.folders.Bind(Account.Id, Archive, "INBOX/Archive");
+        var binding = this.folders.Bind(Account, Archive, "INBOX/Archive");
 
         // Act
         var recording = await this.RecordAsync(Planned("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))));
@@ -94,7 +94,7 @@ public sealed class MailRuleActionRecorderTests
     {
         // Arrange
         this.MapMirrored(Archive, "INBOX/Archive");
-        this.folders.Bind(Account.Id, Archive);
+        this.folders.Bind(Account, Archive);
 
         // Act
         await this.RecordAsync(Planned("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))));
@@ -144,7 +144,7 @@ public sealed class MailRuleActionRecorderTests
     {
         // Arrange
         this.folderMappings.With(
-            Account.Id,
+            Account,
             MailFolderMapping.ToRemotePath(
                 Junk,
                 RemoteFolderPath.Create("INBOX.Spam"),
@@ -292,12 +292,12 @@ public sealed class MailRuleActionRecorderTests
     {
         // Arrange
         this.folderMappings.With(
-            Account.Id,
+            Account,
             MailFolderMapping.ToRemotePath(
                 Archive,
                 RemoteFolderPath.Create("INBOX/Archive"),
                 specialUse: MailFolderSpecialUse.Archive));
-        var binding = this.folders.Bind(Account.Id, Archive, "INBOX/Archive");
+        var binding = this.folders.Bind(Account, Archive, "INBOX/Archive");
 
         // Act
         var recording = await this.RecordAsync(
@@ -410,7 +410,7 @@ public sealed class MailRuleActionRecorderTests
     {
         // Arrange
         this.MapMirrored(Archive, "INBOX/Archive");
-        this.folders.Bind(Account.Id, Archive);
+        this.folders.Bind(Account, Archive);
         this.permissions
             .GetRuleActionPermissions(Arg.Any<MailAccountId>())
             .Returns(MailRuleActionPermissions.Default with { PermitsRelocate = false });
@@ -436,7 +436,7 @@ public sealed class MailRuleActionRecorderTests
     public async Task RecordAsync_AnAccountWhosePermissionsCannotBeRead_RefusesEveryActionVisibly()
     {
         // Arrange
-        this.folders.Bind(Account.Id, Archive);
+        this.folders.Bind(Account, Archive);
         this.permissions
             .GetRuleActionPermissions(Arg.Any<MailAccountId>())
             .Returns(_ => throw new InvalidOperationException("Account 'work' is not configured."));
@@ -478,7 +478,7 @@ public sealed class MailRuleActionRecorderTests
     {
         // Arrange
         this.MapMirrored(Archive, "INBOX/Archive");
-        this.folders.Bind(Account.Id, Archive);
+        this.folders.Bind(Account, Archive);
         var recorder = this.CreateRecorder();
         var plan = MailRuleActionPlan.Compose([RuleNamed("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive)))]);
 
@@ -507,7 +507,7 @@ public sealed class MailRuleActionRecorderTests
     {
         // Arrange
         this.MapMirrored(Archive, "INBOX/Archive");
-        this.folders.Bind(Account.Id, Archive);
+        this.folders.Bind(Account, Archive);
         var plan = MailRuleActionPlan.Compose(
         [
             RuleNamed("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))),
@@ -608,7 +608,7 @@ public sealed class MailRuleActionRecorderTests
     {
         // Arrange
         this.MapMirrored(Archive, "INBOX/Archive");
-        this.folders.Bind(Account.Id, Archive);
+        this.folders.Bind(Account, Archive);
         var states = new InMemoryLocalEmailStateStore(Account);
         states.Store(
             LocalEmail,
@@ -659,7 +659,7 @@ public sealed class MailRuleActionRecorderTests
         MailRuleActionSet.Create([action]));
 
     private static EmailOccurrenceId OccurrenceAt(uint uid) => EmailOccurrenceId.Create(
-        Account.Id,
+        Account,
         new MailFolderResolutionId(Inbox, MailFolderResolutionGeneration.First),
         ImapUidValidity.Create(42),
         ImapUid.Create(uid));
@@ -683,7 +683,6 @@ public sealed class MailRuleActionRecorderTests
         return await recorder.RecordAsync(
             Substitute.For<IPersistenceSession>(),
             storedEmailId,
-            Account.User,
             occurrence,
             plan,
             revision,
@@ -693,13 +692,13 @@ public sealed class MailRuleActionRecorderTests
 
     /// <summary>Maps a folder the account mirrors, which is what every destination but the unmirrored one here is.</summary>
     private void MapMirrored(MailFolderAlias alias, string remotePath) =>
-        this.folderMappings.With(Account.Id, MailFolderMapping.ToRemotePath(alias, RemoteFolderPath.Create(remotePath)));
+        this.folderMappings.With(Account, MailFolderMapping.ToRemotePath(alias, RemoteFolderPath.Create(remotePath)));
 
     /// <summary>Maps a folder MailFathom knows by name and mirrors nothing of, and advertises it on the server.</summary>
     private void MapUnmirrored(MailFolderAlias alias, string remotePath)
     {
         this.folderMappings.With(
-            Account.Id,
+            Account,
             MailFolderMapping.ToRemotePath(
                 alias,
                 RemoteFolderPath.Create(remotePath),

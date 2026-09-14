@@ -62,7 +62,7 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// </remarks>
     public string? Language { get; set; }
 
-    /// <summary>Gets or sets the mail accounts this user owns, which may be none.</summary>
+    /// <summary>Gets or sets the mail accounts this user is assigned, which may be none.</summary>
     /// <remarks>
     /// Zero is an ordinary state rather than an unfinished one: a user is provisioned before their first mailbox is
     /// recorded, and one whose last mailbox is withdrawn is still a user. It is named for what it holds rather than

@@ -37,9 +37,6 @@ internal sealed class SpamClassificationRunEntity
 
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the user whose account the run classified.</summary>
-    public required Guid UserId { get; set; }
-
     public DateTimeOffset RequestedAt { get; set; }
 
     /// <summary>Gets or sets the folders the run walks, as the aliases the operator's configuration names them by.</summary>

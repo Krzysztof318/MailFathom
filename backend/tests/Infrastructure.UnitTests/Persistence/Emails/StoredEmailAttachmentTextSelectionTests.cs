@@ -10,7 +10,6 @@ using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Spam;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
@@ -31,8 +30,6 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
 /// </remarks>
 public sealed class StoredEmailAttachmentTextSelectionTests
 {
-    private static readonly Guid User = SyntheticMailUser.Deployment.Value;
-
     private static readonly DateTimeOffset Now = new(2026, 9, 6, 10, 0, 0, TimeSpan.Zero);
 
     private static readonly MailFolderIdentity WorkInbox = new(
@@ -286,7 +283,6 @@ public sealed class StoredEmailAttachmentTextSelectionTests
         {
             StoredEmailId = email.Id,
             StoredEmail = email,
-            UserId = email.UserId,
             MailboxAccountId = email.MailboxAccountId,
             MailFolder = email.MailFolder,
             Mutation = mutation.Name,
@@ -303,7 +299,6 @@ public sealed class StoredEmailAttachmentTextSelectionTests
         DerivedWorkAdmissionTerms terms) =>
         [.. StoredEmailAttachmentTextStore.Selecting(
             new[] { email }.AsQueryable(),
-            User,
             "work",
             embeddedFolders,
             terms)];
@@ -325,15 +320,13 @@ public sealed class StoredEmailAttachmentTextSelectionTests
     {
         var email = new StoredEmailEntity
         {
-            UserId = User,
             MailboxAccountId = accountId,
             MailFolder = new MailFolderEntity
             {
-                UserId = User,
                 MailboxAccountId = accountId,
                 Alias = alias,
                 RemotePath = alias,
-                MailboxAccount = new MailboxAccountEntity { UserId = User, Id = accountId },
+                MailboxAccount = new MailboxAccountEntity { Id = accountId },
             },
             StoredAt = Now,
             ContentAvailability = StoredEmailContentAvailability.Available,

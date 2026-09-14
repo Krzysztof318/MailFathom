@@ -335,6 +335,7 @@ public sealed class OrchestratedOutgoingMailFilingTests(MailFathomOrchestrationF
 
         return OutgoingEmailRequest.Create(
             SyntheticMailAccount.Account,
+            SyntheticMailAccount.User,
             OutgoingEmailRequester.Command(invocationIdentity),
             [OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To)]);
     }

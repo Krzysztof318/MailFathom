@@ -7,18 +7,18 @@ using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Accounts;
 
-/// <summary>Describes the mail accounts the user this unit of work is acting for owns, and no others.</summary>
+/// <summary>Describes the mail accounts the user this unit of work is acting for is assigned, and no others.</summary>
 /// <remarks>
 /// <para>
 /// Every caller-facing use case that resolves an account asks this rather than the deployment's own catalog. A query
-/// use case asks it before it reads anything, and it asks for two reasons. An account this user does not own is refused
-/// exactly as one nobody configured, because a refusal that separated the two would tell a caller which accounts exist
-/// beside their own. And a request that names no account is narrowed to this set rather than left unrestricted, because
-/// an unbounded read would publish every user's mail rather than merely the mail of an account an operator has since
-/// removed.
+/// use case asks it before it reads anything, and it asks for two reasons. An account this user is not assigned is
+/// refused exactly as one nobody configured, because a refusal that separated the two would tell a caller which
+/// accounts exist beside their own. And a request that names no account is narrowed to this set rather than left
+/// unrestricted, because an unbounded read would publish every user's mail rather than merely the mail of an account
+/// an operator has since removed.
 /// </para>
 /// <para>
-/// A user who owns nothing answers with an empty set, and that is a real answer rather than an absent one: the
+/// A user assigned nothing answers with an empty set, and that is a real answer rather than an absent one: the
 /// resolution turns it into a scope that reads nothing, never into an unrestricted query. A principal acting for no
 /// user at all is a different case and is refused rather than answered — the deployment administrator and this
 /// process's own identity reach this port only by mistake, and an empty answer would let that mistake look like a
@@ -40,23 +40,23 @@ public interface ICallerMailAccountCatalog
     /// </remarks>
     bool SynchronizationEnabled { get; }
 
-    /// <summary>Gets the user this unit of work is acting for, which is whose mail every read narrowed here returns.</summary>
+    /// <summary>Gets the user this unit of work is acting for, whose assignments decide what every read narrowed here returns.</summary>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user.</exception>
     /// <remarks>
-    /// Published beside the accounts because a query carries both: the user is the first term of every mail-returning
-    /// predicate and the column every index those reads are planned against leads with, while the accounts narrow
-    /// within it. Reading it here rather than from the principal directly is what keeps the two answers one answer — a
-    /// read narrowed on a user the catalog did not answer for would be narrowed on a user whose accounts it never
-    /// listed.
+    /// Published beside the accounts because the two are one answer, and because a use case needs the user for what
+    /// belongs to the person rather than to the mailbox — the drafts and recurring sends they authored, the posture
+    /// their text is scanned under. No mail row carries it: the accounts are the whole of what narrows a mailbox read,
+    /// and reading the user here rather than from the principal directly is what keeps a caller's assignments and the
+    /// user they were resolved for from being two answers.
     /// </remarks>
     MailUserId User { get; }
 
-    /// <summary>Gets the accounts the user in hand owns, deduplicated and ordered, or empty when they own none.</summary>
+    /// <summary>Gets the accounts the user in hand is assigned, deduplicated and ordered, or empty when they are assigned none.</summary>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user.</exception>
     /// <remarks>
     /// Ordered the way <see cref="IDeploymentMailAccountCatalog.ServedAccounts" /> is, and for the same reason: a scope
     /// resolved from it is canonical, so a continuation cursor issued for it stays valid while neither the configuration
-    /// nor what this user owns changes.
+    /// nor this user's assignments change.
     /// </remarks>
-    IReadOnlyList<ServedMailAccount> OwnedAccounts { get; }
+    IReadOnlyList<ServedMailAccount> AssignedAccounts { get; }
 }

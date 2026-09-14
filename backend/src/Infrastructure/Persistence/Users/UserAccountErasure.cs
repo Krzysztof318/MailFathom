@@ -12,29 +12,35 @@ using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace MailFathom.Infrastructure.Persistence.Users;
 
-/// <summary>Removes one user, their mail accounts, and everything recorded about either.</summary>
+/// <summary>Removes one user, the mail accounts nobody else is left assigned, and everything recorded about either.</summary>
 /// <remarks>
 /// <para>
-/// Most of the work is the schema's. The mail graph hangs off <c>mailbox_accounts</c>, which cascades from the user,
-/// so deleting the user row takes their accounts, their folders, the mail beneath those folders, and everything
-/// derived from that mail — contents, search documents, chunks, vectors, classifications, threads, mutations, rule
-/// executions, audited citations, and queued work — without anything here naming one of them.
+/// The mail graph belongs to the account rather than to the user, so an erasure is two separate removals rather than
+/// one. The user's own record goes with the user — their credentials, their contacts, their preferences, their
+/// sessions, and the drafts and recurring sends they authored in any account. A mailbox goes only when this user was
+/// the last one assigned it, because an account somebody else still reads is that person's mail rather than this
+/// one's.
 /// </para>
 /// <para>
-/// What the schema does not reach is the tables that record a mail account as a plain identifier with no foreign key
+/// Most of each removal is the schema's. The mail graph hangs off <c>mailbox_accounts</c>, so deleting that row takes
+/// the account's folders, the mail beneath them, and everything derived from that mail — contents, search documents,
+/// chunks, vectors, classifications, threads, mutations, rule executions, audited citations, and queued work —
+/// without anything here naming one of them. The user's own subtree cascades from the user row in the same way.
+/// </para>
+/// <para>
+/// What neither cascade reaches is the tables that record a mail account as a plain identifier with no foreign key
 /// onto one. Those are the seam's own work, and they are enumerated from the model rather than from a list somebody
 /// maintains: a table added later that names an account without keying onto one is discharged by the same walk on the
-/// day it appears, instead of being remembered about after an erasure request has already been answered. Each
-/// statement names the user on the row itself rather than the accounts that user holds, which is what the user
-/// column beside every account reference bought: a row recorded against an account that was authorized and has never
-/// synchronized — a sealed refresh token is the one that occurs — carries the user it was written for and is reached
-/// by the same statement, where a subquery over the account table would have found no account row and left it behind.
+/// day it appears, instead of being remembered about after an erasure request has already been answered. Each of
+/// those statements narrows on the account, which is what the account-keyed graph bought — a row recorded against an
+/// account that was authorized and has never synchronized, a sealed refresh token being the one that occurs, carries
+/// the account it was written for and is reached by the same statement.
 /// </para>
 /// <para>
 /// The walk runs twice, once before the user row is deleted and once after. Deleting that row is what stops any
 /// further write keyed onto it, and nothing stops a writer that only names a mail account — so the second pass is what
 /// reaches the rows such a writer committed while the first was running. What it does not reach is one committed after
-/// it, which no statement here can bound: that is quiescing the user's synchronization and job work, and it belongs
+/// it, which no statement here can bound: that is quiescing the account's synchronization and job work, and it belongs
 /// with whatever comes to own the running deployment's reconfiguration.
 /// </para>
 /// <para>
@@ -50,9 +56,9 @@ internal static class UserAccountErasure
 {
     private const string AccountIdentifierPropertyName = nameof(MailFolderEntity.MailboxAccountId);
 
-    private const string UserPropertyName = nameof(MailFolderEntity.UserId);
+    private const string UserPropertyName = nameof(MailDraftEntity.UserId);
 
-    /// <summary>Erases one user, their mail accounts, and everything recorded about either.</summary>
+    /// <summary>Erases one user, the accounts they were the last assigned user of, and everything recorded about either.</summary>
     /// <param name="session">The transaction the whole erasure runs in, so a partial one is never committed.</param>
     /// <param name="userId">The user to remove.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>
@@ -75,8 +81,8 @@ internal static class UserAccountErasure
         await ReleasedContentObjects.ReleaseForUserAsync(session, userId, cancellationToken);
 
         // The user row is held for the rest of the transaction, so two erasures of one user are serialized, and a
-        // write that keys onto that row — the account insert a first folder binding makes — waits on the foreign-key
-        // check until this transaction ends and is then refused against a row that is gone.
+        // write that keys onto that row — an assignment naming it — waits on the foreign-key check until this
+        // transaction ends and is then refused against a row that is gone.
         //
         // What it does not hold is a plain read. Under MVCC a row lock blocks no `SELECT`, so a run resolving this
         // user while the statements below run is handed the identifier at once; what stops that run is its own insert
@@ -87,61 +93,68 @@ internal static class UserAccountErasure
             .SqlQueryRaw<Guid>(UserRowLockStatement(writeContext.Model), userId)
             .ToListAsync(cancellationToken);
 
-        var tables = TablesTheCascadeDoesNotReach(writeContext.Model);
+        // An account this user shares with somebody else stays whole, so what is erased is the accounts the
+        // unassignment below leaves with nobody: mail no user is served is mail the deployment holds for nobody.
+        var orphanedAccounts = await writeContext.MailAccountAssignments
+            .Where(assignment => assignment.UserId == userId)
+            .Where(assignment => !writeContext.MailAccountAssignments
+                .Any(other => other.MailAccountId == assignment.MailAccountId && other.UserId != userId))
+            .Select(assignment => assignment.MailAccountId)
+            .ToListAsync(cancellationToken);
 
-        var rowsErasedBesideTheCascade = await EraseTablesTheCascadeMissesAsync(
-            writeContext,
-            tables,
-            userId,
+        var rowsErasedBesideTheCascade = await EraseOrphanedAccountsAsync(
+            session,
+            orphanedAccounts,
             cancellationToken);
 
-        // An account nobody else is assigned goes with its last user, as an account unassigned from its last user does.
-        // Its mail is this user's rows and has just been reached above; what is left is the record itself.
-        await writeContext.Database.ExecuteSqlAsync(
-            $"""
-             DELETE FROM settings_mail_accounts AS account
-             WHERE EXISTS (SELECT 1 FROM mail_account_assignments AS own
-                           WHERE own."MailAccountId" = account."Id" AND own."UserId" = {userId})
-               AND NOT EXISTS (SELECT 1 FROM mail_account_assignments AS other
-                               WHERE other."MailAccountId" = account."Id" AND other."UserId" <> {userId})
-             """,
-            cancellationToken);
+        if (orphanedAccounts.Count > 0)
+        {
+            await writeContext.MailAccountRecords
+                .Where(account => orphanedAccounts.Contains(account.Id))
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+
+        rowsErasedBesideTheCascade += await EraseAuthoredRowsAsync(writeContext, userId, cancellationToken);
 
         var erasedUsers = await writeContext.UserAccounts
             .Where(user => user.Id == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        // The same walk again, after the user row is gone. Everything keyed onto that row is refused from here on, so
-        // what the second pass reaches is what a writer holding a mail account of its own committed while the first
-        // pass was running — rows the transaction would otherwise leave behind for a user it reports as erased. It
-        // is one repeat rather than a loop: what remains after it is a writer that committed later still, and stopping
-        // that is quiescing the user's synchronization and job work rather than deleting harder.
-        rowsErasedBesideTheCascade += await EraseTablesTheCascadeMissesAsync(
-            writeContext,
-            tables,
-            userId,
+        // Both walks again, after the user row is gone. Everything keyed onto that row is refused from here on, so
+        // what the second pass reaches is what a writer committed while the first was running — a row naming this
+        // user, and a row naming one of the accounts that went with them, which no lock taken here could have
+        // stopped because such a writer touches neither the user row nor the account record. Rows the transaction
+        // would otherwise leave behind for a user and a mailbox it reports as erased. It is one repeat rather than a
+        // loop: what remains after it is a writer that committed later still, and stopping that is quiescing the
+        // user's and the account's own work rather than deleting harder.
+        rowsErasedBesideTheCascade += await EraseOrphanedAccountsAsync(
+            session,
+            orphanedAccounts,
             cancellationToken);
+
+        rowsErasedBesideTheCascade += await EraseAuthoredRowsAsync(writeContext, userId, cancellationToken);
 
         return new UserErasure(erasedUsers > 0, rowsErasedBesideTheCascade);
     }
 
-    /// <summary>Erases everything stored for one mail account, for every user or for one of them.</summary>
+    /// <summary>Erases everything stored for one mail account.</summary>
     /// <param name="session">The transaction the erasure runs in.</param>
     /// <param name="accountId">The account, as the text every mail row names it by.</param>
-    /// <param name="userId">The one user whose copy is erased, or <see langword="null" /> for everybody's.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>
     /// <returns>How many rows the statements removed beside the cascade.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> is blank.</exception>
     /// <remarks>
-    /// The same walk a user's erasure takes, narrowed on the account column rather than on the user, and ended by
-    /// deleting the account's <c>mailbox_accounts</c> rows so the cascade takes the folders and everything beneath them.
-    /// The record of the account itself is the caller's to delete, because a user unassigned from a shared account
-    /// takes their copy of its mail and leaves the account standing.
+    /// Narrowed on the account column alone, and ended by deleting the account's <c>mailbox_accounts</c> row so the
+    /// cascade takes the folders and everything beneath them. No user narrows it: one mailbox is one copy of the mail
+    /// however many people are assigned it, so erasing the mailbox erases that copy for all of them. The record of the
+    /// account itself is the caller's to delete, because whether the account is going away at all is the caller's
+    /// question rather than this walk's.
     /// </remarks>
     [RequiresIntegrationCoverage]
     public static async Task<int> EraseMailOfAccountAsync(
         IPersistenceSession session,
         string accountId,
-        Guid? userId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -149,62 +162,101 @@ internal static class UserAccountErasure
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
-        await ReleasedContentObjects.ReleaseForMailAccountAsync(session, accountId, userId, cancellationToken);
+        await ReleasedContentObjects.ReleaseForMailAccountAsync(session, accountId, cancellationToken);
 
         var erased = 0;
-        var tables = TablesTheCascadeDoesNotReach(writeContext.Model)
-            .Append(MailboxAccountEntityTypeOf(writeContext.Model));
+        var mailboxAccounts = MailboxAccountEntityTypeOf(writeContext.Model);
+        var tables = TablesTheCascadeDoesNotReach(writeContext.Model).Append(mailboxAccounts);
 
         foreach (var entityType in tables)
         {
-            var accountColumn = entityType == MailboxAccountEntityTypeOf(writeContext.Model)
+            var accountColumn = entityType == mailboxAccounts
                 ? QuotedColumn(entityType, nameof(MailboxAccountEntity.Id))
                 : QuotedColumn(entityType, AccountIdentifierPropertyName);
 
-            // Every identifier in it is one the model supplied, and both values are parameters.
+            // Every identifier in it is one the model supplied, and the value is a parameter.
             var statement = $$"""
                 DELETE FROM {{QuotedTable(entityType)}}
                 WHERE {{accountColumn}} = {0}
-                  AND ({1}::uuid IS NULL OR {{QuotedColumn(entityType, UserPropertyName)}} = {1}::uuid)
                 """;
 
             erased += await writeContext.Database.ExecuteSqlRawAsync(
                 statement,
-                [accountId, (object?)userId ?? DBNull.Value],
+                [accountId],
                 cancellationToken);
         }
 
         return erased;
     }
 
-    /// <summary>Deletes one user's rows from every table the cascade leaves behind.</summary>
-    /// <returns>How many rows the pass removed.</returns>
-    private static async Task<int> EraseTablesTheCascadeMissesAsync(
-        MailFathomDbContext writeContext,
-        IReadOnlyList<IEntityType> tables,
+    /// <summary>Deletes what one user authored in one account, leaving the mailbox and everybody else's rows whole.</summary>
+    /// <param name="session">The transaction the removal runs in.</param>
+    /// <param name="accountId">The account, as the text every mail row names it by.</param>
+    /// <param name="userId">The user whose authored rows go.</param>
+    /// <param name="cancellationToken">Cancels the removal.</param>
+    /// <returns>How many rows the statements removed.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="accountId" /> is blank.</exception>
+    /// <remarks>
+    /// What an unassignment owes. A draft is read only by its author among the account's assigned users and a
+    /// recurring send is stopped only by the person who declared it, so both become unreadable by anybody the moment
+    /// that person is no longer assigned — and a standing instruction left running would go on sending from a mailbox
+    /// its author cannot see. The mail itself is untouched, because it is the mailbox's rather than theirs.
+    /// </remarks>
+    [RequiresIntegrationCoverage]
+    public static async Task<int> EraseAuthoredRowsOfAccountAsync(
+        IPersistenceSession session,
+        string accountId,
         Guid userId,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var erased = 0;
 
-        foreach (var entityType in tables)
+        foreach (var entityType in TablesNamingTheirAuthor(writeContext.Model))
         {
-            // The user is named on the row rather than through the accounts it holds, so the statement reaches every
-            // row written for this user including one whose account the deployment no longer has a row for. The user
-            // leads the index each of these tables carries, which is the same order the reads narrow in. Everything in
-            // it is either a parameter or an identifier the model itself supplied.
+            // Everything in it is either a parameter or an identifier the model itself supplied.
             var statement = $$"""
                 DELETE FROM {{QuotedTable(entityType)}}
-                WHERE {{QuotedColumn(entityType, UserPropertyName)}} = {0}
+                WHERE {{QuotedColumn(entityType, AccountIdentifierPropertyName)}} = {0}
+                  AND {{QuotedColumn(entityType, UserPropertyName)}} = {1}
                 """;
 
-            erased += await writeContext.Database.ExecuteSqlRawAsync(statement, [userId], cancellationToken);
+            erased += await writeContext.Database.ExecuteSqlRawAsync(
+                statement,
+                [accountId, userId],
+                cancellationToken);
         }
 
         return erased;
     }
 
-    /// <summary>Names the tables that record a mail account and that deleting the user would leave behind.</summary>
+    /// <summary>Names the two tables that keep their author, which an erasure takes by the user rather than by the account.</summary>
+    /// <param name="model">The model the schema is generated from.</param>
+    /// <returns>The entity types recording an act one person took: their drafts and their recurring sends.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="model" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Named rather than derived, and that is the point: <c>outgoing_emails</c> carries an author too and is
+    /// deliberately absent, because a submitted message belongs to the mailbox like the sent mail it becomes and
+    /// erasing whoever asked for it may not withdraw it from everybody else assigned that mailbox. A rule reading
+    /// "every table with both columns" would take it, which is why this list is two names a reader can check against
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>.
+    /// </remarks>
+    internal static IReadOnlyList<IEntityType> TablesNamingTheirAuthor(IModel model)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+
+        return
+        [
+            PersistedSchemaNames.EntityTypeOf<MailDraftEntity>(model),
+            PersistedSchemaNames.EntityTypeOf<RecurringSendEntity>(model),
+        ];
+    }
+
+    /// <summary>Names the tables that record a mail account and that deleting that account's row would leave behind.</summary>
     /// <param name="model">The model the schema is generated from.</param>
     /// <returns>
     /// The entity types the erasure has to take itself: each names a mail account, none is reached by a cascade from
@@ -221,13 +273,13 @@ internal static class UserAccountErasure
     {
         ArgumentNullException.ThrowIfNull(model);
 
-        var reachedFromTheUser = CascadeClosureOf([MailboxAccountEntityTypeOf(model)]);
+        var reachedFromTheAccount = CascadeClosureOf([MailboxAccountEntityTypeOf(model)]);
 
         IEntityType[] namingAnAccount =
         [
             .. model.GetEntityTypes()
                 .Where(entityType => entityType.FindProperty(AccountIdentifierPropertyName) is not null)
-                .Where(entityType => !reachedFromTheUser.Contains(entityType))
+                .Where(entityType => !reachedFromTheAccount.Contains(entityType))
                 .OrderBy(entityType => entityType.GetTableName(), StringComparer.Ordinal),
         ];
 
@@ -236,6 +288,48 @@ internal static class UserAccountErasure
             .ToHashSet();
 
         return [.. namingAnAccount.Where(candidate => !reachedFromEachOther.Contains(candidate))];
+    }
+
+    /// <summary>Erases everything stored for each account the departing user was the last assigned to.</summary>
+    /// <returns>How many rows the pass removed beside the cascade.</returns>
+    private static async Task<int> EraseOrphanedAccountsAsync(
+        IPersistenceSession session,
+        IReadOnlyList<Guid> orphanedAccounts,
+        CancellationToken cancellationToken)
+    {
+        var erased = 0;
+
+        foreach (var accountId in orphanedAccounts)
+        {
+            erased += await EraseMailOfAccountAsync(session, accountId.ToString("D"), cancellationToken);
+        }
+
+        return erased;
+    }
+
+    /// <summary>Deletes the rows one user authored, in every account including the ones that outlive them.</summary>
+    /// <returns>How many rows the pass removed.</returns>
+    private static async Task<int> EraseAuthoredRowsAsync(
+        MailFathomDbContext writeContext,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var erased = 0;
+
+        foreach (var entityType in TablesNamingTheirAuthor(writeContext.Model))
+        {
+            // A draft is what one person is writing and a recurring send is a standing instruction one person gave, so
+            // both go with that person even where the mailbox stays. Everything in the statement is either a parameter
+            // or an identifier the model itself supplied.
+            var statement = $$"""
+                DELETE FROM {{QuotedTable(entityType)}}
+                WHERE {{QuotedColumn(entityType, UserPropertyName)}} = {0}
+                """;
+
+            erased += await writeContext.Database.ExecuteSqlRawAsync(statement, [userId], cancellationToken);
+        }
+
+        return erased;
     }
 
     /// <summary>Walks the tables a delete of <paramref name="roots" /> reaches through cascading foreign keys.</summary>

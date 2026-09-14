@@ -143,7 +143,7 @@ public sealed class MailDraftFiler
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The prepared copy, or <see langword="null" /> where the account is not held or no bound folder plays the drafts role.</returns>
     internal async Task<LocalMailCopy?> PrepareLocalCopyAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken) =>
         await this.localFiler.HoldsAsync(account, cancellationToken)
@@ -191,7 +191,7 @@ public sealed class MailDraftFiler
     /// <summary>Runs whatever the stage calls for, which is at most an append followed by the removals it caused.</summary>
     private async Task<MailDraftFilingResult> RunAsync(MailDraftRecord draft, CancellationToken cancellationToken)
     {
-        if (await this.localFiler.HoldsAsync(draft.Account, cancellationToken))
+        if (await this.localFiler.HoldsAsync(draft.AccountId, cancellationToken))
         {
             return await this.SettleLocallyAsync(draft, cancellationToken);
         }
@@ -239,7 +239,7 @@ public sealed class MailDraftFiler
         CancellationToken cancellationToken)
     {
         var appended = await this.appends.AppendAsync(
-            draft.Account,
+            draft.AccountId,
             OutgoingMailFiling.Draft,
             MailboxCopySource.MailDraft(draft.Id),
             (binding, token) => this.commitPolicy.CommitAsync(
@@ -454,7 +454,7 @@ public sealed class MailDraftFiler
     {
         var reference = MailFolderReference.ToRole(OutgoingMailFiling.Draft.Role);
 
-        var resolved = await this.destinations.ResolveAsync(draft.Account, [reference], cancellationToken);
+        var resolved = await this.destinations.ResolveAsync(draft.AccountId, [reference], cancellationToken);
 
         return resolved.Find(reference).Destination;
     }
@@ -496,7 +496,7 @@ public sealed class MailDraftFiler
                 async (session, token) =>
                 {
                     erasedFrom = draft.FiledEmail is { } filedEmail
-                        ? await this.localFiler.EraseAsync(session, draft.Account, filedEmail, token)
+                        ? await this.localFiler.EraseAsync(session, draft.AccountId, filedEmail, token)
                         : null;
 
                     await this.drafts.RemoveAsync(session, draft.Id, token);
@@ -505,7 +505,7 @@ public sealed class MailDraftFiler
 
             if (erasedFrom is { } folder && draft.FiledEmail is { } erased)
             {
-                this.localFiler.AnnounceErased(draft.Account, folder, erased);
+                this.localFiler.AnnounceErased(draft.AccountId, folder, erased);
             }
 
             return Result(draft, MailDraftFilingOutcome.Discarded);

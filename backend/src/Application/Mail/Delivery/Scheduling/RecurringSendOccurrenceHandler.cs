@@ -159,7 +159,12 @@ public sealed class RecurringSendOccurrenceHandler : IJobHandler
         }
 
         var composition = this.composer.RecomposeAsOccurrence(
-            declaration.Account,
+            declaration.AccountId,
+
+            // The occasion is the declaration's author's send, not the pass's: nothing is acting for a user here, and
+            // a send this deployment attributed to nobody would share an idempotency identity with one somebody else
+            // declared on the same mailbox under the same schedule.
+            declaration.User,
             OutgoingEmailRequester.Schedule(declaration.Id, occurrence),
             declaration.Recipients,
             draft.RawMime,

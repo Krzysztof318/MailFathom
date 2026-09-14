@@ -33,7 +33,7 @@ budget or the coordinator loop itself are marked *restart* below.
 | `MailSynchronization:MaxMetadataBatchesPerRun` | int | `10` | 1 – 1000 | reload |
 | `MailSynchronization:MaxContentBytesPerRun` | long | `1073741824` (1 GiB) | 1024 – 1099511627776; how much raw MIME one folder run may fetch before it ends at its checkpoint. Must be at least `MaxRawMimeBytes` | reload |
 | `MailSynchronization:MaxStoredContentBytes` | long | *(none)* | 1024 – `9223372036854775807`; how much storage stored content may occupy before ingestion degrades to metadata only. **The deployment's, not each replica's** — the room a run reserves is held in the content store every replica writes into, so several replicas share this one figure rather than each getting it. Unset means no ceiling, and a deployment that sets neither this nor the per-user ceiling reserves nothing. Must be at least `MaxRawMimeBytes` | reload |
-| `MailSynchronization:MaxStoredContentBytesPerUser` | long | *(none)* | 1024 – `9223372036854775807`; how much stored content **one user's** mail may occupy before that user's ingestion degrades to metadata only, leaving every other user's whole. Counted as what their payloads hold rather than as what the table occupies, so it is not the same quantity as `MaxStoredContentBytes`. **The deployment's, not each replica's**, on the same terms as the ceiling above. Unset means no per-user ceiling, which is what a deployment serving one user wants and what leaves a deployment serving several exposed to one mailbox filling the instance. Must be at least `MaxRawMimeBytes` | reload |
+| `MailSynchronization:MaxStoredContentBytesPerUser` | long | *(none)* | 1024 – `9223372036854775807`; how much stored content **one user's** mail may occupy before that user's ingestion degrades to metadata only, leaving every other user's whole. Counted as what their payloads hold rather than as what the table occupies, so it is not the same quantity as `MaxStoredContentBytes`. **The deployment's, not each replica's**, on the same terms as the ceiling above. Unset means no per-user ceiling, which is what a deployment serving one user wants and what leaves a deployment serving several exposed to one mailbox filling the instance. A mailbox several users are assigned counts in full against each of them, so its mail is stored only while every one of them is under their share. Must be at least `MaxRawMimeBytes` | reload |
 | `MailSynchronization:MaxInFlightRawMimeBytes` | long | `134217728` (128 MiB) | 1024 – 4294967296; how much raw MIME every folder work unit together may hold in memory. **One process's**, because what it bounds is that process's own memory: a deployment of *n* replicas may hold *n* × this, which is the figure to size a container against. Must be at least `MaxRawMimeBytes` | restart |
 | `MailSynchronization:MaxReconciledEmailsPerRun` | int | `500` | 1 – 10000 | reload |
 | `MailSynchronization:MaxMimePartCount` | int | `1000` | 1 – 100000 | reload |
@@ -179,9 +179,9 @@ display name that another account's identifier or display name already carries; 
 
 **The display-name space belongs to each user's assigned set, and the address space to the deployment.** Two of one
 person's accounts may not share a display name, and two people's accounts may. The address is the opposite: one mailbox
-is held by one account in the whole deployment, and an account is assigned to one user at a time, so one mailbox is one
-account held by one person. Stored mail is keyed by
-the user and the account identifier together, so an ad-hoc SQL statement still names both.
+is held by one account in the whole deployment, however many users are assigned to it, so one mailbox is one account
+and one copy of its mail. Stored mail is keyed by the account identifier alone, so an ad-hoc SQL statement names it and
+no user.
 
 A folder entry names `Alias` (required — your stable name for the folder) and **at least one** of `RemotePath` (the
 server's own path) or `SpecialUse` (`Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`,

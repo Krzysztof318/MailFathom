@@ -251,6 +251,12 @@ to `0`, which declares no ceiling and still counts, so an operator sees the figu
 | Extraction | octets handed to a document parser | `Embeddings:AttachmentText:MaxInputOctetsPerPeriod` | `Embeddings:AttachmentText:MaxInputOctetsPerPeriodPerUser` |
 | Description | calls a chat provider answered | `Embeddings:ImageDescription:MaxDescriptionsPerPeriod` | `Embeddings:ImageDescription:MaxDescriptionsPerPeriodPerUser` |
 
+**A per-user share is charged in full to every user a mailbox is assigned to.** An attachment belongs to the mailbox
+rather than to a person, so reading one on a mailbox several people hold is admitted only while every one of them is
+under their share and is then charged to each of them, which is what
+[ADR 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
+decided rather than dividing the window between them.
+
 **An attachment a parser never saw is charged no octets.** Extraction counts what was handed to a parser rather than
 what the walk stepped over, so a picture, a format this deployment does not parse, and an attachment whose declared
 size already puts it past `Embeddings:AttachmentText:MaxInputOctets` cost this ceiling nothing — each is decided from

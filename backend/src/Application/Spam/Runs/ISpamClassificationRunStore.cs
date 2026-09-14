@@ -15,7 +15,7 @@ public interface ISpamClassificationRunStore
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The outstanding run, or <see langword="null" /> when the account has none — including when the last one ended.</returns>
     Task<SpamClassificationRun?> FindOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken);
 
     /// <summary>Reads the run this account last had, whether it is still outstanding or has ended.</summary>
@@ -27,7 +27,7 @@ public interface ISpamClassificationRunStore
     /// as one still going, so reporting only the outstanding one would leave "it completed an hour ago" and "you never
     /// asked" looking identical from the outside.
     /// </remarks>
-    Task<SpamClassificationRun?> FindLatestAsync(MailAccountIdentity account, CancellationToken cancellationToken);
+    Task<SpamClassificationRun?> FindLatestAsync(MailAccountId account, CancellationToken cancellationToken);
 
     /// <summary>Stages a run — a request, a batch's progress, or an ending — in the session it commits through.</summary>
     /// <param name="session">The session the run's progress is staged in.</param>

@@ -4,7 +4,6 @@
 
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Filing;
@@ -26,7 +25,6 @@ public interface IEmailMetadataRepository
 {
     /// <summary>Inserts or updates metadata for one remote occurrence idempotently and returns its stable local identity.</summary>
     /// <param name="session">The explicit persistence session this metadata write participates in.</param>
-    /// <param name="user">The user whose account the occurrence belongs to, which the stored row records beside the account.</param>
     /// <param name="metadata">The remote occurrence metadata to store.</param>
     /// <param name="extractedMetadata">
     /// What was read out of the occurrence's raw MIME, or <see langword="null" /> when nothing was read from it.
@@ -44,7 +42,6 @@ public interface IEmailMetadataRepository
     /// </remarks>
     Task<StoredEmailId> UpsertMetadataAsync(
         IPersistenceSession session,
-        MailUserId user,
         RemoteEmailMetadata metadata,
         ExtractedEmailMetadata? extractedMetadata,
         StoredEmailContentAvailability contentAvailability,
@@ -52,7 +49,6 @@ public interface IEmailMetadataRepository
 
     /// <summary>Moves one stored email onto the occurrence a relocation put it at, instead of storing a second email there.</summary>
     /// <param name="session">The explicit persistence session this write participates in.</param>
-    /// <param name="user">The user whose account the occurrence belongs to.</param>
     /// <param name="storedEmailId">The email that was relocated, named by the mutation record.</param>
     /// <param name="occurrenceId">Where the destination folder now holds it.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
@@ -79,7 +75,6 @@ public interface IEmailMetadataRepository
     /// </remarks>
     Task<bool> TryCarryToOccurrenceAsync(
         IPersistenceSession session,
-        MailUserId user,
         StoredEmailId storedEmailId,
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken);
@@ -139,7 +134,7 @@ public interface IEmailMetadataRepository
     /// </remarks>
     Task<StoredEmailId?> StoreFiledEmailAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId binding,
         ExtractedEmailMetadata? extractedMetadata,
         long sizeOctets,
@@ -159,7 +154,7 @@ public interface IEmailMetadataRepository
     /// folder the drain has not emptied yet costs one query per batch rather than one per message.
     /// </remarks>
     Task<IReadOnlyDictionary<string, StoredEmailId>> FindFiledSentCopiesAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         IReadOnlyCollection<string> internetMessageIds,
         CancellationToken cancellationToken);
 }

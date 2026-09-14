@@ -21,9 +21,10 @@ internal sealed class MailRuleEvaluationRunConfiguration : IEntityTypeConfigurat
     public void Configure(EntityTypeBuilder<MailRuleEvaluationRunEntity> entity)
     {
         entity.ToTable("mail_rule_evaluation_runs");
-        // One row per account, and an account is its user and its identifier together: the key leads with the user
-        // so that "one outstanding whole-mailbox rule run" is a statement about one person's mailbox.
-        entity.HasKey(run => new { run.UserId, run.MailboxAccountId })
+        // One row per account, keyed by the generated identifier alone: it names one mailbox across the
+        // deployment, so "one outstanding whole-mailbox rule run" is a statement about the mailbox rather than
+        // about whichever of its assigned users asked for it.
+        entity.HasKey(run => run.MailboxAccountId)
             .HasName(PersistenceConstraintNames.MailRuleEvaluationRunPrimaryKeyConstraintName);
         entity.Property(run => run.MailboxAccountId).HasMaxLength(128).ValueGeneratedNever();
         entity.Property(run => run.Revision)

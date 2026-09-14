@@ -154,7 +154,7 @@ public sealed class ComposedMailResponseToolContractTests(MailFathomOrchestratio
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(
             services,
-            MailAccountIdentity.Create(SyntheticMailAccount.User, accountId),
+            accountId,
             FolderAlias,
             FolderAlias,
             cancellationToken);
@@ -166,8 +166,7 @@ public sealed class ComposedMailResponseToolContractTests(MailFathomOrchestratio
             async (scope, session, token) =>
             {
                 storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session, SyntheticMailAccount.User,
-                    SyntheticEmail.RemoteMetadataOf(occurrenceId, AnsweredSubject, rawMime.Length),
+                    session, SyntheticEmail.RemoteMetadataOf(occurrenceId, AnsweredSubject, rawMime.Length),
                     SyntheticEmail.ExtractionFrom(
                         occurrenceId,
                         AnsweredSubject,

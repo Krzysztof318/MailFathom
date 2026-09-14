@@ -24,7 +24,7 @@ public interface ILocalEmailStateStore
     /// <returns>The state, or <see langword="null" /> where the account holds no such message.</returns>
     Task<LocalEmailState?> ReadAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId email,
         CancellationToken cancellationToken);
 
@@ -37,7 +37,7 @@ public interface ILocalEmailStateStore
     /// <returns>A task that completes once the write is staged in the session.</returns>
     Task WriteAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId email,
         LocalEmailState state,
         CancellationToken cancellationToken);
@@ -50,7 +50,7 @@ public interface ILocalEmailStateStore
     /// <returns>A task that completes once the erasure is staged in the session.</returns>
     Task EraseAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId email,
         CancellationToken cancellationToken);
 }

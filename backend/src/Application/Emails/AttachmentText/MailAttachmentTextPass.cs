@@ -107,7 +107,7 @@ public sealed class MailAttachmentTextPass
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when a competing writer wins a race the bounded retries could not resolve.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels. Committed readings stay durable.</exception>
     public async Task<MailAttachmentTextPassReport> RunAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         // The switch is honoured here rather than at composition, so a deployment that has not turned attachment
@@ -218,7 +218,7 @@ public sealed class MailAttachmentTextPass
             emailsRemain);
     }
 
-    /// <summary>Names the aggregate ceiling that refuses this user's next message, or nothing where both admit it.</summary>
+    /// <summary>Names the aggregate ceiling that refuses this mailbox's next message, or nothing where both admit it.</summary>
     /// <remarks>
     /// The deployment's ceiling is reported in preference to the user's by the admission itself, and extraction is
     /// asked before description because a message is read before any picture on it is sent anywhere: an operator whose
@@ -228,9 +228,9 @@ public sealed class MailAttachmentTextPass
         EmailAwaitingAttachmentText email,
         CancellationToken cancellationToken)
     {
-        var extraction = await this.spendGate.ReadCurrentPeriodForAsync(
+        var extraction = await this.spendGate.ReadCurrentPeriodForAccountAsync(
             AttachmentDerivationStep.Extraction,
-            email.User,
+            email.Account,
             cancellationToken);
 
         if (!extraction.AdmitsWork)
@@ -238,9 +238,9 @@ public sealed class MailAttachmentTextPass
             return extraction;
         }
 
-        var description = await this.spendGate.ReadCurrentPeriodForAsync(
+        var description = await this.spendGate.ReadCurrentPeriodForAccountAsync(
             AttachmentDerivationStep.Description,
-            email.User,
+            email.Account,
             cancellationToken);
 
         return description.AdmitsWork ? null : description;
@@ -267,17 +267,17 @@ public sealed class MailAttachmentTextPass
             await this.attachmentTextStore.SaveAttachmentTextAsync(session, email.Id, derived, cancellationToken);
         }
 
-        await this.spendGate.RecordSpendAsync(
+        await this.spendGate.RecordAccountSpendAsync(
             session,
             AttachmentDerivationStep.Extraction,
-            email.User,
+            email.Account,
             derived.ExtractedOctetCount,
             cancellationToken);
 
-        await this.spendGate.RecordSpendAsync(
+        await this.spendGate.RecordAccountSpendAsync(
             session,
             AttachmentDerivationStep.Description,
-            email.User,
+            email.Account,
             derived.ProviderDescriptionCount,
             cancellationToken);
     }

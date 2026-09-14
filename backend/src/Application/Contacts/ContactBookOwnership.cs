@@ -26,7 +26,7 @@ namespace MailFathom.Application.Contacts;
 /// what makes this a resolution rather than an assumption.
 /// </para>
 /// <para>
-/// It is deliberately not the empty answer <see cref="Accounts.OwnedMailAccountCatalog" /> gives a caller acting for another
+/// It is deliberately not the empty answer <see cref="Accounts.AssignedMailAccountCatalog" /> gives a caller acting for another
 /// user. There the question is which of the accounts this deployment serves belong to the caller, and nobody's is a
 /// meaningful answer; here the question is which book to read, and a book belonging to nobody is not one. What a caller
 /// acting for another user gets is that user's own book — empty until they write in it — rather than this one's.

@@ -23,13 +23,11 @@ public sealed class MailAccountDirectoryReaderTests
     private static readonly DateTimeOffset SynchronizedAt = new(2026, 3, 4, 9, 0, 0, TimeSpan.Zero);
 
     private static readonly ServedMailAccount Work = new(
-        SyntheticMailUser.Deployment,
         MailAccountId.Create("acct-1"),
         MailAccountDisplayName.Create("Work mail"),
         MailSynchronizationMode.Polling);
 
     private static readonly ServedMailAccount Private = new(
-        SyntheticMailUser.Deployment,
         MailAccountId.Create("acct-2"),
         MailAccountDisplayName.Create("Private mail"),
         MailSynchronizationMode.Push);
@@ -207,7 +205,7 @@ public sealed class MailAccountDirectoryReaderTests
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.SynchronizationEnabled.Returns(true);
-        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of("personal")]);
+        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of("personal")]);
 
         return new MailAccountDirectoryReader(
             catalog,
@@ -240,7 +238,7 @@ public sealed class MailAccountDirectoryReaderTests
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.SynchronizationEnabled.Returns(synchronizationEnabled);
-        catalog.OwnedAccounts.Returns([.. servedAccounts]);
+        catalog.AssignedAccounts.Returns([.. servedAccounts]);
 
         return new MailAccountDirectoryReader(
             catalog,

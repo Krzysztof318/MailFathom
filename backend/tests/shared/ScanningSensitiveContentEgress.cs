@@ -64,9 +64,8 @@ internal sealed class ScanningSensitiveContentEgress : IDisposable
     /// <summary>Gets the user whose mail this deployment is exercised over.</summary>
     public static MailUserId User => SyntheticMailUser.Deployment;
 
-    /// <summary>Gets the mailbox whose mail this deployment is exercised over, beside the user it is assigned to.</summary>
-    public static MailAccountIdentity Account { get; } =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, FixedSensitiveContentPostures.SoleAccount);
+    /// <summary>Gets the mailbox whose mail this deployment is exercised over.</summary>
+    public static MailAccountId Account => FixedSensitiveContentPostures.SoleAccount;
 
     /// <summary>Gets what every account's mail is scanned under, for a consumer that resolves the account itself.</summary>
     public FixedSensitiveContentPostures Postures { get; }

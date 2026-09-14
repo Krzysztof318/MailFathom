@@ -181,7 +181,7 @@ internal static class MailRuleEndpoints
         var run = await runs.FindLatestAsync(servedAccount, cancellationToken);
 
         return TypedResults.Ok(new MailRuleRunStateResponse(
-            servedAccount.Id.Value,
+            servedAccount.Value,
             run is null ? null : MailRuleRunResponse.For(run)));
     }
 

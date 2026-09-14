@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Accounts;
@@ -63,7 +63,7 @@ public sealed class ThreadStateDerivationPass
 
     private readonly IStoredThreadStateStore stateStore;
     private readonly IThreadStateDeriver deriver;
-    private readonly IMailUserLanguages languages;
+    private readonly AccountLanguages accountLanguages;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly TimeProvider timeProvider;
@@ -71,29 +71,29 @@ public sealed class ThreadStateDerivationPass
     /// <summary>Initializes the pass from the state it walks and the derivation it asks.</summary>
     /// <param name="stateStore">Reads which conversations are awaiting a state and writes down what one derivation produced.</param>
     /// <param name="deriver">Derives one conversation's state, in whichever state the deployment left it.</param>
-    /// <param name="languages">Answers which language the account's owner reads, which the statements are written in.</param>
-    /// <param name="egressGuard">States which mailbox the conversation is in, so the derivation scans it under that account's posture.</param>
+    /// <param name="accountLanguages">Answers which language the account's mail is read in.</param>
+    /// <param name="egressGuard">Holds the posture the conversation is scanned under while the pass runs.</param>
     /// <param name="commitPolicy">Commits one conversation's record, retrying a conflict with a competing writer.</param>
     /// <param name="timeProvider">Reads when a derivation ran.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public ThreadStateDerivationPass(
         IStoredThreadStateStore stateStore,
         IThreadStateDeriver deriver,
-        IMailUserLanguages languages,
+        AccountLanguages accountLanguages,
         SensitiveContentEgressGuard egressGuard,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(stateStore);
         ArgumentNullException.ThrowIfNull(deriver);
-        ArgumentNullException.ThrowIfNull(languages);
+        ArgumentNullException.ThrowIfNull(accountLanguages);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.stateStore = stateStore;
         this.deriver = deriver;
-        this.languages = languages;
+        this.accountLanguages = accountLanguages;
         this.egressGuard = egressGuard;
         this.commitPolicy = commitPolicy;
         this.timeProvider = timeProvider;
@@ -109,7 +109,7 @@ public sealed class ThreadStateDerivationPass
     /// </exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels. Committed records stay durable.</exception>
     public async Task<ThreadStateDerivationPassReport> RunAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         // The switch is honoured here rather than at composition, so a deployment that has not turned the derivation on
@@ -131,7 +131,7 @@ public sealed class ThreadStateDerivationPass
 
         // Resolved once for the same reason and from the same fact: every conversation in this batch is one person's,
         // and what they read is what every statement derived from it is written in.
-        var language = this.languages.ForUser(account.User);
+        var language = this.accountLanguages.LanguageOf(account);
 
         var batch = await this.stateStore.GetThreadsAwaitingStateAsync(
             account,

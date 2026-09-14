@@ -4,7 +4,7 @@
 
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.CodeCoverage;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -40,16 +40,16 @@ internal sealed class StoredContentClaimStore(MailFathomDbContext dbContext) : I
 {
     /// <summary>The advisory lock every claim of this deployment serializes on.</summary>
     /// <remarks>
-    /// One key for the whole table rather than one per user, because the deployment ceiling is answered from every
-    /// claim there is: two users claiming at once are exactly the pair a per-user key would let past each other. The
-    /// value is arbitrary and only has to stay unique among whatever else this product ever locks advisorily, which is
-    /// currently nothing.
+    /// One key for the whole table rather than one per account, because the deployment ceiling is answered from every
+    /// claim there is: two mailboxes claiming at once are exactly the pair a per-account key would let past each
+    /// other. The value is arbitrary and only has to stay unique among whatever else this product ever locks
+    /// advisorily, which is currently nothing.
     /// </remarks>
     private const long ClaimSerializationKey = 5_263_456_017_113_920_001L;
 
     /// <inheritdoc />
     public async Task<StoredContentClaimRecord> ClaimAsync(
-        MailUserId user,
+        MailAccountId account,
         long bytes,
         StoredContentCeilings ceilings,
         TimeSpan claimLifetime,
@@ -58,11 +58,11 @@ internal sealed class StoredContentClaimStore(MailFathomDbContext dbContext) : I
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(bytes);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(claimLifetime, TimeSpan.Zero);
 
-        if (!user.IsSpecified)
+        if (string.IsNullOrEmpty(account.Value))
         {
             throw new ArgumentException(
-                "A stored-content claim is reserved against a named user's ceiling, so a user naming nobody cannot claim.",
-                nameof(user));
+                "A stored-content claim is reserved against a named account, so an account naming nothing cannot claim.",
+                nameof(account));
         }
 
         if (!ceilings.BoundsAnything)
@@ -97,7 +97,7 @@ internal sealed class StoredContentClaimStore(MailFathomDbContext dbContext) : I
         var verdicts = await dbContext.Database
             .SqlQueryRaw<int>(
                 ClaimStatement(names),
-                user.Value,
+                account.Value,
                 bytes,
                 claimId,
                 claimLifetime,
@@ -139,9 +139,22 @@ internal sealed class StoredContentClaimStore(MailFathomDbContext dbContext) : I
     /// </para>
     /// <para>
     /// The deployment's occupancy is PostgreSQL's own accounting of what the content table costs the disk, which is the
-    /// quantity the ceiling is set against and is read from the catalogue in constant time. The user's is the maintained
-    /// figure of what their payloads hold, which is the only quantity attributable to one person. Neither answers for
-    /// the other, and each has that population's unexpired claims added to it.
+    /// quantity the ceiling is set against and is read from the catalogue in constant time. A user's is the sum of the
+    /// maintained figures of the accounts assigned to them, which is the only quantity attributable to one person.
+    /// Neither answers for the other, and each has that population's unexpired claims added to it.
+    /// </para>
+    /// <para>
+    /// The user figure is the largest such sum over the users assigned the claiming account, because ADR 0014 counts a
+    /// shared mailbox in full against every one of them and admits the payload only while every one of them is under
+    /// the ceiling — so the user closest to their ceiling is the one that decides. An account nobody is assigned has
+    /// no such sum and is bounded by the deployment alone.
+    /// </para>
+    /// <para>
+    /// ponytail: the assignment table keys an account by the generated identifier as a `uuid` while the mail graph
+    /// keys it as that identifier's text, so the join casts rather than reading an index. The table holds one row per
+    /// assignment in the deployment and the claim already serializes on an advisory lock, so the scan is not what
+    /// bounds a claim; the upgrade path is one column type, taken where the settings record and the mail graph are
+    /// next reconciled.
     /// </para>
     /// <para>
     /// The verdict is reported as the bound that refused rather than as a flag, and the deployment's is reported in
@@ -157,6 +170,31 @@ internal sealed class StoredContentClaimStore(MailFathomDbContext dbContext) : I
             WHERE {{names.ClaimExpiresAtColumn}} <= now()
             RETURNING 1
         ),
+        shared AS (
+            SELECT sharer.{{names.AssignmentUserColumn}} AS user_id
+            FROM {{names.Assignments}} AS sharer
+            WHERE CAST(sharer.{{names.AssignmentAccountColumn}} AS text) = {0}
+        ),
+        per_user AS (
+            SELECT held.user_id, SUM(held.account_held) AS user_held
+            FROM (
+                SELECT assignment.{{names.AssignmentUserColumn}} AS user_id,
+                    COALESCE((
+                        SELECT total.{{names.TotalsCountColumn}}
+                        FROM {{names.Totals}} AS total
+                        WHERE total.{{names.TotalsAccountColumn}}
+                            = CAST(assignment.{{names.AssignmentAccountColumn}} AS text)), 0)
+                        + COALESCE((
+                            SELECT SUM(live.{{names.ClaimBytesColumn}})
+                            FROM {{names.Claims}} AS live
+                            WHERE live.{{names.ClaimExpiresAtColumn}} > now()
+                              AND live.{{names.ClaimAccountColumn}}
+                                = CAST(assignment.{{names.AssignmentAccountColumn}} AS text)), 0) AS account_held
+                FROM {{names.Assignments}} AS assignment
+                WHERE assignment.{{names.AssignmentUserColumn}} IN (SELECT user_id FROM shared)
+            ) AS held
+            GROUP BY held.user_id
+        ),
         figures AS (
             SELECT
                 COALESCE(pg_total_relation_size(to_regclass({6})), 0)
@@ -164,20 +202,12 @@ internal sealed class StoredContentClaimStore(MailFathomDbContext dbContext) : I
                         SELECT SUM(live.{{names.ClaimBytesColumn}})
                         FROM {{names.Claims}} AS live
                         WHERE live.{{names.ClaimExpiresAtColumn}} > now()), 0) AS deployment_held,
-                COALESCE((
-                    SELECT total.{{names.TotalsCountColumn}}
-                    FROM {{names.Totals}} AS total
-                    WHERE total.{{names.TotalsUserColumn}} = {0}), 0)
-                    + COALESCE((
-                        SELECT SUM(live.{{names.ClaimBytesColumn}})
-                        FROM {{names.Claims}} AS live
-                        WHERE live.{{names.ClaimExpiresAtColumn}} > now()
-                          AND live.{{names.ClaimUserColumn}} = {0}), 0) AS user_held
+                COALESCE((SELECT MAX(per_user.user_held) FROM per_user), 0) AS user_held
         ),
         taken AS (
             INSERT INTO {{names.Claims}} (
                 {{names.ClaimIdColumn}},
-                {{names.ClaimUserColumn}},
+                {{names.ClaimAccountColumn}},
                 {{names.ClaimBytesColumn}},
                 {{names.ClaimExpiresAtColumn}})
             SELECT {2}, {0}, {1}, now() + {3}
@@ -202,29 +232,36 @@ internal sealed class StoredContentClaimStore(MailFathomDbContext dbContext) : I
     private sealed record StoredContentClaimNames(
         string Claims,
         string ClaimIdColumn,
-        string ClaimUserColumn,
+        string ClaimAccountColumn,
         string ClaimBytesColumn,
         string ClaimExpiresAtColumn,
         string Totals,
-        string TotalsUserColumn,
+        string TotalsAccountColumn,
         string TotalsCountColumn,
+        string Assignments,
+        string AssignmentUserColumn,
+        string AssignmentAccountColumn,
         string ContentsTable)
     {
         public static StoredContentClaimNames Of(IModel model)
         {
             var claims = PersistedSchemaNames.EntityTypeOf<StoredContentClaimEntity>(model);
-            var totals = PersistedSchemaNames.EntityTypeOf<UserStoredContentEntity>(model);
+            var totals = PersistedSchemaNames.EntityTypeOf<AccountStoredContentEntity>(model);
+            var assignments = PersistedSchemaNames.EntityTypeOf<MailAccountAssignmentEntity>(model);
             var contents = PersistedSchemaNames.EntityTypeOf<EmailMessageContentEntity>(model);
 
             return new StoredContentClaimNames(
                 PersistedSchemaNames.QuotedTable(claims),
                 PersistedSchemaNames.QuotedColumn(claims, nameof(StoredContentClaimEntity.Id)),
-                PersistedSchemaNames.QuotedColumn(claims, nameof(StoredContentClaimEntity.UserId)),
+                PersistedSchemaNames.QuotedColumn(claims, nameof(StoredContentClaimEntity.MailboxAccountId)),
                 PersistedSchemaNames.QuotedColumn(claims, nameof(StoredContentClaimEntity.ClaimedByteCount)),
                 PersistedSchemaNames.QuotedColumn(claims, nameof(StoredContentClaimEntity.ExpiresAt)),
                 PersistedSchemaNames.QuotedTable(totals),
-                PersistedSchemaNames.QuotedColumn(totals, nameof(UserStoredContentEntity.UserId)),
-                PersistedSchemaNames.QuotedColumn(totals, nameof(UserStoredContentEntity.StoredContentByteCount)),
+                PersistedSchemaNames.QuotedColumn(totals, nameof(AccountStoredContentEntity.MailboxAccountId)),
+                PersistedSchemaNames.QuotedColumn(totals, nameof(AccountStoredContentEntity.StoredContentByteCount)),
+                PersistedSchemaNames.QuotedTable(assignments),
+                PersistedSchemaNames.QuotedColumn(assignments, nameof(MailAccountAssignmentEntity.UserId)),
+                PersistedSchemaNames.QuotedColumn(assignments, nameof(MailAccountAssignmentEntity.MailAccountId)),
                 contents.GetSchemaQualifiedTableName()
                     ?? throw new InvalidOperationException(
                         "Stored mail content is mapped to no table, so no claim can measure what it occupies."));

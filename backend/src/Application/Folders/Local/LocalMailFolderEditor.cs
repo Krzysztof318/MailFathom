@@ -83,7 +83,7 @@ public sealed class LocalMailFolderEditor
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        var identity = MailAccountIdentity.Create(this.authorization.RequireUser(), account);
+        var identity = account;
         var holding = await this.store.ReadAsync(identity, cancellationToken);
 
         if (holding is not { Phase: MailAccountCustodyPhase.Held }
@@ -157,7 +157,7 @@ public sealed class LocalMailFolderEditor
 
     private async Task<LocalMailFolderHolding?> SupplyProtectedFoldersAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         var holding = await this.store.ReadAsync(session, account, cancellationToken);
@@ -188,7 +188,7 @@ public sealed class LocalMailFolderEditor
     {
         this.authorization.RequirePermission(MailFathomPermission.MailFoldersWrite);
 
-        var account = MailAccountIdentity.Create(this.authorization.RequireUser(), accountId);
+        var account = accountId;
 
         var decision = await this.concurrencyRetryPolicy.CommitAsync(
             (session, attemptCancellationToken) => this.DecideAndSaveAsync(session, account, act, decide, attemptCancellationToken),
@@ -206,7 +206,7 @@ public sealed class LocalMailFolderEditor
 
     private async Task<LocalMailFolderDecision> DecideAndSaveAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderChangeKind act,
         Func<LocalMailFolderTree, LocalMailFolderEdit> decide,
         CancellationToken cancellationToken)
@@ -264,7 +264,7 @@ public sealed class LocalMailFolderEditor
     /// <summary>Audits and signals a committed act, and queues the first erasure pass of one that erased folders.</summary>
     /// <returns>Whether an erasure found the queue full, so no pass was queued for it.</returns>
     private async Task<bool> AnnounceAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         LocalMailFolderDecision decision,
         CancellationToken cancellationToken)
     {

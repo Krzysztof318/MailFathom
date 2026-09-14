@@ -5,14 +5,12 @@
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
-using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,7 +42,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
     private const string FolderAlias = "job-store";
 
     /// <summary>The mailbox of the second user the fairness of the claim is judged against.</summary>
-    private const string SecondUserAccount = "job-store-second-user";
+    private const string SecondAccount = "job-store-second-account";
 
     /// <summary>The one instant the fairness test queues everything at, so no turn it asserts depends on the clock.</summary>
     /// <remarks>
@@ -550,29 +548,30 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
     }
 
     /// <summary>
-    /// One user with a backlog and another with a single due job, and a claim bounded to two hands back one of each.
+    /// One mailbox with a backlog and another with a single due job, and a claim bounded to two hands back one of each.
     /// Under the ordering this replaced — the instant a job became available, which is the order the backlog was queued
-    /// in — the same claim would have returned two of the backlog and the second user would have waited for the whole
-    /// of it. Only a real database settles it: the fairness is entirely in what one statement selects and in what an
-    /// insert stamped, and a substitute would prove that the code meant to interleave rather than that PostgreSQL does.
+    /// in — the same claim would have returned two of the backlog and the second mailbox would have waited for the
+    /// whole of it. Only a real database settles it: the fairness is entirely in what one statement selects and in what
+    /// an insert stamped, and a substitute would prove that the code meant to interleave rather than that PostgreSQL
+    /// does.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The second user is provisioned here and erased in the finally, because a deployment holding two user records
-    /// cannot attribute a configured mail account — so every folder binding this class arranges is committed before the
-    /// second user exists, and the deployment is left with the one record the classes after this one resolve against.
+    /// A turn is stamped from the queue's own account column, so what the claim interleaves is mailboxes rather than
+    /// the users assigned them: a second account record is written here and removed in the finally, and no second user
+    /// is needed to arrange it.
     /// </para>
     /// <para>
     /// Every job here names the same available instant rather than taking the clock, so the turns the enqueue stamps
-    /// are decided by the order the jobs were queued in and by nothing else. Left to the clock, the second user's job
-    /// would have to be written within one spacing of the backlog's first — a margin four commits against a shared
+    /// are decided by the order the jobs were queued in and by nothing else. Left to the clock, the second mailbox's
+    /// job would have to be written within one spacing of the backlog's first — a margin four commits against a shared
     /// container have to fit inside — and the test would report a fair claim as unfair whenever the machine was busy.
     /// A fixed instant is also what makes the expected ordering exact: the backlog holds the instant and the three
-    /// turns after it, the second user holds the instant, and a claim of two can only be the two rows at it.
+    /// turns after it, the second mailbox holds the instant, and a claim of two can only be the two rows at it.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task ClaimAsync_ABacklogOfOneUserBesideAnotherUsersDueJob_HandsBackOneOfEachWithinABoundedClaim()
+    public async Task ClaimAsync_ABacklogOfOneMailboxBesideAnotherMailboxesDueJob_HandsBackOneOfEachWithinABoundedClaim()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -585,21 +584,19 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             backlog.Add(await EnqueueAtQueuedInstantAsync(services, uid, cancellationToken));
         }
 
-        var secondUserId = Guid.CreateVersion7();
-
         try
         {
             Assert.Equal(
                 PersistenceCommitResult.Committed,
-                await SeedSecondUserAsync(services, secondUserId, cancellationToken));
+                await SeedSecondAccountAsync(services, cancellationToken));
 
-            var otherUsersJob = await services.InScopeAsync(
+            var otherMailboxesJob = await services.InScopeAsync(
                 (scope, token) => scope.GetRequiredService<IJobStore>().EnqueueAsync(
-                    SecondUserRequest(secondUserId),
+                    SecondAccountRequest(),
                     token),
                 cancellationToken);
 
-            Assert.Equal(JobEnqueueOutcome.Created, otherUsersJob.Outcome);
+            Assert.Equal(JobEnqueueOutcome.Created, otherMailboxesJob.Outcome);
 
             // Act
             var claimed = await services.InScopeAsync(
@@ -611,61 +608,64 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             // account identifiers sorts first is not what this proves, and writing it as a sequence would tie the
             // test to their spelling.
             Assert.Equal(2, claimed.Count);
-            Assert.Single(claimed, job => job.AccountId?.Value == SecondUserAccount);
+            Assert.Single(claimed, job => job.AccountId?.Value == SecondAccount);
 
             // The backlog kept its own order: what fairness changed is whose turn comes between them, not whether a
-            // user's work is handed out in the order it was queued.
+            // mailbox's work is handed out in the order it was queued.
             Assert.Equal(
                 backlog[0],
                 Assert.Single(claimed, job => job.AccountId?.Value == SyntheticMailAccount.AccountId.Value).JobId);
         }
         finally
         {
-            await services.CommitProducingAsync(
-                (_, session, token) => UserAccountErasure.EraseAsync(session, secondUserId, token),
-                CancellationToken.None);
+            await EraseSecondAccountAsync(services, CancellationToken.None);
         }
     }
 
-    /// <summary>Writes a second user and one mailbox of theirs, which is the least a claim can be judged fair over.</summary>
+    /// <summary>Writes a second mailbox record, which is the least a claim can be judged fair over.</summary>
     /// <remarks>
-    /// Written straight into the model rather than through folder resolution, because resolution attributes an account
-    /// to the deployment's single user — which is the very thing a second user has to be arranged around.
+    /// Written straight into the model rather than through folder resolution, because resolution arranges the one
+    /// account this class's other tests queue against — and a second turn is exactly what has to stand beside it.
     /// </remarks>
-    private static Task<PersistenceCommitResult> SeedSecondUserAsync(
+    private static Task<PersistenceCommitResult> SeedSecondAccountAsync(
         OrchestratedMailFathomServices services,
-        Guid userId,
         CancellationToken cancellationToken) => services.CommitAsync(
         async (_, session, token) =>
         {
             var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
 
-            context.UserAccounts.Add(new UserAccountEntity
-            {
-                Id = userId,
-                DisplayName = $"user-{userId:N}",
-                Document = "{}",
-                Version = 1,
-                CreatedAt = DateTimeOffset.UnixEpoch,
-                UpdatedAt = DateTimeOffset.UnixEpoch,
-            });
-            context.MailboxAccounts.Add(new MailboxAccountEntity { Id = SecondUserAccount, UserId = userId });
+            context.MailboxAccounts.Add(new MailboxAccountEntity { Id = SecondAccount, });
         },
         cancellationToken);
 
-    /// <summary>Composes the second user's one execution, against their own account rather than this class's.</summary>
-    private static JobEnqueueRequest SecondUserRequest(Guid secondUserId)
+    /// <summary>Removes the second mailbox record, and with it the job the foreign key cascades from.</summary>
+    /// <remarks>
+    /// The record is assigned to nobody, so no user's erasure names it, and leaving it behind would refuse the insert
+    /// the next run of this test makes against a database that already holds one.
+    /// </remarks>
+    private static Task<PersistenceCommitResult> EraseSecondAccountAsync(
+        OrchestratedMailFathomServices services,
+        CancellationToken cancellationToken) => services.CommitAsync(
+        async (_, session, token) =>
+        {
+            var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
+
+            await context.MailboxAccounts
+                .Where(account => account.Id == SecondAccount)
+                .ExecuteDeleteAsync(token);
+        },
+        cancellationToken);
+
+    /// <summary>Composes one execution against a second account rather than this class's.</summary>
+    private static JobEnqueueRequest SecondAccountRequest()
     {
-        var account = MailAccountIdentity.Create(
-            MailUserId.Create(secondUserId),
-            MailAccountId.Create(SecondUserAccount));
+        var account = MailAccountId.Create(SecondAccount);
 
         return JobEnqueueRequest.CreateAvailableAt(
-            JobIdempotencyKey.Create($"{SecondUserAccount}/1"),
+            JobIdempotencyKey.Create($"{SecondAccount}/1"),
             ClassifyEmailSpamJobPayload.For(
-                account.User,
                 EmailOccurrenceId.Create(
-                    account.Id,
+                    account,
                     new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
                     ImapUidValidity.Create(90_002),
                     ImapUid.Create(1))),
@@ -741,7 +741,6 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
     {
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var payload = ClassifyEmailSpamJobPayload.For(
-            SyntheticMailAccount.User,
             EmailOccurrenceId.Create(
                 SyntheticMailAccount.AccountId,
                 binding.Id,

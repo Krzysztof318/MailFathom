@@ -9,7 +9,6 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
-using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -21,8 +20,8 @@ public sealed class LocalMailFolderMailErasureHandlerTests
 {
     private const int MaxEmailsPerPass = 500;
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("primary");
 
     private static readonly EraseLocalMailFolderMailJobPayload FirstPass =
         EraseLocalMailFolderMailJobPayload.For(Account, LocalMailFolderId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000001")));
@@ -89,7 +88,7 @@ public sealed class LocalMailFolderMailErasureHandlerTests
         var store = Substitute.For<ILocalMailFolderStore>();
         store.EraseMailOfErasedFoldersAsync(
                 Arg.Any<IPersistenceSession>(),
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(erasure);

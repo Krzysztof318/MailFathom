@@ -623,7 +623,7 @@ public sealed class ClientMailMutationsEndpointTests
     private static MailboxScopeResolver ScopeResolver(StubMailFolderParticipation? participation = null)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(ServedAccount)]);
+        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(ServedAccount)]);
 
         return new MailboxScopeResolver(
             catalog,
@@ -665,7 +665,6 @@ public sealed class ClientMailMutationsEndpointTests
         var folder = MailFolderResolution.FirstBindingOf(Inbox, RemoteFolderPath.Create(Inbox.Value));
 
         return new AuthoredMailboxTarget(
-            SyntheticMailUser.Deployment,
             EmailOccurrenceId.Create(ServedAccount, folder.Id, ImapUidValidity.Create(42), ImapUid.Create(7)),
             folder);
     }
@@ -711,13 +710,13 @@ public sealed class ClientMailMutationsEndpointTests
         if (held)
         {
             localFolders
-                .ReadAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
+                .ReadAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
                 .Returns(Task.FromResult<LocalMailFolderHolding?>(
                     new LocalMailFolderHolding(MailAccountCustodyPhase.Held, [], [])));
             states
                 .ReadAsync(
                     Arg.Any<IPersistenceSession>(),
-                    Arg.Any<MailAccountIdentity>(),
+                    Arg.Any<MailAccountId>(),
                     Arg.Any<StoredEmailId>(),
                     Arg.Any<CancellationToken>())
                 .Returns(Task.FromResult<LocalEmailState?>(new LocalEmailState(

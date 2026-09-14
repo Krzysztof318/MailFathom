@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Synchronization;
 
@@ -11,37 +10,25 @@ namespace MailFathom.TestSupport;
 
 /// <summary>Builds the served account a test arranges when the account's own settings are not what it is about.</summary>
 /// <remarks>
-/// <para>
 /// Most tests care which accounts a deployment serves and not what they are called, so a derived display name keeps them
 /// from restating one each. It is deliberately not the identifier: a helper that made the two spellings equal would let
 /// a test pass while resolution matched only the identifier, which is the behaviour several of these tests exist to
-/// prove.
-/// </para>
-/// <para>
-/// The user defaults for the same reason the display name is derived: an account belongs to one, every row naming the
-/// account carries it, and most tests are not about which user it is. A test that is about that states the user, which
-/// is what lets one arrange an account of somebody this deployment does not serve.
-/// </para>
+/// prove. No user is stated because the account carries none — which users reach a mailbox is the assignment relation,
+/// and <c>AssignedMailAccountCatalogs</c> is where a test says that.
 /// </remarks>
 internal static class SyntheticServedAccount
 {
     /// <summary>Builds one served account from its identifier.</summary>
-    /// <param name="accountId">The account to serve, within its user.</param>
-    /// <param name="user">The user the account belongs to, defaulting to the one a deployment serves.</param>
+    /// <param name="accountId">The account to serve.</param>
     /// <returns>The account, polling, under a display name derived from the identifier.</returns>
-    public static ServedMailAccount Of(MailAccountId accountId, MailUserId? user = null) =>
-        new(
-            user ?? SyntheticMailUser.Deployment,
-            accountId,
-            DisplayNameOf(accountId),
-            MailSynchronizationMode.Polling);
+    public static ServedMailAccount Of(MailAccountId accountId) =>
+        new(accountId, DisplayNameOf(accountId), MailSynchronizationMode.Polling);
 
     /// <summary>Builds one served account from the text of its identifier.</summary>
-    /// <param name="accountId">The account to serve, within its user.</param>
-    /// <param name="user">The user the account belongs to, defaulting to the one a deployment serves.</param>
+    /// <param name="accountId">The account to serve.</param>
     /// <returns>The account, polling, under a display name derived from the identifier.</returns>
-    public static ServedMailAccount Of(string accountId, MailUserId? user = null) =>
-        Of(MailAccountId.Create(accountId), user);
+    public static ServedMailAccount Of(string accountId) =>
+        Of(MailAccountId.Create(accountId));
 
     /// <summary>Reads the display name this helper gives one account, which a test asserting on the name names.</summary>
     /// <param name="accountId">The account to name.</param>

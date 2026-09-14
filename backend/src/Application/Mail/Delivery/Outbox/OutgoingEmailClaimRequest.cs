@@ -21,7 +21,7 @@ namespace MailFathom.Application.Mail.Delivery.Outbox;
 public sealed record OutgoingEmailClaimRequest
 {
     private OutgoingEmailClaimRequest(
-        MailAccountIdentity account,
+        MailAccountId account,
         int batchSize,
         TimeSpan leaseDuration,
         Guid claimant)
@@ -33,7 +33,7 @@ public sealed record OutgoingEmailClaimRequest
     }
 
     /// <summary>Gets the account whose queued sends this claim takes, named by its user and its identifier.</summary>
-    public MailAccountIdentity Account { get; }
+    public MailAccountId Account { get; }
 
     /// <summary>Gets the greatest number of records the claim takes.</summary>
     public int BatchSize { get; }
@@ -52,7 +52,7 @@ public sealed record OutgoingEmailClaimRequest
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="batchSize" /> is not positive or <paramref name="leaseDuration" /> is not positive.</exception>
     /// <remarks>The claimant is generated here rather than supplied, so no caller can claim under an identity another attempt already holds.</remarks>
     public static OutgoingEmailClaimRequest Create(
-        MailAccountIdentity account,
+        MailAccountId account,
         int batchSize,
         TimeSpan leaseDuration)
     {

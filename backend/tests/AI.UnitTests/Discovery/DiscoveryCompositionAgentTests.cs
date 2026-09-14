@@ -286,7 +286,7 @@ public sealed class DiscoveryCompositionAgentTests
     private static MailQuestion Question(string text = "which supplier quoted least") =>
         new(
             MailQuestionText.Create(text),
-            MailboxScope.Create(SyntheticMailUser.Deployment, [Primary], []));
+            MailboxScope.Create([Primary], []));
 
     private static DiscoveryRunPlan Plan(DiscoveryIntent intent) =>
         DiscoveryRunPlan.Compose(

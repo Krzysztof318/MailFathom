@@ -63,7 +63,7 @@ public sealed class AuthoredMailDrafting(
         // Resolved against the accounts the caller's user owns for the reason the send is, and a draft lands in a
         // folder rather than in the world: one written into another user's account is a message that person may read
         // in their own mailbox as their own.
-        var account = accountCatalog.OwnedAccounts.FirstOrDefault(owned => owned.IsNamedBy(request.Account))
+        var account = accountCatalog.AssignedAccounts.FirstOrDefault(owned => owned.IsNamedBy(request.Account))
             ?? throw new MailAccountNotAccessibleException(request.Account);
 
         // Ahead of the resolution rather than left to it, because the reads it performs carry what the caller supplied
@@ -83,7 +83,7 @@ public sealed class AuthoredMailDrafting(
         // Read from the draft being revised rather than from the request, because a file is uploaded against a draft
         // and belongs to it: a revision that composed only what its own body carried would take the author's
         // attachments off the message every time they edited a word of it.
-        var attachments = await drafts.ReadStagedAttachmentsAsync(account.Identity.Id, request.Revises, cancellationToken);
+        var attachments = await drafts.ReadStagedAttachmentsAsync(account.Id, request.Revises, cancellationToken);
 
         var authored = new AuthoredEmail
         {
@@ -95,7 +95,7 @@ public sealed class AuthoredMailDrafting(
         };
 
         var composition = composer.ComposeDraft(
-            account.Identity,
+            account.Id,
             authored,
             MailDeliveryCapabilities.BeforeAnyServerHasSpoken);
 
@@ -105,7 +105,8 @@ public sealed class AuthoredMailDrafting(
         }
 
         return await drafts.SaveAsync(
-            account.Identity,
+            account.Id,
+            accountCatalog.User,
             request.Author,
             composed,
             request.Revises,

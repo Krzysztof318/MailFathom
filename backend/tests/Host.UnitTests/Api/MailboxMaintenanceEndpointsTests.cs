@@ -12,7 +12,6 @@ using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
-using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -37,8 +36,8 @@ public sealed class MailboxMaintenanceEndpointsTests
     private static readonly MailAccountId Account = MailAccountId.Create("work");
 
     /// <summary>The account as the store is asked about it, which is the user and the identifier together.</summary>
-    private static readonly MailAccountIdentity AccountIdentity =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, Account);
+    private static readonly MailAccountId AccountIdentity =
+        Account;
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
 
     /// <summary>
@@ -403,7 +402,6 @@ public sealed class MailboxMaintenanceEndpointsTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
-                SyntheticMailUser.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),
@@ -423,17 +421,17 @@ public sealed class MailboxMaintenanceEndpointsTests
     private sealed class RecordingCheckpointStore(IReadOnlyList<MailFolderAlias> foldersHoldingProgress)
         : ISynchronizationCheckpointStore
     {
-        public List<(MailAccountIdentity Account, MailFolderAlias? FolderAlias)> Discards { get; } = [];
+        public List<(MailAccountId Account, MailFolderAlias? FolderAlias)> Discards { get; } = [];
 
         public Task<SynchronizationCheckpoint?> GetCheckpointAsync(
-            MailAccountIdentity account,
+            MailAccountId account,
             MailFolderResolutionId folderResolutionId,
             CancellationToken cancellationToken) =>
             Task.FromResult<SynchronizationCheckpoint?>(null);
 
         public Task SaveCheckpointAsync(
             IPersistenceSession session,
-            MailAccountIdentity account,
+            MailAccountId account,
             MailFolderResolutionId folderResolutionId,
             SynchronizationCheckpoint? expectedCheckpoint,
             SynchronizationCheckpoint checkpoint,
@@ -442,7 +440,7 @@ public sealed class MailboxMaintenanceEndpointsTests
 
         public Task<IReadOnlyList<MailFolderAlias>> DiscardCheckpointsAsync(
             IPersistenceSession session,
-            MailAccountIdentity account,
+            MailAccountId account,
             MailFolderAlias? folderAlias,
             CancellationToken cancellationToken)
         {
@@ -483,7 +481,7 @@ public sealed class MailboxMaintenanceEndpointsTests
             return Task.CompletedTask;
         }
 
-        private static string KeyOf(StoredMailScope scope) => $"{scope.Account.User.Value} {scope.Account.Id.Value} {scope.Folder?.Value}";
+        private static string KeyOf(StoredMailScope scope) => $"{scope.Account.Value} {scope.Folder?.Value}";
     }
 
     private sealed class CommittingSession : IPersistenceSession

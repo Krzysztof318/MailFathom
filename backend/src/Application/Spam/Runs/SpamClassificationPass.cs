@@ -116,7 +116,7 @@ public sealed class SpamClassificationPass
     /// nothing, and a profile that has moved under a walk already half done.
     /// </remarks>
     public async Task<SpamClassificationRunReport> RunAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         var run = await this.runStore.FindOutstandingAsync(account, cancellationToken);
@@ -126,7 +126,7 @@ public sealed class SpamClassificationPass
             return SpamClassificationRunReport.NoRun;
         }
 
-        var settings = this.settingsReader.SettingsFor(account.Id);
+        var settings = this.settingsReader.SettingsFor(account);
 
         if (!settings.IsEnabled)
         {
@@ -256,7 +256,7 @@ public sealed class SpamClassificationPass
         else
         {
             var result = await this.classifier.ClassifyAsync(
-                run.Account.User,
+                run.Account,
                 candidate.Id,
                 SpamClassificationMode.Reclassify,
                 cancellationToken);

@@ -106,7 +106,7 @@ public sealed class RecurringMailSubmission
         // Resolved against the accounts the caller's user owns for the reason the single send is, and here the
         // exposure repeats: a declaration written against somebody else's account would send as them on every occasion
         // the schedule names rather than once.
-        var account = this.accountCatalog.OwnedAccounts.FirstOrDefault(owned => owned.IsNamedBy(request.Account))
+        var account = this.accountCatalog.AssignedAccounts.FirstOrDefault(owned => owned.IsNamedBy(request.Account))
             ?? throw new MailAccountNotAccessibleException(request.Account);
 
         // First of the three, because it is the only one that costs nothing: a repetition nobody can resolve is
@@ -137,7 +137,8 @@ public sealed class RecurringMailSubmission
         };
 
         var composition = this.composer.Compose(
-            account.Identity,
+            account.Id,
+            this.accountCatalog.User,
             request.Requester,
             authored,
             MailDeliveryCapabilities.BeforeAnyServerHasSpoken);
@@ -148,7 +149,8 @@ public sealed class RecurringMailSubmission
         }
 
         var declaration = RecurringSendRequest.Create(
-            account.Identity,
+            account.Id,
+            this.accountCatalog.User,
             request.Requester,
             draft.Request.Recipients,
             request.Schedule);

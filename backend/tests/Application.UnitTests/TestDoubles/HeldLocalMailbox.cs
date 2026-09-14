@@ -34,16 +34,16 @@ internal sealed class HeldLocalMailbox
     private readonly IOutgoingMailFilingPolicyReader filingPolicies = Substitute.For<IOutgoingMailFilingPolicyReader>();
     private StubMailFolderMappings mappings = StubMailFolderMappings.Nothing;
 
-    internal HeldLocalMailbox(MailAccountIdentity account, TimeProvider clock)
+    internal HeldLocalMailbox(MailAccountId account, TimeProvider clock)
     {
         this.Account = account;
         this.clock = clock;
         this.Folders = new InMemoryLocalMailFolderStore(account, MailAccountCustodyPhase.Held);
 
         this.mimeReader
-            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountId>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
-                account.Id,
+                account,
                 Subject: "Filed",
                 SentAt: null,
                 ReceivedAt: null,
@@ -58,7 +58,7 @@ internal sealed class HeldLocalMailbox
         this.Emails
             .StoreFiledEmailAsync(
                 Arg.Any<IPersistenceSession>(),
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
                 Arg.Any<MailFolderResolutionId>(),
                 Arg.Any<ExtractedEmailMetadata?>(),
                 Arg.Any<long>(),
@@ -79,7 +79,7 @@ internal sealed class HeldLocalMailbox
             });
     }
 
-    internal MailAccountIdentity Account { get; }
+    internal MailAccountId Account { get; }
 
     /// <summary>Gets the account's local folders and what was placed in them.</summary>
     internal InMemoryLocalMailFolderStore Folders { get; }
@@ -110,7 +110,7 @@ internal sealed class HeldLocalMailbox
         var folderAlias = MailFolderAlias.Create(alias);
 
         this.mappings = this.mappings.With(
-            this.Account.Id,
+            this.Account,
             MailFolderMapping.ToRemotePath(
                 folderAlias,
                 RemoteFolderPath.Create(alias),
@@ -118,7 +118,7 @@ internal sealed class HeldLocalMailbox
                 mayCreateMissingFolder: false,
                 role));
 
-        this.folderResolutions.Bind(this.Account.Id, folderAlias);
+        this.folderResolutions.Bind(this.Account, folderAlias);
     }
 
     /// <summary>Withdraws every role mapping, which is the arrangement of a folder the operator stopped mapping.</summary>

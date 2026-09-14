@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Failures;
@@ -35,17 +36,31 @@ public sealed record OutgoingEmailRecord
     /// <summary>Gets what everything after the first write refers to this record by, including its stored MIME.</summary>
     public required OutgoingEmailId Id { get; init; }
 
-    /// <summary>Gets the account the message is submitted through and sent as.</summary>
-    public required MailAccountIdentity Account { get; init; }
-
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one user names.</summary>
+    /// <summary>Gets the account the message is submitted through and sent as, named by its generated identifier.</summary>
     /// <remarks>
-    /// Derived rather than stored, so the pair is the one value here and the two halves can never disagree. It is kept
-    /// because most readers of this record are inside a scope whose user is already settled, and naming the identifier
-    /// alone there says what the code means.
+    /// A submitted message belongs to the mailbox like the sent mail it becomes, so the account is the whole of what
+    /// this records about where it came from and every user assigned that account reads it. Who asked for it is
+    /// <see cref="Requester" /> and <see cref="Principal" />.
     /// </remarks>
-    public MailAccountId AccountId => this.Account.Id;
+    public required MailAccountId AccountId { get; init; }
 
+    /// <summary>Gets the user who asked for it, and <see langword="null" /> where the deployment's own configuration did.</summary>
+    /// <remarks>
+    /// <para>
+    /// A submitted message belongs to the account like the sent mail it becomes, so this is a reference rather than a
+    /// narrowing term: every user assigned the account reads the send whoever asked for it, and erasing the author does
+    /// not withdraw it from the mailbox.
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+    /// records both halves. What the author is for is the idempotency identity beside it: two assigned users retrying
+    /// one requester's submission are two submissions rather than one.
+    /// </para>
+    /// <para>
+    /// It is absent where nobody authored the send. A rule acts on the operator's own configuration under MailFathom's
+    /// process identity, so there is no person to name, and the requester's identity alone is what makes one rule's
+    /// evaluation the same submission twice over.
+    /// </para>
+    /// </remarks>
+    public MailUserId? User { get; init; }
 
     /// <summary>Gets the authored act that asked, restored exactly as it was written down.</summary>
     public required OutgoingEmailRequester Requester { get; init; }

@@ -34,7 +34,7 @@ public sealed record EmailSummary
     /// that feeds a write — an authored answer, a draft — supplies the user that write records without asking the
     /// account table again.
     /// </remarks>
-    public required MailAccountIdentity Account { get; init; }
+    public required MailAccountId Account { get; init; }
 
     /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one user names.</summary>
     /// <remarks>
@@ -42,7 +42,7 @@ public sealed record EmailSummary
     /// because most readers of this record are inside a scope whose user is already settled, and naming the identifier
     /// alone there says what the code means.
     /// </remarks>
-    public MailAccountId AccountId => this.Account.Id;
+    public MailAccountId AccountId => this.Account;
 
 
     /// <summary>Gets the folder alias the email was read from, which is MailFathom's own name for that folder.</summary>

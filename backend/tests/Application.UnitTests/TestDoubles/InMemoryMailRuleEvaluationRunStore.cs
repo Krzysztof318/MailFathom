@@ -11,7 +11,7 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 /// <summary>The one whole-mailbox rule run an account may have, keyed by the account exactly as the table is.</summary>
 internal sealed class InMemoryMailRuleEvaluationRunStore : IMailRuleEvaluationRunStore
 {
-    private readonly Dictionary<MailAccountIdentity, MailRuleEvaluationRun> runs = [];
+    private readonly Dictionary<MailAccountId, MailRuleEvaluationRun> runs = [];
     private readonly List<MailRuleEvaluationRun> saves = [];
 
     /// <summary>Gets every state a run was saved in, which is what proves a batch committed its position.</summary>
@@ -28,7 +28,7 @@ internal sealed class InMemoryMailRuleEvaluationRunStore : IMailRuleEvaluationRu
     /// <summary>Gets the run recorded for an account, whether or not it is still outstanding.</summary>
     /// <param name="account">The account to read, named as the user and the identifier together.</param>
     /// <returns>The run, or <see langword="null" /> when the account has never had one.</returns>
-    internal MailRuleEvaluationRun? Find(MailAccountIdentity account) => this.runs.GetValueOrDefault(account);
+    internal MailRuleEvaluationRun? Find(MailAccountId account) => this.runs.GetValueOrDefault(account);
 
     /// <summary>Puts a run in front of an account without going through the request path.</summary>
     /// <param name="run">The run to record.</param>
@@ -36,7 +36,7 @@ internal sealed class InMemoryMailRuleEvaluationRunStore : IMailRuleEvaluationRu
 
     /// <inheritdoc />
     public Task<MailRuleEvaluationRun?> FindOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken) =>
         Task.FromResult(this.runs.GetValueOrDefault(account) is { IsOutstanding: true } outstanding
             ? outstanding
@@ -44,7 +44,7 @@ internal sealed class InMemoryMailRuleEvaluationRunStore : IMailRuleEvaluationRu
 
     /// <inheritdoc />
     public Task<MailRuleEvaluationRun?> FindLatestAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken) =>
         Task.FromResult(this.runs.GetValueOrDefault(account));
 

@@ -25,8 +25,13 @@ public sealed class ConfiguredMailAccountCatalogTests
     private static readonly MailUserId Morgan =
         MailUserId.Create(new Guid("2b8f7c2d-3e4f-4a61-9b02-c3d4e5f6a712"));
 
+    /// <summary>Every mailbox a served user's record declares is published, under the identifier it carries.</summary>
+    /// <remarks>
+    /// The user who declared it is not part of the published account: an account names one mailbox across the
+    /// deployment, and which users reach it is the assignment relation rather than a field on the account.
+    /// </remarks>
     [Fact]
-    public void ServedAccounts_UsersDeclaringTheirOwnMailboxes_PublishesEachUnderTheUserWhoDeclaredIt()
+    public void ServedAccounts_UsersDeclaringTheirOwnMailboxes_PublishesEveryOneOfThem()
     {
         // Arrange
         var settings = Synchronizing();
@@ -40,9 +45,7 @@ public sealed class ConfiguredMailAccountCatalogTests
         var served = catalog.ServedAccounts;
 
         // Assert
-        Assert.Equal(
-            [(Alex, "alex-work"), (Morgan, "morgan-work")],
-            served.Select(account => (account.User, account.Id.Value)));
+        Assert.Equal(["alex-work", "morgan-work"], served.Select(account => account.Id.Value));
     }
 
     /// <summary>
@@ -68,9 +71,9 @@ public sealed class ConfiguredMailAccountCatalogTests
         Assert.Equal(["alpha", "beta", "zeta"], served.Select(account => account.Id.Value));
     }
 
-    /// <summary>A user whose record holds no mailbox publishes none, rather than inheriting anybody else's.</summary>
+    /// <summary>A user whose record holds no mailbox contributes none, rather than inheriting anybody else's.</summary>
     [Fact]
-    public void ServedAccounts_AUserRecordingNoMailbox_PublishesNothingUnderThem()
+    public void ServedAccounts_AUserRecordingNoMailbox_ContributesNothing()
     {
         // Arrange
         var settings = Synchronizing();
@@ -84,7 +87,7 @@ public sealed class ConfiguredMailAccountCatalogTests
         var served = catalog.ServedAccounts;
 
         // Assert
-        Assert.Equal([Morgan], served.Select(account => account.User));
+        Assert.Equal(["morgan-work"], served.Select(account => account.Id.Value));
     }
 
     /// <summary>A user who has taken their record over is served from it, and that is the source the roster carries.</summary>
@@ -105,7 +108,7 @@ public sealed class ConfiguredMailAccountCatalogTests
         var served = catalog.ServedAccounts;
 
         // Assert
-        Assert.Equal([(Alex, "alex-adopted")], served.Select(account => (account.User, account.Id.Value)));
+        Assert.Equal(["alex-adopted"], served.Select(account => account.Id.Value));
     }
 
     private static ServedMailUser Declaring(

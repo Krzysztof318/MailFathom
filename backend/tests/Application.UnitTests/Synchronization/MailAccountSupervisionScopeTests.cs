@@ -4,7 +4,6 @@
 
 using MailFathom.Application.Coordination;
 using MailFathom.Application.Synchronization;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using Xunit;
 
@@ -17,30 +16,43 @@ namespace MailFathom.Application.UnitTests.Synchronization;
 /// </summary>
 public sealed class MailAccountSupervisionScopeTests
 {
-    private static readonly MailUserId User = MailUserId.Create(new Guid("0197c0de-0000-7000-8000-000000001290"));
-
-    /// <summary>An operator reading the lease table finds the account under the user and the name the configuration gave it.</summary>
+    /// <summary>An operator reading the lease table finds the account under the identifier the deployment gave it.</summary>
     [Fact]
-    public void For_AccountIdentifierFits_NamesTheUserAndTheAccount()
+    public void For_AccountIdentifierFits_NamesTheAccountAndNobodyBeside()
     {
         // Act
-        var scope = MailAccountSupervisionScope.For(MailAccountIdentity.Create(User, MailAccountId.Create("primary")));
+        var scope = MailAccountSupervisionScope.For(MailAccountId.Create("primary"));
 
         // Assert
-        Assert.Equal("mail-synchronization/0197c0de-0000-7000-8000-000000001290/primary", scope.Value);
+        Assert.Equal("mail-synchronization/primary", scope.Value);
     }
 
-    /// <summary>Two users naming an account alike are two units of work, so neither is supervised by the replica holding the other.</summary>
+    /// <summary>
+    /// One mailbox assigned to several people is supervised once. The scope names the account alone, so every replica
+    /// configured with it contends for the same hold however many users reach the mailbox — a scope naming a user
+    /// would have the same mailbox fetched once per assignment.
+    /// </summary>
     [Fact]
-    public void For_TwoUsersNamingAnAccountAlike_NamesThemApart()
+    public void For_TheSameAccount_NamesOneUnitOfWorkHoweverManyUsersReachIt()
     {
         // Arrange
-        var second = MailUserId.Create(new Guid("0197c0de-0000-7000-8000-000000001291"));
-        var alias = MailAccountId.Create("primary");
+        var account = MailAccountId.Create("shared");
 
         // Act
-        var mine = MailAccountSupervisionScope.For(MailAccountIdentity.Create(User, alias));
-        var theirs = MailAccountSupervisionScope.For(MailAccountIdentity.Create(second, alias));
+        var asOneReaderSeesIt = MailAccountSupervisionScope.For(account);
+        var asAnotherSeesIt = MailAccountSupervisionScope.For(account);
+
+        // Assert
+        Assert.Equal(asOneReaderSeesIt, asAnotherSeesIt);
+    }
+
+    /// <summary>Two accounts are two units of work, so neither is supervised by the replica holding the other.</summary>
+    [Fact]
+    public void For_TwoAccounts_NamesThemApart()
+    {
+        // Act
+        var mine = MailAccountSupervisionScope.For(MailAccountId.Create("primary"));
+        var theirs = MailAccountSupervisionScope.For(MailAccountId.Create("secondary"));
 
         // Assert
         Assert.NotEqual(mine, theirs);
@@ -54,15 +66,15 @@ public sealed class MailAccountSupervisionScopeTests
     public void For_AccountIdentifierTooLongForAScope_NamesEachAccountByItsOwnDigest()
     {
         // Arrange
-        var first = MailAccountIdentity.Create(User, MailAccountId.Create(new string('a', 4000)));
-        var second = MailAccountIdentity.Create(User, MailAccountId.Create(new string('b', 4000)));
+        var first = MailAccountId.Create(new string('a', 4000));
+        var second = MailAccountId.Create(new string('b', 4000));
 
         // Act
         var firstScope = MailAccountSupervisionScope.For(first);
         var secondScope = MailAccountSupervisionScope.For(second);
 
         // Assert
-        Assert.StartsWith("mail-synchronization/0197c0de-0000-7000-8000-000000001290/sha256-", firstScope.Value, StringComparison.Ordinal);
+        Assert.StartsWith("mail-synchronization/sha256-", firstScope.Value, StringComparison.Ordinal);
         Assert.True(firstScope.Value.Length <= WorkScope.MaximumLength);
         Assert.Equal(firstScope, MailAccountSupervisionScope.For(first));
         Assert.NotEqual(firstScope, secondScope);
@@ -76,13 +88,13 @@ public sealed class MailAccountSupervisionScopeTests
     public void For_AccountIdentifierHoldingAControlCharacter_NamesTheAccountByItsDigest()
     {
         // Arrange
-        var account = MailAccountIdentity.Create(User, MailAccountId.Create("prim\u0007ary"));
+        var account = MailAccountId.Create("primary");
 
         // Act
         var scope = MailAccountSupervisionScope.For(account);
 
         // Assert
-        Assert.StartsWith("mail-synchronization/0197c0de-0000-7000-8000-000000001290/sha256-", scope.Value, StringComparison.Ordinal);
+        Assert.StartsWith("mail-synchronization/sha256-", scope.Value, StringComparison.Ordinal);
         Assert.DoesNotContain(scope.Value, char.IsControl);
         Assert.Equal(scope, MailAccountSupervisionScope.For(account));
     }

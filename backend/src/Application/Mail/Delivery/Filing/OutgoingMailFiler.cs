@@ -259,7 +259,7 @@ public sealed class OutgoingMailFiler
         CancellationToken cancellationToken)
     {
         var appended = await this.appends.AppendAsync(
-            record.Account,
+            record.AccountId,
             filing,
             MailboxCopySource.OutgoingEmail(record.Id),
             (binding, token) => this.commitPolicy.CommitAsync(
@@ -296,7 +296,7 @@ public sealed class OutgoingMailFiler
     {
         var reference = MailFolderReference.ToRole(filing.Role);
 
-        var resolved = await this.destinations.ResolveAsync(record.Account, [reference], cancellationToken);
+        var resolved = await this.destinations.ResolveAsync(record.AccountId, [reference], cancellationToken);
 
         return resolved.Find(reference);
     }

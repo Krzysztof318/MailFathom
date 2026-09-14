@@ -11,7 +11,6 @@ using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Synchronization;
-using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -55,7 +54,7 @@ public sealed class MailRuleScheduleSourceTests
         var schedule = Assert.Single(schedules);
         Assert.Equal("mail-rules:work:housekeeping", schedule.Id.Value);
         Assert.Equal(
-            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")),
+            MailAccountId.Create("work"),
             schedule.Account);
     }
 
@@ -133,7 +132,6 @@ public sealed class MailRuleScheduleSourceTests
     private void ArrangeAccounts(params string[] identifiers) => this.accounts.ServedAccounts.Returns(
     [
         .. identifiers.Select(identifier => new ServedMailAccount(
-            SyntheticMailUser.Deployment,
             MailAccountId.Create(identifier),
             MailAccountDisplayName.Create(identifier),
             MailSynchronizationMode.Polling)),

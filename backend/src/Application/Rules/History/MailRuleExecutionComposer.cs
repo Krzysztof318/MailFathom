@@ -34,7 +34,7 @@ public static class MailRuleExecutionComposer
     /// <returns>One execution per rule the pass reached, in the order the rules were reached.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public static IReadOnlyList<MailRuleExecution> Compose(
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId storedEmailId,
         MailRuleSetEvaluation evaluation,
         MailRuleExecutionTrigger trigger,

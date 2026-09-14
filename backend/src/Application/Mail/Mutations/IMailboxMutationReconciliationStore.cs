@@ -48,7 +48,7 @@ public interface IMailboxMutationReconciliationStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<MailboxMutationRecord>> ReadPlacementsAtAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         RemoteFolderPath destinationPath,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -120,7 +120,7 @@ public interface IMailboxMutationReconciliationStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<MailboxMutationRecord>> ReadFlagChangesOnAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -152,7 +152,7 @@ public interface IMailboxMutationReconciliationStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<MailboxMutationRecord>> ReadMutationsRemovingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,

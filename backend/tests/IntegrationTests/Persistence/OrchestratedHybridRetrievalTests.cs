@@ -260,8 +260,7 @@ public sealed class OrchestratedHybridRetrievalTests(MailFathomOrchestrationFixt
             async (scope, session, token) => storedEmailId = await scope
                 .GetRequiredService<IEmailMetadataRepository>()
                 .UpsertMetadataAsync(
-                    session, SyntheticMailAccount.User,
-                    SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
+                    session, SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                     SyntheticEmail.ExtractionOf(
                         occurrenceId,
                         subject,

@@ -4,6 +4,7 @@
 
 using System.Collections.Concurrent;
 using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Coordination;
 using MailFathom.Application.Emails.Chunking;
@@ -686,6 +687,9 @@ public sealed class MailEmbeddingBackfillWorkerTests
             new InMemoryProviderPaceMarker(world.TimeProvider),
             world.TimeProvider));
         services.AddSingleton<IDerivedWorkGateTelemetry>(new RecordingDerivedWorkGateTelemetry());
+        IMailAccountAssignments assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+        services.AddSingleton(assignments);
         services.AddScoped<EmbeddingSpendGate>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddSingleton<IMailOwnership>(new StubMailOwnership());

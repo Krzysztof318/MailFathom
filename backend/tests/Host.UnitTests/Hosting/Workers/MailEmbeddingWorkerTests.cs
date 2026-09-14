@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
@@ -354,6 +355,9 @@ public sealed class MailEmbeddingWorkerTests
             maxRequestsPerMinute: 0,
             new InMemoryProviderPaceMarker(timeProvider),
             timeProvider));
+        IMailAccountAssignments assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+        services.AddSingleton(assignments);
         services.AddScoped<EmbeddingSpendGate>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddSingleton<IMailOwnership>(new StubMailOwnership());

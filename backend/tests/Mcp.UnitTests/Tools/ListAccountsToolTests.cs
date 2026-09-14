@@ -29,13 +29,11 @@ public sealed class ListAccountsToolTests
     private static readonly DateTimeOffset SynchronizedAt = new(2026, 3, 4, 9, 0, 0, TimeSpan.Zero);
 
     private static readonly ServedMailAccount Work = new(
-        SyntheticMailUser.Deployment,
         MailAccountId.Create("acct-1"),
         MailAccountDisplayName.Create("Work mail"),
         MailSynchronizationMode.Polling);
 
     private static readonly ServedMailAccount Private = new(
-        SyntheticMailUser.Deployment,
         MailAccountId.Create("acct-2"),
         MailAccountDisplayName.Create("Private mail"),
         MailSynchronizationMode.Push);
@@ -96,35 +94,34 @@ public sealed class ListAccountsToolTests
     }
 
     /// <summary>
-    /// Both names are the user's own and unique within them, so two users may each declare an account under the same
-    /// identifier and the same display name, and each caller is published the names their own catalog answered with —
-    /// account entries and folder entries alike.
+    /// One mailbox two people are assigned is published to both under the one identifier the deployment gave it,
+    /// beside the mailbox each of them alone reaches — so a shared mailbox reads as the same mailbox to each of its
+    /// readers rather than as a mailbox of their own that happens to be called the same thing.
     /// </summary>
     /// <remarks>
-    /// What this cannot claim is that an account of the other user is withheld here, and no arrangement at this seam
-    /// would report one. The reader delegates the user bound wholly to <see cref="ICallerMailAccountCatalog" /> and
-    /// then attaches folders to the accounts that catalog answered with, by an identifier lookup — so a freshness entry
-    /// for an unowned account is dropped by the lookup whatever the bound does, and a reader with no bound at all would
-    /// publish exactly what is asserted below. The bound itself is taken in
-    /// <c>OwnedMailAccountCatalog</c> and proven there, over the accounts a deployment serves and the user a caller
-    /// was admitted for.
+    /// What this cannot claim is that a mailbox the caller is not assigned is withheld here, and no arrangement at
+    /// this seam would report one. The reader delegates the narrowing wholly to
+    /// <see cref="ICallerMailAccountCatalog" /> and then attaches folders to the accounts that catalog answered with,
+    /// by an identifier lookup — so a freshness entry for an unassigned account is dropped by the lookup whatever the
+    /// bound does, and a reader with no bound at all would publish exactly what is asserted below. The bound itself is
+    /// taken in <c>AssignedMailAccountCatalog</c> and proven there, over the accounts a deployment serves and the
+    /// assignments of the user a caller was admitted for.
     /// </remarks>
     [Fact]
-    public async Task ListAccountsAsync_TwoUsersHoldingIdenticallyNamedAccounts_PublishesEachUserTheirOwnNames()
+    public async Task ListAccountsAsync_AMailboxAssignedToTwoUsers_PublishesItToBothUnderTheSameIdentifier()
     {
         // Arrange
-        var studio = SyntheticServedAccount.Of("studio", SyntheticMailUser.Deployment);
-        var ledger = SyntheticServedAccount.Of("ledger", SyntheticMailUser.Another);
-        var sharedOfOneUser = SharedlyNamedAccountOf(SyntheticMailUser.Deployment);
-        var sharedOfAnotherUser = SharedlyNamedAccountOf(SyntheticMailUser.Another);
+        var studio = SyntheticServedAccount.Of("studio");
+        var ledger = SyntheticServedAccount.Of("ledger");
+        var shared = TheSharedMailbox();
         var toOneUser = ToolOver(
-            CatalogServing(sharedOfOneUser, studio),
-            SynchronizedInbox(sharedOfOneUser),
+            CatalogServing(shared, studio),
+            SynchronizedInbox(shared),
             SynchronizedInbox(studio));
         var toAnotherUser = ToolOver(
-            CatalogServing(ledger, sharedOfAnotherUser),
+            CatalogServing(ledger, shared),
             SynchronizedInbox(ledger),
-            SynchronizedInbox(sharedOfAnotherUser));
+            SynchronizedInbox(shared));
 
         // Act
         var forOneUser = await toOneUser.ListAccountsAsync(TestContext.Current.CancellationToken);
@@ -225,9 +222,8 @@ public sealed class ListAccountsToolTests
     private static MailboxFolderFreshness SynchronizedInbox(ServedMailAccount account) =>
         new(account.Id, MailFolderAlias.Create("INBOX"), SynchronizedAt);
 
-    /// <summary>Builds the account two users each declare, under one identifier and one display name.</summary>
-    private static ServedMailAccount SharedlyNamedAccountOf(MailUserId user) => new(
-        user,
+    /// <summary>Builds the one mailbox both users are assigned, under the identifier the deployment gave it.</summary>
+    private static ServedMailAccount TheSharedMailbox() => new(
         MailAccountId.Create("shared"),
         MailAccountDisplayName.Create("The shared mailbox"),
         MailSynchronizationMode.Polling);

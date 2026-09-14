@@ -37,7 +37,7 @@ internal static class MailAccountEndpoints
     /// <summary>The route one account is read, saved, and erased at.</summary>
     internal const string MailAccountRoute = $"{MailAccountsRoute}/{{accountId:guid}}";
 
-    /// <summary>The route an account nobody holds is assigned to a user at.</summary>
+    /// <summary>The route an account is assigned to a user at.</summary>
     internal const string AssignmentsRoute = $"{MailAccountRoute}/assignments";
 
     /// <summary>The route one user's assignment is ended at.</summary>
@@ -197,7 +197,7 @@ internal static class MailAccountEndpoints
         return TypedResults.Ok(new MailAccountErasureResponse(await administration.EraseAsync(accountId, cancellationToken)));
     }
 
-    /// <summary>Assigns an account nobody holds to a user.</summary>
+    /// <summary>Assigns an account to a user, beside whoever else is already assigned it.</summary>
     /// <param name="accountId">The account.</param>
     /// <param name="administration">The account administration.</param>
     /// <param name="request">The user.</param>

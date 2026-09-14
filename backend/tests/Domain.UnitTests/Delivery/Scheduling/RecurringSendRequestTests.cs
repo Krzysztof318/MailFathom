@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Scheduling;
@@ -14,8 +15,10 @@ namespace MailFathom.Domain.UnitTests.Delivery.Scheduling;
 /// <summary>Covers what a declaration accepts, given that everything it accepts describes many messages rather than one.</summary>
 public sealed class RecurringSendRequestTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
+
+    private static readonly MailUserId Author = SyntheticMailUser.Deployment;
 
     /// <summary>A declaration keeps what it was made with, and the schedule as written bar the space around it.</summary>
     [Fact]
@@ -24,6 +27,7 @@ public sealed class RecurringSendRequestTests
         // Act
         var declaration = RecurringSendRequest.Create(
             Account,
+            Author,
             OutgoingEmailRequester.Command("declare-1"),
             [Recipient("anna@example.test", OutgoingRecipientRole.To)],
             "  Daily at 09:00 Europe/Warsaw  ");
@@ -44,6 +48,7 @@ public sealed class RecurringSendRequestTests
         // Act, Assert
         Assert.Throws<ArgumentException>(() => RecurringSendRequest.Create(
             Account,
+            Author,
             OutgoingEmailRequester.Command("declare-1"),
             [
                 Recipient("anna@example.test", OutgoingRecipientRole.To),
@@ -59,6 +64,7 @@ public sealed class RecurringSendRequestTests
         // Act, Assert
         Assert.Throws<ArgumentException>(() => RecurringSendRequest.Create(
             Account,
+            Author,
             OutgoingEmailRequester.Command("declare-1"),
             [],
             "Daily at 09:00"));
@@ -74,6 +80,7 @@ public sealed class RecurringSendRequestTests
         // Act
         var thrown = Assert.Throws<ArgumentException>(() => RecurringSendRequest.Create(
             Account,
+            Author,
             OutgoingEmailRequester.Command("declare-1"),
             [Recipient("anna@example.test", OutgoingRecipientRole.To)],
             schedule));
@@ -89,6 +96,7 @@ public sealed class RecurringSendRequestTests
         // Act
         var thrown = Assert.Throws<ArgumentException>(() => RecurringSendRequest.Create(
             Account,
+            Author,
             OutgoingEmailRequester.Command("declare-1"),
             [Recipient("anna@example.test", OutgoingRecipientRole.To)],
             new string('e', RecurringSend.MaximumScheduleLength + 1)));
@@ -104,6 +112,7 @@ public sealed class RecurringSendRequestTests
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => RecurringSendRequest.Create(
             Account,
+            Author,
             requester: null!,
             [Recipient("anna@example.test", OutgoingRecipientRole.To)],
             "Daily at 09:00"));

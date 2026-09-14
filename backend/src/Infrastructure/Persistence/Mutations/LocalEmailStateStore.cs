@@ -28,7 +28,7 @@ internal sealed class LocalEmailStateStore : ILocalEmailStateStore
     /// <inheritdoc />
     public async Task<LocalEmailState?> ReadAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId email,
         CancellationToken cancellationToken)
     {
@@ -50,7 +50,7 @@ internal sealed class LocalEmailStateStore : ILocalEmailStateStore
     /// <inheritdoc />
     public async Task WriteAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId email,
         LocalEmailState state,
         CancellationToken cancellationToken)
@@ -69,7 +69,7 @@ internal sealed class LocalEmailStateStore : ILocalEmailStateStore
     /// <inheritdoc />
     public async Task EraseAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId email,
         CancellationToken cancellationToken)
     {
@@ -85,25 +85,24 @@ internal sealed class LocalEmailStateStore : ILocalEmailStateStore
 
         // The cascade every stored message's erasure runs, in the order LocalMailFolderStore states it: the user's storage
         // figure and the content objects are read from the row the removal below only stages.
-        await UserStoredContentLedger.RemoveAsync(sessionContext, removedIds, cancellationToken);
+        await AccountStoredContentLedger.RemoveAsync(sessionContext, removedIds, cancellationToken);
         await ReleasedContentObjects.ReleaseForStoredEmailsAsync(session, removedIds, cancellationToken);
         sessionContext.StoredEmails.Remove(row);
     }
 
     private static async Task<StoredEmailEntity?> FindAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId email,
         CancellationToken cancellationToken)
     {
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var emailId = email.Value;
-        var userId = account.User.Value;
-        var accountId = account.Id.Value;
+        var accountId = account.Value;
 
         return await sessionContext.StoredEmails
             .Include(static row => row.MailFolder)
-            .Where(row => row.Id == emailId && row.UserId == userId && row.MailboxAccountId == accountId)
+            .Where(row => row.Id == emailId && row.MailboxAccountId == accountId)
             .Where(StoredEmailTombstone.IsNotTombstoned)
             .SingleOrDefaultAsync(cancellationToken);
     }

@@ -23,7 +23,7 @@ public sealed record JobEnqueueRequest
     private JobEnqueueRequest(
         JobIdempotencyKey key,
         IJobPayload payload,
-        MailAccountIdentity? account,
+        MailAccountId? account,
         DateTimeOffset? availableAt)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -61,7 +61,7 @@ public sealed record JobEnqueueRequest
     /// and an account or names neither, so the row can never say an account without saying whose it is.
     /// </para>
     /// </remarks>
-    public MailAccountIdentity? Account { get; }
+    public MailAccountId? Account { get; }
 
     /// <summary>Gets the instant before which the job is not claimable, or <see langword="null" /> to make it claimable at once.</summary>
     public DateTimeOffset? AvailableAt { get; }
@@ -73,7 +73,7 @@ public sealed record JobEnqueueRequest
     /// <returns>The request to enqueue.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="key" /> or <paramref name="payload" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the payload names no declared job type.</exception>
-    public static JobEnqueueRequest Create(JobIdempotencyKey key, IJobPayload payload, MailAccountIdentity? account) =>
+    public static JobEnqueueRequest Create(JobIdempotencyKey key, IJobPayload payload, MailAccountId? account) =>
         new(key, ValidPayload(payload), account, availableAt: null);
 
     /// <summary>States an execution to be done no earlier than a given instant.</summary>
@@ -88,7 +88,7 @@ public sealed record JobEnqueueRequest
     public static JobEnqueueRequest CreateAvailableAt(
         JobIdempotencyKey key,
         IJobPayload payload,
-        MailAccountIdentity? account,
+        MailAccountId? account,
         DateTimeOffset availableAt) => new(key, ValidPayload(payload), account, availableAt);
 
     private static IJobPayload ValidPayload(IJobPayload payload)

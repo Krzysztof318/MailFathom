@@ -91,7 +91,7 @@ public sealed class MailAccountDirectoryReader
             MailboxReadOperation.ReadAccountDirectory,
             cancellationToken);
 
-        var ownedAccounts = this.accountCatalog.OwnedAccounts;
+        var ownedAccounts = this.accountCatalog.AssignedAccounts;
 
         if (ownedAccounts.Count is 0)
         {

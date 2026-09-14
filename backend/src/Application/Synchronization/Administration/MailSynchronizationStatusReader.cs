@@ -116,14 +116,14 @@ public sealed class MailSynchronizationStatusReader
 
         foreach (var account in this.accounts.ServedAccounts)
         {
-            var supervision = supervisionByAccount.GetValueOrDefault(account.Identity);
+            var supervision = supervisionByAccount.GetValueOrDefault(account.Id);
 
             accountStatuses.Add(new MailAccountSynchronizationStatus(
                 account.Id,
                 supervision,
                 this.DescribeRun(account.Id, supervision),
                 this.DescribeFolders(mappedByAccount[account.Id], mirrored, progressByFolder),
-                await this.attachmentCoverage.ReadCoverageAsync(account.Identity, cancellationToken)));
+                await this.attachmentCoverage.ReadCoverageAsync(account.Id, cancellationToken)));
         }
 
         return new MailSynchronizationStatus(
@@ -138,11 +138,11 @@ public sealed class MailSynchronizationStatusReader
     /// supervision is called. A scope no row answers for is an account nothing is supervising, which is a supported
     /// state rather than an absence to interpret: a deployment with synchronization switched off holds none of them.
     /// </remarks>
-    private async Task<Dictionary<MailAccountIdentity, MailAccountSupervision>> ReadSupervisionAsync(
+    private async Task<Dictionary<MailAccountId, MailAccountSupervision>> ReadSupervisionAsync(
         CancellationToken cancellationToken)
     {
         var accountsByScope = this.accounts.ServedAccounts
-            .ToDictionary(account => MailAccountSupervisionScope.For(account.Identity), account => account.Identity);
+            .ToDictionary(account => MailAccountSupervisionScope.For(account.Id), account => account.Id);
 
         var held = await this.leases.ReadHeldAsync(accountsByScope.Keys, cancellationToken);
 

@@ -101,11 +101,10 @@ internal static class StoredEmailSelectionPredicate
     /// reading of a caller's entitlement, which is the one thing here nobody may state twice.
     /// </para>
     /// <para>
-    /// The user is the first term of the narrowing itself, ahead of the accounts, and it is applied whatever the
-    /// account list holds. That is what makes an empty list fail closed here rather than open: every index this read is
-    /// planned against leads with the user, so the term is what the plan is chosen for as well as what the entitlement
-    /// rests on. A scope that names nobody — the one a caller owning no account resolves to — therefore admits no row
-    /// at all, on top of admitting no folder.
+    /// The accounts a caller is assigned are the whole of the narrowing, because no mail row carries a user: the
+    /// containment is composed whatever the list holds, so an empty one admits no row rather than every row. That is
+    /// what makes <see cref="MailboxScope.NothingReadable" /> — the scope a caller assigned no account resolves to —
+    /// read nothing, on top of its admitting no folder.
     /// </para>
     /// <para>
     /// The tombstone exclusion leads and no caller can turn it off, which is why it is written here rather than left to
@@ -135,20 +134,16 @@ internal static class StoredEmailSelectionPredicate
     {
         emails = emails.Where(StoredEmailTombstone.IsNotTombstoned);
 
-        // The user leads the account narrowing and is never conditional on it. An account identifier names one account
-        // within its user, so the account term alone would be a comparison against a value that does not say whose
-        // mail it is — and an empty account list is read as unrestricted by the branch below, which without this term
-        // would make the one caller with nothing to read the one caller reading everything. It is also the column every
-        // index this read is planned against leads with.
-        var userId = scope.User.Value;
-        emails = emails.Where(email => email.UserId == userId);
-
+        // The containment is unconditional, which is what makes an empty account list fail closed. The generated
+        // identifier names one mailbox across the deployment, so the accounts a caller is assigned are the whole of
+        // what narrows this read — and a branch that skipped the term when the list was empty would make the one
+        // caller with nothing to read the one caller reading everything.
         if (withinAccount is { } account)
         {
             var accountId = account.Value;
             emails = emails.Where(email => email.MailboxAccountId == accountId);
         }
-        else if (scope.AccountIds.Count > 0)
+        else
         {
             var accountIds = scope.AccountIds.Select(static accountId => accountId.Value).ToArray();
             emails = emails.Where(email => accountIds.Contains(email.MailboxAccountId));

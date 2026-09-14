@@ -60,7 +60,7 @@ internal static class AnsweringDeployment
     {
         var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
         accountCatalog.SynchronizationEnabled.Returns(true);
-        accountCatalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(ServedAccountId)]);
+        accountCatalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(ServedAccountId)]);
 
         return accountCatalog;
     }

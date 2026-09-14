@@ -4,12 +4,10 @@
 
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Emails.Authorship;
-using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -18,6 +16,8 @@ namespace MailFathom.Application.UnitTests.Emails.Extraction;
 /// <summary>Covers the seam at which a message's extracted text is judged for how it was written.</summary>
 public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
 {
+    private static readonly MailAccountId Account = MailAccountId.Create("primary");
+
     /// <summary>The reading is written onto the metadata the parse produced, carrying the profile that reached it.</summary>
     [Fact]
     public async Task ReadMetadataAsync_TextCarryingAConcealedPayload_IsRecordedAsLikelyMachineWritten()
@@ -28,7 +28,7 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
             MachineAuthorshipProfile.Standard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Account, Content(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.Likely, extraction.Metadata?.MachineAuthorship.Band);
@@ -48,7 +48,7 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
             MachineAuthorshipProfile.Standard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Account, Content(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.Unlikely, extraction.Metadata?.MachineAuthorship.Band);
@@ -65,7 +65,7 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
             MachineAuthorshipProfile.Disabled);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Account, Content(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.NotAssessed, extraction.Metadata?.MachineAuthorship.Band);
@@ -82,7 +82,7 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
             MachineAuthorshipProfile.Standard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Account, Content(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.NotAssessed, extraction.Metadata?.MachineAuthorship.Band);
@@ -101,7 +101,7 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
             MachineAuthorshipProfile.Standard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Account, Content(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipSignals.HiddenCharacters, extraction.Metadata?.MachineAuthorship.Signals);
@@ -113,12 +113,12 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
     {
         // Arrange
         var inner = Substitute.For<IEmailMimeReader>();
-        inner.ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+        inner.ReadMetadataAsync(Arg.Any<MailAccountId>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailMimeExtractionResult.MalformedContent()));
         var reader = new MachineAuthorshipEvaluatingEmailMimeReader(inner, MachineAuthorshipProfile.Standard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Account, Content(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmailMimeExtractionOutcome.MalformedContent, extraction.Outcome);
@@ -136,7 +136,7 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
             MachineAuthorshipProfile.Standard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(AccountOf(SyntheticMailUser.Deployment), Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Account, Content(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Same(text, extraction.Metadata?.Text);
@@ -148,9 +148,9 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
     {
         var reader = Substitute.For<IEmailMimeReader>();
 
-        reader.ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+        reader.ReadMetadataAsync(Arg.Any<MailAccountId>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
-                call.Arg<MailAccountIdentity>().Id,
+                call.Arg<MailAccountId>(),
                 Subject: "Subject",
                 SentAt: null,
                 ReceivedAt: null,
@@ -176,8 +176,6 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
     /// <summary>Writes text into the Unicode tag block, which renders as nothing and reads back as ASCII.</summary>
     private static string TagCharacters(string hidden) =>
         string.Concat(hidden.Select(static character => char.ConvertFromUtf32(0xE0000 + character)));
-
-    private static MailAccountIdentity AccountOf(MailUserId user) => MailAccountIdentity.Create(user, MailAccountId.Create("primary"));
 
     private static ReadOnlyMemory<byte> Content() => new byte[] { 1, 2, 3 };
 }

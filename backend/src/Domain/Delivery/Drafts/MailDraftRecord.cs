@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -34,21 +35,25 @@ public sealed record MailDraftRecord
     /// <summary>Gets what everything after the first write refers to this draft by, including its stored MIME.</summary>
     public required MailDraftId Id { get; init; }
 
-    /// <summary>Gets the account the draft belongs to, and the one a promotion would send it as, named by its user and its identifier.</summary>
+    /// <summary>Gets the account the draft belongs to, and the one a promotion would send it as.</summary>
     /// <remarks>
-    /// The pair, read back from the draft's own row rather than resolved again: a promotion writes an outgoing record
-    /// about this account, and the user that record carries is the one the draft was written under.
+    /// Read back from the draft's own row rather than resolved again, and the generated identifier alone: it names one
+    /// mailbox across the deployment, so a promotion writing an outgoing record about this account needs nothing
+    /// beside it. Which of the account's assigned users may read the draft is <see cref="User" />'s answer rather
+    /// than this one's.
     /// </remarks>
-    public required MailAccountIdentity Account { get; init; }
+    public required MailAccountId AccountId { get; init; }
 
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one user names.</summary>
+    /// <summary>Gets the user who wrote it down, which is what makes the draft theirs rather than the mailbox's.</summary>
     /// <remarks>
-    /// Derived rather than stored, so the pair is the one value here and the two halves can never disagree. It is kept
-    /// because most readers of this record are inside a scope whose user is already settled, and naming the identifier
-    /// alone there says what the code means.
+    /// Authored mail is the one part of this schema that still names a person, because it records an act
+    /// somebody took rather than mail a mailbox holds:
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+    /// keeps it on the author for that reason, so a mailbox two people share still shows each of them their
+    /// own. It stands beside the account rather than inside it, the account's generated identifier naming one
+    /// mailbox across the deployment and saying nothing about who wrote through it.
     /// </remarks>
-    public MailAccountId AccountId => this.Account.Id;
-
+    public required MailUserId User { get; init; }
 
     /// <summary>Gets the authored act that wrote the draft down.</summary>
     /// <remarks>

@@ -773,7 +773,7 @@ public sealed class MimeKitEmailMimeReaderTests
         var result = await CreateReader().ReadMetadataAsync(MimeFixtures.Account, content.RawMime, CancellationToken.None);
 
         // Assert
-        Assert.Equal(MimeFixtures.Account.Id, AssertExtracted(result).AccountId);
+        Assert.Equal(MimeFixtures.Account, AssertExtracted(result).AccountId);
     }
 
     /// <summary>The header the trusted server wrote is the one that decides, and the forged one below it is ignored.</summary>

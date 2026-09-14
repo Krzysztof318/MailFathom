@@ -30,7 +30,7 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
     /// queries are ordered and limited by PostgreSQL and neither can return more than the window holds.
     /// </remarks>
     public async Task<IReadOnlyList<StoredEmailAwaitingReconciliation>> GetReconciliationWindowAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         int maxEmailCount,
@@ -171,7 +171,7 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
             // session commits rather than before the line below it: the removal below only stages a delete the change
             // tracker applies at that commit. A later change making the removal set-based would execute immediately and
             // turn that ordering into a real one.
-            await UserStoredContentLedger.RemoveAsync(
+            await AccountStoredContentLedger.RemoveAsync(
                 sessionContext,
                 [.. erasedByAuthoredDelete.Select(email => email.Id)],
                 cancellationToken);
@@ -198,7 +198,7 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
             // so the user's stored-content figure has to give those bytes back explicitly or it would go on bounding
             // a user against payloads that are gone. It reads the lengths itself, which is why it belongs before this
             // session commits rather than at any particular point among the staged removals below.
-            await UserStoredContentLedger.RemoveAsync(
+            await AccountStoredContentLedger.RemoveAsync(
                 sessionContext,
                 [.. disappeared.Select(email => email.Id)],
                 cancellationToken);
@@ -231,20 +231,18 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
 
     /// <summary>Narrows the stored emails to the ones one folder binding's window may select from.</summary>
     private IQueryable<StoredEmailEntity> EligibleEmails(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity)
     {
-        var user = account.User.Value;
-        var accountValue = account.Id.Value;
+        var accountValue = account.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
         var uidValidityValue = uidValidity.Value;
 
         return readContext.StoredEmails
             .AsNoTracking()
-            .Where(email => email.UserId == user
-                && email.MailFolder.MailboxAccountId == accountValue
+            .Where(email => email.MailFolder.MailboxAccountId == accountValue
                 && email.MailFolder.Alias == alias
                 && email.MailFolder.ResolutionGeneration == generation
                 && email.UidValidity == uidValidityValue

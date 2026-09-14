@@ -42,7 +42,7 @@ public sealed class LocalMailFolderArrivals
     /// <param name="account">The account.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns><see langword="true" /> when the account is held.</returns>
-    public async Task<bool> HoldsAsync(MailAccountIdentity account, CancellationToken cancellationToken) =>
+    public async Task<bool> HoldsAsync(MailAccountId account, CancellationToken cancellationToken) =>
         await this.store.ReadAsync(account, cancellationToken) is { Phase: MailAccountCustodyPhase.Held };
 
     /// <summary>Places one stored message, inside the transaction that stored it.</summary>
@@ -54,7 +54,7 @@ public sealed class LocalMailFolderArrivals
     /// <returns>Whether the placement created folders, which the caller announces through <see cref="AnnounceFoldersChanged" /> once the transaction commits.</returns>
     public async Task<bool> PlaceAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId email,
         LocalMailFolderArrivalSource source,
         CancellationToken cancellationToken)
@@ -85,7 +85,7 @@ public sealed class LocalMailFolderArrivals
 
     /// <summary>Tells the account's clients that its folder set moved, after the transaction that created the folders committed.</summary>
     /// <param name="account">The account whose folders were created.</param>
-    public void AnnounceFoldersChanged(MailAccountIdentity account) => this.signals.Publish(ClientSignal.FoldersChanged(account));
+    public void AnnounceFoldersChanged(MailAccountId account) => this.signals.Publish(ClientSignal.FoldersChanged(account));
 
     private LocalMailFolderId MintId() => LocalMailFolderId.Create(Guid.CreateVersion7(this.timeProvider.GetUtcNow()));
 }

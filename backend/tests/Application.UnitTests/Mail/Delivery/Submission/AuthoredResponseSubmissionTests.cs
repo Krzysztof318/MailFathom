@@ -213,7 +213,7 @@ public sealed class AuthoredResponseSubmissionTests
             composer
                 .ReceivedCalls()
                 .Single(call => call.GetMethodInfo().Name == nameof(IAuthoredEmailComposer.Compose))
-                .GetArguments()[3]);
+                .GetArguments()[4]);
     }
 
     /// <summary>A retry carrying the key the first call carried reads back that call's record and queues nothing further.</summary>
@@ -495,7 +495,8 @@ public sealed class AuthoredResponseSubmissionTests
         var composer = Substitute.For<IAuthoredEmailComposer>();
         composer
             .Compose(
-                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<MailAccountId>(),
+                SyntheticMailUser.Deployment,
                 Arg.Any<OutgoingEmailRequester>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())
@@ -711,7 +712,7 @@ public sealed class AuthoredResponseSubmissionTests
     private static AuthoredEmail ComposedMessage(IAuthoredEmailComposer composer) => (AuthoredEmail)composer
         .ReceivedCalls()
         .First(call => call.GetMethodInfo().Name == nameof(IAuthoredEmailComposer.Compose))
-        .GetArguments()[2]!;
+        .GetArguments()[3]!;
 
     private static MailResponseSubmissionRequest Request(AuthoredResponseAct act = AuthoredResponseAct.Reply) =>
         new()
@@ -825,7 +826,7 @@ public sealed class AuthoredResponseSubmissionTests
     private static ICallerMailAccountCatalog CatalogServing(MailAccountId accountId)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(accountId)]);
+        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(accountId)]);
 
         return catalog;
     }

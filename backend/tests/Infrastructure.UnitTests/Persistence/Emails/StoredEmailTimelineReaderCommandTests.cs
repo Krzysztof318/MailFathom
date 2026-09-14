@@ -9,7 +9,6 @@ using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
-using MailFathom.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -145,7 +144,7 @@ public sealed partial class StoredEmailTimelineReaderCommandTests
         using var context = new MailFathomDbContextDesignTimeFactory().CreateDbContext([]);
 
         var filter = EmailTimelineFilter.Create(
-            MailboxScope.Create(SyntheticMailUser.Deployment, [.. accountIds.Select(MailAccountId.Create)], selectedFolders: null),
+            MailboxScope.Create([.. accountIds.Select(MailAccountId.Create)], selectedFolders: null),
             senderAddress: null,
             recipientAddress: null,
             subjectFragment: null,

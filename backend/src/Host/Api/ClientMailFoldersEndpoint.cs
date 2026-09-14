@@ -72,7 +72,7 @@ internal static class ClientMailFoldersEndpoint
 
 /// <summary>What the client endpoint reports about the user's mailboxes and their folders.</summary>
 /// <param name="SynchronizationEnabled">Whether this deployment refreshes the local copy of these accounts at all.</param>
-/// <param name="Accounts">One entry per account the acting user owns, ordered by identifier, empty where they own none.</param>
+/// <param name="Accounts">One entry per account the acting user is assigned, ordered by identifier, empty where they are assigned none.</param>
 /// <remarks>
 /// The switch is reported beside the accounts because no per-folder value carries it: a folder that last moved a week
 /// ago means one thing where the deployment is still trying and another where it has stopped, and a client that could

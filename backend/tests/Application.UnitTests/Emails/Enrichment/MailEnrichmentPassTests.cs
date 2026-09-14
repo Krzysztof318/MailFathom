@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Persistence;
@@ -25,8 +26,8 @@ namespace MailFathom.Application.UnitTests.Emails.Enrichment;
 /// </remarks>
 public sealed class MailEnrichmentPassTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     private static readonly DateTimeOffset DerivedAt = new(2026, 9, 6, 8, 30, 0, TimeSpan.Zero);
 
@@ -202,7 +203,7 @@ public sealed class MailEnrichmentPassTests
         Assert.Equal(EmailEnrichmentWithholding.NotActivated, report.StoppedBy);
         Assert.False(report.EmailsRemain);
         await store.DidNotReceiveWithAnyArgs().GetEmailsAwaitingEnrichmentAsync(
-            Arg.Any<MailAccountIdentity>(),
+            Arg.Any<MailAccountId>(),
             Arg.Any<int>(),
             Arg.Any<int>(),
             Arg.Any<CancellationToken>());
@@ -288,13 +289,15 @@ public sealed class MailEnrichmentPassTests
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>Answers one language for whoever is asked about, which is what a pass over one account's mail needs.</summary>
-    private static IMailUserLanguages LanguagesAnswering(MailUserLanguage language)
+    /// <summary>Resolves the mailbox's language through the users assigned it, as a deployment's reader does.</summary>
+    private static AccountLanguages LanguagesAnswering(MailUserLanguage language)
     {
         var languages = Substitute.For<IMailUserLanguages>();
         languages.ForUser(Arg.Any<MailUserId>()).Returns(language);
 
-        return languages;
+        return SyntheticAccountLanguages.Of(
+            new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, Account),
+            languages);
     }
 
     /// <summary>Composes the pass over a deployment with no scanner switched on, which is the ordinary shape.</summary>

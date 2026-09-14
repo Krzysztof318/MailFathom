@@ -7,7 +7,6 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
-using MailFathom.TestSupport;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
 
@@ -60,7 +59,7 @@ internal static class SyntheticEmailSummaries
         Guid? threadId = null) => new()
         {
             StoredEmailId = StoredEmailId.Create(storedEmailId ?? Guid.CreateVersion7()),
-            Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create(accountId)),
+            Account = MailAccountId.Create(accountId),
             FolderAlias = MailFolderAlias.Create(folderAlias),
             ThreadId = threadId is { } conversation ? EmailThreadId.Create(conversation) : null,
             InternetMessageId = null,

@@ -35,7 +35,7 @@ public sealed class OrchestratedOutboxOperationStoreTests(MailFathomOrchestratio
 {
     /// <summary>Gets the account this suite writes under, whose user the orchestrated database provisioned.</summary>
     /// <remarks>Read on each use rather than captured in a field, because the user is resolved when the harness starts.</remarks>
-    private static MailAccountIdentity Account => SyntheticMailAccount.Account;
+    private static MailAccountId Account => SyntheticMailAccount.Account;
 
     /// <summary>
     /// The ordinary withdrawal, and the two refusals that follow it. A send already withdrawn cannot be withdrawn
@@ -234,6 +234,7 @@ public sealed class OrchestratedOutboxOperationStoreTests(MailFathomOrchestratio
 
         var request = OutgoingEmailRequest.Create(
             Account,
+            SyntheticMailAccount.User,
             OutgoingEmailRequester.Command(invocationIdentity),
             [OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To, contact: null)]);
 

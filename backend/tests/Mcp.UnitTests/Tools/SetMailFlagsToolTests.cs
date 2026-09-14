@@ -360,13 +360,13 @@ public sealed class SetMailFlagsToolTests
         if (held)
         {
             localFolders
-                .ReadAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
+                .ReadAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
                 .Returns(Task.FromResult<LocalMailFolderHolding?>(
                     new LocalMailFolderHolding(MailAccountCustodyPhase.Held, [], [])));
             states
                 .ReadAsync(
                     Arg.Any<IPersistenceSession>(),
-                    Arg.Any<MailAccountIdentity>(),
+                    Arg.Any<MailAccountId>(),
                     Arg.Any<StoredEmailId>(),
                     Arg.Any<CancellationToken>())
                 .Returns(Task.FromResult<LocalEmailState?>(
@@ -377,12 +377,11 @@ public sealed class SetMailFlagsToolTests
         targets
             .FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AuthoredMailboxTarget?>(new AuthoredMailboxTarget(
-                SyntheticMailUser.Deployment,
                 EmailOccurrenceId.Create(Account, folder.Id, ImapUidValidity.Create(9), ImapUid.Create(41)),
                 folder)));
 
         var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
-        accountCatalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        accountCatalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
@@ -455,21 +454,21 @@ public sealed class SetMailFlagsToolTests
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<MailboxMutationRecord>> ReadAsync(
-            MailUserId user,
+            IReadOnlyList<MailAccountId> accounts,
             IReadOnlyList<MailboxMutationRecordId> recordIds,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<MailboxMutationRecord>> WithdrawAsync(
             IPersistenceSession session,
-            MailUserId user,
+            IReadOnlyList<MailAccountId> accounts,
             IReadOnlyList<MailboxMutationRecordId> recordIds,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<MailboxMutationRecord>> ReleaseAsync(
             IPersistenceSession session,
-            MailUserId user,
+            IReadOnlyList<MailAccountId> accounts,
             IReadOnlyList<MailboxMutationRecordId> recordIds,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
@@ -503,20 +502,20 @@ public sealed class SetMailFlagsToolTests
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
-            MailAccountIdentity account,
+            MailAccountId account,
             int limit,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
-            MailAccountIdentity account,
+            MailAccountId account,
             MailboxMutation mutation,
             int limit,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<MailboxMutationLifecycleCount>> ReadLifecycleCountsAsync(
-            MailAccountIdentity account,
+            MailAccountId account,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }

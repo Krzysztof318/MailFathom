@@ -69,7 +69,7 @@ public sealed class UnmirroredMailFolderEraser
     /// an entrypoint added later must not be able to perform one by omission.
     /// </remarks>
     public async Task<MailFolderMirrorErasure> EraseAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias folderAlias,
         CancellationToken cancellationToken)
     {

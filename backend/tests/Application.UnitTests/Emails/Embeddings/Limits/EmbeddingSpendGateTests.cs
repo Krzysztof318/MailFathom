@@ -246,9 +246,9 @@ public sealed class EmbeddingSpendGateTests
         var timeProvider = new FakeTimeProvider();
 
         // Act, Assert
-        Assert.Throws<ArgumentNullException>(() => new EmbeddingSpendGate(null!, budget, timeProvider));
-        Assert.Throws<ArgumentNullException>(() => new EmbeddingSpendGate(ledger, null!, timeProvider));
-        Assert.Throws<ArgumentNullException>(() => new EmbeddingSpendGate(ledger, budget, null!));
+        Assert.Throws<ArgumentNullException>(() => new EmbeddingSpendGate(null!, new StubMailAccountAssignments(), budget, timeProvider));
+        Assert.Throws<ArgumentNullException>(() => new EmbeddingSpendGate(ledger, new StubMailAccountAssignments(), null!, timeProvider));
+        Assert.Throws<ArgumentNullException>(() => new EmbeddingSpendGate(ledger, new StubMailAccountAssignments(), budget, null!));
     }
 
     private static EmbeddingSpendBudget Bounded(long ceiling) =>
@@ -261,5 +261,5 @@ public sealed class EmbeddingSpendGateTests
         IEmbeddingSpendLedger ledger,
         EmbeddingSpendBudget budget,
         TimeProvider timeProvider) =>
-        new(ledger, budget, timeProvider);
+        new(ledger, new StubMailAccountAssignments(), budget, timeProvider);
 }

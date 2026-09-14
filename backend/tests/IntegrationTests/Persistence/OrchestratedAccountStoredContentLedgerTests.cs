@@ -6,40 +6,38 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Reconciliation;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
-using MailFathom.Infrastructure.Persistence;
 using MailFathom.IntegrationTests.Orchestration;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace MailFathom.IntegrationTests.Persistence;
 
-/// <summary>Proves the maintained per-user stored-content figure says what a recomputation over the payloads says.</summary>
+/// <summary>Proves the maintained per-account stored-content figure says what a recomputation over the payloads says.</summary>
 /// <remarks>
 /// <para>
-/// The figure exists so a per-user storage ceiling can be consulted before every message without a sum over one
-/// person's whole mailbox, and it is the only number in this schema that duplicates something derivable from the rows
-/// beneath it. What makes that safe is exactly this claim, and nothing below a real database can settle it: every
-/// movement is a composed statement joining a message to its account to reach the user column, and the removals are
-/// issued in front of a <c>RemoveRange</c> whose effect on the payload is PostgreSQL's own cascade. A figure that had
-/// stopped tracking would reach an operator as a ceiling that refused mail there was room for, or admitted mail there
-/// was not — neither of which fails anywhere.
+/// The figure exists so a per-user storage ceiling can be consulted before every message without a sum over a whole
+/// mailbox, and it is the only number in this schema that duplicates something derivable from the rows beneath it.
+/// What makes that safe is exactly this claim, and nothing below a real database can settle it: every movement is a
+/// composed statement joining a message to the account it belongs to, and the removals are issued in front of a
+/// <c>RemoveRange</c> whose effect on the payload is PostgreSQL's own cascade. A figure that had stopped tracking
+/// would reach an operator as a ceiling that refused mail there was room for, or admitted mail there was not —
+/// neither of which fails anywhere.
 /// </para>
 /// <para>
-/// The suite shares one database and one user, and two other classes write a content row through the context rather
-/// than through the port — deliberately, because what they are about is the schema and the cascade. So this class
+/// The suite shares one database and one account, and two other classes write a content row through the context
+/// rather than through the port — deliberately, because what they are about is the schema and the cascade. So this class
 /// re-derives once before it acts, which is a supported operation and leaves the counter holding what the payloads
 /// hold; every movement afterwards is this class's own, and the agreement asserted at the end is therefore about the
 /// port rather than about what the rest of the suite happened to leave behind.
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-public sealed class OrchestratedUserStoredContentLedgerTests(MailFathomOrchestrationFixture orchestration)
+public sealed class OrchestratedAccountStoredContentLedgerTests(MailFathomOrchestrationFixture orchestration)
 {
-    private const string FolderAlias = "user-stored-content";
+    private const string FolderAlias = "account-stored-content";
 
     private const uint OverwrittenUid = 700;
 
@@ -70,7 +68,7 @@ public sealed class OrchestratedUserStoredContentLedgerTests(MailFathomOrchestra
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
-        var user = MailUserId.Create(await ReadSoleUserAsync(services, cancellationToken));
+        var account = SyntheticMailAccount.Account;
 
         var storedEmailIds = await StoreEmailsAsync(
             services,
@@ -80,14 +78,14 @@ public sealed class OrchestratedUserStoredContentLedgerTests(MailFathomOrchestra
 
         // The baseline the movements below are measured from, taken as a recomputation so it holds what the payloads
         // hold rather than whatever an earlier class left in the counter.
-        var baseline = await RederiveAsync(services, user, cancellationToken);
+        var baseline = await RederiveAsync(services, account, cancellationToken);
 
         // Act
         await SaveContentAsync(services, binding, storedEmailIds, OverwrittenUid, FirstPayloadByteCount, cancellationToken);
         await SaveContentAsync(services, binding, storedEmailIds, ErasedUid, ErasedPayloadByteCount, cancellationToken);
         await SaveContentAsync(services, binding, storedEmailIds, UntouchedUid, UntouchedPayloadByteCount, cancellationToken);
 
-        var afterStores = await ReadAsync(services, user, cancellationToken);
+        var afterStores = await ReadAsync(services, account, cancellationToken);
 
         // A re-synchronization replaces the payload in place, so the figure moves by the difference rather than by the
         // whole of what arrived.
@@ -99,19 +97,19 @@ public sealed class OrchestratedUserStoredContentLedgerTests(MailFathomOrchestra
             OverwritingPayloadByteCount,
             cancellationToken);
 
-        var afterOverwrite = await ReadAsync(services, user, cancellationToken);
+        var afterOverwrite = await ReadAsync(services, account, cancellationToken);
 
         // The row leaves and its payload leaves with it through the cascade, which nothing below the content store
         // observes: the figure gives those bytes back because the removal hands them back in the same transaction.
         await EraseAsync(services, storedEmailIds[ErasedUid], cancellationToken);
 
-        var afterErasure = await ReadAsync(services, user, cancellationToken);
+        var afterErasure = await ReadAsync(services, account, cancellationToken);
 
         // What an account run actually does: the message's metadata and its payload are committed together, so the row
         // naming the account is still pending in the session when the figure moves.
         await StoreArrivingEmailAsync(services, binding, FirstArrivalUid, FirstArrivalPayloadByteCount, cancellationToken);
 
-        var afterArrival = await ReadAsync(services, user, cancellationToken);
+        var afterArrival = await ReadAsync(services, account, cancellationToken);
 
         // Assert
         Assert.Equal(
@@ -123,34 +121,24 @@ public sealed class OrchestratedUserStoredContentLedgerTests(MailFathomOrchestra
 
         // The claim the maintained figure exists on: recomputing from the payloads themselves reaches the same number,
         // and reading it back afterwards still does.
-        Assert.Equal(afterArrival, await RederiveAsync(services, user, cancellationToken));
-        Assert.Equal(afterArrival, await ReadAsync(services, user, cancellationToken));
+        Assert.Equal(afterArrival, await RederiveAsync(services, account, cancellationToken));
+        Assert.Equal(afterArrival, await ReadAsync(services, account, cancellationToken));
     }
 
     private static Task<long> ReadAsync(
         OrchestratedMailFathomServices services,
-        MailUserId user,
+        MailAccountId account,
         CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IUserStoredContentLedger>()
-                .ReadStoredContentBytesAsync(user, token),
+            (scope, token) => scope.GetRequiredService<IAccountStoredContentLedger>()
+                .ReadStoredContentBytesAsync(account, token),
             cancellationToken);
 
     private static Task<long> RederiveAsync(
         OrchestratedMailFathomServices services,
-        MailUserId user,
+        MailAccountId account,
         CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IUserStoredContentLedger>()
-                .RederiveStoredContentBytesAsync(user, token),
-            cancellationToken);
-
-    private static Task<Guid> ReadSoleUserAsync(
-        OrchestratedMailFathomServices services,
-        CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<MailFathomDbContext>()
-                .UserAccounts
-                .AsNoTracking()
-                .Select(user => user.Id)
-                .SingleAsync(token),
+            (scope, token) => scope.GetRequiredService<IAccountStoredContentLedger>()
+                .RederiveStoredContentBytesAsync(account, token),
             cancellationToken);
 
     private static async Task<IReadOnlyDictionary<uint, StoredEmailId>> StoreEmailsAsync(
@@ -171,7 +159,7 @@ public sealed class OrchestratedUserStoredContentLedgerTests(MailFathomOrchestra
                     var occurrenceId = SyntheticEmail.OccurrenceIn(binding, uid);
 
                     storedEmailIds[uid] = await repository.UpsertMetadataAsync(
-                        session, SyntheticMailAccount.User,
+                        session,
                         SyntheticEmail.RemoteMetadataOf(occurrenceId, $"{FolderAlias}-{uid}"),
                         extractedMetadata: null,
                         StoredEmailContentAvailability.Available,
@@ -199,7 +187,7 @@ public sealed class OrchestratedUserStoredContentLedgerTests(MailFathomOrchestra
             async (scope, session, token) =>
             {
                 var storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session, SyntheticMailAccount.User,
+                    session,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, $"{FolderAlias}-{uid}"),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,

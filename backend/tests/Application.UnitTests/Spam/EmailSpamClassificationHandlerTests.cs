@@ -7,7 +7,6 @@ using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.UnitTests.TestDoubles;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -21,8 +20,8 @@ namespace MailFathom.Application.UnitTests.Spam;
 /// <summary>Covers what one leased classification does, and what makes running it twice the same as running it once.</summary>
 public sealed class EmailSpamClassificationHandlerTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-1"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("acct-1");
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -30,9 +29,13 @@ public sealed class EmailSpamClassificationHandlerTests
 
     private readonly SpamClassificationHarness harness = new(EvaluatedAt);
 
-    public EmailSpamClassificationHandlerTests() => this.harness.ContentStore
-        .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
-        .Returns(_ => SpamClassificationHarness.SomeContent());
+    public EmailSpamClassificationHandlerTests()
+    {
+        this.harness.Assignments.Assigning(SyntheticMailUser.Deployment, Account);
+        this.harness.ContentStore
+            .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
+            .Returns(_ => SpamClassificationHarness.SomeContent());
+    }
 
     [Fact]
     public void JobType_Always_IsTheClassificationOfOneStoredEmail() =>
@@ -91,21 +94,19 @@ public sealed class EmailSpamClassificationHandlerTests
     }
 
     /// <summary>
-    /// The payload names a user and a stored email as two values, so a document naming a user who does not hold that
-    /// email must not reach a verdict under that user's settings or ask anybody's mailbox for a change.
+    /// The payload names a mailbox and a stored email as two values, so a document naming a mailbox that does not hold
+    /// that email must not reach a verdict under that mailbox's posture or ask anybody's mailbox for a change.
     /// </summary>
     [Fact]
-    public async Task RunAsync_AStoredEmailThePayloadsUserDoesNotHold_EndsTheJobWithoutClassifyingOrActing()
+    public async Task RunAsync_AStoredEmailThePayloadsMailboxDoesNotHold_EndsTheJobWithoutClassifyingOrActing()
     {
         // Arrange
         var emailId = this.StoreEmail();
-        var anotherUser = MailAccountIdentity.Create(
-            MailUserId.Create(Guid.Parse("22222222-2222-2222-2222-222222222222")),
-            Account.Id);
+        var anotherMailbox = MailAccountId.Create("acct-2");
 
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyStoredEmailSpamJobPayload.For(anotherUser, emailId),
+            ClassifyStoredEmailSpamJobPayload.For(anotherMailbox, emailId),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -185,7 +186,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
     private StoredEmailId StoreEmail() => this.harness.Emails.Add(new ClassifiableEmail(
         StoredEmailId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000001")),
-        Account.Id,
+        Account,
         Inbox));
 
     private EmailSpamClassificationHandler CreateHandler(
@@ -204,7 +205,7 @@ public sealed class EmailSpamClassificationHandlerTests
             this.harness.CreateClassifier(settingsReader, commitPolicy),
             this.harness.CreateActionRecorder(
                 actions ?? SpamActionSettings.None,
-                occurrences ?? SpamClassificationHarness.OccurrenceReader(Account.Id, Inbox),
+                occurrences ?? SpamClassificationHarness.OccurrenceReader(Account, Inbox),
                 sessionFactory,
                 commitPolicy));
     }

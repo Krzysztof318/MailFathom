@@ -72,7 +72,7 @@ public sealed class SpamClassificationRunRequests
     /// </para>
     /// </remarks>
     public Task<SpamClassificationRunRequest> SubmitAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         SpamClassificationRunTerms terms,
         CancellationToken cancellationToken)
     {

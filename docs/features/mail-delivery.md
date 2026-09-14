@@ -608,7 +608,7 @@ scanner switched on nothing here runs, and an enqueue costs exactly what it did 
 
 `AuthoredMailSubmission` is the one use case a boundary reaches to send a message that answers nothing, and it composes
 the three steps above it rather than adding a fourth: the account a caller named is resolved against the accounts the
-caller's user owns, the people named become addresses, the addresses and the text become MIME, and the MIME and the
+caller is assigned, the people named become addresses, the addresses and the text become MIME, and the MIME and the
 request become the durable record. Composing them in one place is what keeps a second entrypoint from doing two of the
 three and inventing the middle one, and it is what `send_email` calls and the whole of what that tool does.
 

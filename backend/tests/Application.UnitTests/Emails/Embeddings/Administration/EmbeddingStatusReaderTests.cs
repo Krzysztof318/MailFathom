@@ -216,6 +216,7 @@ public sealed class EmbeddingStatusReaderTests
             workloadReader,
             new EmbeddingSpendGate(
                 ledger,
+                new StubMailAccountAssignments(),
                 EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod, 0, TimeSpan.FromDays(1)),
                 new FakeTimeProvider(Now)),
             providerHealth,

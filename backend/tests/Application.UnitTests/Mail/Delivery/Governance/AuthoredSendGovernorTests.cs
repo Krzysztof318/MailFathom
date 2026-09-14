@@ -23,8 +23,8 @@ public sealed class AuthoredSendGovernorTests
 {
     private const string CallerIdentity = "test-caller";
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     private static readonly DateTimeOffset Recorded =
         DateTimeOffset.Parse("2026-08-19T09:00:00Z", CultureInfo.InvariantCulture);
@@ -204,7 +204,7 @@ public sealed class AuthoredSendGovernorTests
         Assert.Equal(CallerIdentity, recorded.Caller);
         Assert.Equal(MailFathomPermission.MailSend, recorded.Grant);
         Assert.Equal(AuthoredSendAct.NewMessage, recorded.Act);
-        Assert.Equal(Account.Id, recorded.AccountId);
+        Assert.Equal(Account, recorded.AccountId);
         Assert.Equal(record.Id, recorded.OutgoingEmailId);
         Assert.Equal(1, recorded.RecipientCount);
         Assert.Equal(0, recorded.UnvouchedRecipientCount);
@@ -316,13 +316,14 @@ public sealed class AuthoredSendGovernorTests
     private static OutgoingEmailRequest AskedAs(string requesterIdentity, params string[] addresses) =>
         OutgoingEmailRequest.Create(
             Account,
+            SyntheticMailUser.Deployment,
             OutgoingEmailRequester.Command(requesterIdentity),
             [.. addresses.Select(address => OutgoingRecipient.Create(Address(address), OutgoingRecipientRole.To))]);
 
     private static OutgoingEmailRecord RecordOf(params string[] addresses) => new()
     {
         Id = RecordNumber(7),
-        Account = Account,
+        AccountId = Account,
         Requester = OutgoingEmailRequester.Command("send-1"),
         Principal = OutgoingEmailPrincipal.Of("agent-key"),
         Recipients =

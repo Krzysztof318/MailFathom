@@ -106,7 +106,7 @@ The Secret is mounted read-only at `/etc/mailfathom/secrets`, one file per key, 
 reference — the same path and the same references the Compose deployment uses.
 
 The administrative key is in that list because a deployment that cannot be administered cannot be given a mailbox:
-every mail account belongs to a user's record, and [recording the
+every mail account is a record of its own assigned to the users it serves, and [recording the
 mailbox](#recording-the-mailbox) below is the write that puts one there. The mailbox password beside it is
 what that record's declaration will reference; nothing in the ConfigMap names it.
 

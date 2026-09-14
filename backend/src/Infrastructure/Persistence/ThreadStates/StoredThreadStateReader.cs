@@ -63,8 +63,7 @@ internal sealed class StoredThreadStateReader(
             .AsNoTracking()
             .Where(state => state.EmailThreadId == surviving)
             .Select(state => new StoredThreadStateRow(
-                state.EmailThread!.UserId,
-                state.EmailThread.MailboxAccountId,
+                state.EmailThread!.MailboxAccountId,
                 state.Coverage,
                 state.DerivedAt,
                 state.DerivedFromMessageCount,
@@ -90,7 +89,6 @@ internal sealed class StoredThreadStateReader(
                 dbContext.StoredEmails.AsNoTracking(),
                 dbContext.EmailThreadStates.AsNoTracking(),
                 surviving,
-                stored.UserId,
                 stored.MailboxAccountId,
                 folderParticipation.FoldersGeneratingEmbeddings,
                 derivedWorkGate.ReadTerms())
@@ -116,7 +114,6 @@ internal sealed class StoredThreadStateReader(
     /// <param name="emails">The stored mail to count the conversation from.</param>
     /// <param name="states">The states already stored.</param>
     /// <param name="survivingThreadId">The conversation, as the surviving thread of any merge.</param>
-    /// <param name="userId">The user whose account the conversation belongs to.</param>
     /// <param name="mailboxAccountId">The configured account the conversation belongs to.</param>
     /// <param name="embeddedFolders">The folders a mapping admits to derived work.</param>
     /// <param name="terms">The classification terms in force.</param>
@@ -131,14 +128,12 @@ internal sealed class StoredThreadStateReader(
         IQueryable<StoredEmailEntity> emails,
         IQueryable<EmailThreadStateEntity> states,
         Guid survivingThreadId,
-        Guid userId,
         string mailboxAccountId,
         IReadOnlyList<MailFolderIdentity> embeddedFolders,
         DerivedWorkAdmissionTerms terms) =>
         StoredThreadStateStore.Awaiting(
             StoredThreadStateStore.Selecting(
                 emails.Where(email => email.EmailThreadId == survivingThreadId),
-                userId,
                 mailboxAccountId,
                 embeddedFolders,
                 terms),
@@ -160,7 +155,6 @@ internal sealed class StoredThreadStateReader(
             scope);
 
     private sealed record StoredThreadStateRow(
-        Guid UserId,
         string MailboxAccountId,
         ThreadStateCoverage Coverage,
         DateTimeOffset DerivedAt,

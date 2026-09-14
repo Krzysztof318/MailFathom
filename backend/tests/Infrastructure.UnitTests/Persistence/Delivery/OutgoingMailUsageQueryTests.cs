@@ -7,7 +7,6 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Delivery;
-using MailFathom.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -18,16 +17,16 @@ public sealed class OutgoingMailUsageQueryTests
     private static readonly DateTimeOffset PeriodStart =
         DateTimeOffset.Parse("2026-08-19T00:00:00Z", CultureInfo.InvariantCulture);
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     /// <summary>
     /// The period is a range over the instant a record was written, which is what an epoch-anchored window means, and
-    /// the account it is narrowed to is the pair rather than the identifier — a spend ceiling read for one user's
-    /// account may not count what another user's account of the same name sent.
+    /// the account it is narrowed to is the generated identifier alone — a shared mailbox's sends are counted once,
+    /// against the mailbox, rather than once per person assigned to it.
     /// </summary>
     [Fact]
-    public void ComposeMessages_ForOneAccount_NarrowsToThatUsersAccountInsideThePeriod()
+    public void ComposeMessages_ForOneAccount_NarrowsToThatAccountInsideThePeriod()
     {
         // Arrange
         using var context = DesignTimeContext();
@@ -39,8 +38,8 @@ public sealed class OutgoingMailUsageQueryTests
 
         // Assert
         Assert.Contains("\"RecordedAt\" >=", sql, StringComparison.Ordinal);
-        Assert.Contains("\"UserId\" =", sql, StringComparison.Ordinal);
         Assert.Contains("\"MailboxAccountId\" =", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"UserId\" =", sql, StringComparison.Ordinal);
     }
 
     /// <summary>The deployment's count is every account's, so nothing narrows it but the window.</summary>

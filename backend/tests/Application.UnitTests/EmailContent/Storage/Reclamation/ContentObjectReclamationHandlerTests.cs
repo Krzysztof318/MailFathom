@@ -6,7 +6,6 @@ using MailFathom.Application.EmailContent.Storage.Reclamation;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Domain.Accounts;
-using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -260,7 +259,7 @@ public sealed class ContentObjectReclamationHandlerTests
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentException>(
             () => handler.RunAsync(
-                RederiveStoredMailJobPayload.For(MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")), folderAlias: null),
+                RederiveStoredMailJobPayload.For(MailAccountId.Create("work"), folderAlias: null),
                 TestContext.Current.CancellationToken));
     }
 

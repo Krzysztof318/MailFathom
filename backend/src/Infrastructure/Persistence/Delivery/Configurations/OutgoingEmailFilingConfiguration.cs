@@ -79,7 +79,6 @@ internal sealed class OutgoingEmailFilingConfiguration : IEntityTypeConfiguratio
         // answered, would each otherwise leave a row nothing can match sitting in them for the life of the deployment.
         entity.HasIndex(filing => new
         {
-            filing.UserId,
             filing.MailboxAccountId,
             filing.FolderPath,
             filing.PlacementUidValidity,
@@ -90,7 +89,6 @@ internal sealed class OutgoingEmailFilingConfiguration : IEntityTypeConfiguratio
 
         entity.HasIndex(filing => new
         {
-            filing.UserId,
             filing.MailboxAccountId,
             filing.InternetMessageId,
         })
@@ -104,7 +102,6 @@ internal sealed class OutgoingEmailFilingConfiguration : IEntityTypeConfiguratio
         // deterministic, and it is what lets the ordering be read rather than sorted.
         entity.HasIndex(filing => new
         {
-            filing.UserId,
             filing.MailboxAccountId,
             filing.Filing,
             filing.AppendedAt,

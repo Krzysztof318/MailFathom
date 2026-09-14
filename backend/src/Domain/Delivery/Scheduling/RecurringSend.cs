@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Domain.Delivery.Scheduling;
@@ -40,21 +41,24 @@ public sealed record RecurringSend
     /// <summary>Gets what every occurrence and every later act refers to this declaration by.</summary>
     public required RecurringSendId Id { get; init; }
 
-    /// <summary>Gets the account each occurrence is submitted through and sent as, named by its user and its identifier.</summary>
+    /// <summary>Gets the account each occurrence is submitted through and sent as, named by its generated identifier.</summary>
     /// <remarks>
-    /// The pair, read back from the declaration's own row: every occasion becomes an outgoing record about this
-    /// account, and the user that record carries is the one the declaration was made under.
+    /// Read back from the declaration's own row: every occasion becomes an outgoing record about this account, and the
+    /// identifier names one mailbox across the deployment. Whose standing instruction it is, and which of the
+    /// account's assigned users may stop it, is <see cref="Requester" />'s answer.
     /// </remarks>
-    public required MailAccountIdentity Account { get; init; }
+    public required MailAccountId AccountId { get; init; }
 
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one user names.</summary>
+    /// <summary>Gets the user who declared it, which is what makes the declaration theirs rather than the mailbox's.</summary>
     /// <remarks>
-    /// Derived rather than stored, so the pair is the one value here and the two halves can never disagree. It is kept
-    /// because most readers of this record are inside a scope whose user is already settled, and naming the identifier
-    /// alone there says what the code means.
+    /// Authored mail is the one part of this schema that still names a person, because it records an act
+    /// somebody took rather than mail a mailbox holds:
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+    /// keeps it on the author for that reason, so a mailbox two people share still shows each of them their
+    /// own. It stands beside the account rather than inside it, the account's generated identifier naming one
+    /// mailbox across the deployment and saying nothing about who wrote through it.
     /// </remarks>
-    public MailAccountId AccountId => this.Account.Id;
-
+    public required MailUserId User { get; init; }
 
     /// <summary>Gets the authored act that asked for the declaration, which every occurrence's identity is composed from.</summary>
     public required OutgoingEmailRequester Requester { get; init; }

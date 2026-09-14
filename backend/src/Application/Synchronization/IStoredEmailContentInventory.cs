@@ -54,7 +54,7 @@ public interface IStoredEmailContentInventory
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<EmailAwaitingContent>> GetEmailsAwaitingContentAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         int maxEmailCount,

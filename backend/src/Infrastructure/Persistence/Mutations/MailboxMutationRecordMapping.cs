@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -46,7 +45,6 @@ internal static class MailboxMutationRecordMapping
             Id = MailboxMutationRecordId.Create(entity.Id),
             Request = MailboxMutationRequest.Create(
                 StoredEmailId.Create(entity.StoredEmailId),
-                MailUserId.Create(entity.UserId),
                 occurrence,
                 mutation,
                 MailboxMutationRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),

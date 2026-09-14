@@ -19,8 +19,9 @@ namespace MailFathom.Application.Synchronization;
 /// while every account was in fact being supervised.
 /// </para>
 /// <para>
-/// The unit is the account's whole identity rather than its identifier alone, because two users may each name an
-/// account alike and neither has any reason to be synchronized by the replica holding the other.
+/// The unit is the account's generated identifier and nothing beside it. The identifier names one mailbox across the
+/// deployment, and one mailbox is supervised once however many users are assigned it — a scope naming a user would
+/// have a shared mailbox supervised once per assignment, which is the same mailbox fetched several times over.
 /// </para>
 /// </remarks>
 public static class MailAccountSupervisionScope
@@ -33,10 +34,10 @@ public static class MailAccountSupervisionScope
     /// is named by its SHA-256 digest instead. Configuration accepts identifiers far longer than a scope, and a scope
     /// that could not be composed would end supervision for every account on the replica rather than for that one.
     /// </remarks>
-    public static WorkScope For(MailAccountIdentity account)
+    public static WorkScope For(MailAccountId account)
     {
-        var accountId = account.Id.Value;
-        var readableScope = string.Create(CultureInfo.InvariantCulture, $"mail-synchronization/{account.User.Value}/{accountId}");
+        var accountId = account.Value;
+        var readableScope = string.Create(CultureInfo.InvariantCulture, $"mail-synchronization/{accountId}");
 
         if (readableScope.Length <= WorkScope.MaximumLength && !accountId.Any(char.IsControl))
         {
@@ -45,6 +46,6 @@ public static class MailAccountSupervisionScope
 
         var digest = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(accountId)));
 
-        return WorkScope.Create(string.Create(CultureInfo.InvariantCulture, $"mail-synchronization/{account.User.Value}/sha256-{digest}"));
+        return WorkScope.Create(string.Create(CultureInfo.InvariantCulture, $"mail-synchronization/sha256-{digest}"));
     }
 }

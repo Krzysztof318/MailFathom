@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Domain.Emails;
@@ -28,7 +27,6 @@ internal static class MailAnsweringAuditEntryMapping
             Id = entry.Id.Value,
             RunId = entry.RunId.Value,
             MailboxAccountId = entry.AccountId.Value,
-            UserId = entry.User.Value,
             ChatEndpointAlias = entry.ChatEndpointAlias,
             InstructionsVersion = entry.InstructionsVersion,
             StartedAt = entry.StartedAt,
@@ -82,9 +80,7 @@ internal static class MailAnsweringAuditEntryMapping
         {
             Id = MailAnsweringAuditEntryId.Create(entity.Id),
             RunId = MailAnsweringRunId.Create(entity.RunId),
-            Account = MailAccountIdentity.Create(
-                MailUserId.Create(entity.UserId),
-                MailAccountId.Create(entity.MailboxAccountId)),
+            AccountId = MailAccountId.Create(entity.MailboxAccountId),
             Emails =
             [
                 .. entity.Emails

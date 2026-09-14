@@ -20,6 +20,6 @@ namespace MailFathom.Application.Contacts.Collection;
 /// also what makes the bound the run's — a value built per message would bound nothing.
 /// </remarks>
 public sealed record ContactCollectionRun(
-    MailAccountIdentity Account,
+    MailAccountId Account,
     MailFolderSpecialUse? FolderRole,
     ContactCollectionBudget Budget);

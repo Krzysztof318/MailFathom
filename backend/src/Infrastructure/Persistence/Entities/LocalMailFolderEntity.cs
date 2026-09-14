@@ -12,9 +12,6 @@ internal sealed class LocalMailFolderEntity
 {
     public Guid Id { get; set; }
 
-    /// <summary>Gets or sets the user whose account this folder belongs to, which with the account identifier is the reference to the account.</summary>
-    public required Guid UserId { get; set; }
-
     public required string MailboxAccountId { get; set; }
 
     public Guid? ParentId { get; set; }

@@ -70,18 +70,17 @@ public sealed class MailRuleScheduleSource : IScheduledJobSource
         IReadOnlyList<ServedMailAccount> servedAccounts) => rule.Schedule is { } recurrence
         ? servedAccounts
             .Where(account => rule.AppliesTo(account.Id.Value))
-            .Select(account => Declare(rule.Name, recurrence, account.Identity))
+            .Select(account => Declare(rule.Name, recurrence, account.Id))
         : [];
 
     /// <summary>Declares one rule's schedule for one account, as the repeated work a dispatch reads.</summary>
     /// <remarks>
-    /// The payload names the user beside the identifier, because the run it starts writes rows about that account. The
-    /// schedule's own identity is still composed from the identifier alone: making every identity composed as text say
-    /// whose account it names is a later step of ADR 0014's delivery order, and taking it here would move the durable
-    /// state a deployment already keeps under those strings.
+    /// The identity is composed from the account's generated identifier and the rule's name, and from nothing else. No
+    /// user stands in it: a mailbox two people are assigned declares one schedule rather than one each, so the rule
+    /// runs over that mail once however many people read it.
     /// </remarks>
-    private static ScheduledJob Declare(string ruleName, JobRecurrence recurrence, MailAccountIdentity account) => new(
-        JobScheduleId.Create($"{IdentityPrefix}:{account.Id.Value}:{ruleName}"),
+    private static ScheduledJob Declare(string ruleName, JobRecurrence recurrence, MailAccountId account) => new(
+        JobScheduleId.Create($"{IdentityPrefix}:{account.Value}:{ruleName}"),
         RunScheduledMailRulesJobPayload.For(account),
         recurrence,
         account);

@@ -82,7 +82,7 @@ public sealed class MailDraftPass
     /// nowhere else, and a promotion still waiting to be delivered answers nothing.
     /// </remarks>
     public async Task<IReadOnlyList<MailDraftFilingResult>> SettleOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         var outstanding = await this.drafts.ReadOutstandingAsync(

@@ -12,16 +12,21 @@ namespace MailFathom.Infrastructure.Persistence.Accounts.Configurations;
 /// <summary>Declares the account row every folder binding, message, and durable job hangs on.</summary>
 /// <remarks>
 /// <para>
-/// The row carries the configured alias, which gives the rows that reference an account something to reference, and two
-/// pieces of state configuration cannot hold because configuration is read-only: the custody phase, which says whether
-/// MailFathom mirrors, holds, or is restoring the mailbox, and the local folders revision, which every write to a held
-/// account's folder hierarchy bumps so that write commits only over the hierarchy it read.
+/// The row carries two pieces of state configuration cannot hold because configuration is read-only: the custody
+/// phase, which says whether MailFathom mirrors, holds, or is restoring the mailbox, and the local folders revision,
+/// which every write to a held account's folder hierarchy bumps so that write commits only over the hierarchy it read.
 /// </para>
 /// <para>
-/// It is keyed by the user and the identifier together, which is what ADR 0014 decided an account is identified by.
-/// The identifier stays the readable string whoever declared the account wrote, and it names one account within its
-/// user rather than across the deployment — so two people served by one instance may each call a mailbox
-/// <c>work</c> and neither is claiming the word from the other.
+/// It is keyed by the generated identifier alone, which is what ADR 0014 decided an account is identified by. That
+/// identifier is unique across the deployment, so this row is the mailbox rather than one user's view of it: a second
+/// user assigned the account adds an assignment and no second row, and the mail beneath this one is the one copy both
+/// of them read.
+/// </para>
+/// <para>
+/// No foreign key points out of it. The row is created lazily by whichever run first binds one of the account's
+/// folders, so it cannot cascade from the account record a person provisioned, and the user it is served to is a
+/// relation rather than a column — which is why removing an account's mail is the erasure seam's statement against
+/// this table rather than a cascade from somewhere else.
 /// </para>
 /// </remarks>
 internal sealed class MailboxAccountConfiguration : IEntityTypeConfiguration<MailboxAccountEntity>
@@ -33,13 +38,9 @@ internal sealed class MailboxAccountConfiguration : IEntityTypeConfiguration<Mai
 
         // The account row is created by whichever run first binds one of the account's folders, so two overlapping
         // first runs insert it together and one of them loses. The key is therefore named for the same reason the
-        // alias binding index below is: the loser is recognized by the constraint it violated and reported as a
-        // race to resolve rather than as a failure.
-        //
-        // The user leads it, so the key is also the structure that answers which mail accounts one user owns —
-        // the read the erasure performs before it takes the rows no cascade reaches, and the reason the foreign key
-        // below needs no index of its own.
-        entity.HasKey(account => new { account.UserId, account.Id })
+        // alias binding index is: the loser is recognized by the constraint it violated and reported as a race to
+        // resolve rather than as a failure.
+        entity.HasKey(account => account.Id)
             .HasName(PersistenceConstraintNames.MailboxAccountPrimaryKeyConstraintName);
         entity.Property(account => account.Id).HasMaxLength(128);
 
@@ -50,14 +51,5 @@ internal sealed class MailboxAccountConfiguration : IEntityTypeConfiguration<Mai
             .HasMaxLength(64)
             .HasDefaultValueSql($"'{nameof(MailAccountCustodyPhase.Mirrored)}'");
         entity.Property(account => account.LocalMailFoldersRevision).IsConcurrencyToken();
-
-        // The user is required, so a mailbox belongs to somebody from the moment its row exists rather than from the
-        // moment something remembers to say so. The cascade is what makes erasing a user one statement: the mail
-        // graph hangs off this table, so the account rows take their folders, and the folders take everything derived
-        // from the mail beneath them.
-        entity.HasOne<UserAccountEntity>()
-            .WithMany()
-            .HasForeignKey(account => account.UserId)
-            .OnDelete(DeleteBehavior.Cascade);
     }
 }

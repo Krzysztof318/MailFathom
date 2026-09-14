@@ -34,7 +34,7 @@ public sealed class UserAccountDocumentBinderTests
 
     /// <summary>A user is provisioned before their first mailbox, so a record of their language alone is an ordinary one.</summary>
     [Fact]
-    public void Bind_ADocumentNamingOnlyALanguage_IsAUserWhoOwnsNoMailAccount()
+    public void Bind_ADocumentNamingOnlyALanguage_IsAUserAssignedNoMailAccount()
     {
         // Arrange
         var binder = CreateBinder();

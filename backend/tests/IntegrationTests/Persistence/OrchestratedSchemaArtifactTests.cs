@@ -145,16 +145,17 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         await host.StopAsync(cancellationToken);
     }
 
-    /// <summary>Proves a mailbox stored before the user axis existed is carried onto the user the script writes.</summary>
+    /// <summary>Proves a mailbox stored before the user axis existed comes out of the whole chain keyed by its identifier alone.</summary>
     /// <remarks>
-    /// The one claim in this class that a whole-chain apply cannot make: the migration adds a column, fills it, and then
-    /// makes it required, and a database that never held a mailbox row while the column was still absent never exercises
-    /// the filling step at all. So the chain is applied in two parts with the row written between them, which is the
-    /// state every installation of the previous release is in on the day it takes this one — and the failure this
-    /// catches is the generated shape, where the column arrives with a default and points at a row nothing inserted.
+    /// The one claim in this class that a whole-chain apply cannot make: the row has to exist while the user column is
+    /// added, filled, made required, and then dropped again by the migration that keys the mail graph by the account's
+    /// generated identifier. A database that never held a mailbox row through that stretch exercises neither the
+    /// filling step nor the rekeying, and both are what an installation of an earlier release meets on the day it
+    /// takes this one. So the chain is applied in two parts with the row written between them, and what this catches is
+    /// a generated shape that drops the row, duplicates it, or leaves it keyed by a column the release no longer holds.
     /// </remarks>
     [Fact]
-    public async Task SchemaArtifact_AppliedOverAMailboxStoredBeforeTheUserMigration_CarriesItOntoTheProvisionedUser()
+    public async Task SchemaArtifact_AppliedOverAMailboxStoredBeforeTheUserMigration_LeavesItKeyedByItsIdentifierAlone()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -177,15 +178,11 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         await ApplyAsync(connectionString, GenerateSchemaArtifact(scope.ServiceProvider), cancellationToken);
 
         // Assert
-        var userId = await context.UserAccounts
-            .AsNoTracking()
-            .Select(user => user.Id)
-            .SingleAsync(cancellationToken);
         var carriedMailbox = await context.MailboxAccounts
             .AsNoTracking()
             .SingleAsync(account => account.Id == CarriedAccount, cancellationToken);
 
-        Assert.Equal(userId, carriedMailbox.UserId);
+        Assert.Equal(CarriedAccount, carriedMailbox.Id);
         Assert.Equal(
             context.Database.GetMigrations(),
             await ReadAppliedMigrationsAsync(connectionString, cancellationToken));
@@ -318,10 +315,9 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         // The user the artifact provisioned, rather than one written here: a mailbox belongs to somebody, and this
         // database has held exactly one user record since the script that created it ran.
         var userId = await context.UserAccounts.Select(user => user.Id).SingleAsync(cancellationToken);
-        var account = new MailboxAccountEntity { Id = "artifact-upgrade", UserId = userId };
+        var account = new MailboxAccountEntity { Id = "artifact-upgrade", };
         var folder = new MailFolderEntity
         {
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             MailboxAccount = account,
             Alias = "inbox",
@@ -330,7 +326,6 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         var storedEmail = new StoredEmailEntity
         {
             Id = Guid.CreateVersion7(),
-            UserId = account.UserId,
             MailboxAccountId = account.Id,
             MailFolder = folder,
             UidValidity = 1,

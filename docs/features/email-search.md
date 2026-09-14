@@ -90,7 +90,7 @@ the same reason. It stays distinguishable from a message whose body was genuinel
 | Field | Meaning | Absent means |
 |---|---|---|
 | `QueryText` | The text to search for | refused — see below |
-| `Accounts` | The accounts to search, each named by its identifier or by its display name | every account the caller's user owns |
+| `Accounts` | The accounts to search, each named by its identifier or by its display name | every account the caller is assigned |
 | `Folders` | The folders to search, each named by its alias or by the role it plays | every folder of those accounts |
 | `SenderAddress` | The address the sender must carry, in any case | any sender |
 | `RecipientAddress` | The address a `To` or `Cc` recipient must carry | any recipient |
@@ -441,7 +441,7 @@ backward one would promise a re-read of a list that no longer exists in the form
 
 A query that matches nothing returns an empty window rather than a failure, so a search cannot be used to establish that
 an account or a folder holds mail the caller was not already entitled to see. A name that reaches none of the accounts
-the caller's user owns is still refused with `53001 MailAccountNotAccessible` before anything is read, for the reason a
+the caller is assigned is still refused with `53001 MailAccountNotAccessible` before anything is read, for the reason a
 listing refuses one: an empty result would confirm the identifier. It is one answer for three cases — nothing carries
 that name, this deployment stopped serving the account, or the account is somebody else's — so a refusal separates none
 of them.

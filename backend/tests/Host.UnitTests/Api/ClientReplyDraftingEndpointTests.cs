@@ -325,7 +325,7 @@ public sealed class ClientReplyDraftingEndpointTests
     private static MailReplyDrafting Drafting(IReplyDraftSourceReader sourceReader, IReplyDraftWriter writer)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
         catalog.User.Returns(SyntheticMailUser.Deployment);
 
         var scopeResolver = new MailboxScopeResolver(

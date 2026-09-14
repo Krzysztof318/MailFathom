@@ -261,7 +261,7 @@ public sealed class EmailAttachmentDownloadReader
     /// </para>
     /// </remarks>
     private async Task<AttachmentDownloadOutcome> ScreenedAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         IOpenedEmailAttachment attachment,
         CancellationToken cancellationToken)
     {

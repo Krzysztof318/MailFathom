@@ -175,8 +175,8 @@ public sealed class StubEmailThreadReaderTests
     {
         public bool SynchronizationEnabled => true;
 
-        public IReadOnlyList<ServedMailAccount> OwnedAccounts => served;
+        public IReadOnlyList<ServedMailAccount> AssignedAccounts => served;
 
-        public MailUserId User => served.Count is 0 ? SyntheticMailUser.Deployment : served[0].User;
+        public MailUserId User => SyntheticMailUser.Deployment;
     }
 }

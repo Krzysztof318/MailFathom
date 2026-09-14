@@ -271,7 +271,7 @@ public sealed class ClientCitationEndpointTests
     private static CitationResolver Resolver()
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([]);
+        catalog.AssignedAccounts.Returns([]);
 
         var readTelemetry = Substitute.For<IMailboxReadTelemetry>();
         readTelemetry.BeginRead(Arg.Any<MailboxReadOperation>(), Arg.Any<CancellationToken>())

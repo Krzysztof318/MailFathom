@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Globalization;
 using MailFathom.Application.Paging;
 using MailFathom.Domain.Accounts;
 
@@ -38,12 +37,12 @@ public sealed record DeadLetteredJobQuery
 
     private DeadLetteredJobQuery(
         JobType? jobType,
-        MailAccountIdentity? account,
+        MailAccountId? account,
         int pageSize,
         DeadLetteredJobCursor? cursor)
     {
         this.JobType = jobType;
-        this.Account = account;
+        this.AccountId = account;
         this.PageSize = pageSize;
         this.Cursor = cursor;
     }
@@ -52,9 +51,7 @@ public sealed record DeadLetteredJobQuery
     public JobType? JobType { get; }
 
     /// <summary>Gets the account the page is narrowed to, or <see langword="null" /> for every account and for work belonging to none.</summary>
-    public MailAccountIdentity? Account { get; }
-    /// <summary>Gets the identifier half of <see cref="Account" />, or <see langword="null" /> when the reading is across every account.</summary>
-    public MailAccountId? AccountId => this.Account?.Id;
+    public MailAccountId? AccountId { get; }
 
     /// <summary>Gets how many jobs the page holds at most.</summary>
     public int PageSize { get; }
@@ -67,7 +64,7 @@ public sealed record DeadLetteredJobQuery
     /// The page size is deliberately not part of it. A caller may ask for a shorter or longer page while continuing the
     /// same walk, and refusing that would be a rule about pacing rather than about which records the boundary sits in.
     /// </remarks>
-    public string FilterFingerprint => ComputeFingerprint(this.JobType, this.Account);
+    public string FilterFingerprint => ComputeFingerprint(this.JobType, this.AccountId);
 
     /// <summary>Builds a validated query from what a caller asked for, or reports why the request names no page.</summary>
     /// <param name="jobType">The kind of work to narrow to, or <see langword="null" /> for every kind.</param>
@@ -77,7 +74,7 @@ public sealed record DeadLetteredJobQuery
     /// <returns>The accepted query, or the refusal naming what the caller has to change.</returns>
     public static DeadLetteredJobQueryResult Create(
         JobType? jobType,
-        MailAccountIdentity? account,
+        MailAccountId? account,
         int? pageSize,
         DeadLetteredJobCursor? cursor)
     {
@@ -107,9 +104,6 @@ public sealed record DeadLetteredJobQuery
     }
 
     /// <summary>Reduces the filters to the short stable text a cursor carries to prove it belongs to this walk.</summary>
-    private static string ComputeFingerprint(JobType? jobType, MailAccountIdentity? account) =>
-        PageFilterFingerprint.Of(
-            jobType?.Name,
-            account?.User.Value.ToString("N", CultureInfo.InvariantCulture),
-            account?.Id.Value);
+    private static string ComputeFingerprint(JobType? jobType, MailAccountId? account) =>
+        PageFilterFingerprint.Of(jobType?.Name, account?.Value);
 }

@@ -41,7 +41,7 @@ public interface IMailRuleEvaluationStore
     /// waiting for extraction would be read again on the next batch and the walk would never move past it.
     /// </remarks>
     Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> GetEmailsAwaitingFirstEvaluationAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken);
@@ -57,7 +57,7 @@ public interface IMailRuleEvaluationStore
     /// position is the whole of what a restart resumes from.
     /// </remarks>
     Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> GetStoredEmailsAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken);

@@ -37,7 +37,7 @@ internal sealed class PublishedAccountNames
         ArgumentNullException.ThrowIfNull(accountCatalog);
 
         return new PublishedAccountNames(
-            accountCatalog.OwnedAccounts.ToDictionary(
+            accountCatalog.AssignedAccounts.ToDictionary(
                 static account => account.Id.Value,
                 static account => account.DisplayName.Value,
                 StringComparer.Ordinal));

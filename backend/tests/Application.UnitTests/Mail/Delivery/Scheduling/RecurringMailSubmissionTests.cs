@@ -192,7 +192,7 @@ public sealed class RecurringMailSubmissionTests
     /// against a mailbox this caller may not even read — which would otherwise send as that user on every occasion.
     /// </summary>
     [Fact]
-    public async Task DeclareAsync_AnAccountTheCallersUserDoesNotOwn_IsRefusedAndDeclaresNothing()
+    public async Task DeclareAsync_AnAccountTheCallersUserIsNotAssigned_IsRefusedAndDeclaresNothing()
     {
         // Arrange
         var store = new InMemoryRecurringSendStore();
@@ -380,7 +380,7 @@ public sealed class RecurringMailSubmissionTests
         // the book the recipients are resolved out of, and the caller the send is judged for are one scoped instance in
         // production.
         var callerAuthorization = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
-        var accountCatalog = OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account));
+        var accountCatalog = AssignedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account));
 
         var conflictsLeft = conflictingAttempts;
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();

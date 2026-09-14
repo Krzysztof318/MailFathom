@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json.Serialization;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -13,8 +12,8 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// <summary>Points one job at a single stored message occurrence, and at nothing inside the message.</summary>
 /// <remarks>
 /// <para>
-/// Every property is one of MailFathom's own identifiers: the user the mailbox belongs to, and the four that are the
-/// stable remote occurrence identity within them — account, folder binding, UIDVALIDITY, and UID. A handler therefore
+/// Every property is one of MailFathom's own identifiers: the four that are the stable remote occurrence
+/// identity — account, folder binding, UIDVALIDITY, and UID. A handler therefore
 /// resolves what it needs from committed local state rather than from anything the enqueuer copied, and a subject, an
 /// address, a body, and extracted text are all absent by construction: there is no property to put one in.
 /// </para>
@@ -26,22 +25,13 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// <para>
 /// The properties are primitives rather than the domain value objects they came from, because this record is the stored
 /// document: it is serialized into one <c>jsonb</c> column and read by an operator looking at a queue. Rebuilding them
-/// is <see cref="ToAccountIdentity" /> for the user and the account and <see cref="ToOccurrenceId" /> for the
-/// occurrence, which between them validate every component the way the domain types do — the occurrence identity does
-/// not carry the user, so neither method covers the record on its own.
+/// is <see cref="ToAccountIdentity" /> for the account and <see cref="ToOccurrenceId" /> for the occurrence,
+/// which between them validate every component the way the domain types do.
 /// </para>
 /// </remarks>
 public sealed record ClassifyEmailSpamJobPayload : IJobPayload
 {
-    /// <summary>Gets the user whose account the occurrence belongs to.</summary>
-    /// <remarks>
-    /// Named beside the identifier, because an identifier names one account within its user and the rows this work
-    /// writes are about that account. The user is generated and names nobody outside this deployment, so carrying it
-    /// discloses nothing an operator reading a queued job may not see.
-    /// </remarks>
-    public required Guid UserId { get; init; }
-
-    /// <summary>Gets the account whose mailbox the occurrence belongs to, within that user.</summary>
+    /// <summary>Gets the account whose mailbox the occurrence belongs to.</summary>
     public required string AccountId { get; init; }
 
     /// <summary>Gets the operator-facing name of the folder the occurrence was read in.</summary>
@@ -61,17 +51,15 @@ public sealed record ClassifyEmailSpamJobPayload : IJobPayload
     public JobType JobType => JobType.ClassifyEmailSpam;
 
     /// <summary>Describes one occurrence as the document a job carries.</summary>
-    /// <param name="user">The user whose account the occurrence belongs to, as the run that met it resolved.</param>
     /// <param name="occurrence">The stable remote occurrence identity.</param>
     /// <returns>The payload naming that occurrence.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrence" /> is <see langword="null" />.</exception>
-    public static ClassifyEmailSpamJobPayload For(MailUserId user, EmailOccurrenceId occurrence)
+    public static ClassifyEmailSpamJobPayload For(EmailOccurrenceId occurrence)
     {
         ArgumentNullException.ThrowIfNull(occurrence);
 
         return new ClassifyEmailSpamJobPayload
         {
-            UserId = user.Value,
             AccountId = occurrence.AccountId.Value,
             FolderAlias = occurrence.FolderResolutionId.Alias.Value,
             FolderResolutionGeneration = occurrence.FolderResolutionId.Generation.Value,
@@ -84,14 +72,12 @@ public sealed record ClassifyEmailSpamJobPayload : IJobPayload
     /// <returns>The account identity.</returns>
     /// <exception cref="ArgumentException">Thrown when the stored values no longer name a valid account identity.</exception>
     /// <remarks>
-    /// The user is a required property, so a document that carries none is refused by the deserializer before
-    /// this is reached rather than resolving to a user nobody named. A document the previous release wrote is
-    /// not that case: the migration that put the user on the queue row writes it into the document beside it, so
-    /// what remains here is a value that is present and does not name an account — which this refuses for the
-    /// reason every payload record refuses a component that no longer validates.
+    /// The identifier is a required property, so a document that carries none is refused by the deserializer before
+    /// this is reached. What remains here is a value that is present and does not name an account, which this refuses
+    /// for the reason every payload record refuses a component that no longer validates.
     /// </remarks>
-    public MailAccountIdentity ToAccountIdentity() =>
-        MailAccountIdentity.Create(MailUserId.Create(this.UserId), MailAccountId.Create(this.AccountId));
+    public MailAccountId ToAccountIdentity() =>
+        MailAccountId.Create(this.AccountId);
 
     /// <summary>Rebuilds the occurrence identity this payload names.</summary>
     /// <returns>The stable remote occurrence identity.</returns>

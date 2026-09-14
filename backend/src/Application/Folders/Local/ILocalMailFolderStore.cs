@@ -28,14 +28,14 @@ public interface ILocalMailFolderStore
     /// </remarks>
     Task<LocalMailFolderHolding?> ReadAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken);
 
     /// <summary>Reads the account's phase and folders, joining no transaction.</summary>
     /// <param name="account">The account.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The holding, or <see langword="null" /> where the user holds no such account.</returns>
-    Task<LocalMailFolderHolding?> ReadAsync(MailAccountIdentity account, CancellationToken cancellationToken);
+    Task<LocalMailFolderHolding?> ReadAsync(MailAccountId account, CancellationToken cancellationToken);
 
     /// <summary>Writes what an edit decided.</summary>
     /// <param name="session">The transaction the read joined.</param>
@@ -46,7 +46,7 @@ public interface ILocalMailFolderStore
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown at commit when another edit changed the hierarchy since the read.</exception>
     Task SaveAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         IReadOnlyCollection<LocalMailFolder> saved,
         IReadOnlyCollection<LocalMailFolderId> erased,
         CancellationToken cancellationToken);
@@ -60,7 +60,7 @@ public interface ILocalMailFolderStore
     /// <remarks>A message already in a folder stays there, so a message synchronization meets again is not moved back to where it first arrived.</remarks>
     Task PlaceAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId email,
         LocalMailFolderId folder,
         CancellationToken cancellationToken);
@@ -73,7 +73,7 @@ public interface ILocalMailFolderStore
     /// <returns>What the pass erased, and whether another is owed.</returns>
     Task<LocalMailFolderMailErasure> EraseMailOfErasedFoldersAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         int maxEmails,
         CancellationToken cancellationToken);
 
@@ -86,7 +86,7 @@ public interface ILocalMailFolderStore
     /// <remarks>A message already gone is not an error, because the act that erases it may be replaying one that already did.</remarks>
     Task<MailFolderAlias?> EraseEmailAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId email,
         CancellationToken cancellationToken);
 }

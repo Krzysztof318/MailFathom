@@ -55,9 +55,9 @@ public sealed class OutgoingEmailFilingModelTests
         // Act
         var index = FindFilingIndex(indexName);
 
-        // Assert — the account a filing names is the pair, so every one of them narrows on the user before the
-        // identifier.
-        Assert.Equal(["UserId", "MailboxAccountId"], index.Properties.Take(2).Select(property => property.Name));
+        // Assert — a filing names the account by its generated identifier alone, so every one of them is entered
+        // by that identifier and nothing stands before it.
+        Assert.Equal("MailboxAccountId", index.Properties[0].Name);
         Assert.Equal(expectedLastColumn, index.Properties[^1].Name);
         Assert.Equal("\"Stage\" = 'Confirmed'", index.GetFilter());
     }
@@ -75,7 +75,7 @@ public sealed class OutgoingEmailFilingModelTests
 
         // Assert
         Assert.Equal(
-            ["UserId", "MailboxAccountId", "Filing", "AppendedAt", "OutgoingEmailId"],
+            ["MailboxAccountId", "Filing", "AppendedAt", "OutgoingEmailId"],
             index.Properties.Select(property => property.Name));
     }
 

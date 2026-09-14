@@ -9,7 +9,6 @@ using MailFathom.Domain.Folders;
 using MailFathom.Domain.Spam;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Spam;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Spam;
@@ -227,15 +226,13 @@ public sealed class DerivedWorkAdmittedEmailsTests
     {
         var email = new StoredEmailEntity
         {
-            UserId = SyntheticMailUser.Deployment.Value,
             MailboxAccountId = accountId,
             MailFolder = new MailFolderEntity
             {
-                UserId = SyntheticMailUser.Deployment.Value,
                 MailboxAccountId = accountId,
                 Alias = alias,
                 RemotePath = alias,
-                MailboxAccount = new MailboxAccountEntity { UserId = SyntheticMailUser.Deployment.Value, Id = accountId },
+                MailboxAccount = new MailboxAccountEntity { Id = accountId },
             },
             StoredAt = storedAt,
             ContentAvailability = StoredEmailContentAvailability.Available,

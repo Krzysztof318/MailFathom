@@ -61,7 +61,7 @@ public sealed class OutgoingMailGovernor(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (permissions.FindRefusal(request.Account.Id) is { } refusal)
+        if (permissions.FindRefusal(request.Account) is { } refusal)
         {
             throw OutgoingMailRefusedException.SendingNotEnabled(refusal);
         }

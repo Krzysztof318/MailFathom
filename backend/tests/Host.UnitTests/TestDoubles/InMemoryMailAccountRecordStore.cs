@@ -160,11 +160,6 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
             return Written(MailAccountWriteResult.NothingToChange, account.Version);
         }
 
-        if (this.assignments[accountId].Count > 0)
-        {
-            return Written(MailAccountWriteResult.AssignedElsewhere, 0);
-        }
-
         if (held.Version != expectedUserVersion)
         {
             return Written(MailAccountWriteResult.VersionSuperseded, held.Version);

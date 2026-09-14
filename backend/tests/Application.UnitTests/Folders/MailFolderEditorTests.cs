@@ -28,8 +28,7 @@ namespace MailFathom.Application.UnitTests.Folders;
 /// </summary>
 public sealed class MailFolderEditorTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
+    private static readonly MailAccountId Account = MailAccountId.Create("primary");
 
     private static readonly MailFolderAlias Projects = MailFolderAlias.Create("projects");
 
@@ -50,7 +49,7 @@ public sealed class MailFolderEditorTests
         await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
 
         // Act
-        var management = await deployment.Editor.ReadAsync(Account.Id, TestContext.Current.CancellationToken);
+        var management = await deployment.Editor.ReadAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([MailFolderAct.Create], management!.AllowedActs);
@@ -67,7 +66,7 @@ public sealed class MailFolderEditorTests
         deployment.Declares(MailFolderMapping.ToRemotePath(Projects, RemoteFolderPath.Create("Projects", '/')));
 
         // Act
-        var management = await deployment.Editor.ReadAsync(Account.Id, TestContext.Current.CancellationToken);
+        var management = await deployment.Editor.ReadAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(["Projects"], management!.Folders.Select(folder => folder.Name));
@@ -93,7 +92,7 @@ public sealed class MailFolderEditorTests
         await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
 
         // Act
-        var outcome = await deployment.Editor.CreateAsync(Account.Id, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.CreateAsync(Account, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderChangeKind.Created, outcome.Change);
@@ -110,7 +109,7 @@ public sealed class MailFolderEditorTests
 
         // Act
         var outcome = await deployment.Editor.CreateAsync(
-            Account.Id,
+            Account,
             parentId: null,
             name: null,
             MailFolderSpecialUse.Archive,
@@ -132,7 +131,7 @@ public sealed class MailFolderEditorTests
 
         // Act
         var outcome = await deployment.Editor.CreateAsync(
-            Account.Id,
+            Account,
             "not-an-identifier",
             "Projects",
             role: null,
@@ -148,11 +147,11 @@ public sealed class MailFolderEditorTests
     {
         // Arrange
         await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
-        var created = await deployment.Editor.CreateAsync(Account.Id, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken);
+        var created = await deployment.Editor.CreateAsync(Account, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken);
 
         // Act
         var outcome = await deployment.Editor.MoveAsync(
-            Account.Id,
+            Account,
             created.Folder!.Id,
             "not-an-identifier",
             TestContext.Current.CancellationToken);
@@ -169,7 +168,7 @@ public sealed class MailFolderEditorTests
 
         // Act
         var outcome = await deployment.Editor.CreateAsync(
-            Account.Id,
+            Account,
             "",
             "Projects",
             role: null,
@@ -187,7 +186,7 @@ public sealed class MailFolderEditorTests
         deployment.CreatesAt("Projects");
 
         // Act
-        var outcome = await deployment.Editor.CreateAsync(Account.Id, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.CreateAsync(Account, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderChangeKind.Created, outcome.Change);
@@ -202,7 +201,7 @@ public sealed class MailFolderEditorTests
         await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Restoring);
 
         // Act
-        var outcome = await deployment.Editor.DeleteAsync(Account.Id, Guid.CreateVersion7().ToString(), TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.DeleteAsync(Account, Guid.CreateVersion7().ToString(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderActRefusal.AccountNotHeld, outcome.Refusal);
@@ -218,7 +217,7 @@ public sealed class MailFolderEditorTests
         await using var deployment = new EditorDeployment(phase);
 
         // Act
-        var outcome = await deployment.Editor.RenameAsync(Account.Id, "   ", "Plans", TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.RenameAsync(Account, "   ", "Plans", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderActRefusal.FolderMissing, outcome.Refusal);
@@ -232,7 +231,7 @@ public sealed class MailFolderEditorTests
 
         // Act, Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
-            () => deployment.Editor.CreateAsync(Account.Id, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken));
+            () => deployment.Editor.CreateAsync(Account, parentId: null, "Projects", role: null, TestContext.Current.CancellationToken));
     }
 
     /// <summary>The use case over both editors, each composed over the doubles its own suite uses.</summary>

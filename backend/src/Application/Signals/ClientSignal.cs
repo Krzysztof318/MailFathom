@@ -10,7 +10,7 @@ using MailFathom.Domain.Notifications;
 
 namespace MailFathom.Application.Signals;
 
-/// <summary>One statement that something changed for one user, carrying no mail.</summary>
+/// <summary>One statement that something changed for one mailbox or one user, carrying no mail.</summary>
 /// <remarks>
 /// <para>
 /// A signal is an instruction to look again rather than a payload to keep. It names what changed and for whom, and the
@@ -47,7 +47,7 @@ public sealed class ClientSignal
 
     private ClientSignal(
         ClientSignalKind kind,
-        MailUserId user,
+        MailUserId? user,
         MailAccountId? account,
         MailFolderAlias? folder,
         int count,
@@ -72,8 +72,14 @@ public sealed class ClientSignal
     /// <summary>Gets which of the six kinds this is.</summary>
     public ClientSignalKind Kind { get; }
 
-    /// <summary>Gets the user whose connections this reaches, and no other's.</summary>
-    public MailUserId User { get; }
+    /// <summary>Gets the user whose connections this reaches, or nothing when the account decides who it reaches.</summary>
+    /// <remarks>
+    /// Named only where the change is one person's — a notification written for them. A change to a mailbox names the
+    /// account instead and nobody, because a mailbox assigned to several users is one change every one of them has to
+    /// see: resolving that list here would fix it at the moment the signal was composed, so the delivery channel
+    /// resolves it at the moment it delivers.
+    /// </remarks>
+    public MailUserId? User { get; }
 
     /// <summary>Gets the account the change is in, where the kind names one.</summary>
     public MailAccountId? Account { get; }
@@ -108,14 +114,14 @@ public sealed class ClientSignal
     /// <param name="newEmailCount">How many occurrences the run committed there.</param>
     /// <returns>The signal.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="newEmailCount" /> is not positive, an arrival of nothing being no arrival.</exception>
-    public static ClientSignal MailArrived(MailAccountIdentity account, MailFolderAlias folder, int newEmailCount)
+    public static ClientSignal MailArrived(MailAccountId account, MailFolderAlias folder, int newEmailCount)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(newEmailCount);
 
         return new ClientSignal(
             ClientSignalKind.MailArrived,
-            account.User,
-            account.Id,
+            user: null,
+            account,
             folder,
             newEmailCount,
             emails: [],
@@ -132,7 +138,7 @@ public sealed class ClientSignal
     /// <returns>The signal.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="emails" /> is <see langword="null" />.</exception>
     public static ClientSignal MailChanged(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias folder,
         IEnumerable<StoredEmailId> emails)
     {
@@ -140,8 +146,8 @@ public sealed class ClientSignal
 
         return new ClientSignal(
             ClientSignalKind.MailChanged,
-            account.User,
-            account.Id,
+            user: null,
+            account,
             folder,
             count: 0,
             [.. emails.Distinct().Take(MostNamedEmails)],
@@ -164,7 +170,7 @@ public sealed class ClientSignal
     /// the row still belongs where it is drawn — and only a flag makes that true.
     /// </remarks>
     public static ClientSignal MailFlagsChanged(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias folder,
         IEnumerable<SignalledEmailFlags> flags)
     {
@@ -187,8 +193,8 @@ public sealed class ClientSignal
 
         return new ClientSignal(
             ClientSignalKind.MailFlagsChanged,
-            account.User,
-            account.Id,
+            user: null,
+            account,
             folder,
             count: 0,
             emails: [],
@@ -201,11 +207,11 @@ public sealed class ClientSignal
     /// <summary>States that the set of folders an account mirrors has moved.</summary>
     /// <param name="account">The account whose folder set moved.</param>
     /// <returns>The signal.</returns>
-    public static ClientSignal FoldersChanged(MailAccountIdentity account) =>
+    public static ClientSignal FoldersChanged(MailAccountId account) =>
         new(
             ClientSignalKind.FoldersChanged,
-            account.User,
-            account.Id,
+            user: null,
+            account,
             folder: null,
             count: 0,
             emails: [],
@@ -248,11 +254,11 @@ public sealed class ClientSignal
     /// and a run deriving it a second way here would be two reductions of one question waiting to disagree. The client
     /// re-reads the accounts behind its freshness line, which is what it does with this signal anyway.
     /// </remarks>
-    public static ClientSignal AccountState(MailAccountIdentity account) =>
+    public static ClientSignal AccountState(MailAccountId account) =>
         new(
             ClientSignalKind.AccountState,
-            account.User,
-            account.Id,
+            user: null,
+            account,
             folder: null,
             count: 0,
             emails: [],
@@ -321,13 +327,13 @@ public sealed class ClientSignal
 }
 
 /// <summary>What two signals must share before one folds into the other: whose it is, what kind it is, and where it happened.</summary>
-/// <param name="User">Whose mail the statement is about.</param>
+/// <param name="User">Whose the statement is, where it is one person's rather than one mailbox's.</param>
 /// <param name="Kind">Which of the six kinds it is.</param>
 /// <param name="Account">The account it names, where the kind names one.</param>
 /// <param name="Folder">The folder it names, where the kind names one.</param>
 /// <remarks>Declared once and read from both sides of the fold — the buffer keys on it and <see cref="ClientSignal.FoldedWith" /> refuses a pair that does not share it — so the two can never come to disagree about what one scope is. The place is part of it deliberately: folding two folders' arrivals into one would leave a client told that mail arrived without being told where to look.</remarks>
 internal readonly record struct ClientSignalScope(
-    MailUserId User,
+    MailUserId? User,
     ClientSignalKind Kind,
     MailAccountId? Account,
     MailFolderAlias? Folder);

@@ -5,7 +5,6 @@
 using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
-using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Delivery.Operations;
@@ -18,8 +17,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Operations;
 /// </remarks>
 public sealed class OutboxQueryTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     [Fact]
     public void Create_ARequestNamingNothing_IsServedTheDefaultPageOverEveryAccountAndStage()

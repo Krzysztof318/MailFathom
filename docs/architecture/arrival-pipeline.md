@@ -145,7 +145,7 @@ record. [Mail delivery](../features/mail-delivery.md#how-a-written-down-send-rea
 described; nothing else on this page concerns it.
 
 The last step of that sequence belongs to no arrival either, and is drawn nowhere above for the same reason: once the
-passes have finished, the run tells the account's user what happened to it — mail arrived, a credential was refused,
+passes have finished, the run tells every user the account is assigned to what happened to it — mail arrived, a credential was refused,
 some folders did not finish. It is stated per run rather than per message, which is why it cannot sit on this page's
 graph: what it reports is the run's own outcome, and the count it carries is how much of what the passes above stored
 was mail arriving for the person — the inbox, unread on the server, and nothing MailFathom itself placed there —

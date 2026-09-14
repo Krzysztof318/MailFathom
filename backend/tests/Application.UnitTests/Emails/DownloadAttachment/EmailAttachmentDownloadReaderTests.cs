@@ -163,7 +163,7 @@ public sealed class EmailAttachmentDownloadReaderTests
     /// hand it somebody else's.
     /// </remarks>
     [Fact]
-    public async Task OpenAsync_EmailOfAnAccountTheRedeemingPrincipalsUserDoesNotOwn_Refuses()
+    public async Task OpenAsync_EmailOfAnAccountTheRedeemingPrincipalsUserIsNotAssigned_Refuses()
     {
         // Arrange
         var summary = SyntheticEmailSummaries.Create();
@@ -171,7 +171,7 @@ public sealed class EmailAttachmentDownloadReaderTests
             AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Another, AuthorizedObject));
         var reader = ReaderOver(
             summary,
-            accountCatalog: OwnedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(summary.AccountId)),
+            accountCatalog: AssignedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(summary.AccountId)),
             authorization: authorization);
 
         // Act
@@ -840,7 +840,7 @@ public sealed class EmailAttachmentDownloadReaderTests
     private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))]);
+        catalog.AssignedAccounts.Returns([.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))]);
 
         return catalog;
     }

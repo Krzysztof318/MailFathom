@@ -29,4 +29,4 @@ public sealed record ScheduledJob(
     JobScheduleId Id,
     IJobPayload Payload,
     JobRecurrence Recurrence,
-    MailAccountIdentity? Account = null);
+    MailAccountId? Account = null);

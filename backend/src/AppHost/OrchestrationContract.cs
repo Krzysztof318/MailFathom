@@ -580,12 +580,15 @@ public static class OrchestrationContract
     /// <summary>The MailFathom account identifier the in-process integration suite stores its mail under.</summary>
     /// <remarks>
     /// Stated rather than generated, because those tests compose their services in process and supply the account ports
-    /// themselves, so no account record is created and nothing mints an identifier for them. The composed host is the
-    /// other case: it serves the mailbox the suite records through its administrative surface, under the identifier that
-    /// deployment generated, so a test talking to that host reads the identifier from the fixture and never names this
-    /// one.
+    /// themselves, so nothing mints an identifier for them. It is nonetheless written in the form a deployment
+    /// generates, because the assignment relation keys an account by that generated identifier: an identifier of any
+    /// other shape could name no assignment, and the per-user ceiling — which is answered from the accounts assigned to
+    /// the users the claiming account is assigned to — would then be unreachable in this suite. The composed host is
+    /// the other case: it serves the mailbox the suite records through its administrative surface, under the identifier
+    /// that deployment generated, so a test talking to that host reads the identifier from the fixture and never names
+    /// this one.
     /// </remarks>
-    public const string ServedMailAccountId = "integration";
+    public const string ServedMailAccountId = "8f6f4f1e-0f2a-4a5f-9a3e-6b7c8d9e0f10";
 
     /// <summary>The display name the integration-test topology publishes its one account under, in process and on the composed host alike.</summary>
     /// <remarks>

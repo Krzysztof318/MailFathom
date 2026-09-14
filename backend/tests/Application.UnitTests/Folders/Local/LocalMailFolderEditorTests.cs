@@ -26,8 +26,8 @@ namespace MailFathom.Application.UnitTests.Folders.Local;
 /// </summary>
 public sealed class LocalMailFolderEditorTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("primary");
 
     [Fact]
     public async Task CreateAsync_TheFirstActOnAHeldAccount_CreatesTheFolderBesideTheFiveProtectedOnes()
@@ -36,7 +36,7 @@ public sealed class LocalMailFolderEditorTests
         await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
 
         // Act
-        var outcome = await deployment.Editor.CreateAsync(Account.Id, parentId: null, "Projects", TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.CreateAsync(Account, parentId: null, "Projects", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderChangeKind.Created, outcome.Kind);
@@ -55,7 +55,7 @@ public sealed class LocalMailFolderEditorTests
         await using var deployment = new EditorDeployment(phase);
 
         // Act
-        var outcome = await deployment.Editor.CreateAsync(Account.Id, parentId: null, "Projects", TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.CreateAsync(Account, parentId: null, "Projects", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderActRefusal.AccountNotHeld, outcome.Refusal);
@@ -88,7 +88,7 @@ public sealed class LocalMailFolderEditorTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
-            deployment.Editor.CreateAsync(Account.Id, parentId: null, "Projects", TestContext.Current.CancellationToken));
+            deployment.Editor.CreateAsync(Account, parentId: null, "Projects", TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFathomPermission.MailFoldersWrite, refusal.RequiredPermission);
@@ -103,7 +103,7 @@ public sealed class LocalMailFolderEditorTests
         var created = await deployment.CreateAsync("Projects");
 
         // Act
-        var outcome = await deployment.Editor.RenameAsync(Account.Id, created.Id, "Clients", TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.RenameAsync(Account, created.Id, "Clients", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderChangeKind.Renamed, outcome.Kind);
@@ -119,7 +119,7 @@ public sealed class LocalMailFolderEditorTests
         var clients = await deployment.CreateAsync("Clients");
 
         // Act
-        var outcome = await deployment.Editor.MoveAsync(Account.Id, clients.Id, projects.Id, TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.MoveAsync(Account, clients.Id, projects.Id, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderChangeKind.Moved, outcome.Kind);
@@ -134,10 +134,10 @@ public sealed class LocalMailFolderEditorTests
         await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
         var projects = await deployment.CreateAsync("Projects");
         var old = await deployment.CreateAsync("Old");
-        await deployment.Editor.DeleteAsync(Account.Id, old.Id, TestContext.Current.CancellationToken);
+        await deployment.Editor.DeleteAsync(Account, old.Id, TestContext.Current.CancellationToken);
 
         // Act
-        var outcome = await deployment.Editor.MoveAsync(Account.Id, projects.Id, old.Id, TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.MoveAsync(Account, projects.Id, old.Id, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderChangeKind.MovedToTrash, outcome.Kind);
@@ -152,7 +152,7 @@ public sealed class LocalMailFolderEditorTests
         var projects = await deployment.CreateAsync("Projects");
 
         // Act
-        var outcome = await deployment.Editor.DeleteAsync(Account.Id, projects.Id, TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.DeleteAsync(Account, projects.Id, TestContext.Current.CancellationToken);
 
         // Assert
         var trash = Assert.Single(deployment.Store.Folders, folder => folder.Role == MailFolderSpecialUse.Trash);
@@ -169,10 +169,10 @@ public sealed class LocalMailFolderEditorTests
         // Arrange
         await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
         var projects = await deployment.CreateAsync("Projects");
-        await deployment.Editor.DeleteAsync(Account.Id, projects.Id, TestContext.Current.CancellationToken);
+        await deployment.Editor.DeleteAsync(Account, projects.Id, TestContext.Current.CancellationToken);
 
         // Act
-        var outcome = await deployment.Editor.DeleteAsync(Account.Id, projects.Id, TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.DeleteAsync(Account, projects.Id, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderChangeKind.Erased, outcome.Kind);
@@ -196,10 +196,10 @@ public sealed class LocalMailFolderEditorTests
         deployment.Jobs.EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>())
             .Returns(JobEnqueueResult.RefusedAtCapacity());
         var projects = await deployment.CreateAsync("Projects");
-        await deployment.Editor.DeleteAsync(Account.Id, projects.Id, TestContext.Current.CancellationToken);
+        await deployment.Editor.DeleteAsync(Account, projects.Id, TestContext.Current.CancellationToken);
 
         // Act
-        var outcome = await deployment.Editor.DeleteAsync(Account.Id, projects.Id, TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.DeleteAsync(Account, projects.Id, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderChangeKind.Erased, outcome.Kind);
@@ -214,10 +214,10 @@ public sealed class LocalMailFolderEditorTests
         deployment.Jobs.EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>())
             .Returns(JobEnqueueResult.Created(JobId.Create(Guid.CreateVersion7())));
         var projects = await deployment.CreateAsync("Projects");
-        await deployment.Editor.DeleteAsync(Account.Id, projects.Id, TestContext.Current.CancellationToken);
+        await deployment.Editor.DeleteAsync(Account, projects.Id, TestContext.Current.CancellationToken);
 
         // Act
-        var outcome = await deployment.Editor.DeleteAsync(Account.Id, projects.Id, TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.DeleteAsync(Account, projects.Id, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(outcome.MailErasureDeferred);
@@ -232,7 +232,7 @@ public sealed class LocalMailFolderEditorTests
         var projects = await deployment.CreateAsync("Projects");
 
         // Act
-        var outcome = await deployment.Editor.RenameAsync(Account.Id, projects.Id, " Projects ", TestContext.Current.CancellationToken);
+        var outcome = await deployment.Editor.RenameAsync(Account, projects.Id, " Projects ", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFolderChangeKind.Renamed, outcome.Kind);
@@ -246,8 +246,8 @@ public sealed class LocalMailFolderEditorTests
         await using var deployment = new EditorDeployment(MailAccountCustodyPhase.Held);
 
         // Act
-        var first = await deployment.Editor.ReadAsync(Account.Id, TestContext.Current.CancellationToken);
-        var second = await deployment.Editor.ReadAsync(Account.Id, TestContext.Current.CancellationToken);
+        var first = await deployment.Editor.ReadAsync(Account, TestContext.Current.CancellationToken);
+        var second = await deployment.Editor.ReadAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -318,7 +318,7 @@ public sealed class LocalMailFolderEditorTests
 
         /// <summary>Creates a top-level folder a test goes on to act on.</summary>
         internal async Task<LocalMailFolder> CreateAsync(string name) =>
-            (await this.Editor.CreateAsync(Account.Id, parentId: null, name, TestContext.Current.CancellationToken)).Folder!;
+            (await this.Editor.CreateAsync(Account, parentId: null, name, TestContext.Current.CancellationToken)).Folder!;
 
         public ValueTask DisposeAsync() => this.Signals.DisposeAsync();
     }

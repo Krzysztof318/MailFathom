@@ -5,7 +5,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 
@@ -20,10 +19,7 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// </remarks>
 public sealed record EraseWithdrawnMailFolderMailJobPayload : IJobPayload
 {
-    /// <summary>Gets the user the account is served to.</summary>
-    public required Guid UserId { get; init; }
-
-    /// <summary>Gets the account's identifier within that user.</summary>
+    /// <summary>Gets the account's generated identifier.</summary>
     public required string AccountId { get; init; }
 
     /// <summary>Gets MailFathom's own name for the folder whose deletion asked for the work.</summary>
@@ -36,10 +32,9 @@ public sealed record EraseWithdrawnMailFolderMailJobPayload : IJobPayload
     [JsonIgnore]
     public JobType JobType => JobType.EraseWithdrawnMailFolderMail;
 
-    /// <summary>Gets the account, named by its user and its identifier.</summary>
+    /// <summary>Gets the account whose folder the pass sweeps.</summary>
     [JsonIgnore]
-    public MailAccountIdentity Account =>
-        MailAccountIdentity.Create(MailUserId.Create(this.UserId), MailAccountId.Create(this.AccountId));
+    public MailAccountId Account => MailAccountId.Create(this.AccountId);
 
     /// <summary>Gets the folder the pass sweeps.</summary>
     [JsonIgnore]
@@ -49,11 +44,10 @@ public sealed record EraseWithdrawnMailFolderMailJobPayload : IJobPayload
     /// <param name="account">The account.</param>
     /// <param name="folderAlias">The folder whose declaration was withdrawn.</param>
     /// <returns>The payload.</returns>
-    public static EraseWithdrawnMailFolderMailJobPayload For(MailAccountIdentity account, MailFolderAlias folderAlias) =>
+    public static EraseWithdrawnMailFolderMailJobPayload For(MailAccountId account, MailFolderAlias folderAlias) =>
         new()
         {
-            UserId = account.User.Value,
-            AccountId = account.Id.Value,
+            AccountId = account.Value,
             FolderAlias = folderAlias.Value,
         };
 
@@ -71,7 +65,7 @@ public sealed record EraseWithdrawnMailFolderMailJobPayload : IJobPayload
     /// still enqueue two passes rather than one swallowing the other's mail.
     /// </remarks>
     public JobIdempotencyKey ToIdempotencyKey() => JobIdempotencyKey.Create(
-        Fit($"{JobType.EraseWithdrawnMailFolderMail.Name}:{this.UserId}:{this.AccountId}:{this.FolderAlias}:{this.Pass}"));
+        Fit($"{JobType.EraseWithdrawnMailFolderMail.Name}:{this.AccountId}:{this.FolderAlias}:{this.Pass}"));
 
     private static string Fit(string identity)
     {

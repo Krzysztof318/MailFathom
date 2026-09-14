@@ -23,8 +23,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Drafts;
 /// <summary>Covers the pass that finishes what a stopped process, or an unreachable server, left a draft owing.</summary>
 public sealed class MailDraftPassTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     private static readonly DateTimeOffset Moment = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -58,7 +58,7 @@ public sealed class MailDraftPassTests
         var draft = await SaveAsync(harness, "first version");
         Assert.Equal(MailDraftStage.Composed, harness.Drafts.Peek(draft.Id)!.Stage);
 
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
 
         // Act
         var results = await harness.Pass.SettleOutstandingAsync(Account, CancellationToken.None);
@@ -82,7 +82,7 @@ public sealed class MailDraftPassTests
             new InMemoryOutgoingEmailStore(),
             Settings());
 
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
         var held = harness.HoldAccount(Account, mapsDraftsFolder: false);
         var draft = await SaveAsync(harness, "first version");
         Assert.Null(harness.Drafts.Peek(draft.Id)!.FiledEmail);
@@ -114,7 +114,7 @@ public sealed class MailDraftPassTests
             new InMemoryOutgoingEmailStore(),
             Settings());
 
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
         var held = harness.HoldAccount(Account);
         var draft = await SaveAsync(harness, "first version");
 
@@ -149,11 +149,11 @@ public sealed class MailDraftPassTests
             Settings());
 
         await SaveAsync(harness, "first version");
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
 
         // Act
         var results = await harness.Pass.SettleOutstandingAsync(
-            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal")),
+            MailAccountId.Create("personal"),
             CancellationToken.None);
 
         // Assert
@@ -172,7 +172,7 @@ public sealed class MailDraftPassTests
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
         var harness = new MailDraftHarness(new FakeTimeProvider(Moment), outgoingEmails, Settings());
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
         var draft = await SaveAsync(harness, "first version");
         await PromoteAsync(harness, outgoingEmails, draft, OutgoingEmailStage.Sent);
 
@@ -192,7 +192,7 @@ public sealed class MailDraftPassTests
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
         var harness = new MailDraftHarness(new FakeTimeProvider(Moment), outgoingEmails, Settings());
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
         var draft = await SaveAsync(harness, "first version");
         await PromoteAsync(harness, outgoingEmails, draft, OutgoingEmailStage.Recorded);
 
@@ -214,6 +214,7 @@ public sealed class MailDraftPassTests
         var send = outgoingEmails.Publish(
             OutgoingEmailRequest.Create(
                 Account,
+                SyntheticMailUser.Deployment,
                 OutgoingEmailRequester.Draft(draft.Id),
                 [.. draft.Recipients.Select(recipient => recipient.Recipient)]),
             mimeByteLength: 64);
@@ -235,7 +236,7 @@ public sealed class MailDraftPassTests
             new InMemoryOutgoingEmailStore(),
             Settings());
 
-        harness.MapDraftsFolder(Account.Id);
+        harness.MapDraftsFolder(Account);
 
         return harness;
     }
@@ -252,6 +253,7 @@ public sealed class MailDraftPassTests
     private static Task<MailDraftRecord> SaveAsync(MailDraftHarness harness, string body, MailDraftId? revises = null) =>
         harness.Book.SaveAsync(
             Account,
+            SyntheticMailUser.Deployment,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             new ComposedMailDraft(
                 [Recipient()],

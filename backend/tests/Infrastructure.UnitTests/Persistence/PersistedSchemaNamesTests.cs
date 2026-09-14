@@ -25,10 +25,10 @@ public sealed class PersistedSchemaNamesTests
 
         // Act
         var table = PersistedSchemaNames.QuotedTable(
-            PersistedSchemaNames.EntityTypeOf<UserStoredContentEntity>(context.Model));
+            PersistedSchemaNames.EntityTypeOf<AccountStoredContentEntity>(context.Model));
 
         // Assert
-        Assert.Equal($"\"{UserStoredContentEntity.TableName}\"", table);
+        Assert.Equal($"\"{AccountStoredContentEntity.TableName}\"", table);
     }
 
     [Fact]
@@ -36,19 +36,19 @@ public sealed class PersistedSchemaNamesTests
     {
         // Arrange
         using var context = new MailFathomDbContextDesignTimeFactory().CreateDbContext([]);
-        var entityType = PersistedSchemaNames.EntityTypeOf<UserStoredContentEntity>(context.Model);
+        var entityType = PersistedSchemaNames.EntityTypeOf<AccountStoredContentEntity>(context.Model);
 
         // Act
-        var userColumn = PersistedSchemaNames.QuotedColumn(
+        var accountColumn = PersistedSchemaNames.QuotedColumn(
             entityType,
-            nameof(UserStoredContentEntity.UserId));
+            nameof(AccountStoredContentEntity.MailboxAccountId));
         var countColumn = PersistedSchemaNames.QuotedColumn(
             entityType,
-            nameof(UserStoredContentEntity.StoredContentByteCount));
+            nameof(AccountStoredContentEntity.StoredContentByteCount));
 
         // Assert
-        Assert.Equal($"\"{UserStoredContentEntity.UserIdColumnName}\"", userColumn);
-        Assert.Equal($"\"{UserStoredContentEntity.StoredContentByteCountColumnName}\"", countColumn);
+        Assert.Equal($"\"{AccountStoredContentEntity.MailboxAccountIdColumnName}\"", accountColumn);
+        Assert.Equal($"\"{AccountStoredContentEntity.StoredContentByteCountColumnName}\"", countColumn);
     }
 
     /// <summary>A name the model does not hold is refused where the statement is composed, not where it is executed.</summary>
@@ -57,7 +57,7 @@ public sealed class PersistedSchemaNamesTests
     {
         // Arrange
         using var context = new MailFathomDbContextDesignTimeFactory().CreateDbContext([]);
-        var entityType = PersistedSchemaNames.EntityTypeOf<UserStoredContentEntity>(context.Model);
+        var entityType = PersistedSchemaNames.EntityTypeOf<AccountStoredContentEntity>(context.Model);
 
         // Act, Assert
         Assert.Throws<InvalidOperationException>(
@@ -70,8 +70,8 @@ public sealed class PersistedSchemaNamesTests
     public void EntityTypeOf_AMissingArgument_IsRefused()
     {
         // Act, Assert
-        Assert.Throws<ArgumentNullException>(() => PersistedSchemaNames.EntityTypeOf<UserStoredContentEntity>(null!));
+        Assert.Throws<ArgumentNullException>(() => PersistedSchemaNames.EntityTypeOf<AccountStoredContentEntity>(null!));
         Assert.Throws<ArgumentNullException>(() => PersistedSchemaNames.QuotedTable(null!));
-        Assert.Throws<ArgumentNullException>(() => PersistedSchemaNames.QuotedColumn(null!, "UserId"));
+        Assert.Throws<ArgumentNullException>(() => PersistedSchemaNames.QuotedColumn(null!, "MailboxAccountId"));
     }
 }

@@ -735,7 +735,9 @@ way — the spam classification posture, and the
 account's** record carries in blocks of its own.
 
 **Taking a mailbox from its last person deletes its mail.** `mfctl account unassign` ends one person's assignment
-without a restart; while somebody else is still assigned the mailbox, its mail stays theirs. Ending the last assignment
+without a restart; while somebody else is still assigned the mailbox, its mail stays theirs, and what goes with the
+departing person is only what they wrote there — their drafts and the recurring sends they declared, neither of which
+anybody else could read. Ending the last assignment
 erases the account and everything stored for it, exactly as `mfctl account delete` does, so both show what they are
 about to do and ask. A run already in flight drains against the document version it began with. `mfctl user remove` erases the person and every
 message, folder, attachment, and derived index the deployment holds for them; it shows what it is about to do and asks,

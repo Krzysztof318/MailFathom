@@ -47,7 +47,7 @@ public sealed class OrchestratedOutboxDeliveryTests(MailFathomOrchestrationFixtu
 
     /// <summary>Gets the account this suite writes under, whose user the orchestrated database provisioned.</summary>
     /// <remarks>Read on each use rather than captured in a field, because the user is resolved when the harness starts.</remarks>
-    private static MailAccountIdentity Account => SyntheticMailAccount.Account;
+    private static MailAccountId Account => SyntheticMailAccount.Account;
 
     /// <summary>A queued send leaves, arrives, and leaves the record saying so with the reply the server gave.</summary>
     [Fact]
@@ -243,6 +243,7 @@ public sealed class OrchestratedOutboxDeliveryTests(MailFathomOrchestrationFixtu
 
         return OutgoingEmailRequest.Create(
             Account,
+            SyntheticMailAccount.User,
             OutgoingEmailRequester.Command(invocationIdentity),
             [OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To)]);
     }

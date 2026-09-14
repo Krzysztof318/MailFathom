@@ -49,7 +49,7 @@ public sealed class SensitiveContentEgressGuardTests
         var guard = new SensitiveContentEgressGuard(
             FixedSensitiveContentPostures.Of(
                 SensitiveContentPosture.ScanningNothing,
-                (ScanningSensitiveContentEgress.Account.Id, egress.Postures.ForAccount(ScanningSensitiveContentEgress.Account.Id))),
+                (ScanningSensitiveContentEgress.Account, egress.Postures.ForAccount(ScanningSensitiveContentEgress.Account))),
             new RecordingSensitiveContentEgressTelemetry(),
             this.timeProvider);
 
@@ -132,7 +132,7 @@ public sealed class SensitiveContentEgressGuardTests
         var guard = new SensitiveContentEgressGuard(
             FixedSensitiveContentPostures.Of(
                 SensitiveContentPosture.ScanningNothing,
-                (ScanningSensitiveContentEgress.Account.Id, egress.Postures.ForAccount(ScanningSensitiveContentEgress.Account.Id))),
+                (ScanningSensitiveContentEgress.Account, egress.Postures.ForAccount(ScanningSensitiveContentEgress.Account))),
             new RecordingSensitiveContentEgressTelemetry(),
             this.timeProvider);
 
@@ -166,12 +166,12 @@ public sealed class SensitiveContentEgressGuardTests
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
 
         var scanned = ScanningSensitiveContentEgress.Account;
-        var unscanned = MailAccountIdentity.Create(scanned.User, MailAccountId.Create("archive"));
+        var unscanned = MailAccountId.Create("archive");
 
         var guard = new SensitiveContentEgressGuard(
             FixedSensitiveContentPostures.Of(
                 SensitiveContentPosture.ScanningNothing,
-                (scanned.Id, egress.Postures.ForAccount(scanned.Id))),
+                (scanned, egress.Postures.ForAccount(scanned))),
             new RecordingSensitiveContentEgressTelemetry(),
             this.timeProvider);
 
@@ -196,7 +196,7 @@ public sealed class SensitiveContentEgressGuardTests
                 TestContext.Current.CancellationToken);
         }
 
-        using (guard.ActingFor(scanned.User))
+        using (guard.ActingFor(ScanningSensitiveContentEgress.User))
         {
             acrossBoth = await guard.GuardAsync(
                 SensitiveContentEgressPoint.ChatPrompt,

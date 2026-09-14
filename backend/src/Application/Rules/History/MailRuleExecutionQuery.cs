@@ -40,7 +40,7 @@ public sealed record MailRuleExecutionQuery
     public const int MaximumPageSize = 200;
 
     private MailRuleExecutionQuery(
-        MailAccountIdentity account,
+        MailAccountId account,
         string? ruleName,
         StoredEmailId? storedEmailId,
         DateTimeOffset? evaluatedFrom,
@@ -58,9 +58,9 @@ public sealed record MailRuleExecutionQuery
     }
 
     /// <summary>Gets the account whose history is read.</summary>
-    public MailAccountIdentity Account { get; }
+    public MailAccountId Account { get; }
     /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one user names.</summary>
-    public MailAccountId AccountId => this.Account.Id;
+    public MailAccountId AccountId => this.Account;
 
     /// <summary>Gets the rule the page is narrowed to, or <see langword="null" /> for every rule of the account.</summary>
     public string? RuleName { get; }
@@ -102,7 +102,7 @@ public sealed record MailRuleExecutionQuery
     /// <param name="cursor">The boundary a continued walk reads beyond, or <see langword="null" /> for the first page.</param>
     /// <returns>The accepted query, or the refusal naming what the caller has to change.</returns>
     public static MailRuleExecutionQueryResult Create(
-        MailAccountIdentity account,
+        MailAccountId account,
         string? ruleName,
         StoredEmailId? storedEmailId,
         DateTimeOffset? evaluatedFrom,
@@ -149,14 +149,13 @@ public sealed record MailRuleExecutionQuery
 
     /// <summary>Reduces the filters to the short stable text a cursor carries to prove it belongs to this walk.</summary>
     private static string ComputeFingerprint(
-        MailAccountIdentity account,
+        MailAccountId account,
         string? ruleName,
         StoredEmailId? storedEmailId,
         DateTimeOffset? evaluatedFrom,
         DateTimeOffset? evaluatedBefore) =>
         PageFilterFingerprint.Of(
-            account.User.Value.ToString("N", CultureInfo.InvariantCulture),
-            account.Id.Value,
+            account.Value,
             ruleName,
             storedEmailId?.Value.ToString("N", CultureInfo.InvariantCulture),
             evaluatedFrom?.UtcTicks.ToString(CultureInfo.InvariantCulture),

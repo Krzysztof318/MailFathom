@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -13,8 +12,8 @@ namespace MailFathom.Application.Emails.Mailboxes;
 /// <remarks>
 /// <para>
 /// This is what a query runs with rather than what a request asked for. Both differences are settled before the scope is
-/// built: an unnamed account list becomes the accounts the caller's user owns, because a store holds rows for accounts
-/// an operator has since removed and rows belonging to every other user, and every folder a request named — by its
+/// built: an unnamed account list becomes the accounts the caller's user is assigned, because a store holds rows for
+/// accounts an operator has since removed and rows of mailboxes this caller is assigned none of, and every folder a request named — by its
 /// alias or by the role it plays — becomes the folder of the account it means. A folder is therefore named here as an account and an alias together, never as an
 /// alias alone, so one account's junk folder cannot admit another account's folder that happens to share the name.
 /// </para>
@@ -46,8 +45,8 @@ public sealed record MailboxScope
     /// It counts what the caller wrote rather than folders, which is the same distinction the bound above makes and one
     /// a role sharpens: <c>role:Junk</c> is one name however many accounts answer it. Both bounds are enforced where the
     /// caller's own list is read, in <see cref="MailboxScopeResolver" />, rather than over the resolved lists this type
-    /// holds. Resolution can only produce more: a request naming no account resolves to every account its user owns,
-    /// and one role a request named resolves to a folder on each of them.
+    /// holds. Resolution can only produce more: a request naming no account resolves to every account its user is
+    /// assigned, and one role a request named resolves to a folder on each of them.
     /// </remarks>
     public const int MaximumFolders = 64;
 
@@ -60,11 +59,9 @@ public sealed record MailboxScope
     public const int MaximumSelectedEmails = 64;
 
     private MailboxScope(
-        MailUserId user,
         IReadOnlyList<MailAccountId> accountIds,
         IReadOnlyList<MailFolderIdentity> selectedFolders)
     {
-        this.User = user;
         this.AccountIds = accountIds;
         this.SelectedFolders = selectedFolders;
     }
@@ -73,34 +70,19 @@ public sealed record MailboxScope
     /// <remarks>
     /// <para>
     /// Two callers resolve to it. A deployment serving no account is the first and the older one. The second is a
-    /// caller acting for a user who owns none of the accounts the deployment does serve, which is a real read on a
+    /// caller acting for a user assigned none of the accounts the deployment does serve, which is a real read on a
     /// populated deployment rather than a degenerate configuration — <see cref="MailboxScopeResolver" /> answers it
     /// with this scope before any folder decision is applied, because those decisions are the deployment's and would
-    /// otherwise admit every other user's folders beside an account list that names nobody.
+    /// otherwise admit every other mailbox's folders beside an account list that names none.
     /// </para>
     /// <para>
-    /// A use case handed it answers with nothing, which is what both cases have to mean: there is no folder this caller
-    /// may read. What it must never become is an unrestricted query, and that is why it names no folder as well as no
-    /// account — an empty account list alone is read as every account by the persistence predicate.
+    /// A use case handed it answers with nothing, which is what both cases have to mean: there is no mail this caller
+    /// may read. The account list is the whole of the narrowing now that no mail row carries a user, so an empty one
+    /// has to mean nothing rather than everything — <c>StoredEmailSelectionPredicate.WithinScope</c> composes the
+    /// containment unconditionally for exactly that reason, and this scope names no folder as well.
     /// </para>
     /// </remarks>
-    public static MailboxScope NothingReadable { get; } = new(default, [], []);
-
-    /// <summary>Gets the user whose mail the query is restricted to, which names nobody on <see cref="NothingReadable" />.</summary>
-    /// <remarks>
-    /// <para>
-    /// The first term of every mail-returning query, ahead of the accounts and applied whatever the account list holds.
-    /// An account identifier names one account within its user rather than across the deployment, so a read narrowed
-    /// on the account alone would compare a value that does not say whose mail it is; and every index those reads are
-    /// planned against leads with this column, so it is what the plan is chosen for as well.
-    /// </para>
-    /// <para>
-    /// On <see cref="NothingReadable" /> it is the unspecified identity, which names nobody and therefore matches no
-    /// row. That is a second reason such a scope reads nothing, beside its admitting no folder, and it is what makes the
-    /// empty account list — which every narrowing site reads as unrestricted — safe rather than merely unreachable.
-    /// </para>
-    /// </remarks>
-    public MailUserId User { get; }
+    public static MailboxScope NothingReadable { get; } = new([], []);
 
     /// <summary>Gets the accounts the query is restricted to, deduplicated and ordered, or empty when the request named none.</summary>
     public IReadOnlyList<MailAccountId> AccountIds { get; }
@@ -177,17 +159,16 @@ public sealed record MailboxScope
     /// how <see cref="ReadableFolders" /> reads, because that list is configuration and this one is a caller's choice.
     /// </para>
     /// <para>
-    /// An identifier naming mail this scope's user does not own matches nothing rather than being refused. The user is
-    /// the first term of every mail-returning query whatever else narrows it, so a caller cannot reach another user's
-    /// mail by naming its identifier, and answering with nothing is what naming an email that no longer exists already
-    /// does.
+    /// An identifier naming mail in an account this scope does not hold matches nothing rather than being refused.
+    /// The account containment is composed whatever else narrows the query, so a caller cannot reach a mailbox they
+    /// are not assigned by naming an identifier from it, and answering with nothing is what naming an email that no
+    /// longer exists already does.
     /// </para>
     /// </remarks>
     public IReadOnlyList<StoredEmailId> SelectedEmails { get; private init; } = [];
 
     /// <summary>Creates the scope a query runs with, from identities already resolved against configuration.</summary>
-    /// <param name="user">The user whose mail the query is restricted to, which every narrowing then sits inside.</param>
-    /// <param name="accountIds">The accounts the query runs against, which are the ones the caller's user owns when a request named none.</param>
+    /// <param name="accountIds">The accounts the query runs against, which are the ones the caller's user is assigned when a request named none.</param>
     /// <param name="selectedFolders">The folders the query runs against, one pair per account, with every role a request named already turned into the folder it means on that account, or <see langword="null" /> to name none.</param>
     /// <returns>The scope, with both lists deduplicated and ordered.</returns>
     /// <remarks>
@@ -197,7 +178,6 @@ public sealed record MailboxScope
     /// a folder on each of those accounts.
     /// </remarks>
     public static MailboxScope Create(
-        MailUserId user,
         IEnumerable<MailAccountId>? accountIds,
         IEnumerable<MailFolderIdentity>? selectedFolders)
     {
@@ -217,7 +197,7 @@ public sealed record MailboxScope
 
         return accounts.Length is 0 && folders.Length is 0
             ? NothingReadable
-            : new MailboxScope(user, accounts, folders);
+            : new MailboxScope(accounts, folders);
     }
 
     /// <summary>Admits the folders configuration says a tool may read from, and nothing else.</summary>

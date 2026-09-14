@@ -115,7 +115,7 @@ internal static class SpamClassificationEndpoints
             return AdminAccountRequest.Refuse(request?.Account);
         }
 
-        var configuredScope = settings.SettingsFor(servedAccount.Id).ScannedFolderAliases;
+        var configuredScope = settings.SettingsFor(servedAccount).ScannedFolderAliases;
         var scope = ResolveScope(request?.Folders, configuredScope);
 
         if (scope.Refusal is { } refusal)
@@ -163,7 +163,7 @@ internal static class SpamClassificationEndpoints
         var run = await runs.FindLatestAsync(servedAccount, cancellationToken);
 
         return TypedResults.Ok(new SpamClassificationRunStateResponse(
-            servedAccount.Id.Value,
+            servedAccount.Value,
             run is null ? null : SpamClassificationRunResponse.For(run)));
     }
 

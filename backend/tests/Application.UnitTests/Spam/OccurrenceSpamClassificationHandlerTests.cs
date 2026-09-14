@@ -7,7 +7,6 @@ using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.UnitTests.TestDoubles;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -21,24 +20,28 @@ namespace MailFathom.Application.UnitTests.Spam;
 /// <summary>Covers the classification a previous build enqueued by occurrence, which this build still runs.</summary>
 public sealed class OccurrenceSpamClassificationHandlerTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-1"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("acct-1");
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
     private static readonly DateTimeOffset EvaluatedAt = new(2026, 8, 13, 9, 0, 0, TimeSpan.Zero);
 
     private static readonly EmailOccurrenceId Occurrence = EmailOccurrenceId.Create(
-        Account.Id,
+        Account,
         new MailFolderResolutionId(Inbox, MailFolderResolutionGeneration.First),
         ImapUidValidity.Create(9),
         ImapUid.Create(4401));
 
     private readonly SpamClassificationHarness harness = new(EvaluatedAt);
 
-    public OccurrenceSpamClassificationHandlerTests() => this.harness.ContentStore
-        .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
-        .Returns(_ => SpamClassificationHarness.SomeContent());
+    public OccurrenceSpamClassificationHandlerTests()
+    {
+        this.harness.Assignments.Assigning(SyntheticMailUser.Deployment, Account);
+        this.harness.ContentStore
+            .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
+            .Returns(_ => SpamClassificationHarness.SomeContent());
+    }
 
     /// <summary>The name a previous build enqueued under is the one this handler claims, so that work is not left waiting.</summary>
     [Fact]
@@ -53,7 +56,7 @@ public sealed class OccurrenceSpamClassificationHandlerTests
 
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyEmailSpamJobPayload.For(SyntheticMailUser.Deployment, Occurrence),
+            ClassifyEmailSpamJobPayload.For(Occurrence),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -68,7 +71,7 @@ public sealed class OccurrenceSpamClassificationHandlerTests
     {
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyEmailSpamJobPayload.For(SyntheticMailUser.Deployment, Occurrence),
+            ClassifyEmailSpamJobPayload.For(Occurrence),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -76,17 +79,25 @@ public sealed class OccurrenceSpamClassificationHandlerTests
         Assert.Equal(0, this.harness.Mutations.OpenedRecordCount);
     }
 
-    /// <summary>An occurrence resolves only within the user the payload names, so another user's mail is never classified under it.</summary>
+    /// <summary>
+    /// An occurrence names the mailbox it is in, so mail stored in another mailbox is never reached under it. That is
+    /// the whole of the narrowing now the identifier is the account's own: the payload carries no user to compare, and
+    /// a second mailbox holding the same UID in the same folder is a different occurrence rather than the same one.
+    /// </summary>
     [Fact]
-    public async Task RunAsync_AnOccurrenceOfMailThePayloadsUserDoesNotHold_EndsTheJobWithoutClassifyingOrActing()
+    public async Task RunAsync_AnOccurrenceInAnotherMailbox_EndsTheJobWithoutClassifyingOrActing()
     {
         // Arrange
         this.StoreEmailAtTheOccurrence();
-        var anotherUser = MailUserId.Create(Guid.Parse("22222222-2222-2222-2222-222222222222"));
+        var inAnotherMailbox = EmailOccurrenceId.Create(
+            MailAccountId.Create("acct-2"),
+            new MailFolderResolutionId(Inbox, MailFolderResolutionGeneration.First),
+            ImapUidValidity.Create(9),
+            ImapUid.Create(4401));
 
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyEmailSpamJobPayload.For(anotherUser, Occurrence),
+            ClassifyEmailSpamJobPayload.For(inAnotherMailbox),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -113,7 +124,7 @@ public sealed class OccurrenceSpamClassificationHandlerTests
     {
         var emailId = this.harness.Emails.Add(new ClassifiableEmail(
             StoredEmailId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000001")),
-            Account.Id,
+            Account,
             Inbox));
 
         this.harness.Emails.AddOccurrence(Occurrence, emailId);
@@ -137,7 +148,7 @@ public sealed class OccurrenceSpamClassificationHandlerTests
                 this.harness.CreateClassifier(settingsReader, commitPolicy),
                 this.harness.CreateActionRecorder(
                     actions ?? SpamActionSettings.None,
-                    SpamClassificationHarness.OccurrenceReader(Account.Id, Inbox),
+                    SpamClassificationHarness.OccurrenceReader(Account, Inbox),
                     sessionFactory,
                     commitPolicy)));
     }

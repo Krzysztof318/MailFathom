@@ -44,8 +44,7 @@ internal sealed class MailAnsweringAuditEntryStore(
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var runId = entry.RunId.Value;
-        var userValue = entry.Account.User.Value;
-        var accountId = entry.Account.Id.Value;
+        var accountId = entry.AccountId.Value;
 
         // Looked up by the run and account rather than by the key, because a retried append generates a fresh key and
         // the thing that must not happen twice is an entry for one question asked of one mailbox. The change-tracker
@@ -55,7 +54,6 @@ internal sealed class MailAnsweringAuditEntryStore(
             writeContext.MailAnsweringAuditEntries,
             writeContext.MailAnsweringAuditEntries,
             candidate => candidate.RunId == runId
-                && candidate.UserId == userValue
                 && candidate.MailboxAccountId == accountId,
             cancellationToken);
 
@@ -75,11 +73,10 @@ internal sealed class MailAnsweringAuditEntryStore(
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var userValue = query.Account.User.Value;
-        var accountValue = query.Account.Id.Value;
+        var accountValue = query.Account.Value;
 
         var entities = await this.Filter(query)
-            .Where(record => record.UserId == userValue && record.MailboxAccountId == accountValue)
+            .Where(record => record.MailboxAccountId == accountValue)
 
             // The emails are the point of the entry, so they are loaded with it rather than left to a second read per
             // row. The page is bounded and so is what one run may retrieve, which is what keeps the join bounded too.
@@ -128,20 +125,18 @@ internal sealed class MailAnsweringAuditEntryStore(
     /// <see cref="MailboxMutationAuditEntryStore.EraseCompletedBeforeAsync" /> states.
     /// </remarks>
     public async Task<int> EraseCompletedBeforeAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         DateTimeOffset completedBefore,
         int limit,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var userValue = account.User.Value;
-        var accountValue = account.Id.Value;
+        var accountValue = account.Value;
 
         var expiringIds = await readContext.MailAnsweringAuditEntries
             .AsNoTracking()
-            .Where(record => record.UserId == userValue
-                && record.MailboxAccountId == accountValue
+            .Where(record => record.MailboxAccountId == accountValue
                 && record.CompletedAt < completedBefore)
             .OrderBy(record => record.CompletedAt)
             .ThenBy(record => record.Id)

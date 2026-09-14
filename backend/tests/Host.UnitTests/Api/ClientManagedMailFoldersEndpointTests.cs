@@ -30,8 +30,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </summary>
 public sealed class ClientManagedMailFoldersEndpointTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
+    private static readonly MailAccountId Account = MailAccountId.Create("primary");
 
     private static readonly MailTransportSecurityPolicy RequiredTlsPolicy = MailTransportSecurityPolicy.Create(
         MailConnectionSecurity.TlsOnConnect,

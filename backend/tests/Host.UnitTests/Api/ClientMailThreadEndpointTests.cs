@@ -463,7 +463,7 @@ public sealed class ClientMailThreadEndpointTests
     private static EmailSummary SyntheticListedEmail(Guid? storedEmailId = null) => new()
     {
         StoredEmailId = StoredEmailId.Create(storedEmailId ?? Guid.CreateVersion7()),
-        Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")),
+        Account = MailAccountId.Create("work"),
         FolderAlias = MailFolderAlias.Create("INBOX"),
         ThreadId = Conversation,
         Subject = "a subject",
@@ -559,7 +559,7 @@ public sealed class ClientMailThreadEndpointTests
     private EmailContentReader ReadingDrawnMessages(EmailSummary[] summaries)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
+        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
 
         var readTelemetry = Substitute.For<IMailboxReadTelemetry>();
         readTelemetry.BeginRead(Arg.Any<MailboxReadOperation>(), Arg.Any<CancellationToken>())
@@ -625,7 +625,7 @@ public sealed class ClientMailThreadEndpointTests
     private static EmailContentReader ReadingNothing()
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
+        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
 
         var readTelemetry = Substitute.For<IMailboxReadTelemetry>();
         readTelemetry.BeginRead(Arg.Any<MailboxReadOperation>(), Arg.Any<CancellationToken>())
@@ -653,7 +653,7 @@ public sealed class ClientMailThreadEndpointTests
     private MailThreadBrowser Browser()
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
+        catalog.AssignedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
 
         var readTelemetry = Substitute.For<IMailboxReadTelemetry>();
         readTelemetry.BeginRead(Arg.Any<MailboxReadOperation>(), Arg.Any<CancellationToken>())

@@ -109,10 +109,10 @@ public sealed class OutgoingMailFilingPass
     /// every send this deployment makes. A held account has no outbox mirror at all: its outgoing record is its outbox.
     /// </remarks>
     public async Task<IReadOnlyList<OutgoingMailFilingResult>> MirrorWaitingSendsAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
-        if (!this.MapsOutboxFolder(account.Id) || await this.localFiler.HoldsAsync(account, cancellationToken))
+        if (!this.MapsOutboxFolder(account) || await this.localFiler.HoldsAsync(account, cancellationToken))
         {
             return [];
         }
@@ -161,10 +161,10 @@ public sealed class OutgoingMailFilingPass
     /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<OutgoingMailFilingResult>> WithdrawDuplicatedSentCopiesAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
-        if (!this.filingPolicies.WithdrawsDuplicateSentCopy(account.Id)
+        if (!this.filingPolicies.WithdrawsDuplicateSentCopy(account)
             || await this.localFiler.HoldsAsync(account, cancellationToken))
         {
             return [];
@@ -222,7 +222,7 @@ public sealed class OutgoingMailFilingPass
         CancellationToken cancellationToken)
     {
         if (await this.outgoingEmails.FindAsync(outgoingEmailId, cancellationToken) is not { IsTerminal: true } record
-            || await this.localFiler.HoldsAsync(record.Account, cancellationToken))
+            || await this.localFiler.HoldsAsync(record.AccountId, cancellationToken))
         {
             return [];
         }

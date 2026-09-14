@@ -521,8 +521,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
                 foreach (var seededEmail in SeededEmails(binding))
                 {
                     await repository.UpsertMetadataAsync(
-                        session, SyntheticMailAccount.User,
-                        seededEmail.RemoteMetadata,
+                        session, seededEmail.RemoteMetadata,
                         seededEmail.Extraction,
                         StoredEmailContentAvailability.Available,
                         token);

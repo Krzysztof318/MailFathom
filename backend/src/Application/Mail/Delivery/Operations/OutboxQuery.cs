@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Globalization;
 using MailFathom.Application.Paging;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
@@ -35,21 +34,19 @@ public sealed record OutboxQuery
     public const int MaximumPageSize = 200;
 
     private OutboxQuery(
-        MailAccountIdentity? account,
+        MailAccountId? account,
         OutgoingEmailStage? stage,
         int pageSize,
         OutboxCursor? cursor)
     {
-        this.Account = account;
+        this.AccountId = account;
         this.Stage = stage;
         this.PageSize = pageSize;
         this.Cursor = cursor;
     }
 
     /// <summary>Gets the account the page is narrowed to, or <see langword="null" /> for every account.</summary>
-    public MailAccountIdentity? Account { get; }
-    /// <summary>Gets the identifier half of <see cref="Account" />, or <see langword="null" /> when the reading is across every account.</summary>
-    public MailAccountId? AccountId => this.Account?.Id;
+    public MailAccountId? AccountId { get; }
 
     /// <summary>Gets the stage the page is narrowed to, or <see langword="null" /> for every stage.</summary>
     public OutgoingEmailStage? Stage { get; }
@@ -65,7 +62,7 @@ public sealed record OutboxQuery
     /// The page size is deliberately not part of it. A caller may ask for a shorter or longer page while continuing the
     /// same walk, and refusing that would be a rule about pacing rather than about which records the boundary sits in.
     /// </remarks>
-    public string FilterFingerprint => ComputeFingerprint(this.Account, this.Stage);
+    public string FilterFingerprint => ComputeFingerprint(this.AccountId, this.Stage);
 
     /// <summary>Builds a validated query from what a caller asked for, or reports why the request names no page.</summary>
     /// <param name="account">The account to narrow to, or <see langword="null" /> for every account.</param>
@@ -74,7 +71,7 @@ public sealed record OutboxQuery
     /// <param name="cursor">The boundary a continued walk reads beyond, or <see langword="null" /> for the first page.</param>
     /// <returns>The accepted query, or the refusal naming what the caller has to change.</returns>
     public static OutboxQueryResult Create(
-        MailAccountIdentity? account,
+        MailAccountId? account,
         OutgoingEmailStage? stage,
         int? pageSize,
         OutboxCursor? cursor)
@@ -105,11 +102,8 @@ public sealed record OutboxQuery
     }
 
     /// <summary>Reduces the filters to the short stable text a cursor carries to prove it belongs to this walk.</summary>
-    private static string ComputeFingerprint(MailAccountIdentity? account, OutgoingEmailStage? stage) =>
-        PageFilterFingerprint.Of(
-            account?.User.Value.ToString("N", CultureInfo.InvariantCulture),
-            account?.Id.Value,
-            stage?.ToString());
+    private static string ComputeFingerprint(MailAccountId? account, OutgoingEmailStage? stage) =>
+        PageFilterFingerprint.Of(account?.Value, stage?.ToString());
 
     /// <summary>Names the stages a caller may narrow to, for a refusal that says what to write instead.</summary>
     /// <returns>The declared stage names, separated by commas.</returns>

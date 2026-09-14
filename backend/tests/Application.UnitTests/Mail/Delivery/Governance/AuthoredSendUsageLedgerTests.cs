@@ -18,8 +18,8 @@ public sealed class AuthoredSendUsageLedgerTests
 {
     private const string Caller = "agent-key";
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     /// <summary>A deployment that bounded no caller counts nothing, so the ordinary posture holds no identity at all.</summary>
     [Fact]
@@ -219,6 +219,7 @@ public sealed class AuthoredSendUsageLedgerTests
 
     private static OutgoingEmailRequest Send(int number, int recipientCount) => OutgoingEmailRequest.Create(
         Account,
+        SyntheticMailUser.Deployment,
         OutgoingEmailRequester.Command(string.Create(CultureInfo.InvariantCulture, $"send-{number}")),
         [.. Enumerable
             .Range(0, recipientCount)

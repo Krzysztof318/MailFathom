@@ -198,6 +198,7 @@ public sealed class OrchestratedConcurrentIdempotencyTests(MailFathomOrchestrati
 
         var request = OutgoingEmailRequest.Create(
             SyntheticMailAccount.Account,
+            SyntheticMailAccount.User,
             OutgoingEmailRequester.Command(SendRequesterIdentity),
             [OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To, contact: null)]);
 
@@ -229,7 +230,7 @@ public sealed class OrchestratedConcurrentIdempotencyTests(MailFathomOrchestrati
         string subject,
         CancellationToken cancellationToken) => services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                session, SyntheticMailAccount.User,
+                session,
                 SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                 extractedMetadata: null,
                 StoredEmailContentAvailability.ExceededSizeLimit,
@@ -309,9 +310,7 @@ public sealed class OrchestratedConcurrentIdempotencyTests(MailFathomOrchestrati
         CancellationToken cancellationToken)
     {
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
-        var payload = ClassifyEmailSpamJobPayload.For(
-            SyntheticMailAccount.User,
-            SyntheticEmail.OccurrenceIn(binding, LeasedJobUid));
+        var payload = ClassifyEmailSpamJobPayload.For(SyntheticEmail.OccurrenceIn(binding, LeasedJobUid));
         var request = JobEnqueueRequest.Create(
             JobIdempotencyKey.Create($"{FolderAlias}/{LeasedJobUid}"),
             payload,
@@ -361,8 +360,7 @@ public sealed class OrchestratedConcurrentIdempotencyTests(MailFathomOrchestrati
             async (scope, session, token) => storedEmailId = await scope
                 .GetRequiredService<IEmailMetadataRepository>()
                 .UpsertMetadataAsync(
-                    session, SyntheticMailAccount.User,
-                    SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
+                    session, SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                     SyntheticEmail.ExtractionOf(
                         occurrenceId,
                         subject,

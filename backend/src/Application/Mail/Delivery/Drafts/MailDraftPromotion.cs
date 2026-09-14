@@ -178,7 +178,8 @@ public sealed class MailDraftPromotion
         }
 
         var request = OutgoingEmailRequest.Create(
-            draft.Account,
+            draft.AccountId,
+            draft.User,
             OutgoingEmailRequester.Draft(draftId),
             [.. draft.Recipients.Select(recipient => recipient.Recipient)]);
 

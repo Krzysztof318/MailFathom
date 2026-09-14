@@ -393,6 +393,7 @@ public sealed class EmbeddingProfileEndpointsTests
         var timeProvider = new FakeTimeProvider(Now);
         var spendGate = new EmbeddingSpendGate(
             ledger,
+            new StubMailAccountAssignments(),
             EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod, 0, TimeSpan.FromDays(1)),
             timeProvider);
 

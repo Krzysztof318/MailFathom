@@ -168,7 +168,7 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
             folder.Id,
             stored.UidValidity,
             stored.Uid);
-        var request = MailboxMutationRequest.SetSeen(stored.StoredEmailId, SyntheticMailAccount.User, occurrence, requester, isSeen);
+        var request = MailboxMutationRequest.SetSeen(stored.StoredEmailId, occurrence, requester, isSeen);
 
         return services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxMutationPerformer>().PerformAsync(

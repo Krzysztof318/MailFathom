@@ -11,7 +11,6 @@ using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
-using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -36,8 +35,8 @@ public sealed class MailFolderErasureEndpointTests
     private static readonly MailAccountId Account = MailAccountId.Create("work");
 
     /// <summary>The account as the mirror store is asked about it, which is the user and the identifier together.</summary>
-    private static readonly MailAccountIdentity AccountIdentity =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, Account);
+    private static readonly MailAccountId AccountIdentity =
+        Account;
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
 
     private readonly IMailFolderMappingReader mappings = Substitute.For<IMailFolderMappingReader>();
@@ -239,7 +238,6 @@ public sealed class MailFolderErasureEndpointTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
-                SyntheticMailUser.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),
@@ -251,13 +249,13 @@ public sealed class MailFolderErasureEndpointTests
     /// <summary>Records which folder each pass was asked to erase, and answers with the erasure the test arranged.</summary>
     private sealed class RecordingMirrorStore(MailFolderMirrorErasure erasure) : IStoredMailFolderMirrorStore
     {
-        private readonly List<(MailAccountIdentity Account, MailFolderAlias FolderAlias)> passes = [];
+        private readonly List<(MailAccountId Account, MailFolderAlias FolderAlias)> passes = [];
 
-        public IReadOnlyList<(MailAccountIdentity Account, MailFolderAlias FolderAlias)> Passes => this.passes;
+        public IReadOnlyList<(MailAccountId Account, MailFolderAlias FolderAlias)> Passes => this.passes;
 
         public Task<MailFolderMirrorErasure> EraseFolderMirrorAsync(
             IPersistenceSession session,
-            MailAccountIdentity account,
+            MailAccountId account,
             MailFolderAlias folderAlias,
             int maxEmails,
             CancellationToken cancellationToken)

@@ -9,7 +9,6 @@ using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
-using MailFathom.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -25,7 +24,6 @@ public sealed class StoredEmailSelectionPredicateCommandTests
     private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
 
     private static MailboxScope WholeMailbox { get; } = MailboxScope.Create(
-        SyntheticMailUser.Deployment,
         [MailAccountId.Create("primary")],
         []);
 

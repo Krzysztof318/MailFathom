@@ -11,7 +11,6 @@ using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Jobs;
-using MailFathom.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -26,13 +25,12 @@ public sealed class JobEnqueueStatementTests
 {
     private static readonly DateTimeOffset EnqueuedAt = new(2026, 8, 12, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("account-a"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("account-a");
 
     private static JobEnqueueRequest Request => JobEnqueueRequest.Create(
         JobIdempotencyKey.Create("account-a/INBOX#1/12345/4711"),
         ClassifyEmailSpamJobPayload.For(
-            SyntheticMailUser.Deployment,
             EmailOccurrenceId.Create(
                 MailAccountId.Create("account-a"),
                 new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
@@ -94,14 +92,14 @@ public sealed class JobEnqueueStatementTests
     }
 
     /// <summary>
-    /// The turn is one spacing past the latest one the same user's waiting work already holds, which is the whole of
-    /// what makes the claim fair: it is what spreads a backlog over the clock instead of leaving every job of it at the
-    /// instant it was queued. The peers are found on the job row's own user column rather than through a join back to
-    /// the account table, so a person with several mailboxes gets one share rather than one per mailbox and the read
-    /// stays an index scan over the queue.
+    /// The turn is one spacing past the latest one the same mailbox's waiting work already holds, which is the whole
+    /// of what makes the claim fair: it is what spreads a backlog over the clock instead of leaving every job of it at
+    /// the instant it was queued. The peers are found on the job row's own account column, so the read stays an index
+    /// scan over the queue rather than a join back to the account table — and a mailbox several people are assigned
+    /// gets one share, because the work is the mailbox's rather than each reader's.
     /// </summary>
     [Fact]
-    public void Compose_AnEnqueue_PlacesTheTurnOneSpacingPastTheUsersLatestWaitingTurn()
+    public void Compose_AnEnqueue_PlacesTheTurnOneSpacingPastTheMailboxesLatestWaitingTurn()
     {
         // Act
         var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt, enqueuedTrace: null);
@@ -112,7 +110,7 @@ public sealed class JobEnqueueStatementTests
             statement.Format,
             StringComparison.Ordinal);
         Assert.Contains(
-            $"waiting.\"{nameof(JobEntity.UserId)}\" = ",
+            $"waiting.\"{nameof(JobEntity.MailboxAccountId)}\" = ",
             statement.Format,
             StringComparison.Ordinal);
         Assert.DoesNotContain("JOIN mailbox_accounts", statement.Format, StringComparison.Ordinal);

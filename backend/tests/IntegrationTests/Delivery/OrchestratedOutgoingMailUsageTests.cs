@@ -30,7 +30,7 @@ public sealed class OrchestratedOutgoingMailUsageTests(MailFathomOrchestrationFi
 {
     /// <summary>Gets the account this suite writes under, whose user the orchestrated database provisioned.</summary>
     /// <remarks>Read on each use rather than captured in a field, because the user is resolved when the harness starts.</remarks>
-    private static MailAccountIdentity Account => SyntheticMailAccount.Account;
+    private static MailAccountId Account => SyntheticMailAccount.Account;
 
     /// <summary>
     /// Two sends naming three people between them move both counts by exactly that much. Asserted as a difference
@@ -102,6 +102,7 @@ public sealed class OrchestratedOutgoingMailUsageTests(MailFathomOrchestrationFi
     {
         var request = OutgoingEmailRequest.Create(
             Account,
+            SyntheticMailAccount.User,
             OutgoingEmailRequester.Command(invocationIdentity),
             [.. addresses.Select(RecipientOf)]);
 

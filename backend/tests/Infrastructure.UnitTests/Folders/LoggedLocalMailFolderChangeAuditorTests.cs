@@ -25,7 +25,7 @@ public sealed class LoggedLocalMailFolderChangeAuditorTests
         var auditor = CreateAuditor(logs);
         var folder = LocalMailFolderId.Create(Guid.CreateVersion7(OccurredAt));
         var change = new LocalMailFolderChange(
-            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary")),
+            MailAccountId.Create("primary"),
             folder,
             MailFolderChangeKind.Erased,
             ErasedFolderCount: 3,
@@ -39,7 +39,7 @@ public sealed class LoggedLocalMailFolderChangeAuditorTests
 
         Assert.Equal(LogLevel.Information, record.Level);
         Assert.Equal(
-            ["AccountId", "ChangeKind", "ErasedFolderCount", "FolderId", "OccurredAt", "UserId"],
+            ["AccountId", "ChangeKind", "ErasedFolderCount", "FolderId", "OccurredAt"],
             record.Properties.Keys.Order(StringComparer.Ordinal));
         Assert.Equal(folder.Value, record.Properties["FolderId"]);
         Assert.Equal("primary", record.Properties["AccountId"]);

@@ -34,7 +34,7 @@ public sealed class DiscoveryRunTests
 
     private static readonly MailQuestion Question = new(
         MailQuestionText.Create("which supplier quoted least"),
-        MailboxScope.Create(SyntheticMailUser.Deployment, [MailAccountId.Create("primary")], []));
+        MailboxScope.Create([MailAccountId.Create("primary")], []));
 
     /// <summary>Both halves of what a run decided are its record, so neither is discarded once the other exists.</summary>
     [Fact]

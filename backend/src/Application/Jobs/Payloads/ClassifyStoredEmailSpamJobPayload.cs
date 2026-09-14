@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json.Serialization;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 
@@ -12,7 +11,7 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// <summary>Points one job at a single stored email, and at nothing inside the message.</summary>
 /// <remarks>
 /// <para>
-/// Every property is one of MailFathom's own identifiers: the user the mailbox belongs to, the account within them, and
+/// Every property is one of MailFathom's own identifiers: the account the mailbox is, and
 /// the email's own stored identity. A handler therefore resolves what it needs from committed local state rather than
 /// from anything the enqueuer copied, and a subject, an address, a body, and extracted text are all absent by
 /// construction: there is no property to put one in.
@@ -29,15 +28,7 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// </remarks>
 public sealed record ClassifyStoredEmailSpamJobPayload : IJobPayload
 {
-    /// <summary>Gets the user whose account the email belongs to.</summary>
-    /// <remarks>
-    /// Named beside the identifier, because an identifier names one account within its user and the rows this work
-    /// writes are about that account. The user is generated and names nobody outside this deployment, so carrying it
-    /// discloses nothing an operator reading a queued job may not see.
-    /// </remarks>
-    public required Guid UserId { get; init; }
-
-    /// <summary>Gets the account whose mailbox the email belongs to, within that user.</summary>
+    /// <summary>Gets the account whose mailbox the email belongs to.</summary>
     public required string AccountId { get; init; }
 
     /// <summary>Gets the stored identity of the email to classify.</summary>
@@ -52,18 +43,17 @@ public sealed record ClassifyStoredEmailSpamJobPayload : IJobPayload
     /// <param name="account">The account the email belongs to, as the run that stored it resolved.</param>
     /// <param name="email">The email's stored identity.</param>
     /// <returns>The payload naming that email.</returns>
-    public static ClassifyStoredEmailSpamJobPayload For(MailAccountIdentity account, StoredEmailId email) => new()
+    public static ClassifyStoredEmailSpamJobPayload For(MailAccountId account, StoredEmailId email) => new()
     {
-        UserId = account.User.Value,
-        AccountId = account.Id.Value,
+        AccountId = account.Value,
         EmailRecordId = email.Value,
     };
 
     /// <summary>Rebuilds the account identity this payload names.</summary>
     /// <returns>The account identity.</returns>
     /// <exception cref="ArgumentException">Thrown when the stored values no longer name a valid account identity.</exception>
-    public MailAccountIdentity ToAccountIdentity() =>
-        MailAccountIdentity.Create(MailUserId.Create(this.UserId), MailAccountId.Create(this.AccountId));
+    public MailAccountId ToAccountIdentity() =>
+        MailAccountId.Create(this.AccountId);
 
     /// <summary>Rebuilds the stored identity this payload names.</summary>
     /// <returns>The email's stored identity.</returns>

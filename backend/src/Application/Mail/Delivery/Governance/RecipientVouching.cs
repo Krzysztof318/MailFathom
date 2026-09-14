@@ -121,7 +121,7 @@ public sealed class RecipientVouching(
     /// account without a sending identity contributes none, which is the honest answer: nothing here knows what a
     /// read-only account's own address is.
     /// </remarks>
-    private HashSet<EmailAddress> OwnAddresses() => accounts.OwnedAccounts
+    private HashSet<EmailAddress> OwnAddresses() => accounts.AssignedAccounts
         .Select(account => senderIdentities.FindSenderIdentity(account.Id))
         .OfType<OutgoingSenderIdentity>()
         .Select(identity => identity.Address)

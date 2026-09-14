@@ -30,7 +30,7 @@ internal sealed class LocalMailFolderConfiguration : IEntityTypeConfiguration<Lo
         // folders take part, so an erased folder's name is free again the moment it commits, and a null parent is one
         // value rather than many, so the top of the hierarchy is a set of siblings like any other. The index is named,
         // because two edits creating the same name at once is a race whose loser decides again and is refused.
-        entity.HasIndex(folder => new { folder.UserId, folder.MailboxAccountId, folder.ParentId, folder.NameKey })
+        entity.HasIndex(folder => new { folder.MailboxAccountId, folder.ParentId, folder.NameKey })
             .IsUnique()
             .AreNullsDistinct(false)
             .HasFilter(LiveFolderFilter)
@@ -38,18 +38,18 @@ internal sealed class LocalMailFolderConfiguration : IEntityTypeConfiguration<Lo
 
         // One folder per protected role, for the reason the name index is named: the first act on a held account and an
         // arrival for it can both supply the five at once.
-        entity.HasIndex(folder => new { folder.UserId, folder.MailboxAccountId, folder.Role })
+        entity.HasIndex(folder => new { folder.MailboxAccountId, folder.Role })
             .IsUnique()
             .HasFilter($"\"{nameof(LocalMailFolderEntity.Role)}\" IS NOT NULL AND {LiveFolderFilter}")
             .HasDatabaseName(PersistenceConstraintNames.LocalMailFolderRoleUniqueIndexName);
 
         // Unfiltered, because both indexes above are partial and a partial index covers no foreign key: this is what the
         // account's cascade and every read of one account's folders walk.
-        entity.HasIndex(folder => new { folder.UserId, folder.MailboxAccountId, folder.ErasedAt });
+        entity.HasIndex(folder => new { folder.MailboxAccountId, folder.ErasedAt });
 
         entity.HasOne<MailboxAccountEntity>()
             .WithMany()
-            .HasForeignKey(folder => new { folder.UserId, folder.MailboxAccountId })
+            .HasForeignKey(folder => folder.MailboxAccountId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // No action rather than a cascade or a restriction: an account's erasure removes its whole hierarchy in one

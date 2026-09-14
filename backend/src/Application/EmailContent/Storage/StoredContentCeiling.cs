@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.EmailContent.Storage;
 
@@ -31,9 +31,17 @@ namespace MailFathom.Application.EmailContent.Storage;
 /// <para>
 /// The two ceilings are counted in different quantities, and that is deliberate rather than an inconsistency. The
 /// deployment's is what the operator's disk fills with, which only the database can report; a user's is the payload
-/// their mail holds, which is the only figure attributable to one person at all — a catalogue answers for a table and
-/// never for a share of one. So the same payload counts once against a physical figure and once against a logical one,
-/// and the two are never expected to agree.
+/// the accounts assigned to them hold, which is the only figure attributable to one person at all — a catalogue
+/// answers for a table and never for a share of one. So the same payload counts once against a physical figure and
+/// once against a logical one, and the two are never expected to agree.
+/// </para>
+/// <para>
+/// A claim names the account and no user, because the mail is one copy however many users are assigned the mailbox.
+/// Which per-user ceilings it is charged to follows from the assignments at the moment of the claim, and a mailbox
+/// shared by two people counts in full against both — so a user whose own mailboxes have reached their ceiling holds
+/// the shared one back for everybody assigned to it, which is the trade-off
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
+/// states rather than an oversight here.
 /// </para>
 /// </remarks>
 public sealed class StoredContentCeiling
@@ -82,13 +90,13 @@ public sealed class StoredContentCeiling
     /// <summary>Gets whether a per-user ceiling is configured at all.</summary>
     public bool IsConfiguredPerUser => this.ceilings.UserBytes.HasValue;
 
-    /// <summary>Claims room for one payload of one user, or reports which ceiling has none.</summary>
-    /// <param name="user">The user whose mail the payload is.</param>
+    /// <summary>Claims room for one payload of one account, or reports which ceiling has none.</summary>
+    /// <param name="account">The account whose mail the payload is.</param>
     /// <param name="bytes">What the payload is expected to occupy.</param>
     /// <param name="cancellationToken">Cancels the claim.</param>
     /// <returns>The claim, or the bound that refused it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="bytes" /> is not positive.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="account" /> names nothing.</exception>
     /// <remarks>
     /// Both ceilings have to admit the payload, and the store admits them together rather than one after the other:
     /// charging one and then discovering the other refuses would leave a population reserved for a payload nothing will
@@ -96,12 +104,12 @@ public sealed class StoredContentCeiling
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the claim passes to the caller through the granted attempt, which disposes it once the payload has reached storage or been abandoned.")]
     public async Task<StoredContentClaimAttempt> TryClaimAsync(
-        MailUserId user,
+        MailAccountId account,
         long bytes,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(bytes);
-        RequireNamedUser(user);
+        RequireNamedAccount(account);
 
         // A deployment that bounds neither population has nothing for a claim to be visible to, so it reaches no
         // database: the grant is real and its release is a no-op, which is what keeps the whole mechanism off the
@@ -113,7 +121,7 @@ public sealed class StoredContentCeiling
         }
 
         var record = await this.claimStore.ClaimAsync(
-            user,
+            account,
             bytes,
             this.ceilings,
             ClaimLifetime,
@@ -124,19 +132,20 @@ public sealed class StoredContentCeiling
             : StoredContentClaimAttempt.Refused(record.ReachedBound);
     }
 
-    /// <summary>Refuses a user naming nobody, which is the one argument no ceiling can be measured or claimed for.</summary>
+    /// <summary>Refuses an account naming nothing, which is the one argument no ceiling can be measured or claimed for.</summary>
     /// <remarks>
-    /// A user naming nobody would otherwise be claimed against as a population of its own: bytes would be reserved and
-    /// admitted against a ceiling for "nobody", which reads as a working bound right up until somebody asks whose it
-    /// was. The spend gate refuses the same argument for the same reason, and this is the storage half of that rule.
+    /// An account naming nothing would otherwise be claimed against as a population of its own: bytes would be
+    /// reserved and admitted against a ceiling for "nothing", which reads as a working bound right up until somebody
+    /// asks which mailbox it was. The spend gate refuses the same argument for the same reason, and this is the
+    /// storage half of that rule.
     /// </remarks>
-    private static void RequireNamedUser(MailUserId user)
+    private static void RequireNamedAccount(MailAccountId account)
     {
-        if (!user.IsSpecified)
+        if (string.IsNullOrEmpty(account.Value))
         {
             throw new ArgumentException(
-                "A stored-content ceiling is measured and claimed for a named user, so a user naming nobody cannot be bounded.",
-                nameof(user));
+                "A stored-content ceiling is measured and claimed for a named account, so an account naming nothing cannot be bounded.",
+                nameof(account));
         }
     }
 }

@@ -83,7 +83,7 @@ public sealed class MailboxChangeProgressReader
 
         ArgumentOutOfRangeException.ThrowIfGreaterThan(recordIds.Count, MaximumRecordsPerRead);
 
-        var held = await this.records.ReadAsync(this.scopeResolver.User, recordIds, cancellationToken);
+        var held = await this.records.ReadAsync(this.scopeResolver.AssignedAccounts, recordIds, cancellationToken);
 
         return
         [

@@ -25,8 +25,8 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Authoring;
 /// <summary>Covers the grant, the visibility rule, and the records one caller's flag change is written down as.</summary>
 public sealed class MailFlagChangeRecorderTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("personal");
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -79,7 +79,7 @@ public sealed class MailFlagChangeRecorderTests
         Assert.Equal(target.Occurrence, request.Occurrence);
         Assert.Equal(LocalEmail, request.StoredEmailId);
         Assert.True(request.DesiredSeenState);
-        Assert.Equal(Account.Id, result.AccountId);
+        Assert.Equal(Account, result.AccountId);
         Assert.Equal(Inbox, result.FolderAlias);
     }
 
@@ -145,7 +145,7 @@ public sealed class MailFlagChangeRecorderTests
     /// somebody else's mail and the refusal says nothing about it existing.
     /// </summary>
     [Fact]
-    public async Task RecordAsync_AnEmailInAnAccountTheCallersUserDoesNotOwn_IsRefusedAsNotFound()
+    public async Task RecordAsync_AnEmailInAnAccountTheCallersUserIsNotAssigned_IsRefusedAsNotFound()
     {
         // Arrange
         var records = new InMemoryMailboxMutationRecordStore();
@@ -324,7 +324,7 @@ public sealed class MailFlagChangeRecorderTests
         await recorder.RecordAsync(change, Requester, TestContext.Current.CancellationToken);
 
         // Assert
-        using var waiting = runSignal.Register(Account.Id, TestContext.Current.CancellationToken);
+        using var waiting = runSignal.Register(Account, TestContext.Current.CancellationToken);
 
         Assert.True(waiting.Token.IsCancellationRequested);
     }
@@ -339,7 +339,7 @@ public sealed class MailFlagChangeRecorderTests
     {
         var callerAuthorization =
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailFlagsWrite);
-        var accountCatalog = OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account.Id));
+        var accountCatalog = AssignedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account));
 
         var targets = Substitute.For<IAuthoredMailboxTargetReader>();
         targets.FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(target));
@@ -356,8 +356,8 @@ public sealed class MailFlagChangeRecorderTests
             new MailboxScopeResolver(
                 accountCatalog,
                 StubMailFolderParticipation
-                    .Mapping(new MailFolderIdentity(Account.Id, Inbox))
-                    .Hiding(new MailFolderIdentity(Account.Id, Withheld)),
+                    .Mapping(new MailFolderIdentity(Account, Inbox))
+                    .Hiding(new MailFolderIdentity(Account, Withheld)),
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             targets,
@@ -374,8 +374,7 @@ public sealed class MailFlagChangeRecorderTests
         var folder = MailFolderResolution.FirstBindingOf(folderAlias, RemoteFolderPath.Create(folderAlias.Value));
 
         return new AuthoredMailboxTarget(
-            Account.User,
-            EmailOccurrenceId.Create(Account.Id, folder.Id, ImapUidValidity.Create(42), ImapUid.Create(7)),
+            EmailOccurrenceId.Create(Account, folder.Id, ImapUidValidity.Create(42), ImapUid.Create(7)),
             folder);
     }
 

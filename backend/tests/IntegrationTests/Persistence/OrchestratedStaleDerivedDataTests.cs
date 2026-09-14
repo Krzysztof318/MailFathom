@@ -468,8 +468,9 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
 
     /// <summary>Builds the walk's store as a deployment with a scanner switched on for its user would resolve it.</summary>
     /// <remarks>
-    /// The posture belongs to the user this suite's mail belongs to, because the walk judges each row against its own
-    /// user's stamp: a posture stated for anybody else would leave every row of this user's fresh.
+    /// The posture belongs to the user this suite's account is assigned to, because the walk judges each row against
+    /// the stamp of the mailbox it belongs to and that mailbox's posture is read through the user scanning it: a
+    /// posture stated for anybody else would leave every row of this account's fresh.
     /// </remarks>
     private StoredEmailExtractionBackfillStore StoreIn(
         IServiceProvider scope,
@@ -538,7 +539,6 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
                 var storedEmail = new StoredEmailEntity
                 {
                     Id = insertedId,
-                    UserId = folder.UserId,
                     MailboxAccountId = folder.MailboxAccountId,
                     MailFolder = folder,
                     UidValidity = SyntheticEmail.UidValidity,
@@ -629,7 +629,6 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
                     var storedEmail = new StoredEmailEntity
                     {
                         Id = Guid.CreateVersion7(SyntheticEmail.SentAt.AddSeconds(index)),
-                        UserId = folder.UserId,
                         MailboxAccountId = folder.MailboxAccountId,
                         MailFolder = folder,
                         UidValidity = SyntheticEmail.UidValidity,

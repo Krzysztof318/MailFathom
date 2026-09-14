@@ -61,7 +61,7 @@ internal sealed class StoredThreadStateStore(
     /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<DerivableThread>> GetThreadsAwaitingStateAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         int batchSize,
         int maximumMessagesPerThread,
         int maximumCharactersPerMessage,
@@ -71,13 +71,11 @@ internal sealed class StoredThreadStateStore(
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumMessagesPerThread);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumCharactersPerMessage);
 
-        var userId = account.User.Value;
-        var mailboxAccountId = account.Id.Value;
+        var mailboxAccountId = account.Value;
         var terms = derivedWorkGate.ReadTerms();
 
         var counted = Selecting(
             dbContext.StoredEmails.AsNoTracking(),
-            userId,
             mailboxAccountId,
             folderParticipation.FoldersGeneratingEmbeddings,
             terms);
@@ -100,7 +98,6 @@ internal sealed class StoredThreadStateStore(
             ? []
             : await Selecting(
                     dbContext.StoredEmails.AsNoTracking(),
-                    userId,
                     mailboxAccountId,
                     folderParticipation.FoldersGeneratingEmbeddings,
                     terms)
@@ -179,7 +176,6 @@ internal sealed class StoredThreadStateStore(
 
     /// <summary>Narrows stored mail to the messages a conversation's state is derived from.</summary>
     /// <param name="emails">The emails to narrow.</param>
-    /// <param name="userId">The user whose account this pass belongs to, which is what the index leads with.</param>
     /// <param name="mailboxAccountId">The configured account this pass belongs to.</param>
     /// <param name="embeddedFolders">The folders a mapping admits to derived work.</param>
     /// <param name="terms">The classification terms the whole batch is decided under.</param>
@@ -191,15 +187,13 @@ internal sealed class StoredThreadStateStore(
     /// </remarks>
     internal static IQueryable<StoredEmailEntity> Selecting(
         IQueryable<StoredEmailEntity> emails,
-        Guid userId,
         string mailboxAccountId,
         IReadOnlyList<MailFolderIdentity> embeddedFolders,
         DerivedWorkAdmissionTerms terms) => DerivedWorkAdmittedEmails.Admitting(
         AccountScopedMailFolders.Admitting(
             emails
                 .Where(StoredEmailTombstone.IsNotTombstoned)
-                .Where(email => email.UserId == userId
-                    && email.MailboxAccountId == mailboxAccountId
+                .Where(email => email.MailboxAccountId == mailboxAccountId
                     && email.EmailThreadId != null
                     && email.SearchDocument != null
                     && email.SearchDocument.BodyText != null)

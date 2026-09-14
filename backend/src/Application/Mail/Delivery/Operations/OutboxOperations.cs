@@ -61,7 +61,7 @@ public sealed class OutboxOperations
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminRead" />.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     public async Task<OutboxSummary> ReadSummaryAsync(
-        MailAccountIdentity? account,
+        MailAccountId? account,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminRead);

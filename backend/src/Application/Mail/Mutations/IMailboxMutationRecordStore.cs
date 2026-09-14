@@ -4,7 +4,6 @@
 
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -40,7 +39,7 @@ public interface IMailboxMutationRecordStore
     /// A hold is what makes a change withdrawable for a stated stretch after it was asked for, and it belongs to the
     /// record rather than to whoever asked: a client that closes, loses its network, or is put to sleep costs the
     /// mailbox nothing, because the window elapses and the record is taken in hand exactly as it would have been. It
-    /// is honoured by <see cref="ReadOutstandingAsync(MailAccountIdentity, int, CancellationToken)" /> and lifted by <see cref="ReleaseAsync" />, and a record that
+    /// is honoured by <see cref="ReadOutstandingAsync(MailAccountId, int, CancellationToken)" /> and lifted by <see cref="ReleaseAsync" />, and a record that
     /// already exists under this identity keeps the hold it was opened with rather than taking this call's.
     /// </para>
     /// </remarks>
@@ -78,19 +77,20 @@ public interface IMailboxMutationRecordStore
         MailboxMutationOrigin origin,
         CancellationToken cancellationToken);
 
-    /// <summary>Reads the records one user's own change carries, by the identities that change was answered with.</summary>
-    /// <param name="user">The user the records must belong to.</param>
+    /// <summary>Reads the records a change on the caller's own accounts carries, by the identities that change was answered with.</summary>
+    /// <param name="accounts">The accounts the caller is assigned, which are the accounts the records must belong to.</param>
     /// <param name="recordIds">The records to read, in any order and with repetitions.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The records this user holds under those identities, ordered by when each was recorded, and empty where they hold none.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="recordIds" /> is <see langword="null" />.</exception>
+    /// <returns>The records those accounts hold under those identities, ordered by when each was recorded, and empty where they hold none.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="accounts" /> or <paramref name="recordIds" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
-    /// The user is a parameter rather than something the caller checks afterwards, because it is what makes an
-    /// identifier somebody else's record unreadable rather than merely unreported: a record that does not belong to the
-    /// asking user is absent from the answer, so no timing or shape separates one that exists from one that never did.
-    /// A record identity is generated rather than guessable, and this is what keeps that from being the only thing
-    /// standing between two people's mail.
+    /// The accounts are a parameter rather than something the caller checks afterwards, because they are what makes an
+    /// identifier on a mailbox the caller is not assigned unreadable rather than merely unreported: a record outside
+    /// them is absent from the answer, so no timing or shape separates one that exists from one that never did. A
+    /// record identity is generated rather than guessable, and this is what keeps that from being the only thing
+    /// standing between two mailboxes. An empty list therefore reads nothing rather than everything, which is what a
+    /// caller assigned no account is answered with.
     /// </para>
     /// <para>
     /// Every stage is answered, completed and terminal ones included, because the caller is asking where its own change
@@ -98,17 +98,17 @@ public interface IMailboxMutationRecordStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<MailboxMutationRecord>> ReadAsync(
-        MailUserId user,
+        IReadOnlyList<MailAccountId> accounts,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken);
 
-    /// <summary>Withdraws the user's changes among those named, wherever nothing has been asked of the mail server for one yet.</summary>
+    /// <summary>Withdraws the changes among those named on the caller's own accounts, wherever nothing has been asked of the mail server for one yet.</summary>
     /// <param name="session">The session the write joins.</param>
-    /// <param name="user">The user the records must belong to.</param>
+    /// <param name="accounts">The accounts the caller is assigned, which are the accounts the records must belong to.</param>
     /// <param name="recordIds">The records to withdraw.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>Each named record as it now stands, unchanged where the change had already been attempted, and absent where this user holds no such record.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="recordIds" /> is <see langword="null" />.</exception>
+    /// <returns>Each named record as it now stands, unchanged where the change had already been attempted, and absent where those accounts hold no such record.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" />, <paramref name="accounts" /> or <paramref name="recordIds" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
     /// A record past <see cref="MailboxMutationRecord.IsWithdrawable" /> is returned rather than refused, because the
@@ -123,17 +123,17 @@ public interface IMailboxMutationRecordStore
     /// </remarks>
     Task<IReadOnlyList<MailboxMutationRecord>> WithdrawAsync(
         IPersistenceSession session,
-        MailUserId user,
+        IReadOnlyList<MailAccountId> accounts,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken);
 
-    /// <summary>Lifts the hold on the user's changes among those named, so the next convergence pass may take each in hand.</summary>
+    /// <summary>Lifts the hold on the changes among those named on the caller's own accounts, so the next convergence pass may take each in hand.</summary>
     /// <param name="session">The session the write joins.</param>
-    /// <param name="user">The user the records must belong to.</param>
+    /// <param name="accounts">The accounts the caller is assigned, which are the accounts the records must belong to.</param>
     /// <param name="recordIds">The records to release.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>Each named record as it now stands, unchanged where nothing was holding it, and absent where this user holds no such record.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="recordIds" /> is <see langword="null" />.</exception>
+    /// <returns>Each named record as it now stands, unchanged where nothing was holding it, and absent where those accounts hold no such record.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" />, <paramref name="accounts" /> or <paramref name="recordIds" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// It is the opposite half of <see cref="WithdrawAsync" /> and is shaped like it for the same reasons: a record
     /// nothing was holding is reported where it stands rather than refused, which is what makes the call safe to
@@ -143,7 +143,7 @@ public interface IMailboxMutationRecordStore
     /// </remarks>
     Task<IReadOnlyList<MailboxMutationRecord>> ReleaseAsync(
         IPersistenceSession session,
-        MailUserId user,
+        IReadOnlyList<MailAccountId> accounts,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken);
 
@@ -235,7 +235,7 @@ public interface IMailboxMutationRecordStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         int limit,
         CancellationToken cancellationToken);
 
@@ -252,7 +252,7 @@ public interface IMailboxMutationRecordStore
     /// a record inside its hold is — a page spent on records the pass cannot act on is a page its real backlog does not get.
     /// </remarks>
     Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailboxMutation mutation,
         int limit,
         CancellationToken cancellationToken);
@@ -263,7 +263,7 @@ public interface IMailboxMutationRecordStore
     /// <returns>One entry per kind and lifecycle that has at least one record, in no particular order.</returns>
     /// <remarks>
     /// <para>
-    /// It is an aggregate rather than a count of what <see cref="ReadOutstandingAsync(MailAccountIdentity, int, CancellationToken)" /> returned, because that read is
+    /// It is an aggregate rather than a count of what <see cref="ReadOutstandingAsync(MailAccountId, int, CancellationToken)" /> returned, because that read is
     /// bounded and a bounded count is wrong exactly when it matters — the moment an account has more stuck changes than
     /// one pass looks at is the moment somebody needs the real number.
     /// </para>
@@ -273,6 +273,6 @@ public interface IMailboxMutationRecordStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<MailboxMutationLifecycleCount>> ReadLifecycleCountsAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken);
 }

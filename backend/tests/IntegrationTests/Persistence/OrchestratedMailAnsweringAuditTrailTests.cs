@@ -142,7 +142,7 @@ public sealed class OrchestratedMailAnsweringAuditTrailTests(MailFathomOrchestra
     {
         var observation = new MailAnsweringRunObservation(
             MailAnsweringRunId.Create(Guid.CreateVersion7()),
-            MailboxScope.Create(SyntheticMailAccount.User, [SyntheticMailAccount.AccountId], []),
+            MailboxScope.Create([SyntheticMailAccount.AccountId], []),
             completedAt - TimeSpan.FromSeconds(9));
 
         observation.RecordComposition(EndpointAlias, InstructionsVersion);
@@ -262,7 +262,7 @@ public sealed class OrchestratedMailAnsweringAuditTrailTests(MailFathomOrchestra
                     ImapUid.Create(uid));
 
                 var storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session, SyntheticMailAccount.User,
+                    session,
                     SyntheticEmail.RemoteMetadataOf(occurrence, $"answering-audit-{uid}"),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.ExceededSizeLimit,

@@ -34,22 +34,20 @@ internal sealed class AuthoredMailTally(MailFathomDbContext readContext) : IAuth
 {
     /// <inheritdoc />
     public async Task<int> CountMessagesAuthoredByAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         EmailAddress author,
         int ceiling,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(ceiling);
 
-        var userValue = account.User.Value;
-        var accountValue = account.Id.Value;
+        var accountValue = account.Value;
         var normalizedAddress = author.NormalizedAddress;
 
         var authored = readContext.StoredEmails
             .AsNoTracking()
             .Where(email =>
-                email.UserId == userValue
-                && email.MailboxAccountId == accountValue
+                email.MailboxAccountId == accountValue
                 && email.SenderNormalizedAddress == normalizedAddress);
 
         var identified = await authored

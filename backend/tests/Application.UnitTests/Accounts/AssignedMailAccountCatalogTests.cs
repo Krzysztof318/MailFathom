@@ -15,54 +15,52 @@ namespace MailFathom.Application.UnitTests.Accounts;
 
 /// <summary>Covers the one place the user axis enters a mailbox read.</summary>
 /// <remarks>
-/// Everything a caller may reach is composed from this answer, so the outcomes worth stating are all here: a user owns
-/// the accounts served under their own name, another user owns none of them, a deployment serving two users answers
-/// each with their own half rather than refusing both, and a principal acting for no user is refused rather than
+/// Everything a caller may reach is composed from this answer, so the outcomes worth stating are all here: a user
+/// reads the accounts they are assigned, a user assigned none reads nothing, one mailbox assigned to two users is
+/// read by both rather than duplicated between them, and a principal acting for no user is refused rather than
 /// answered with an empty set.
 /// </remarks>
-public sealed class OwnedMailAccountCatalogTests
+public sealed class AssignedMailAccountCatalogTests
 {
     private static readonly ServedMailAccount ServedAccount = new(
-        SyntheticMailUser.Deployment,
         MailAccountId.Create("personal"),
         MailAccountDisplayName.Create("Personal mail"),
         MailSynchronizationMode.Polling);
 
     private static readonly ServedMailAccount AnotherUsersAccount = new(
-        SyntheticMailUser.Another,
         MailAccountId.Create("work"),
         MailAccountDisplayName.Create("Work mail"),
         MailSynchronizationMode.Polling);
 
     [Fact]
-    public void OwnedAccounts_TheUserTheDeploymentServes_OwnsEveryAccountItServes()
+    public void AssignedAccounts_AUserAssignedEveryAccountTheDeploymentServes_ReadsThemAll()
     {
         // Arrange
         var catalog = CatalogFor(AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment));
 
         // Act
-        var owned = catalog.OwnedAccounts;
+        var assigned = catalog.AssignedAccounts;
 
         // Assert
-        Assert.Equal([ServedAccount], owned);
+        Assert.Equal([ServedAccount], assigned);
     }
 
     /// <summary>
-    /// The refusal a caller sees for another user's account has to be the one they see for an account nobody
+    /// The refusal a caller sees for a mailbox they are not assigned has to be the one they see for a mailbox nobody
     /// configured, which is what an empty catalog produces: resolution then narrows the scope rather than reporting
-    /// that the account exists and belongs to somebody else.
+    /// that the account exists and somebody else reaches it.
     /// </summary>
     [Fact]
-    public void OwnedAccounts_AnotherUser_OwnsNothingThisDeploymentServes()
+    public void AssignedAccounts_AUserAssignedNoMailbox_ReadsNothingThisDeploymentServes()
     {
         // Arrange
         var catalog = CatalogFor(AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another));
 
         // Act
-        var owned = catalog.OwnedAccounts;
+        var assigned = catalog.AssignedAccounts;
 
         // Assert
-        Assert.Empty(owned);
+        Assert.Empty(assigned);
     }
 
     /// <summary>
@@ -71,13 +69,13 @@ public sealed class OwnedMailAccountCatalogTests
     /// </summary>
     [Theory]
     [MemberData(nameof(PrincipalsActingForNoUser))]
-    public void OwnedAccounts_APrincipalActingForNoUser_IsRefused(AuthorizedPrincipal principal)
+    public void AssignedAccounts_APrincipalActingForNoUser_IsRefused(AuthorizedPrincipal principal)
     {
         // Arrange
         var catalog = CatalogFor(AccessAuthorizations.ForPrincipal(principal));
 
         // Act
-        var refusal = Record.Exception(() => catalog.OwnedAccounts);
+        var refusal = Record.Exception(() => catalog.AssignedAccounts);
 
         // Assert
         Assert.IsType<PrincipalNotAuthorizedException>(refusal);
@@ -85,13 +83,13 @@ public sealed class OwnedMailAccountCatalogTests
 
     /// <summary>An entrypoint that stated no principal at all is refused by the same requirement rather than answered.</summary>
     [Fact]
-    public void OwnedAccounts_ReachedUnderNoPrincipal_IsRefused()
+    public void AssignedAccounts_ReachedUnderNoPrincipal_IsRefused()
     {
         // Arrange
         var catalog = CatalogFor(AccessAuthorizations.ForPrincipal(principal: null));
 
         // Act
-        var refusal = Record.Exception(() => catalog.OwnedAccounts);
+        var refusal = Record.Exception(() => catalog.AssignedAccounts);
 
         // Assert
         Assert.IsType<PrincipalNotAuthorizedException>(refusal);
@@ -99,28 +97,64 @@ public sealed class OwnedMailAccountCatalogTests
 
     /// <summary>
     /// The deployment this change exists to enable serves several users, and every user-facing read runs through here.
-    /// Each of them is answered with the accounts served under their own name rather than with a refusal that no sole
-    /// user could be named, which is what asking the deployment for one would have produced.
+    /// Each of them is answered with the mailboxes they are assigned rather than with a refusal that no sole user
+    /// could be named, which is what asking the deployment for one would have produced.
     /// </summary>
     [Fact]
-    public void OwnedAccounts_ADeploymentServingTwoUsers_AnswersEachWithTheirOwnAccounts()
+    public void AssignedAccounts_TwoUsersAssignedOneMailboxEach_AnswersEachWithTheirOwn()
     {
         // Arrange
+        var assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, ServedAccount.Id)
+            .Assigning(SyntheticMailUser.Another, AnotherUsersAccount.Id);
+
         var deploymentUser = CatalogFor(
             AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment),
-            servedAccounts: [ServedAccount, AnotherUsersAccount]);
+            servedAccounts: [ServedAccount, AnotherUsersAccount],
+            assignments: assignments);
 
         var anotherUser = CatalogFor(
             AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another),
-            servedAccounts: [ServedAccount, AnotherUsersAccount]);
+            servedAccounts: [ServedAccount, AnotherUsersAccount],
+            assignments: assignments);
 
         // Act
-        var deploymentUsersAccounts = deploymentUser.OwnedAccounts;
-        var anotherUsersAccounts = anotherUser.OwnedAccounts;
+        var deploymentUsersAccounts = deploymentUser.AssignedAccounts;
+        var anotherUsersAccounts = anotherUser.AssignedAccounts;
 
         // Assert
         Assert.Equal([ServedAccount], deploymentUsersAccounts);
         Assert.Equal([AnotherUsersAccount], anotherUsersAccounts);
+    }
+
+    /// <summary>
+    /// One mailbox assigned to two people is one mailbox, and both of them read it under the identifier the
+    /// deployment gave it. That is the whole of what makes a mailbox shared rather than copied per reader, and it is
+    /// the answer every narrowing site downstream composes its scope from.
+    /// </summary>
+    [Fact]
+    public void AssignedAccounts_OneMailboxAssignedToTwoUsers_IsReadByBothUnderTheSameIdentifier()
+    {
+        // Arrange
+        var assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, ServedAccount.Id)
+            .Assigning(SyntheticMailUser.Another, ServedAccount.Id);
+
+        var firstReader = CatalogFor(
+            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment),
+            assignments: assignments);
+
+        var secondReader = CatalogFor(
+            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another),
+            assignments: assignments);
+
+        // Act
+        var read = firstReader.AssignedAccounts;
+        var alsoRead = secondReader.AssignedAccounts;
+
+        // Assert
+        Assert.Equal([ServedAccount], read);
+        Assert.Equal(read, alsoRead);
     }
 
     /// <summary>Whether synchronization runs is a deployment fact rather than a caller's, so it is reported unchanged.</summary>
@@ -144,15 +178,21 @@ public sealed class OwnedMailAccountCatalogTests
         AuthorizedPrincipal.Process,
     ];
 
-    private static OwnedMailAccountCatalog CatalogFor(
+    /// <summary>Builds the catalog over the accounts a deployment serves and who is assigned which of them.</summary>
+    private static AssignedMailAccountCatalog CatalogFor(
         AccessAuthorization authorization,
         bool synchronizationEnabled = true,
-        IReadOnlyList<ServedMailAccount>? servedAccounts = null)
+        IReadOnlyList<ServedMailAccount>? servedAccounts = null,
+        IMailAccountAssignments? assignments = null)
     {
         var deploymentAccounts = Substitute.For<IDeploymentMailAccountCatalog>();
         deploymentAccounts.ServedAccounts.Returns(servedAccounts ?? [ServedAccount]);
         deploymentAccounts.SynchronizationEnabled.Returns(synchronizationEnabled);
 
-        return new OwnedMailAccountCatalog(deploymentAccounts, authorization);
+        return new AssignedMailAccountCatalog(
+            deploymentAccounts,
+            assignments
+                ?? new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, ServedAccount.Id),
+            authorization);
     }
 }

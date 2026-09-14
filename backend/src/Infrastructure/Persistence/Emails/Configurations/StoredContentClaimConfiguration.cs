@@ -12,7 +12,7 @@ namespace MailFathom.Infrastructure.Persistence.Emails.Configurations;
 /// <remarks>
 /// Keyed by the claim's own identity, because a holder releases exactly the claim it took and nothing else joins to
 /// one. The index is on the expiry, which is what every read of this table filters on: a claim binds while it has not
-/// expired, and the sweep removes the rows that no longer do. Nothing cascades into it, not even from the user record,
+/// expired, and the sweep removes the rows that no longer do. Nothing cascades into it, not even from the account,
 /// because a claim outlives nothing — the expiry removes every row a release did not. The column names are the
 /// entity's own constants because the claim is a composed statement, so the statement and this mapping name the same
 /// things by construction.
@@ -27,8 +27,9 @@ internal sealed class StoredContentClaimConfiguration : IEntityTypeConfiguration
         entity.Property(claim => claim.Id)
             .HasColumnName(StoredContentClaimEntity.IdColumnName)
             .ValueGeneratedNever();
-        entity.Property(claim => claim.UserId)
-            .HasColumnName(StoredContentClaimEntity.UserIdColumnName)
+        entity.Property(claim => claim.MailboxAccountId)
+            .HasColumnName(StoredContentClaimEntity.MailboxAccountIdColumnName)
+            .HasMaxLength(128)
             .ValueGeneratedNever();
         entity.Property(claim => claim.ClaimedByteCount)
             .HasColumnName(StoredContentClaimEntity.ClaimedByteCountColumnName);

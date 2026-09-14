@@ -19,47 +19,34 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Entities;
 /// </summary>
 public sealed class UserAccountModelTests
 {
-    /// <summary>The user is a relational column, so ownership never depends on reading a document.</summary>
-    [Fact]
-    public void MailboxAccountModel_User_IsARequiredKeyThatErasesTheMailboxWithTheUser()
-    {
-        // Arrange
-        using var context = CreateContext();
-
-        // Act
-        var reference = Assert.Single(EntityTypeOf<MailboxAccountEntity>(context).GetForeignKeys());
-
-        // Assert
-        Assert.Equal(["UserId"], reference.Properties.Select(property => property.Name));
-        Assert.Equal(typeof(UserAccountEntity), reference.PrincipalEntityType.ClrType);
-        Assert.True(reference.IsRequired);
-        Assert.Equal(DeleteBehavior.Cascade, reference.DeleteBehavior);
-    }
-
     /// <summary>
-    /// The account is keyed by its user and the identifier its operator chose, so the identifier names one mailbox
-    /// within its user and nothing across the deployment.
+    /// The mailbox names no user at all, so which people it serves is the assignment relation rather than a column
+    /// the mail beneath it would then be keyed by.
     /// </summary>
     /// <remarks>
-    /// The key is also the structure the read that used to need an index of its own is served from — which mail
-    /// accounts one user owns, which erasing a user asks before taking the rows no cascade reaches — so the model
-    /// declares no separate index over the user and this asserts that it does not.
+    /// The key itself is asserted by <c>AccountReferenceOwnershipTests</c>, which holds the whole model to it. What
+    /// is asserted here is the absence the rekey turned on: a user column would have made this row one reader's view
+    /// of a mailbox, and the cascade off it would have erased a shared mailbox's mail with the first person to
+    /// leave. The table declares no index either, because every read of it is by the key and the read asking which
+    /// mailboxes one person reaches is <c>mail_account_assignments</c>.
     /// </remarks>
     [Fact]
-    public void MailboxAccountModel_Key_IsTheUserAndTheIdentifierAndCoversTheUsersOwnAccounts()
+    public void MailboxAccountModel_Shape_NamesNoUserAndNeedsNoIndexOfItsOwn()
     {
         // Arrange
         using var context = CreateContext();
         var entityType = EntityTypeOf<MailboxAccountEntity>(context);
 
         // Act
-        var key = entityType.FindPrimaryKey();
+        var user = entityType.FindProperty("UserId");
 
         // Assert
-        Assert.NotNull(key);
-        Assert.Equal(["UserId", "Id"], key.Properties.Select(property => property.Name));
-        Assert.Equal(PersistenceConstraintNames.MailboxAccountPrimaryKeyConstraintName, key.GetName());
+        Assert.Null(user);
+        Assert.Empty(entityType.GetForeignKeys());
         Assert.Empty(entityType.GetIndexes());
+        Assert.Equal(
+            PersistenceConstraintNames.MailboxAccountPrimaryKeyConstraintName,
+            entityType.FindPrimaryKey()!.GetName());
     }
 
     /// <summary>One row per user, keyed by an identity whoever provisions the user decides.</summary>

@@ -8,11 +8,9 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
-using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -21,6 +19,10 @@ namespace MailFathom.Application.UnitTests.Emails.Extraction;
 
 public sealed class StoredEmailExtractionBackfillTests
 {
+    private static readonly MailAccountId Account = MailAccountId.Create("primary");
+
+    private static readonly MailAccountId AnotherAccount = MailAccountId.Create("secondary");
+
     /// <summary>A run that finds fewer emails than one batch holds has reached the end of the stored mail.</summary>
     [Fact]
     public async Task RunAsync_FewerEmailsThanOneBatch_ExtractsThemAndReportsNoRemainingWork()
@@ -123,7 +125,7 @@ public sealed class StoredEmailExtractionBackfillTests
         var contentStore = CreateContentStoreWithReadableMime();
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountId>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailMimeExtractionResult.MalformedContent()));
         var backfill = CreateBackfill(store, contentStore, mimeReader, batchSize: 10);
 
@@ -337,17 +339,17 @@ public sealed class StoredEmailExtractionBackfillTests
     }
 
     /// <summary>
-    /// Every message the walk re-reads is re-read under the posture of the user who holds it, so a rebuild covering
-    /// two users redacts each of their mail the way that user's own record asks for. Nothing else says so: the reader
-    /// resolves the posture from the user it is handed, and a walk that handed it one user for the whole batch would
-    /// rewrite one person's mail under the other's answer.
+    /// Every message the walk re-reads is re-read under the posture of the mailbox that holds it, so a rebuild
+    /// covering two mailboxes redacts each of them the way that mailbox's own record asks for. Nothing else says so:
+    /// the reader resolves the posture from the account it is handed, and a walk that handed it one account for the
+    /// whole batch would rewrite one mailbox's mail under the other's answer.
     /// </summary>
     [Fact]
-    public async Task RunAsync_EmailsOfTwoUsers_ReReadsEachOfThemUnderItsOwnUser()
+    public async Task RunAsync_EmailsOfTwoMailboxes_ReReadsEachOfThemUnderItsOwnMailbox()
     {
         // Arrange
-        var deploymentEmail = EmailAwaitingExtraction(1, SyntheticMailUser.Deployment);
-        var anotherEmail = EmailAwaitingExtraction(2, SyntheticMailUser.Another);
+        var deploymentEmail = EmailAwaitingExtraction(1, Account);
+        var anotherEmail = EmailAwaitingExtraction(2, AnotherAccount);
         var store = new FakeBackfillStore([deploymentEmail, anotherEmail]);
         byte[] deploymentMime = [1, 1, 1];
         byte[] anotherMime = [2, 2, 2];
@@ -380,9 +382,9 @@ public sealed class StoredEmailExtractionBackfillTests
     {
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<MailAccountId>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
-                call.Arg<MailAccountIdentity>().Id,
+                call.Arg<MailAccountId>(),
                 Subject: "Subject",
                 SentAt: null,
                 ReceivedAt: null,
@@ -400,14 +402,14 @@ public sealed class StoredEmailExtractionBackfillTests
     [
         .. Enumerable
             .Range(1, count)
-            .Select(position => EmailAwaitingExtraction(position, SyntheticMailUser.Deployment)),
+            .Select(position => EmailAwaitingExtraction(position, Account)),
     ];
 
-    /// <summary>Builds one email awaiting extraction, at a stated position in the walk and belonging to a stated user.</summary>
-    private static StoredEmailAwaitingExtraction EmailAwaitingExtraction(int position, MailUserId user) =>
+    /// <summary>Builds one email awaiting extraction, at a stated position in the walk and belonging to a stated mailbox.</summary>
+    private static StoredEmailAwaitingExtraction EmailAwaitingExtraction(int position, MailAccountId account) =>
         new(
             StoredEmailId.Create(Guid.Parse($"00000000-0000-0000-0000-{position:D12}")),
-            MailAccountIdentity.Create(user, MailAccountId.Create("primary")));
+            account);
 
     /// <summary>Stands in for the persisted walk state, keyed the way the real store's ordering is.</summary>
     private sealed class FakeBackfillStore(IReadOnlyList<StoredEmailAwaitingExtraction> awaitingExtraction)

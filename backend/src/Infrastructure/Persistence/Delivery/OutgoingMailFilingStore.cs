@@ -69,11 +69,8 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
             OutgoingEmailId = outgoingEmailId.Value,
             OutgoingEmail = record,
             Filing = filing.Name,
+            // Copied off the record this copy is filed for, so the filing names the same mailbox the message does.
             MailboxAccountId = record.MailboxAccountId,
-
-            // Both halves copied off the record this copy is filed for, which is the row the caller's own resolution
-            // wrote. A filing cannot belong to a user the message it files does not.
-            UserId = record.UserId,
             FolderAlias = destination.Alias.Value,
             FolderPath = destination.RemotePath.Value,
             Stage = OutgoingMailFilingStage.Issued,
@@ -142,7 +139,7 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
     /// collections, which a synchronization run fills from one batch of discoveries.
     /// </remarks>
     public async Task<IReadOnlyList<OutgoingMailFilingRecord>> ReadFilingsAtAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         RemoteFolderPath folderPath,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -157,8 +154,7 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
             return [];
         }
 
-        var userValue = account.User.Value;
-        var accountValue = account.Id.Value;
+        var accountValue = account.Value;
         var folderValue = folderPath.Value;
         var uidValidityValue = uidValidity.Value;
 
@@ -169,8 +165,7 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
 
         var entities = await readContext.OutgoingEmailFilings
             .AsNoTracking()
-            .Where(candidate => candidate.UserId == userValue
-                && candidate.MailboxAccountId == accountValue
+            .Where(candidate => candidate.MailboxAccountId == accountValue
                 && candidate.FolderPath == folderValue
                 && candidate.Stage == OutgoingMailFilingStage.Confirmed
                 && ((candidate.PlacementUidValidity == uidValidityValue
@@ -201,21 +196,19 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
     /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<OutgoingEmailId>> ReadDuplicatedSentCopiesAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         DateTimeOffset appendedSince,
         int limit,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var userValue = account.User.Value;
-        var accountValue = account.Id.Value;
+        var accountValue = account.Value;
         var sentFiling = OutgoingMailFiling.Sent.Name;
 
         var duplicated = await readContext.OutgoingEmailFilings
             .AsNoTracking()
-            .Where(filing => filing.UserId == userValue
-                && filing.MailboxAccountId == accountValue
+            .Where(filing => filing.MailboxAccountId == accountValue
                 && filing.Filing == sentFiling
                 && filing.Stage == OutgoingMailFilingStage.Confirmed
                 && filing.AppendedAt >= appendedSince
@@ -224,8 +217,7 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
                 && filing.InternetMessageId != null
                 && readContext.StoredEmails
                     .Where(StoredEmailTombstone.IsNotTombstoned)
-                    .Any(stored => stored.UserId == userValue
-                        && stored.MailboxAccountId == accountValue
+                    .Any(stored => stored.MailboxAccountId == accountValue
                         && stored.MailFolder.RemotePath == filing.FolderPath
                         && stored.UidValidity == filing.PlacementUidValidity
                         && stored.Uid != filing.PlacementUid

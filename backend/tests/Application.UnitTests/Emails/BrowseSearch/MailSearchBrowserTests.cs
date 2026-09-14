@@ -601,7 +601,7 @@ public sealed class MailSearchBrowserTests
 
     /// <summary>A search of the local copy never reaches an account its user does not own.</summary>
     [Fact]
-    public async Task SearchPageAsync_AnAccountThisUserDoesNotOwn_IsRefused()
+    public async Task SearchPageAsync_AnAccountThisUserIsNotAssigned_IsRefused()
     {
         // Arrange
         var browser = BrowserOver(IndexOver(RankedCorpus(1)));
@@ -713,7 +713,7 @@ public sealed class MailSearchBrowserTests
     private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns(
+        catalog.AssignedAccounts.Returns(
         [
             .. servedAccountIds
                 .OrderBy(accountId => accountId.Value, StringComparer.Ordinal)

@@ -145,14 +145,14 @@ public sealed class MailRuleEvaluationPass
     /// edit reaches the next pass rather than this one, so what a rule means cannot change halfway through a mailbox.
     /// </remarks>
     public async Task<MailRuleEvaluationReport> RunAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         var ruleSet = this.ruleSetSource.Current;
 
         var arrivals = await this.WalkArrivalsAsync(
             account,
-            BoundRuleSet.For(ruleSet, account.Id, MailRuleExecutionTrigger.Arrival),
+            BoundRuleSet.For(ruleSet, account, MailRuleExecutionTrigger.Arrival),
             cancellationToken);
 
         var outstandingRun = await this.WalkOutstandingRunAsync(account, ruleSet, cancellationToken);
@@ -167,7 +167,7 @@ public sealed class MailRuleEvaluationPass
     /// has to be stepped over within the walk so a message waiting for extraction cannot hold up the mail behind it.
     /// </remarks>
     private async Task<MailRuleEvaluationWalk> WalkArrivalsAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         BoundRuleSet boundRuleSet,
         CancellationToken cancellationToken)
     {
@@ -250,7 +250,7 @@ public sealed class MailRuleEvaluationPass
     /// </para>
     /// </remarks>
     private async Task<RequestedRunOutcome> WalkOutstandingRunAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailRuleSet ruleSet,
         CancellationToken cancellationToken)
     {
@@ -261,7 +261,7 @@ public sealed class MailRuleEvaluationPass
             return new RequestedRunOutcome(Walk: null, Ending: null);
         }
 
-        var boundRuleSet = BoundRuleSet.For(ruleSet, account.Id, run.Trigger);
+        var boundRuleSet = BoundRuleSet.For(ruleSet, account, run.Trigger);
 
         if (run.Revision.IsSpecified && run.Revision != boundRuleSet.RuleSet.Revision)
         {
@@ -376,7 +376,7 @@ public sealed class MailRuleEvaluationPass
     /// </remarks>
     private async Task RecordDecisionsAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailRuleSetRevision revision,
         MailRuleEvaluationBatch outcome,
         MailRuleExecutionTrigger trigger,
@@ -397,7 +397,6 @@ public sealed class MailRuleEvaluationPass
                 : await this.actionRecorder.RecordAsync(
                     session,
                     evaluated.Candidate.StoredEmailId,
-                    account.User,
                     evaluated.Candidate.Occurrence,
                     plan,
                     revision,
@@ -426,7 +425,7 @@ public sealed class MailRuleEvaluationPass
     /// one answer per destination rather than one per batch.
     /// </remarks>
     private async Task<MailboxDestinations> ResolveDestinationsAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailRuleEvaluationBatch outcome,
         CancellationToken cancellationToken)
     {

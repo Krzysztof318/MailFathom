@@ -21,13 +21,14 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// rather than over the whole table.
 /// </para>
 /// <para>
-/// The user is a plain column with no foreign key onto the user record, for a reason narrower than the spend ledger's:
-/// a claim outlives nothing at all, so a cascade would have nothing to erase that the expiry does not. What the column
-/// carries is which per-user ceiling the reservation counts against while it binds.
+/// The account is a plain column with no foreign key onto the mailbox, for a reason narrower than the spend
+/// ledger's: a claim outlives nothing at all, so a cascade would have nothing to erase that the expiry does not. What
+/// the column carries is which mailbox the reservation counts against while it binds, and through the assignments,
+/// whose per-user ceilings it is charged to.
 /// </para>
 /// <para>
-/// Nothing here is mail or derived from it. A byte count, two instants, and a generated identity say how much room is
-/// reserved and until when; nothing names a message, a folder, or an account.
+/// Nothing here is mail or derived from it. A byte count, an instant, an account identifier, and a generated
+/// identity say how much room is reserved for which mailbox and until when; nothing names a message or a folder.
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
@@ -39,8 +40,8 @@ internal sealed class StoredContentClaimEntity
     /// <summary>The key column, named here for the same reason the table is.</summary>
     internal const string IdColumnName = "Id";
 
-    /// <summary>The column naming whose per-user ceiling the reservation counts against.</summary>
-    internal const string UserIdColumnName = "UserId";
+    /// <summary>The column naming which mailbox the reservation counts against.</summary>
+    internal const string MailboxAccountIdColumnName = "MailboxAccountId";
 
     /// <summary>The reserved column, named here for the same reason the table is.</summary>
     internal const string ClaimedByteCountColumnName = "ClaimedByteCount";
@@ -51,8 +52,8 @@ internal sealed class StoredContentClaimEntity
     /// <summary>Gets or sets the claim's identity, which is what a holder releases it by.</summary>
     public Guid Id { get; set; }
 
-    /// <summary>Gets or sets the user whose mail the reserved payload is.</summary>
-    public Guid UserId { get; set; }
+    /// <summary>Gets or sets the account whose mail the reserved payload is.</summary>
+    public required string MailboxAccountId { get; set; }
 
     /// <summary>Gets or sets how much room this claim reserves.</summary>
     /// <remarks>

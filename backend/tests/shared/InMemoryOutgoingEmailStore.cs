@@ -235,7 +235,7 @@ internal sealed class InMemoryOutgoingEmailStore(
     }
 
     public Task<IReadOnlyList<OutgoingEmailRecord>> ReadOutstandingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         int limit,
         CancellationToken cancellationToken)
     {
@@ -245,7 +245,7 @@ internal sealed class InMemoryOutgoingEmailStore(
         [
             .. this.rows.Values
                 .Select(row => row.Record)
-                .Where(record => record.Account == account && !record.IsTerminal)
+                .Where(record => record.AccountId == account && !record.IsTerminal)
                 .OrderBy(record => record.RecordedAt)
                 .ThenBy(record => record.Id.Value)
                 .Take(limit),
@@ -255,7 +255,7 @@ internal sealed class InMemoryOutgoingEmailStore(
     }
 
     public Task<IReadOnlyList<OutboxStageCount>> CountOutstandingByStageAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
         if (this.RefusesOutstandingCount)
@@ -265,7 +265,7 @@ internal sealed class InMemoryOutgoingEmailStore(
 
         var standing = this.rows.Values
             .Select(row => row.Record)
-            .Where(record => record.Account == account && !record.IsTerminal)
+            .Where(record => record.AccountId == account && !record.IsTerminal)
             .GroupBy(record => record.Stage)
             .ToDictionary(group => group.Key, group => group.Count());
 
@@ -290,7 +290,7 @@ internal sealed class InMemoryOutgoingEmailStore(
         var claimedAt = this.clock.GetUtcNow();
         var expiresAt = claimedAt + request.LeaseDuration;
         var due = this.rows.Values
-            .Where(row => row.Record.Account == request.Account
+            .Where(row => row.Record.AccountId == request.Account
                 && row.Record.Stage == OutgoingEmailStage.Recorded
                 && row.Record.AvailableAt <= claimedAt
                 && (row.LeaseExpiresAt is null || row.LeaseExpiresAt <= claimedAt))
@@ -312,11 +312,11 @@ internal sealed class InMemoryOutgoingEmailStore(
         return Task.FromResult<IReadOnlyList<ClaimedOutgoingEmail>>(claimed);
     }
 
-    public Task<int> MarkUnknownOutcomesAsync(MailAccountIdentity account, CancellationToken cancellationToken)
+    public Task<int> MarkUnknownOutcomesAsync(MailAccountId account, CancellationToken cancellationToken)
     {
         var markedAt = this.clock.GetUtcNow();
         var stranded = this.rows.Values
-            .Where(row => row.Record.Account == account
+            .Where(row => row.Record.AccountId == account
                 && row.Record.Stage == OutgoingEmailStage.TransmissionBegun
                 && row.Record.LastFailure != MailFathomErrorCode.OutgoingEmailOutcomeUnknown
                 && (row.LeaseExpiresAt is null || row.LeaseExpiresAt <= markedAt))
@@ -506,7 +506,7 @@ internal sealed class InMemoryOutgoingEmailStore(
 
     private static (string Account, OutgoingEmailOrigin Origin, string Identity) IdentityOf(
         OutgoingEmailRequest request) =>
-        (request.Account.Id.Value, request.Requester.Origin, request.Requester.Identity);
+        (request.Account.Value, request.Requester.Origin, request.Requester.Identity);
 
     private StoredRow RequireLeased(OutgoingEmailLease lease, OutgoingEmailId outgoingEmailId)
     {
@@ -553,7 +553,8 @@ internal sealed class InMemoryOutgoingEmailStore(
         long mimeByteLength) => new()
         {
             Id = OutgoingEmailId.Create(Guid.CreateVersion7()),
-            Account = request.Account,
+            AccountId = request.Account,
+            User = request.Author,
             Requester = request.Requester,
             Principal = principal,
             Recipients = [.. request.Recipients.Select(OutgoingRecipientOutcome.Unanswered)],

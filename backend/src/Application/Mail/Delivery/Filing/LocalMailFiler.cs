@@ -99,7 +99,7 @@ public sealed class LocalMailFiler
     /// <param name="account">The account.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns><see langword="true" /> when the account is held.</returns>
-    public async Task<bool> HoldsAsync(MailAccountIdentity account, CancellationToken cancellationToken) =>
+    public async Task<bool> HoldsAsync(MailAccountId account, CancellationToken cancellationToken) =>
         await this.folders.ReadAsync(account, cancellationToken) is { Phase: MailAccountCustodyPhase.Held };
 
     /// <summary>Reads and places a message for filing, before the transaction that files it.</summary>
@@ -109,12 +109,12 @@ public sealed class LocalMailFiler
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The prepared copy, or <see langword="null" /> where no bound source folder of the account plays the role.</returns>
     public async Task<LocalMailCopy?> PrepareAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         OutgoingMailFiling filing,
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken)
     {
-        if (this.folderMappings.FindFolderPlayingRole(account.Id, filing.Role) is not { } mapping
+        if (this.folderMappings.FindFolderPlayingRole(account, filing.Role) is not { } mapping
             || await this.folderResolutions.GetCurrentResolutionAsync(account, mapping.Alias, cancellationToken)
                 is not { } binding)
         {
@@ -137,7 +137,7 @@ public sealed class LocalMailFiler
         ArgumentNullException.ThrowIfNull(draft);
 
         return await this.contents.FindMailDraftContentAsync(draft.Id, cancellationToken) is { } content
-            ? await this.PrepareAsync(draft.Account, OutgoingMailFiling.Draft, content.RawMime, cancellationToken)
+            ? await this.PrepareAsync(draft.AccountId, OutgoingMailFiling.Draft, content.RawMime, cancellationToken)
             : null;
     }
 
@@ -166,13 +166,13 @@ public sealed class LocalMailFiler
 
         try
         {
-            if (!await this.HoldsAsync(record.Account, cancellationToken)
+            if (!await this.HoldsAsync(record.AccountId, cancellationToken)
                 || await this.contents.FindOutgoingContentAsync(record.Id, cancellationToken) is not { } content)
             {
                 return null;
             }
 
-            if (await this.PrepareAsync(record.Account, OutgoingMailFiling.Sent, content.RawMime, cancellationToken)
+            if (await this.PrepareAsync(record.AccountId, OutgoingMailFiling.Sent, content.RawMime, cancellationToken)
                 is { } copy)
             {
                 return copy;
@@ -276,7 +276,7 @@ public sealed class LocalMailFiler
     /// <returns>The alias it was stored under, or <see langword="null" /> where it was already gone.</returns>
     public Task<MailFolderAlias?> EraseAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         StoredEmailId email,
         CancellationToken cancellationToken) =>
         this.folders.EraseEmailAsync(session, account, email, cancellationToken);
@@ -316,7 +316,7 @@ public sealed class LocalMailFiler
     /// <param name="account">The account.</param>
     /// <param name="folder">The alias the message was stored under.</param>
     /// <param name="email">The message.</param>
-    public void AnnounceErased(MailAccountIdentity account, MailFolderAlias folder, StoredEmailId email) =>
+    public void AnnounceErased(MailAccountId account, MailFolderAlias folder, StoredEmailId email) =>
         this.signals.Publish(ClientSignal.MailChanged(account, folder, [email]));
 
     private LocalMailFolderId MintId() => LocalMailFolderId.Create(Guid.CreateVersion7(this.timeProvider.GetUtcNow()));

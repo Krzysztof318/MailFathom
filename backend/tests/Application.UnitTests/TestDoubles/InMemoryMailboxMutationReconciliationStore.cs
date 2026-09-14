@@ -65,7 +65,7 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
 
     /// <inheritdoc />
     public Task<IReadOnlyList<MailboxMutationRecord>> ReadPlacementsAtAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         RemoteFolderPath destinationPath,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -76,7 +76,7 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
         IReadOnlyList<MailboxMutationRecord> placed =
         [
             .. this.recordsById.Values
-                .Where(record => record.Request.Occurrence.AccountId == account.Id
+                .Where(record => record.Request.Occurrence.AccountId == account
                     && (record.Request.Mutation == MailboxMutation.Relocate
                         || record.Request.Mutation == MailboxMutation.Copy)
                     && record.Stage == MailboxMutationStage.Completed
@@ -94,7 +94,7 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
 
     /// <inheritdoc />
     public Task<IReadOnlyList<MailboxMutationRecord>> ReadFlagChangesOnAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -109,7 +109,7 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
         IReadOnlyList<MailboxMutationRecord> writing =
         [
             .. this.recordsById.Values
-                .Where(record => record.Request.Occurrence.AccountId == account.Id
+                .Where(record => record.Request.Occurrence.AccountId == account
                     && record.Request.Occurrence.FolderResolutionId == folderResolutionId
                     && record.Request.Occurrence.UidValidity == uidValidity
                     && uids.Contains(record.Request.Occurrence.Uid)
@@ -130,7 +130,7 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
 
     /// <inheritdoc />
     public Task<IReadOnlyList<MailboxMutationRecord>> ReadMutationsRemovingAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -141,7 +141,7 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
         IReadOnlyList<MailboxMutationRecord> removing =
         [
             .. this.recordsById.Values
-                .Where(record => record.Request.Occurrence.AccountId == account.Id
+                .Where(record => record.Request.Occurrence.AccountId == account
                     && record.Request.Occurrence.FolderResolutionId == folderResolutionId
                     && record.Request.Occurrence.UidValidity == uidValidity
                     && uids.Contains(record.Request.Occurrence.Uid)

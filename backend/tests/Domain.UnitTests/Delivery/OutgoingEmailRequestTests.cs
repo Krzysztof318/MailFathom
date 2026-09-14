@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.TestSupport;
@@ -11,8 +12,10 @@ namespace MailFathom.Domain.UnitTests.Delivery;
 
 public sealed class OutgoingEmailRequestTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
+
+    private static readonly MailUserId Author = SyntheticMailUser.Deployment;
 
     private static readonly OutgoingEmailRequester Requester =
         OutgoingEmailRequester.Command("mfctl-4f2a");
@@ -29,7 +32,7 @@ public sealed class OutgoingEmailRequestTests
         };
 
         // Act
-        var request = OutgoingEmailRequest.Create(Account, Requester, recipients);
+        var request = OutgoingEmailRequest.Create(Account, Author, Requester, recipients);
 
         // Assert
         Assert.Equal(recipients, request.Recipients);
@@ -50,7 +53,7 @@ public sealed class OutgoingEmailRequestTests
 
         // Act
         var thrown = Assert.Throws<ArgumentException>(
-            () => OutgoingEmailRequest.Create(Account, Requester, recipients));
+            () => OutgoingEmailRequest.Create(Account, Author, Requester, recipients));
 
         // Assert
         Assert.Equal("recipients", thrown.ParamName);
@@ -62,7 +65,7 @@ public sealed class OutgoingEmailRequestTests
     {
         // Act
         var thrown = Assert.Throws<ArgumentException>(
-            () => OutgoingEmailRequest.Create(Account, Requester, []));
+            () => OutgoingEmailRequest.Create(Account, Author, Requester, []));
 
         // Assert
         Assert.Equal("recipients", thrown.ParamName);
@@ -77,7 +80,7 @@ public sealed class OutgoingEmailRequestTests
         {
             OutgoingDeliveryFixture.Recipient("anna@example.test", OutgoingRecipientRole.To),
         };
-        var request = OutgoingEmailRequest.Create(Account, Requester, recipients);
+        var request = OutgoingEmailRequest.Create(Account, Author, Requester, recipients);
 
         // Act
         recipients.Add(OutgoingDeliveryFixture.Recipient("bruno@example.test", OutgoingRecipientRole.Bcc));
@@ -100,7 +103,7 @@ public sealed class OutgoingEmailRequestTests
 
         // Act
         var thrown = Assert.Throws<ArgumentException>(
-            () => OutgoingEmailRequest.Create(Account, Requester, recipients));
+            () => OutgoingEmailRequest.Create(Account, Author, Requester, recipients));
 
         // Assert
         Assert.Equal("recipients", thrown.ParamName);

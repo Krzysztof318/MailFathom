@@ -18,7 +18,7 @@ namespace MailFathom.Host.Api;
 /// reconciled and whether the deployment can still reach it, and those are separable facts a screen must not blur.
 /// </para>
 /// <para>
-/// What it returns is the accounts the request's acting user owns. It composes no deployment-wide catalog: an account
+/// What it returns is the accounts the request's acting user is assigned. It composes no deployment-wide catalog: an account
 /// another user holds is absent exactly as an account this deployment does not serve is absent, with nothing in the
 /// response, its timing, or its failure modes separating the two. A user who owns none is answered with an empty
 /// collection, which is a state a client renders rather than an error, and is a different answer from the refusal a
@@ -65,7 +65,7 @@ internal static class ClientMailAccountsEndpoint
 
 /// <summary>What the client endpoint reports about the user's mail accounts.</summary>
 /// <param name="SynchronizationEnabled">Whether this deployment refreshes the local copy of these accounts at all.</param>
-/// <param name="Accounts">One entry per account the acting user owns, ordered by identifier, empty where they own none.</param>
+/// <param name="Accounts">One entry per account the acting user is assigned, ordered by identifier, empty where they are assigned none.</param>
 /// <remarks>
 /// The switch is reported beside the accounts because no per-account value carries it: a copy that last moved a week ago
 /// means one thing where the deployment is still trying and another where it has stopped, and a client that could not

@@ -17,8 +17,8 @@ namespace MailFathom.Application.UnitTests.Folders;
 
 public sealed class MailFolderResolverTests
 {
-    private static readonly MailAccountIdentity PrimaryAccount =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
+    private static readonly MailAccountId PrimaryAccount =
+        MailAccountId.Create("primary");
 
     private static readonly MailTransportSecurityPolicy RequiredTlsPolicy = MailTransportSecurityPolicy.Create(
         MailConnectionSecurity.TlsOnConnect,
@@ -165,7 +165,7 @@ public sealed class MailFolderResolverTests
         Assert.Equal(MailFolderResolutionOutcome.Resolved, inboxResult.Outcome);
         await context.ResolutionStore.DidNotReceive().SaveResolutionAsync(
             Arg.Any<IPersistenceSession>(),
-            Arg.Any<MailAccountIdentity>(),
+            Arg.Any<MailAccountId>(),
             Arg.Is<MailFolderResolution>(resolution => resolution!.Alias.Value == "ARCHIVE"),
             Arg.Any<CancellationToken>());
     }
@@ -410,7 +410,7 @@ public sealed class MailFolderResolverTests
         // Assert
         var signal = Assert.Single(context.SignalChannel.Published);
         Assert.Equal(ClientSignalKind.FoldersChanged, signal.Kind);
-        Assert.Equal(PrimaryAccount.Id, signal.Account);
+        Assert.Equal(PrimaryAccount, signal.Account);
         Assert.Null(signal.Folder);
     }
 
@@ -453,7 +453,7 @@ public sealed class MailFolderResolverTests
 
             this.ResolutionStore = Substitute.For<IMailFolderResolutionStore>();
             this.ResolutionStore
-                .GetCurrentResolutionAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<MailFolderAlias>(), Arg.Any<CancellationToken>())
+                .GetCurrentResolutionAsync(Arg.Any<MailAccountId>(), Arg.Any<MailFolderAlias>(), Arg.Any<CancellationToken>())
                 .Returns(call => Task.FromResult(
                     this.bindingsByAlias.GetValueOrDefault(call.Arg<MailFolderAlias>().Value)));
 
@@ -543,6 +543,6 @@ public sealed class MailFolderResolverTests
                     Arg.Any<MailTransportSecurityPolicy>(),
                     Arg.Any<CancellationToken>())
                 .Returns<Task<RemoteFolderPath>>(_ =>
-                    throw new RemoteFolderCreationRefusedException(PrimaryAccount.Id, alias));
+                    throw new RemoteFolderCreationRefusedException(PrimaryAccount, alias));
     }
 }

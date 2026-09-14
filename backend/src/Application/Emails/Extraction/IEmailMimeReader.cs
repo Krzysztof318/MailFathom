@@ -39,7 +39,7 @@ public interface IEmailMimeReader
     /// </para>
     /// </remarks>
     Task<EmailMimeExtractionResult> ReadMetadataAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken);
 }

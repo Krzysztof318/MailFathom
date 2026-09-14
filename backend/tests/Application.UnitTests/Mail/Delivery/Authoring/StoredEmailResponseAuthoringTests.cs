@@ -525,7 +525,7 @@ public sealed class StoredEmailResponseAuthoringTests
     /// it: the quotation a reply would carry is the message itself.
     /// </summary>
     [Fact]
-    public async Task AuthorAsync_EmailOfAnAccountTheCallersUserDoesNotOwn_IsRefusedAsNoSuchEmail()
+    public async Task AuthorAsync_EmailOfAnAccountTheCallersUserIsNotAssigned_IsRefusedAsNoSuchEmail()
     {
         // Arrange
         var authoring = AuthoringOver(
@@ -1074,7 +1074,7 @@ public sealed class StoredEmailResponseAuthoringTests
             attachmentContentReader ?? Substitute.For<IEmailAttachmentContentReader>(),
             repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
             new MailboxScopeResolver(
-                OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(answered.AccountId)),
+                AssignedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(answered.AccountId)),
                 folderParticipation ?? StubMailFolderParticipation.Mapping(
                     new MailFolderIdentity(answered.AccountId, answered.FolderAlias)),
                 StubJunkMailFolderCatalog.None,

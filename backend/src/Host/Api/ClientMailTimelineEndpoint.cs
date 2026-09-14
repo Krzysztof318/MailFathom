@@ -85,7 +85,7 @@ internal static class ClientMailTimelineEndpoint
     }
 
     /// <summary>Serves one page of the acting user's mail, or reports what was wrong with the request.</summary>
-    /// <param name="account">The account to draw from, by its identifier or its display name, or <see langword="null" /> for every account the user owns.</param>
+    /// <param name="account">The account to draw from, by its identifier or its display name, or <see langword="null" /> for every account the user is assigned.</param>
     /// <param name="folder">The folder to draw from, by its alias or as <c>role:Inbox</c>, or <see langword="null" /> for every folder.</param>
     /// <param name="includeJunk">Whether the junk folder takes part, which it does not unless the request asks.</param>
     /// <param name="unread">Whether to keep only unread mail, only read mail, or <see langword="null" /> for both.</param>
@@ -195,7 +195,7 @@ internal static class ClientMailTimelineEndpoint
         }
         catch (MailAccountNotAccessibleException)
         {
-            return Refuse("The account is not one this user owns.");
+            return Refuse("The account is not one this user is assigned.");
         }
         catch (MailboxQueryFilterInvalidException refusal)
         {
@@ -269,7 +269,7 @@ internal static class ClientMailTimelineEndpoint
     /// <summary>Reads the two names a request narrows the list with, refusing text no name of this system is spelled with.</summary>
     /// <remarks>
     /// One account and one folder rather than lists of them, because this route draws a folder somebody is looking at.
-    /// A request that names neither draws every folder of every account the user owns, which is the unified view.
+    /// A request that names neither draws every folder of every account the user is assigned, which is the unified view.
     /// </remarks>
     private static bool TryReadScope(
         string? account,

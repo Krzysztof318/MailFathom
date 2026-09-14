@@ -36,15 +36,14 @@ internal sealed class MailboxRefreshTokenStore(
 {
     /// <inheritdoc />
     public async Task<MailboxRefreshToken?> FindTokenAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
-        var storedUserId = account.User.Value;
-        var storedAccountId = account.Id.Value;
+        var storedAccountId = account.Value;
 
         var stored = await dbContext.MailboxRefreshTokens
             .AsNoTracking()
-            .Where(token => token.UserId == storedUserId && token.MailboxAccountId == storedAccountId)
+            .Where(token => token.MailboxAccountId == storedAccountId)
             .Select(token => new { token.SealedRefreshToken, token.DataEncryptionKeyId })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -73,7 +72,7 @@ internal sealed class MailboxRefreshTokenStore(
 
     /// <inheritdoc />
     public async Task SaveTokenAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailboxRefreshToken refreshToken,
         CancellationToken cancellationToken)
     {
@@ -93,8 +92,7 @@ internal sealed class MailboxRefreshTokenStore(
             CryptographicOperations.ZeroMemory(plaintext);
         }
 
-        var storedUserId = account.User.Value;
-        var storedAccountId = account.Id.Value;
+        var storedAccountId = account.Value;
         var ciphertext = sealedToken.Ciphertext.ToArray();
         var keyId = sealedToken.KeyId;
         var updatedAt = timeProvider.GetUtcNow();
@@ -104,9 +102,9 @@ internal sealed class MailboxRefreshTokenStore(
         await dbContext.Database.ExecuteSqlAsync(
             $"""
              INSERT INTO mailbox_refresh_tokens
-                 ("UserId", "MailboxAccountId", "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt")
-             VALUES ({storedUserId}, {storedAccountId}, {ciphertext}, {keyId}, {updatedAt})
-             ON CONFLICT ("UserId", "MailboxAccountId") DO UPDATE SET
+                 ("MailboxAccountId", "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt")
+             VALUES ({storedAccountId}, {ciphertext}, {keyId}, {updatedAt})
+             ON CONFLICT ("MailboxAccountId") DO UPDATE SET
                  "SealedRefreshToken" = EXCLUDED."SealedRefreshToken",
                  "DataEncryptionKeyId" = EXCLUDED."DataEncryptionKeyId",
                  "UpdatedAt" = EXCLUDED."UpdatedAt"
@@ -115,16 +113,13 @@ internal sealed class MailboxRefreshTokenStore(
             cancellationToken);
     }
 
-    /// <summary>Composes what a token is bound to, which is the whole of the account rather than the name it goes by.</summary>
+    /// <summary>Composes what a token is bound to, which is the account's generated identifier and nothing beside it.</summary>
     /// <remarks>
-    /// The user leads the subject because the identifier after it names one mailbox within that user and a different
-    /// one within the next: bound to the identifier alone, two people's <c>work</c> accounts would share a binding and
-    /// one's sealed token would open as the other's credential, which is the one thing the binding exists to refuse.
-    /// The user is a GUID in its fixed 36-character form, so the separator cannot be read as part of either half and
-    /// no two identities compose one subject.
+    /// The identifier names one mailbox across the whole deployment, so it is the whole subject: there is no second
+    /// mailbox it could collide with, and a user beside it would make one mailbox's sealed token fail to open for the
+    /// next person assigned the same mailbox. What the binding refuses is a token resealed under another account's
+    /// name, which the identifier alone is enough to refuse.
     /// </remarks>
-    private static DataEncryptionBinding BindingFor(MailAccountIdentity account) =>
-        DataEncryptionBinding.Create(
-            DataEncryptionPurpose.MailboxRefreshToken,
-            $"{account.User.Value:D}/{account.Id.Value}");
+    private static DataEncryptionBinding BindingFor(MailAccountId account) =>
+        DataEncryptionBinding.Create(DataEncryptionPurpose.MailboxRefreshToken, account.Value);
 }

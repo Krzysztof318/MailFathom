@@ -21,8 +21,8 @@ public sealed class MailboxEmailSelectionTests
 {
     private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-1"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("acct-1");
 
     [Fact]
     public void Create_AddressFilters_KeepTheComparisonFormPersistenceIndexes()
@@ -362,8 +362,7 @@ public sealed class MailboxEmailSelectionTests
     {
         // Arrange
         var scope = MailboxScope.Create(
-            SyntheticMailUser.Deployment,
-            [Account.Id],
+            [Account],
             []);
         var thread = EmailThreadId.Create(new Guid("55555555-5555-5555-5555-555555555555"));
         var email = StoredEmailId.Create(new Guid("66666666-6666-6666-6666-666666666666"));
@@ -399,11 +398,10 @@ public sealed class MailboxEmailSelectionTests
     private static MailboxScopeResolver ResolverWithJunkFolder(IJunkMailFolderCatalog? junkFolders = null)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns(
+        catalog.AssignedAccounts.Returns(
         [
             new ServedMailAccount(
-                Account.User,
-                Account.Id,
+                Account,
                 MailAccountDisplayName.Create("Work mail"),
                 MailSynchronizationMode.Polling),
         ]);
@@ -412,7 +410,7 @@ public sealed class MailboxEmailSelectionTests
             catalog,
             StubMailFolderParticipation.Nothing,
             junkFolders ?? StubJunkMailFolderCatalog.Naming(
-                new MailFolderIdentity(Account.Id, MailFolderAlias.Create("JUNK"))),
+                new MailFolderIdentity(Account, MailFolderAlias.Create("JUNK"))),
             StubMailFolderMappings.ResolvingNothing);
     }
 

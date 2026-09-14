@@ -20,9 +20,10 @@ internal sealed class MailRederivationRunConfiguration : IEntityTypeConfiguratio
     public void Configure(EntityTypeBuilder<MailRederivationRunEntity> entity)
     {
         entity.ToTable("mail_rederivation_runs");
-        // The user leads the key, because the account identifier after it names one mailbox within that user and a
-        // different one within the next: two users re-deriving the same folder of their own `work` are two runs.
-        entity.HasKey(run => new { run.UserId, run.MailboxAccountId, run.FolderAlias })
+        // The account leads the key and no user stands ahead of it: the identifier names one mailbox across the
+        // deployment, so re-deriving a folder is one run over the one stored copy rather than a run per assigned
+        // user.
+        entity.HasKey(run => new { run.MailboxAccountId, run.FolderAlias })
             .HasName(PersistenceConstraintNames.MailRederivationRunPrimaryKeyConstraintName);
         entity.Property(run => run.MailboxAccountId).HasMaxLength(128);
         entity.Property(run => run.FolderAlias).HasMaxLength(128);

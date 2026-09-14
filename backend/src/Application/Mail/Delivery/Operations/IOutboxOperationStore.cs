@@ -31,7 +31,7 @@ public interface IOutboxOperationStore
     /// <returns>One count per stage anything stands at; a stage nothing stands at may be absent.</returns>
     /// <remarks>The caller fills in the stages this answer omits, so a store need not enumerate what it counted nothing at.</remarks>
     Task<IReadOnlyList<OutboxStageCount>> CountByStageAsync(
-        MailAccountIdentity? account,
+        MailAccountId? account,
         CancellationToken cancellationToken);
 
     /// <summary>Serves one bounded page of the sends this deployment has recorded.</summary>

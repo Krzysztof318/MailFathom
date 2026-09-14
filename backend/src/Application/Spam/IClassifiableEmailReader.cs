@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -24,21 +23,24 @@ namespace MailFathom.Application.Spam;
 /// </remarks>
 public interface IClassifiableEmailReader
 {
-    /// <summary>Finds one stored email of one user.</summary>
-    /// <param name="user">The user the classification runs for, whose mail alone the read may answer with.</param>
+    /// <summary>Finds one stored email of one account.</summary>
+    /// <param name="account">The account the classification runs for, whose mail alone the read may answer with.</param>
     /// <param name="emailId">The stable local identifier.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
-    /// <returns>The email, or <see langword="null" /> when that user holds nothing under that identifier.</returns>
+    /// <returns>The email, or <see langword="null" /> when that account holds nothing under that identifier.</returns>
     /// <remarks>
     /// An absent email is an ordinary answer: mail can be erased between the moment classification was asked for and the
-    /// moment it runs, and that is the message leaving rather than a failure to report. An email another user holds is
-    /// answered the same way, because the user decides whose settings, scope, and switches the verdict is reached and
-    /// acted under, and a classification must never apply one person's to another person's mail.
+    /// moment it runs, and that is the message leaving rather than a failure to report. An email another account holds
+    /// is answered the same way, because the account decides which settings, scope, and switches the verdict is reached
+    /// and acted under, and a classification must never apply one mailbox's to another mailbox's mail.
     /// </remarks>
-    Task<ClassifiableEmail?> FindAsync(MailUserId user, StoredEmailId emailId, CancellationToken cancellationToken);
+    Task<ClassifiableEmail?> FindAsync(
+        MailAccountId account,
+        StoredEmailId emailId,
+        CancellationToken cancellationToken);
 
     /// <summary>Resolves the stable remote occurrence identity into the local email it was stored as.</summary>
-    /// <param name="user">The user whose account the occurrence belongs to, which the read narrows on ahead of the account.</param>
+    /// <param name="account">The account the occurrence belongs to, which is the whole of what the read narrows on.</param>
     /// <param name="occurrenceId">The account, folder binding, UIDVALIDITY, and UID the message was discovered under.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The local identity, or <see langword="null" /> when nothing is stored at that occurrence.</returns>
@@ -49,7 +51,7 @@ public interface IClassifiableEmailReader
     /// enqueued and the moment it ran.
     /// </remarks>
     Task<StoredEmailId?> FindStoredEmailIdAsync(
-        MailUserId user,
+        MailAccountId account,
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken);
 
@@ -69,7 +71,7 @@ public interface IClassifiableEmailReader
     /// answer is empty, which is what a scope narrowed to nothing means rather than a scope of everything.
     /// </remarks>
     Task<IReadOnlyList<ClassifiableEmail>> GetStoredEmailsAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         IReadOnlyList<MailFolderAlias> folderAliases,
         StoredEmailId? resumeAfter,
         int batchSize,

@@ -166,7 +166,7 @@ internal sealed class InMemoryOutgoingMailFilingStore(InMemoryOutgoingEmailStore
     }
 
     public Task<IReadOnlyList<OutgoingMailFilingRecord>> ReadFilingsAtAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         RemoteFolderPath folderPath,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -179,7 +179,7 @@ internal sealed class InMemoryOutgoingMailFilingStore(InMemoryOutgoingEmailStore
         IReadOnlyList<OutgoingMailFilingRecord> found =
         [
             .. this.rows.Values
-                .Where(row => this.AccountOf(row) == account.Id
+                .Where(row => this.AccountOf(row) == account
                     && row.Stage == OutgoingMailFilingStage.Confirmed
                     && (uids.Any(uid => row.AccountsForPlacementAt(folderPath, uidValidity, uid))
                         || internetMessageIds.Any(messageId => row.AccountsForMessageAt(folderPath, messageId))))
@@ -190,7 +190,7 @@ internal sealed class InMemoryOutgoingMailFilingStore(InMemoryOutgoingEmailStore
     }
 
     public Task<IReadOnlyList<OutgoingEmailId>> ReadDuplicatedSentCopiesAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         DateTimeOffset appendedSince,
         int limit,
         CancellationToken cancellationToken)
@@ -200,7 +200,7 @@ internal sealed class InMemoryOutgoingMailFilingStore(InMemoryOutgoingEmailStore
         IReadOnlyList<OutgoingEmailId> duplicated =
         [
             .. this.rows.Values
-                .Where(row => this.AccountOf(row) == account.Id
+                .Where(row => this.AccountOf(row) == account
                     && row.Filing == OutgoingMailFiling.Sent
                     && row.Stage == OutgoingMailFilingStage.Confirmed
                     && row.AppendedAt >= appendedSince

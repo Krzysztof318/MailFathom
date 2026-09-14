@@ -297,7 +297,7 @@ public sealed class OrchestratedAuthoredDeleteTests(MailFathomOrchestrationFixtu
             stored.UidValidity,
             stored.Uid);
         var request = MailboxMutationRequest.Delete(
-            stored.StoredEmailId, SyntheticMailAccount.User,
+            stored.StoredEmailId,
             occurrence,
             Requester,
             localDisposition);

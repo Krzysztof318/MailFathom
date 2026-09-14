@@ -16,7 +16,6 @@ using MailFathom.Domain.Spam;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
-using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -42,8 +41,8 @@ public sealed class SpamClassificationEndpointsTests
     private static readonly MailAccountId Account = MailAccountId.Create("work");
 
     /// <summary>The account a stored run names, which is the user and the identifier together.</summary>
-    private static readonly MailAccountIdentity AccountIdentity =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, Account);
+    private static readonly MailAccountId AccountIdentity =
+        Account;
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -425,7 +424,6 @@ public sealed class SpamClassificationEndpointsTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
-                SyntheticMailUser.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),
@@ -434,7 +432,8 @@ public sealed class SpamClassificationEndpointsTests
         return catalog;
     }
 
-    private static ISpamClassificationSettingsReader SettingsReader(SpamClassificationSettings settings)
+    /// <summary>Answers one classification posture for whichever mailbox is asked about.</summary>
+    private static ISpamClassificationSettingsReader SettingsReading(SpamClassificationSettings settings)
     {
         var reader = Substitute.For<ISpamClassificationSettingsReader>();
         reader.SettingsFor(Arg.Any<MailAccountId>()).Returns(settings);
@@ -457,7 +456,7 @@ public sealed class SpamClassificationEndpointsTests
         return SpamClassificationEndpoints.StartRunAsync(
             request,
             CatalogServing(Account),
-            SettingsReader(settings ?? SpamClassificationSettings.Create(
+            SettingsReading(settings ?? SpamClassificationSettings.Create(
                 isEnabled: true,
                 usesScanner: false,
                 [Inbox])),

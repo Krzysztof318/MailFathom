@@ -82,7 +82,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
 
         var recordId = await CompletedRelocationAsync(
             services,
-            MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, DestinationPath),
+            MailboxMutationRequest.Relocate(storedEmailId, occurrence, Requester, DestinationPath),
             cancellationToken);
 
         // Act
@@ -154,18 +154,18 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
 
         var seenRecordId = await CompletedSeenStoreAsync(
             services,
-            MailboxMutationRequest.SetSeen(seenEmailId, SyntheticMailAccount.User, seenOccurrence, Requester, isSeen: true),
+            MailboxMutationRequest.SetSeen(seenEmailId, seenOccurrence, Requester, isSeen: true),
             cancellationToken);
         await OpenAsync(
             services,
-            MailboxMutationRequest.Relocate(relocatedEmailId, SyntheticMailAccount.User, relocatedOccurrence, Requester, DestinationPath),
+            MailboxMutationRequest.Relocate(relocatedEmailId, relocatedOccurrence, Requester, DestinationPath),
             cancellationToken);
 
         // Opened and left where the tool leaves it, which is the state every change is in until the account's next run
         // issues it. It is written down last, so it also carries the newest stage change of the three.
         await OpenAsync(
             services,
-            MailboxMutationRequest.SetSeen(writtenDownEmailId, SyntheticMailAccount.User, writtenDownOccurrence, Requester, isSeen: true),
+            MailboxMutationRequest.SetSeen(writtenDownEmailId, writtenDownOccurrence, Requester, isSeen: true),
             cancellationToken);
 
         // Act
@@ -223,7 +223,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
         // newest-first truncation across the whole answer drops.
         var quietRecordId = await CompletedSeenStoreAsync(
             services,
-            MailboxMutationRequest.SetSeen(quietEmailId, SyntheticMailAccount.User, quietOccurrence, Requester, isSeen: true),
+            MailboxMutationRequest.SetSeen(quietEmailId, quietOccurrence, Requester, isSeen: true),
             cancellationToken);
         var crowdedRecordIds = new List<MailboxMutationRecordId>();
 
@@ -232,7 +232,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
             crowdedRecordIds.Add(await CompletedSeenStoreAsync(
                 services,
                 MailboxMutationRequest.SetSeen(
-                    crowdedEmailId, SyntheticMailAccount.User,
+                    crowdedEmailId,
                     crowdedOccurrence,
                     MailboxMutationRequester.Command($"triage-{call}"),
                     isSeen: call % 2 == 0),

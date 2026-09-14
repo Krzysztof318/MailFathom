@@ -70,7 +70,7 @@ public sealed class MailFolderEditor
         }
 
         return holding.Phase is MailAccountCustodyPhase.Mirrored
-            ? await this.mirrored.ReadAsync(this.Identify(account), cancellationToken)
+            ? await this.mirrored.ReadAsync(account, cancellationToken)
             : DescribeHeld(holding);
     }
 
@@ -163,7 +163,7 @@ public sealed class MailFolderEditor
     private async Task<MailFolderActOutcome> ActAsync(
         MailAccountId account,
         Func<LocalMailFolderHolding, Task<MailFolderActOutcome>> held,
-        Func<MailAccountIdentity, Task<MailFolderActOutcome>> mirroredAct,
+        Func<MailAccountId, Task<MailFolderActOutcome>> mirroredAct,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailFoldersWrite);
@@ -173,7 +173,7 @@ public sealed class MailFolderEditor
         return holding switch
         {
             null => MailFolderActOutcome.Refused(MailFolderActRefusal.AccountMissing),
-            { Phase: MailAccountCustodyPhase.Mirrored } => await mirroredAct(this.Identify(account)),
+            { Phase: MailAccountCustodyPhase.Mirrored } => await mirroredAct(account),
             { Phase: MailAccountCustodyPhase.Held } => await held(holding),
             _ => MailFolderActOutcome.Refused(MailFolderActRefusal.AccountNotHeld),
         };
@@ -183,7 +183,7 @@ public sealed class MailFolderEditor
         MailAccountId account,
         string? folderId,
         Func<LocalMailFolderId, Task<LocalMailFolderEditOutcome>> held,
-        Func<MailAccountIdentity, MailFolderAlias, Task<MailFolderActOutcome>> mirroredAct,
+        Func<MailAccountId, MailFolderAlias, Task<MailFolderActOutcome>> mirroredAct,
         CancellationToken cancellationToken) =>
         this.ActAsync(
             account,
@@ -217,9 +217,6 @@ public sealed class MailFolderEditor
 
         return Describe(await this.local.CreateAsync(account, parent, name, cancellationToken), holding);
     }
-
-    private MailAccountIdentity Identify(MailAccountId account) =>
-        MailAccountIdentity.Create(this.authorization.RequireUser(), account);
 
     private static MailFolderManagement DescribeHeld(LocalMailFolderHolding holding)
     {

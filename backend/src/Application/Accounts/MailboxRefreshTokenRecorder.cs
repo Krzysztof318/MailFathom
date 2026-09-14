@@ -82,6 +82,6 @@ public sealed class MailboxRefreshTokenRecorder
             throw new MailAccountNotAccessibleException(accountId);
         }
 
-        await this.refreshTokenStore.SaveTokenAsync(account.Identity, refreshToken, cancellationToken);
+        await this.refreshTokenStore.SaveTokenAsync(account.Id, refreshToken, cancellationToken);
     }
 }

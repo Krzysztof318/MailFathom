@@ -26,8 +26,8 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Authoring;
 /// </remarks>
 public sealed class MailboxChangeWithdrawerTests
 {
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("personal");
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -257,7 +257,6 @@ public sealed class MailboxChangeWithdrawerTests
     private static MailboxMutationRequest DeleteRequestIn(MailFolderAlias folderAlias, uint uid) =>
         MailboxMutationRequest.Delete(
             StoredEmailId.Create(Guid.CreateVersion7()),
-            Account.User,
             OccurrenceIn(folderAlias, uid),
             Requester,
             AuthoredDeleteEmailDisposition.RetainTombstone);
@@ -265,7 +264,6 @@ public sealed class MailboxChangeWithdrawerTests
     private static MailboxMutationRequest FlagRequestIn(MailFolderAlias folderAlias, uint uid) =>
         MailboxMutationRequest.SetSeen(
             StoredEmailId.Create(Guid.CreateVersion7()),
-            Account.User,
             OccurrenceIn(folderAlias, uid),
             Requester,
             isSeen: true);
@@ -273,13 +271,12 @@ public sealed class MailboxChangeWithdrawerTests
     private static MailboxMutationRequest RelocateRequestIn(MailFolderAlias folderAlias, uint uid) =>
         MailboxMutationRequest.Relocate(
             StoredEmailId.Create(Guid.CreateVersion7()),
-            Account.User,
             OccurrenceIn(folderAlias, uid),
             Requester,
             RemoteFolderPath.Create("Archive"));
 
     private static EmailOccurrenceId OccurrenceIn(MailFolderAlias folderAlias, uint uid) => EmailOccurrenceId.Create(
-        Account.Id,
+        Account,
         MailFolderResolution.FirstBindingOf(folderAlias, RemoteFolderPath.Create(folderAlias.Value)).Id,
         ImapUidValidity.Create(42),
         ImapUid.Create(uid));
@@ -311,10 +308,10 @@ public sealed class MailboxChangeWithdrawerTests
         return new MailboxChangeWithdrawer(
             callerAuthorization,
             new MailboxScopeResolver(
-                OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account.Id)),
+                AssignedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account)),
                 StubMailFolderParticipation
-                    .Mapping(new MailFolderIdentity(Account.Id, Inbox))
-                    .Hiding(new MailFolderIdentity(Account.Id, Withheld)),
+                    .Mapping(new MailFolderIdentity(Account, Inbox))
+                    .Hiding(new MailFolderIdentity(Account, Withheld)),
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             this.records,

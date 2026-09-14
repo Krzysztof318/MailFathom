@@ -23,4 +23,4 @@ namespace MailFathom.Application.Emails.Extraction;
 /// </remarks>
 public sealed record StoredEmailAwaitingExtraction(
     StoredEmailId StoredEmailId,
-    MailAccountIdentity Account);
+    MailAccountId Account);

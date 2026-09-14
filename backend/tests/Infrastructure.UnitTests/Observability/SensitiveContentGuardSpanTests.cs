@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Common.Observability;
+using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.TestSupport;
 using Xunit;
@@ -19,6 +20,8 @@ namespace MailFathom.Infrastructure.UnitTests.Observability;
 /// </remarks>
 public sealed class SensitiveContentGuardSpanTests : IDisposable
 {
+    private static readonly MailAccountId GuardedMailbox = MailAccountId.Create("guarded-mailbox");
+
     private readonly ConcurrentBag<Activity> published = [];
 
     /// <summary>Stands in for whichever read is publishing above the guard, which is a span this class alone owns.</summary>
@@ -68,6 +71,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpEmailContent,
             SyntheticMailUser.Deployment,
+            account: null,
             TestContext.Current.CancellationToken))
         {
             operation.TextGuarded();
@@ -100,6 +104,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpEmailContent,
             SyntheticMailUser.Another,
+            account: null,
             TestContext.Current.CancellationToken))
         {
             operation.TextGuarded();
@@ -112,9 +117,34 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         Assert.Equal(SyntheticMailUser.Another.Value.ToString(), span.GetTagItem("mailfathom.user"));
     }
 
-    /// <summary>A deployment that scans nobody opens no operation, so an unset user is a flow that skipped resolving one.</summary>
+    /// <summary>A flow scoped to one mailbox names it instead of a user, because the posture it ran under is the mailbox's.</summary>
     [Fact]
-    public void BeginGuardedOperation_AnOperationNamingNoUser_PublishesNoUserAttribute()
+    public void BeginGuardedOperation_AnOperationPublishingOneMailboxesMail_PublishesWhichMailboxItWas()
+    {
+        // Arrange
+        var telemetry = new SensitiveContentEgressTelemetry();
+
+        // Act
+        using (var operation = telemetry.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpEmailContent,
+            user: null,
+            GuardedMailbox,
+            TestContext.Current.CancellationToken))
+        {
+            operation.TextGuarded();
+            operation.Completed();
+        }
+
+        // Assert
+        var span = Assert.Single(this.published);
+
+        Assert.Equal(GuardedMailbox.Value, span.GetTagItem("mailfathom.mail.account"));
+        Assert.Null(span.GetTagItem("mailfathom.user"));
+    }
+
+    /// <summary>A deployment that scans nobody opens no operation, so an unset scope is a flow that skipped resolving one.</summary>
+    [Fact]
+    public void BeginGuardedOperation_AnOperationNamingNeither_PublishesNeitherAttribute()
     {
         // Arrange
         var telemetry = new SensitiveContentEgressTelemetry();
@@ -123,6 +153,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpEmailContent,
             default,
+            account: null,
             TestContext.Current.CancellationToken))
         {
             operation.Completed();
@@ -132,6 +163,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         var span = Assert.Single(this.published);
 
         Assert.Null(span.GetTagItem("mailfathom.user"));
+        Assert.Null(span.GetTagItem("mailfathom.mail.account"));
     }
 
     /// <summary>A refusal is an ending rather than an error, because the scanner stopped the egress on purpose.</summary>
@@ -145,6 +177,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpSnippet,
             SyntheticMailUser.Deployment,
+            account: null,
             TestContext.Current.CancellationToken))
         {
             operation.Refused();
@@ -172,6 +205,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
             using var operation = telemetry.BeginGuardedOperation(
                 SensitiveContentEgressPoint.McpEmailContent,
                 SyntheticMailUser.Deployment,
+                account: null,
                 TestContext.Current.CancellationToken);
 
             operation.TextGuarded();
@@ -194,6 +228,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpSnippet,
             SyntheticMailUser.Deployment,
+            account: null,
             TestContext.Current.CancellationToken))
         {
             operation.TextGuarded();
@@ -219,6 +254,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         using (telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpEmailContent,
             SyntheticMailUser.Deployment,
+            account: null,
             shutdown.Token))
         {
             shutdown.Cancel();

@@ -17,4 +17,4 @@ namespace MailFathom.Application.Mail.Maintenance;
 /// every folder its configuration maps — the mail is what is acted on, and a mapping somebody withdrew left its rows
 /// where they were.
 /// </remarks>
-public sealed record StoredMailScope(MailAccountIdentity Account, MailFolderAlias? Folder);
+public sealed record StoredMailScope(MailAccountId Account, MailFolderAlias? Folder);

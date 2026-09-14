@@ -40,26 +40,26 @@ internal sealed class InMemoryMailFolderResolutionStore : IMailFolderResolutionS
 
     /// <inheritdoc />
     public Task<MailFolderResolution?> GetCurrentResolutionAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderAlias folderAlias,
         CancellationToken cancellationToken)
     {
         this.ResolutionReadCount++;
 
         return Task.FromResult(
-            this.bindings.TryGetValue((account.Id.Value, folderAlias), out var resolution) ? resolution : null);
+            this.bindings.TryGetValue((account.Value, folderAlias), out var resolution) ? resolution : null);
     }
 
     /// <inheritdoc />
     public Task<MailFolderAlias?> GetAliasBoundToAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         RemoteFolderPath remotePath,
         CancellationToken cancellationToken)
     {
         this.ResolutionReadCount++;
 
         var bound = this.bindings
-            .Where(binding => binding.Key.AccountId == account.Id.Value
+            .Where(binding => binding.Key.AccountId == account.Value
                 && binding.Value.RemotePath.NamesSameFolderAs(remotePath))
             .Select(binding => binding.Key.Alias)
             .OrderBy(alias => alias.Value, StringComparer.Ordinal)
@@ -71,13 +71,13 @@ internal sealed class InMemoryMailFolderResolutionStore : IMailFolderResolutionS
     /// <inheritdoc />
     public Task SaveResolutionAsync(
         IPersistenceSession session,
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderResolution resolution,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(resolution);
 
-        this.bindings[(account.Id.Value, resolution.Alias)] = resolution;
+        this.bindings[(account.Value, resolution.Alias)] = resolution;
 
         return Task.CompletedTask;
     }

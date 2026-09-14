@@ -656,7 +656,7 @@ public static class ServiceCollectionExtensions
         // What one user's stored content holds. Beside the inventory rather than part of it, because the inventory is
         // read-only over the mail graph while this keeps a figure of its own, moved by whichever adapter owns the
         // payloads.
-        services.AddScoped<IUserStoredContentLedger, UserStoredContentLedger>();
+        services.AddScoped<IAccountStoredContentLedger, AccountStoredContentLedger>();
         // The room every replica has reserved for a payload it is about to store. Beside the two above rather than part
         // of either, because what it holds is neither a reading of the mail graph nor a maintained figure: it is what
         // the other replicas are about to add to both, and the one thing a process cannot measure for itself.
@@ -874,11 +874,12 @@ public static class ServiceCollectionExtensions
                     provider.GetRequiredService<ISenderTrustPolicyReader>()),
                 provider.GetRequiredService<MachineAuthorshipProfile>());
 
-            // Wrapped whatever the postures say today, because they change while a scope is open: a user committing a
-            // record that switches a provided scanner on flips the guard's answer, and a synchronization or backfill
-            // scope that had decided at construction would go on writing that user's mail unredacted and unstamped for
-            // the rest of its run. The decorator asks per user per call and is inert — no detector, no permit, no
-            // stamp — for a user nothing scans, so a deployment scanning nobody pays a delegating call and nothing else.
+            // Wrapped whatever the postures say today, because they change while a scope is open: a record committed
+            // that switches a provided scanner on for an account flips the guard's answer, and a synchronization or
+            // backfill scope that had decided at construction would go on writing that account's mail unredacted and
+            // unstamped for the rest of its run. The decorator asks per account per call and is inert — no detector,
+            // no permit, no stamp — for an account nothing scans, so a deployment scanning nobody pays a delegating
+            // call and nothing else.
             return new RedactingEmailMimeReader(
                 reader,
                 provider.GetRequiredService<SensitiveContentDerivationGuard>());
@@ -944,7 +945,7 @@ public static class ServiceCollectionExtensions
         // deployment-wide half is registered by the composition root, because configuration is what declares the
         // accounts; this half is application reasoning over that answer, so it is composed here and the two are
         // separate registrations rather than one service resolved two ways.
-        services.AddScoped<ICallerMailAccountCatalog, OwnedMailAccountCatalog>();
+        services.AddScoped<ICallerMailAccountCatalog, AssignedMailAccountCatalog>();
         services.AddScoped<MailboxScopeResolver>();
     }
 

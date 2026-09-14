@@ -421,7 +421,7 @@ public sealed class MailAccountFreshnessReaderTests
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.SynchronizationEnabled.Returns(synchronizationEnabled);
-        catalog.OwnedAccounts.Returns([.. ownedAccounts]);
+        catalog.AssignedAccounts.Returns([.. ownedAccounts]);
 
         return catalog;
     }

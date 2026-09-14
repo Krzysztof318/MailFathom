@@ -75,7 +75,7 @@ internal static class OrchestratedFolderBinding
     /// </remarks>
     internal static async Task<MailFolderResolution> CommitAsync(
         OrchestratedMailFathomServices services,
-        MailAccountIdentity account,
+        MailAccountId account,
         string alias,
         string remotePath,
         CancellationToken cancellationToken)

@@ -24,9 +24,7 @@ public class MimeParsingBenchmarks
         new NoTrustedAuthentication(),
         localSenderVerifier: null);
 
-    private readonly MailAccountIdentity account = MailAccountIdentity.Create(
-        SyntheticMailUser.Deployment,
-        MailAccountId.Create("primary"));
+    private readonly MailAccountId account = MailAccountId.Create("primary");
 
     private RemoteEmailContent content = null!;
 

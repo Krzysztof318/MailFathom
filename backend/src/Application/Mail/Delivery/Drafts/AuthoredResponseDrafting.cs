@@ -100,6 +100,7 @@ public sealed class AuthoredResponseDrafting(
 
         return await drafts.SaveAsync(
             response.Account,
+            authorization.RequireUser(),
             request.Author,
             composed,
             request.Revises,

@@ -543,13 +543,17 @@ internal static class HostComposition
         builder.Services.AddScoped<IMailRuleActionPermissionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.RuleActionPermissions);
         builder.Services.AddScoped<IMailboxMutationAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.MutationAuditSettings);
         builder.Services.AddScoped<IMailAnsweringAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.AnsweringAuditSettings);
-        // Composed here rather than taken off the snapshot's reader set, because an account is described by whose it is
-        // as well as by what an operator configured, and the user is established by a startup gate rather than bound
-        // from a file. The snapshot still decides which accounts are served; this adds the half configuration cannot
-        // state.
-        builder.Services.AddScoped<IDeploymentMailAccountCatalog>(provider => new ConfiguredMailAccountCatalog(
+        // Composed here rather than taken off the snapshot's reader set, because which users an account is assigned to
+        // is established by a startup gate rather than bound from a file. The snapshot still decides which accounts are
+        // served; this adds the half configuration cannot state. Both ports are the same instance, so the set of
+        // accounts and the assignments into it are one reading of one roster.
+        builder.Services.AddScoped(provider => new ConfiguredMailAccountCatalog(
             provider.GetRequiredService<MailSynchronizationOptions>(),
             provider.GetRequiredService<ServedMailUsers>()));
+        builder.Services.AddScoped<IDeploymentMailAccountCatalog>(provider =>
+            provider.GetRequiredService<ConfiguredMailAccountCatalog>());
+        builder.Services.AddScoped<IMailAccountAssignments>(provider =>
+            provider.GetRequiredService<ConfiguredMailAccountCatalog>());
         builder.Services.AddScoped<ITrustedAuthenticationAuthorityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.TrustedAuthenticationAuthorities);
         builder.Services.AddScoped<ISenderTrustPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.SenderTrustPolicies);
         // Resolved from the same snapshot as the verdicts above, so one work unit reads mail under one reload. Which of
@@ -570,6 +574,10 @@ internal static class HostComposition
         builder.Services.AddScoped<IContactCollectionSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.ContactCollection);
         builder.Services.AddScoped<ISpamClassificationSettingsReader, ConfiguredSpamClassificationSettingsReader>();
         builder.Services.AddScoped<ISpamActionSettingsReader, ConfiguredSpamActionSettingsReader>();
+        // Registered beside the reader it resolves through rather than with the passes that ask it, because a derived
+        // reading of a mailbox two people are assigned has one language wherever it is written. It is scoped like the
+        // reader, so a work unit answers under one reload.
+        builder.Services.AddScoped<AccountLanguages>();
         builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();
         builder.Services.AddScoped<ISmtpAccountSettingsProvider, ConfiguredSmtpAccountSettingsProvider>();
         builder.Services.AddScoped<IMailOAuthSettingsProvider, ConfiguredMailOAuthSettingsProvider>();

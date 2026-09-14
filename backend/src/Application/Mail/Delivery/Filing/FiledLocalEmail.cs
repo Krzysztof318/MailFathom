@@ -14,7 +14,7 @@ namespace MailFathom.Application.Mail.Delivery.Filing;
 /// <param name="Email">The stored message.</param>
 /// <param name="CreatedFolders">Whether filing it supplied protected folders the account was missing.</param>
 public sealed record FiledLocalEmail(
-    MailAccountIdentity Account,
+    MailAccountId Account,
     MailFolderAlias Folder,
     StoredEmailId Email,
     bool CreatedFolders)

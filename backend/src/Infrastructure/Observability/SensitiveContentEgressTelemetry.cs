@@ -9,6 +9,7 @@ using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Common.Observability;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Infrastructure.Observability;
 
@@ -61,13 +62,20 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
     /// </remarks>
     private const string NotScannedTagValue = "not_scanned";
 
-    /// <summary>Whose mail one guarded operation published, so a scan is read against the posture that person asked for.</summary>
+    /// <summary>The user whose whole mail one guarded operation published, written where the flow resolved no single mailbox.</summary>
     /// <remarks>
-    /// A span attribute and never a metric dimension. Postures differ between the people one deployment serves, so a
-    /// scan nothing attributes cannot be read against what its user asked for; a user identifier on a counter
-    /// incremented once per text would be an unbounded series, which is what every closed tag above exists to avoid.
+    /// A span attribute and never a metric dimension. A posture is a mailbox's own, so a scan nothing attributes
+    /// cannot be read against what was asked for; either identifier on a counter incremented once per text would be
+    /// an unbounded series, which is what every closed tag above exists to avoid.
     /// </remarks>
     private const string UserTagName = "mailfathom.user";
+
+    /// <summary>The mailbox one guarded operation published, which is what its posture was read from.</summary>
+    /// <remarks>
+    /// The alternative to <see cref="UserTagName" /> rather than a second attribute beside it: a flow either holds one
+    /// account or reads across a user's, and writing both would say a scan was attributed twice.
+    /// </remarks>
+    private const string AccountTagName = "mailfathom.mail.account";
 
     /// <summary>How the operation ended, which separates a scan that answered from one that could not and one that stopped.</summary>
     private const string OutcomeTagName = "mailfathom.sensitive_content.outcome";
@@ -177,18 +185,24 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
     /// <inheritdoc />
     public ISensitiveContentGuardScope BeginGuardedOperation(
         SensitiveContentEgressPoint egressPoint,
-        MailUserId user,
+        MailUserId? user,
+        MailAccountId? account,
         CancellationToken cancellationToken)
     {
         var activity = Telemetry.ActivitySource.StartActivity(GuardedOperationSpanName);
         activity?.SetTag(EgressPointTagName, TagOf(egressPoint));
 
-        // Written only where a user was resolved, which is every scanning flow: a deployment scanning nobody opens no
-        // operation at all, so an unset value here is a flow that reached this before it established whose mail it holds
-        // and an empty attribute reads more honestly than a zero UUID.
-        if (user.IsSpecified)
+        // One of the two is written, whichever the flow resolved: a pass holding one mailbox names it, and a read
+        // across a user's accounts names the user. Neither written at all is a flow that reached this before it
+        // established whose mail it holds, and an absent attribute reads more honestly than a zero UUID.
+        if (user is { IsSpecified: true } resolvedUser)
         {
-            activity?.SetTag(UserTagName, user.Value.ToString());
+            activity?.SetTag(UserTagName, resolvedUser.Value.ToString());
+        }
+
+        if (account is { } resolvedAccount)
+        {
+            activity?.SetTag(AccountTagName, resolvedAccount.Value);
         }
 
         return new GuardedOperation(activity, cancellationToken);

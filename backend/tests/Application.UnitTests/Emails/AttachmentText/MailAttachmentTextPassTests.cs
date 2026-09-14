@@ -41,8 +41,8 @@ public sealed class MailAttachmentTextPassTests
     /// <summary>The instant every ceiling test's period is anchored to, so a seeded charge and a read agree on it.</summary>
     private static readonly DateTimeOffset PeriodStart = new(2026, 9, 6, 0, 0, 0, TimeSpan.Zero);
 
-    private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountId Account =
+        MailAccountId.Create("work");
 
     /// <summary>
     /// The switch is honoured before anything is asked of the database, so an instance that reads no attachments costs
@@ -63,7 +63,7 @@ public sealed class MailAttachmentTextPassTests
         Assert.False(report.EmailsRemain);
         Assert.False(report.RunBudgetExhausted);
         await store.DidNotReceiveWithAnyArgs().GetEmailsAwaitingAttachmentTextAsync(
-            Arg.Any<MailAccountIdentity>(),
+            Arg.Any<MailAccountId>(),
             Arg.Any<StoredEmailId?>(),
             Arg.Any<int>(),
             Arg.Any<CancellationToken>());
@@ -454,8 +454,7 @@ public sealed class MailAttachmentTextPassTests
         StoredEmailId storedEmailId,
         DerivedWorkAdmission admission = DerivedWorkAdmission.Admitted) => new(
         storedEmailId,
-        SyntheticMailUser.Deployment,
-        FixedSensitiveContentPostures.SoleAccount,
+        Account,
         admission);
 
     private static IStoredEmailAttachmentTextStore StoreReturning(IReadOnlyList<EmailAwaitingAttachmentText> batch)
@@ -518,6 +517,7 @@ public sealed class MailAttachmentTextPassTests
         long maxDescriptionsPerPeriod = 0,
         long maxDescriptionsPerPeriodPerUser = 0) => new(
         ledger,
+        new StubMailAccountAssignments().Assigning(SyntheticMailUser.Deployment, Account),
         AttachmentDerivationBudget.Create(
             maxInputOctetsPerPeriod,
             maxInputOctetsPerPeriodPerUser,

@@ -110,7 +110,7 @@ public sealed class MailboxCopyAppender
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Past the issued write the append may already have reached the folder, so every way it can end has to be recorded as an outcome nobody can settle rather than raised into a retry that would file a second copy.")]
     public async Task<MailboxCopyAppendResult> AppendAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         OutgoingMailFiling filing,
         MailboxCopySource source,
         Func<MailFolderResolution, CancellationToken, Task> recordIssuedAsync,
@@ -140,10 +140,10 @@ public sealed class MailboxCopyAppender
             return MailboxCopyAppendResult.MessageUnavailable();
         }
 
-        var transportSecurityPolicy = this.transportSecurityPolicies.GetPolicy(account.Id);
+        var transportSecurityPolicy = this.transportSecurityPolicies.GetPolicy(account);
 
         await using var session = await this.writeSessions.OpenForWritingAsync(
-            account.Id,
+            account,
             destination.Binding,
             transportSecurityPolicy,
             cancellationToken);
@@ -176,7 +176,7 @@ public sealed class MailboxCopyAppender
 
     /// <summary>Finds the folder of the account that plays a role, as it currently resolves.</summary>
     private async Task<MailboxDestination?> ResolveDestinationAsync(
-        MailAccountIdentity account,
+        MailAccountId account,
         MailFolderSpecialUse role,
         CancellationToken cancellationToken)
     {
