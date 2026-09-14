@@ -97,12 +97,15 @@ const longestRecordsAnswer = 65_536;
 /**
  * What became of one message in a submitted batch.
  *
- * `recorded` is the only outcome that wrote anything down. The other four are each about that one message rather than
- * about the request, which is what lets a batch composed from a list that has moved on report exactly which entries did
- * not apply and write the rest down.
+ * `recorded` wrote a change down for the mail server and carries the record to follow. `applied` is the answer from an
+ * account the deployment holds on its own: the change has already happened and there is no record to follow, so a
+ * screen treats it as finished at once. The rest are each about that one message rather than about the request, which
+ * is what lets a batch composed from a list that has moved on report exactly which entries did not apply and write the
+ * rest down.
  */
 export type MailMutationOutcome =
     | 'recorded'
+    | 'applied'
     | 'message-not-found'
     | 'destination-not-found'
     | 'already-in-destination'
@@ -111,6 +114,7 @@ export type MailMutationOutcome =
 
 const mutationOutcomes: readonly MailMutationOutcome[] = [
     'recorded',
+    'applied',
     'message-not-found',
     'destination-not-found',
     'already-in-destination',

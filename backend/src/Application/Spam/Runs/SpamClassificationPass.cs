@@ -278,7 +278,7 @@ public sealed class SpamClassificationPass
             run.Terms.Posture,
             cancellationToken);
 
-        if (action.Outcome is SpamActionOutcome.Requested or SpamActionOutcome.WouldRequest)
+        if (action.Outcome is SpamActionOutcome.Requested or SpamActionOutcome.WouldRequest or SpamActionOutcome.Applied)
         {
             tally.Acted();
         }

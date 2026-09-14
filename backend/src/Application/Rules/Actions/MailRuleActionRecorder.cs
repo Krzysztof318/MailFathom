@@ -22,13 +22,19 @@ namespace MailFathom.Application.Rules.Actions;
 /// identity, the order, and the refusal of an action whose account or destination has stopped permitting it.
 /// </para>
 /// <para>
+/// A held account is the exception, because it has no server to converge with. There the action is committed to the
+/// stored email in the caller's session and no record is opened, so an action reaches the recorded list with no record
+/// identifier, and what it applied is handed back for <see cref="Announce" /> to publish once the batch has committed.
+/// </para>
+/// <para>
 /// What an account permits is read here as well as when the rule set is read, and the second reading is not redundant:
 /// the two configuration sections reload independently, so narrowing what an account permits leaves a rule set nobody
 /// edited in force. Without this, a revoked permission would take effect at the next edit of the rules rather than at
 /// the next pass, which for a deletion is the wrong way round.
 /// </para>
 /// <para>
-/// The records join the caller's session, so a batch's evaluations and the requests they produced commit together. A
+/// The records, and a held account's committed changes, join the caller's session, so a batch's evaluations and the
+/// requests they produced commit together. A
 /// crash between them is therefore impossible in the direction that matters: an email is never recorded as evaluated
 /// while the change its rules asked for was lost, and a rolled-back batch is evaluated again and asks again under the
 /// same identity.
@@ -41,25 +47,25 @@ namespace MailFathom.Application.Rules.Actions;
 /// </remarks>
 public sealed class MailRuleActionRecorder
 {
-    private readonly IMailboxMutationRecordStore records;
+    private readonly MailboxChangeSubmission submission;
     private readonly IAuthoredDeleteEmailDispositionReader deleteDispositions;
     private readonly IMailRuleActionPermissionReader permissions;
 
-    /// <summary>Initializes the recorder from the record it writes and the decisions it has to read.</summary>
-    /// <param name="records">Opens the durable record one action is carried by.</param>
+    /// <summary>Initializes the recorder from the submission it writes through and the decisions it has to read.</summary>
+    /// <param name="submission">Records one action, or commits it where the account is held.</param>
     /// <param name="deleteDispositions">Answers what the account keeps locally of an email a rule deletes or files away.</param>
     /// <param name="permissions">Answers which changes the account currently permits a rule to make.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public MailRuleActionRecorder(
-        IMailboxMutationRecordStore records,
+        MailboxChangeSubmission submission,
         IAuthoredDeleteEmailDispositionReader deleteDispositions,
         IMailRuleActionPermissionReader permissions)
     {
-        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(submission);
         ArgumentNullException.ThrowIfNull(deleteDispositions);
         ArgumentNullException.ThrowIfNull(permissions);
 
-        this.records = records;
+        this.submission = submission;
         this.deleteDispositions = deleteDispositions;
         this.permissions = permissions;
     }
@@ -76,7 +82,7 @@ public sealed class MailRuleActionRecorder
     /// <param name="revision">The rule set revision the pass ran under, which is part of every request's identity.</param>
     /// <param name="destinations">Where the folders this batch's actions name currently are, resolved before the transaction opened.</param>
     /// <param name="cancellationToken">Cancels the staging.</param>
-    /// <returns>Every action a record was opened for, with the record that carries it, and every action nothing was opened for.</returns>
+    /// <returns>Every action a record was opened for, with the record that carries it, or a held account committed, with none; every action nothing was done for; and the committed changes, which the caller hands to <see cref="Announce" /> once its transaction has committed.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="revision" /> names no rule set.</exception>
     public async Task<MailRuleActionRecording> RecordAsync(
@@ -115,6 +121,7 @@ public sealed class MailRuleActionRecorder
 
         var failures = new List<MailRuleActionFailure>();
         var recorded = new List<RecordedMailRuleAction>();
+        var applied = new List<AppliedMailboxChange>();
 
         foreach (var planned in plan.Actions)
         {
@@ -140,18 +147,64 @@ public sealed class MailRuleActionRecorder
                 continue;
             }
 
-            var record = await this.records.OpenAsync(session, request, heldUntil: null, cancellationToken);
+            var submitted = await this.submission.SubmitAsync(
+                session,
+                request,
+                planned.Action.Destination is { } named ? destinations.Find(named).Destination : null,
+                heldUntil: null,
+                cancellationToken);
 
-            recorded.Add(new RecordedMailRuleAction(
+            if (submitted.Change is { } change)
+            {
+                applied.Add(change);
+            }
+
+            if (submitted.Outcome is MailboxChangeSubmissionOutcome.Recorded
+                or MailboxChangeSubmissionOutcome.Applied
+                or MailboxChangeSubmissionOutcome.AlreadyInDestination)
+            {
+                recorded.Add(new RecordedMailRuleAction(
+                    planned.RuleName,
+                    planned.Position,
+                    planned.Action.Mutation,
+                    submitted.Record?.Id,
+                    RecordedDestinationAlias(destinations, planned.Action.Destination)));
+
+                continue;
+            }
+
+            failures.Add(new MailRuleActionFailure(
                 planned.RuleName,
                 planned.Position,
                 planned.Action.Mutation,
-                record.Id,
-                RecordedDestinationAlias(destinations, planned.Action.Destination)));
+                RefusalOf(submitted.Outcome),
+                planned.Action.Destination));
         }
 
-        return new MailRuleActionRecording(recorded, failures);
+        return new MailRuleActionRecording(recorded, failures) { Applied = applied };
     }
+
+    /// <summary>Tells the clients watching each account about the changes a held account committed.</summary>
+    /// <param name="applied">What the batch committed, once its transaction has.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="applied" /> is <see langword="null" />.</exception>
+    public void Announce(IEnumerable<AppliedMailboxChange> applied)
+    {
+        ArgumentNullException.ThrowIfNull(applied);
+
+        foreach (var change in applied)
+        {
+            this.submission.Announce(change);
+        }
+    }
+
+    /// <summary>Names the refusal a submission that wrote nothing is reported to the operator as.</summary>
+    private static MailRuleActionFailureReason RefusalOf(MailboxChangeSubmissionOutcome outcome) => outcome switch
+    {
+        MailboxChangeSubmissionOutcome.DestinationMissing => MailRuleActionFailureReason.LocalDestinationFolderMissing,
+        MailboxChangeSubmissionOutcome.NotAvailableLocally => MailRuleActionFailureReason.ActionNotAvailableOnHeldAccount,
+        MailboxChangeSubmissionOutcome.MessageMissing => MailRuleActionFailureReason.EmailNoLongerStored,
+        _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "The outcome wrote something, so it is not a refusal."),
+    };
 
     /// <summary>Reads what the account permits, or nothing when the configuration no longer declares it.</summary>
     private MailRuleActionPermissions? TryReadPermissions(MailAccountId accountId)

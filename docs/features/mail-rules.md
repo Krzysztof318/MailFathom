@@ -368,7 +368,11 @@ each is the point of the arrangement:
 - **Asking twice asks once.** The record's identity is the email occurrence, the mutation, and who asked — and for a
   rule, *who asked* is the rule's name together with the revision of the rule set that matched. So a whole-mailbox run
   over mail a rule has already acted on issues nothing, while an edit to the rule set is a new revision and therefore a
-  fresh request. A user who moved the message back by hand is not overruled by the rule that filed it.
+  fresh request. A user who moved the message back by hand is not overruled by the rule that filed it. A held account
+  opens no record to match against, so there a repeat is harmless only where the stored state already matches: a flag
+  already set, a message already in the folder, and a message already in the trash each leave nothing to do. A person is
+  not protected there the same way — a message moved out of the folder a rule filed it into is filed there again by the
+  next whole-mailbox run.
 
 **A change MailFathom made does not come back as something to act on.** A rule filing a message would otherwise meet it
 in its new folder, match again, and file it again for as long as the folder is watched;
@@ -426,12 +430,23 @@ Each is recorded against the rule that asked, and the actions beside it are stil
 | `AccountNoLongerConfigured` | The account was withdrawn from the configuration between the rule set being read and the change being written |
 | `ActionNoLongerPermitted` | The account has stopped permitting this action since the rule set that declares it was read |
 | `EmailNotOnMailServer` | The stored email carries no occurrence, because no mail server holds it any longer, so there is nowhere a change could be carried to |
+| `ActionNotAvailableOnHeldAccount` | The account's mailbox is one MailFathom holds itself, and the action is a copy, which a held account does not offer |
+| `EmailNoLongerStored` | The account's mailbox is one MailFathom holds itself, and the email was erased between the pass reading it and the change being made |
+| `LocalDestinationFolderMissing` | The account's mailbox is one MailFathom holds itself, and no local folder corresponds to the destination: its source folder has delivered nothing locally, or its local folder was deleted into the trash. No run will supply one, so the rule's destination is what to correct |
 
 Nothing is written down in any of these cases: filing into whichever folder looked closest to the name is precisely
 what a stale destination must not do. The account run reports how many changes it asked for, how many it withheld because
 another matching rule had already settled the same message, and how many named something that no longer resolves,
 together with the rules involved. Counts and rule names only — nothing derived from a message reaches a log line, a
 metric, or a span.
+
+On a held account every other action is made to the stored email as the pass commits, in the transaction that records
+the rule's decision, rather than written down for a server: a move files into the local folder the destination's role
+or source folder corresponds to, and a delete moves the message into the local trash. A delete meeting a message already
+in the trash does nothing: erasing it is a person's act, taken with the window a person can withdraw it in, and never a
+rule's. The rule's history records each such action as requested with no mutation identifier, because the change was
+committed rather than recorded: there is no mutation behind it and no mutation trail to follow, so a requested action
+without one is done.
 
 ## The facts a condition can read
 

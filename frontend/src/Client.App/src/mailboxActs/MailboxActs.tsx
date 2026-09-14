@@ -110,12 +110,32 @@ const heldForNobody: Held = { session: null, directory: null, asked: new Map() }
  * A message the deployment did not record is mail that has moved on since the list drew it, an account it no longer
  * serves, or a message already where it was asked to go. Each is that message's own answer rather than the request's,
  * which is what lets the rest of a batch stand — and it is read the same way whichever direction the act was going in.
+ * A message answered `applied` counts beside a recorded one: the deployment already made the change, on an account it
+ * holds alone, so the act stands even though there is no record to follow.
  */
 function writtenDown(batches: readonly Submitted[]): ReadonlySet<string> {
     return new Set(
         batches.flatMap(({ answer }) =>
             answer.outcome === 'read'
-                ? answer.value.filter((result) => result.outcome === 'recorded').map((result) => result.storedEmailId)
+                ? answer.value
+                      .filter((result) => result.outcome === 'recorded' || result.outcome === 'applied')
+                      .map((result) => result.storedEmailId)
+                : [],
+        ),
+    );
+}
+
+/**
+ * The messages the deployment answered `applied` for, which it changed at once and wrote no record of.
+ *
+ * A permanent delete is only what the records stand behind: a message the deployment applied a delete to was filed into
+ * the trash of an account it holds alone, so it is reported the way a delete into the trash is, never as destroyed.
+ */
+function appliedTo(batches: readonly Submitted[]): ReadonlySet<string> {
+    return new Set(
+        batches.flatMap(({ answer }) =>
+            answer.outcome === 'read'
+                ? answer.value.filter((result) => result.outcome === 'applied').map((result) => result.storedEmailId)
                 : [],
         ),
     );
@@ -709,7 +729,24 @@ export function MailboxActsProvider({
                 });
             }
 
-            report(act, recorded, destination, destroying, recordsWritten(answered));
+            if (destroying) {
+                const applied = appliedTo(answered);
+                const filed = recorded.filter((message) => applied.has(message.storedEmailId));
+
+                // A message the deployment filed into the trash rather than holding a record for is not going anywhere,
+                // so it stops being claimed as destroyed and is reported as the delete into the trash it was.
+                forget(filed.map((message) => message.storedEmailId));
+                report(act, filed, destination, false, []);
+                report(
+                    act,
+                    recorded.filter((message) => !applied.has(message.storedEmailId)),
+                    destination,
+                    true,
+                    recordsWritten(answered),
+                );
+            } else {
+                report(act, recorded, destination, destroying, recordsWritten(answered));
+            }
 
             // Asking again is the same act performed afresh over the same messages, naming the folder a move named, so
             // it travels the path the first attempt took and is followed again from its own answer. The claim the

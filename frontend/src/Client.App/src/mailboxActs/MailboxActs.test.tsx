@@ -770,6 +770,41 @@ describe('MailboxActsProvider', () => {
         expect(held().asked.get('message-1')?.act).toBe('flag');
     });
 
+    // An account the deployment holds alone answers `applied`: the change is already made, so the act stands exactly as a
+    // recorded one does and nothing about it is a refusal.
+    it('keeps claiming an archive the deployment applied without a record, says it went, and reports no refusal', async () => {
+        const recording = recordingTelemetry();
+        const deployment = deploymentAnswering({ 'message-1': 'applied' });
+        const { held } = acting(deployment, { telemetry: recording.telemetry });
+
+        await waitFor(() => {
+            expect(held().refusalOf('archive', [invoice])).toBeNull();
+        });
+
+        perform(held, 'archive', [invoice]);
+
+        await screen.findByText('Archived');
+
+        expect(held().asked.get('message-1')?.act).toBe('archive');
+        expect(recordsOf(recording.recorded, 'act_refused')).toStrictEqual([]);
+    });
+
+    it('reports a delete in the trash the deployment applied as a move into the trash, never as a permanent delete', async () => {
+        const deployment = deploymentAnswering({ 'message-3': 'applied' });
+        const { held } = acting(deployment);
+
+        await waitFor(() => {
+            expect(held().deletesPermanently([discarded])).toBe(true);
+        });
+
+        perform(held, 'delete', [discarded]);
+
+        await screen.findByText('Moved to the trash');
+
+        expect(screen.queryByText('Deleting permanently…')).toBeNull();
+        expect(held().asked.has('message-3')).toBe(false);
+    });
+
     it('says an act that never reached the deployment changed nothing, and claims nothing about the message', async () => {
         const deployment = deploymentAnswering({}, 403);
         const { held } = acting(deployment);

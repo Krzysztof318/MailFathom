@@ -67,4 +67,25 @@ public enum MailRuleActionFailureReason
     /// command reaches.
     /// </remarks>
     EmailNotOnMailServer = 6,
+
+    /// <summary>The account is held, and the change is one a held account cannot commit to stored state yet.</summary>
+    /// <remarks>A copy is the one such change: a held account's copy is a second stored message with a payload of its own, which cannot be placed inside the transaction a rule's batch commits in.</remarks>
+    ActionNotAvailableOnHeldAccount = 7,
+
+    /// <summary>The account is held, and it no longer stores the email the rule matched.</summary>
+    /// <remarks>
+    /// The email was erased between the pass reading it and the change being committed — a person emptying the trash, or
+    /// a folder deletion's erasure pass. There is no mail server to point at on a held account, so this is its own
+    /// reason rather than <see cref="EmailNotOnMailServer" />.
+    /// </remarks>
+    EmailNoLongerStored = 8,
+
+    /// <summary>The account is held, and no local folder corresponds to the destination the rule names.</summary>
+    /// <remarks>
+    /// A held account files into the local folder a protected role names, or into the one the destination's source folder
+    /// created. That source folder has delivered nothing locally, or its local folder was deleted into the trash. No
+    /// folder run will supply one on a held account, so the remedy is the rule's destination rather than waiting, which is
+    /// why this is not <see cref="DestinationFolderUnresolved" />.
+    /// </remarks>
+    LocalDestinationFolderMissing = 9,
 }

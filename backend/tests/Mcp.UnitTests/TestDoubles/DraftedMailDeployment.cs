@@ -218,7 +218,8 @@ internal sealed class DraftedMailDeployment
                 persistenceSessions,
                 ClientSignalPublishers.ReachingNobody,
                 clock),
-            transportSecurityPolicies);
+            transportSecurityPolicies,
+            Substitute.For<ILocalMailFolderStore>());
 
         var localFiler = new LocalMailFiler(
             Substitute.For<ILocalMailFolderStore>(),

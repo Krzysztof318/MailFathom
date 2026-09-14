@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Folders;
+using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Actions;
@@ -195,6 +196,7 @@ public sealed class MailRuleEvaluationPass
             {
                 var evaluatedAt = this.timeProvider.GetUtcNow();
                 var destinations = await this.ResolveDestinationsAsync(account, outcome, cancellationToken);
+                var applied = new List<AppliedMailboxChange>();
 
                 await this.commitPolicy.CommitAsync(
                     async (session, attemptCancellationToken) =>
@@ -212,9 +214,12 @@ public sealed class MailRuleEvaluationPass
                             outcome,
                             boundRuleSet.Trigger,
                             destinations,
+                            applied,
                             attemptCancellationToken);
                     },
                     cancellationToken);
+
+                this.actionRecorder.Announce(applied);
             }
 
             tally.Add(outcome);
@@ -327,6 +332,8 @@ public sealed class MailRuleEvaluationPass
             Ending = reachedTheEnd ? MailRuleEvaluationRunEnding.Completed : null,
         };
 
+        var applied = new List<AppliedMailboxChange>();
+
         await this.commitPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
@@ -343,12 +350,14 @@ public sealed class MailRuleEvaluationPass
                     outcome,
                     boundRuleSet.Trigger,
                     destinations,
+                    applied,
                     attemptCancellationToken);
 
                 await this.runStore.SaveAsync(session, carried, attemptCancellationToken);
             },
             cancellationToken);
 
+        this.actionRecorder.Announce(applied);
         tally.Add(outcome);
 
         return carried;
@@ -372,9 +381,11 @@ public sealed class MailRuleEvaluationPass
         MailRuleEvaluationBatch outcome,
         MailRuleExecutionTrigger trigger,
         MailboxDestinations destinations,
+        List<AppliedMailboxChange> applied,
         CancellationToken cancellationToken)
     {
         outcome.ForgetRecordedActions();
+        applied.Clear();
 
         var executions = new List<MailRuleExecution>();
 
@@ -394,6 +405,7 @@ public sealed class MailRuleEvaluationPass
                     cancellationToken);
 
             outcome.ActionsRecorded(recording);
+            applied.AddRange(recording.Applied);
 
             executions.AddRange(MailRuleExecutionComposer.Compose(
                 account,

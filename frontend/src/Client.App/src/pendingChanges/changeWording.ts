@@ -63,14 +63,16 @@ function forms(
 }
 
 /**
- * Why the deployment wrote nothing down, or `null` for the two outcomes nobody is told about.
+ * Why the deployment wrote nothing down, or `null` for the three outcomes nobody is told about.
  *
- * `recorded` wrote something down and is not a refusal at all. `already-in-destination` is the collision that
+ * `recorded` wrote something down and `applied` already made the change, so neither is a refusal at all.
+ * `already-in-destination` is the collision that
  * converges without a decision: the mailbox already says what was asked for, so nothing failed, the screen was right,
  * and reporting it would be the client apologising for having been correct.
  */
 export const refusalReasons: Readonly<Record<MailMutationOutcome, MessageKey | null>> = {
     recorded: null,
+    applied: null,
     'already-in-destination': null,
     'message-not-found': 'pendingChange.messageNotFound',
     'destination-not-found': 'pendingChange.destinationNotFound',

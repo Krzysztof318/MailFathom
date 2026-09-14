@@ -3,12 +3,15 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
+using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
+using MailFathom.Application.Signals;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -522,6 +525,120 @@ public sealed class MailRuleActionRecorderTests
             recording.Failures.Select(failure => failure.Reason));
     }
 
+    /// <summary>A held account that erased the email before the pass committed says so, rather than naming a mail server it has none of.</summary>
+    [Fact]
+    public async Task RecordAsync_AHeldAccountNoLongerStoringTheEmail_RefusesTheActionAsNoLongerStored()
+    {
+        // Arrange
+        var recorder = new MailRuleActionRecorder(
+            MailboxChangeSubmissions.Over(
+                this.records,
+                new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held),
+                new InMemoryLocalEmailStateStore(Account)),
+            this.dispositions,
+            this.permissions);
+
+        // Act
+        var recording = await this.RecordAsync(
+            recorder,
+            LocalEmail,
+            OccurrenceAt(7),
+            Planned("mark-them-read", MailRuleAction.SetSeen(isSeen: true)),
+            Revision);
+
+        // Assert
+        Assert.Equal(0, recording.RecordedCount);
+        Assert.Equal(MailRuleActionFailureReason.EmailNoLongerStored, Assert.Single(recording.Failures).Reason);
+    }
+
+    /// <summary>
+    /// A held account's action is made rather than written down, so the history names no record, and clients hear of it
+    /// only when the pass announces what its committed batch applied.
+    /// </summary>
+    [Fact]
+    public async Task RecordAsync_AHeldAccountApplyingAnAction_RecordsItWithNoRecordAndHandsBackWhatToAnnounce()
+    {
+        // Arrange
+        var channel = Substitute.For<IClientSignalChannel>();
+        var states = new InMemoryLocalEmailStateStore(Account);
+        states.Store(
+            LocalEmail,
+            new LocalEmailState(
+                MailFolderResolution.FirstBindingOf(Inbox, RemoteFolderPath.Create("INBOX")),
+                Folder: null,
+                IsSeen: false,
+                IsFlagged: false,
+                RemoteEmailKeywords.Create([])));
+        MailRuleActionRecording recording;
+
+        // Act
+        await using (var signals = new ClientSignals([channel], new FakeTimeProvider()))
+        {
+            var recorder = new MailRuleActionRecorder(
+                MailboxChangeSubmissions.Over(
+                    this.records,
+                    new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held),
+                    states,
+                    signals: signals),
+                this.dispositions,
+                this.permissions);
+
+            recording = await this.RecordAsync(
+                recorder,
+                LocalEmail,
+                OccurrenceAt(7),
+                Planned("mark-them-read", MailRuleAction.SetSeen(isSeen: true)),
+                Revision);
+            recorder.Announce(recording.Applied);
+        }
+
+        // Assert
+        Assert.Null(Assert.Single(recording.Recorded).RecordId);
+        Assert.Equal(0, this.records.OpenedRecordCount);
+        Assert.True(states.States[LocalEmail].IsSeen);
+        Assert.Equal(LocalEmail, Assert.Single(recording.Applied).Email);
+        await channel.Received(1).PublishAsync(
+            Arg.Is<ClientSignal>(signal => signal != null && signal.Kind == ClientSignalKind.MailFlagsChanged),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A held account files into a local folder, so one with no local folder for the destination says that, rather than waiting for a run it will never have.</summary>
+    [Fact]
+    public async Task RecordAsync_AHeldAccountWithNoLocalFolderForTheDestination_RefusesItAsLocallyMissing()
+    {
+        // Arrange
+        this.MapMirrored(Archive, "INBOX/Archive");
+        this.folders.Bind(Account.Id, Archive);
+        var states = new InMemoryLocalEmailStateStore(Account);
+        states.Store(
+            LocalEmail,
+            new LocalEmailState(
+                MailFolderResolution.FirstBindingOf(Inbox, RemoteFolderPath.Create("INBOX")),
+                Folder: null,
+                IsSeen: false,
+                IsFlagged: false,
+                RemoteEmailKeywords.Create([])));
+        var recorder = new MailRuleActionRecorder(
+            MailboxChangeSubmissions.Over(
+                this.records,
+                new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held),
+                states),
+            this.dispositions,
+            this.permissions);
+
+        // Act
+        var recording = await this.RecordAsync(
+            recorder,
+            LocalEmail,
+            OccurrenceAt(7),
+            Planned("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))),
+            Revision);
+
+        // Assert
+        Assert.Equal(0, recording.RecordedCount);
+        Assert.Equal(MailRuleActionFailureReason.LocalDestinationFolderMissing, Assert.Single(recording.Failures).Reason);
+    }
+
     [Fact]
     public async Task RecordAsync_APlanThatAsksForNothing_WritesNothing()
     {
@@ -617,8 +734,10 @@ public sealed class MailRuleActionRecorderTests
                 persistenceSessionFactory,
                 ClientSignalPublishers.ReachingNobody,
                 new FakeTimeProvider(new DateTimeOffset(2026, 8, 12, 9, 0, 0, TimeSpan.Zero))),
-            transportSecurityPolicies);
+            transportSecurityPolicies,
+            Substitute.For<ILocalMailFolderStore>());
     }
 
-    private MailRuleActionRecorder CreateRecorder() => new(this.records, this.dispositions, this.permissions);
+    private MailRuleActionRecorder CreateRecorder() =>
+        new(MailboxChangeSubmissions.Over(this.records), this.dispositions, this.permissions);
 }

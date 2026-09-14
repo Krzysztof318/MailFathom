@@ -1719,11 +1719,24 @@ Content-Type: application/json
 { "moves": [{ "storedEmailId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90", "destinationFolder": "ARCHIVE" }] }
 ```
 
-Each result carries one of `recorded`, `message-not-found`, `destination-not-found`, `already-in-destination`, or
-`account-no-longer-configured`, and a flag change may also answer `change-not-usable` when the values asked for are not
-values one request can name. A folder withheld from this caller is reported as a destination that is not there, on the
-same rule that makes mail in a withheld folder a message that is not there: filing mail into a folder the caller cannot
-read would move it out of sight rather than be a capability of its own.
+Each result carries one of `recorded`, `applied`, `message-not-found`, `destination-not-found`,
+`already-in-destination`, or `account-no-longer-configured`, and a flag change may also answer `change-not-usable` when
+the values asked for are not values one request can name. A folder withheld from this caller is reported as a
+destination that is not there, on the same rule that makes mail in a withheld folder a message that is not there: filing
+mail into a folder the caller cannot read would move it out of sight rather than be a capability of its own.
+
+**On an account whose mailbox MailFathom holds, a change is made rather than recorded.** There is no server to carry it
+to, so a flag, a keyword, a move, or a delete on a [held account](#the-local-folder-routes) is committed to the stored
+message in the same transaction as its audit entry where the account keeps one, the answer is `applied`, and `changes` is empty because no record
+exists to follow. Treat `applied` as finished: nothing converges afterwards and no later state will be reported.
+`requestId` matches a repeat only against a record, so a submission repeated on a held account applies its changes
+again. A move
+files into the local folder the destination's role names, or into the local folder the destination's source folder
+created; a destination with neither is `destination-not-found`, and a message already in that local folder is
+`already-in-destination`. A delete moves the message into the local trash, which a person can move it back out of. A
+delete of a message already in the trash is the one act still `recorded`: it erases the message and everything derived
+from it, so it is held for the same window as every other delete and can be withdrawn through the same route until the
+window passes. A copy is not offered on a held account.
 
 **Moving mail is its own grant.** `mailfathom.mail.flags.write` does not reach it and `mailfathom.mail.move` does. A
 flag misdescribes mail the user can still find; a move puts the mail somewhere else, and on a server without `MOVE` it
@@ -1740,7 +1753,7 @@ Content-Type: application/json
 { "deletes": [{ "storedEmailId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90" }] }
 ```
 
-Each result carries `recorded`, `message-not-found`, or `account-no-longer-configured`. There is no
+Each result carries `recorded`, `applied`, `message-not-found`, or `account-no-longer-configured`. There is no
 `destination-not-found` here for the same reason there is no destination, and a message already gone is reported as one
 that is not there rather than as a delete that succeeded twice.
 

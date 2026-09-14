@@ -53,17 +53,17 @@ public sealed class MailDeletionRecorder
     private readonly MailboxScopeResolver scopeResolver;
     private readonly IAuthoredMailboxTargetReader targets;
     private readonly IAuthoredDeleteEmailDispositionReader deleteDispositions;
-    private readonly IMailboxMutationRecordStore records;
+    private readonly MailboxChangeSubmission submission;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly MailAccountRunSignal runSignal;
     private readonly TimeProvider timeProvider;
 
-    /// <summary>Initializes the use case over the grant it asks first, the email it is about, and the record it writes.</summary>
+    /// <summary>Initializes the use case over the grant it asks first, the email it is about, and the submission it writes through.</summary>
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <param name="scopeResolver">Answers whether a caller may reach the folder the email is in.</param>
     /// <param name="targets">Answers where the named email currently is.</param>
     /// <param name="deleteDispositions">Answers what the account keeps locally of mail the server has let go of.</param>
-    /// <param name="records">Opens the durable record the delete is carried by.</param>
+    /// <param name="submission">Records the delete, or commits it where the account is held.</param>
     /// <param name="commitPolicy">Commits the record, retrying an optimistic conflict.</param>
     /// <param name="runSignal">Brings the account's next synchronization run forward, which is what carries the delete to the mail server.</param>
     /// <param name="timeProvider">Measures the withdrawal window a caller asks for, from the moment the record is written.</param>
@@ -73,7 +73,7 @@ public sealed class MailDeletionRecorder
         MailboxScopeResolver scopeResolver,
         IAuthoredMailboxTargetReader targets,
         IAuthoredDeleteEmailDispositionReader deleteDispositions,
-        IMailboxMutationRecordStore records,
+        MailboxChangeSubmission submission,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         MailAccountRunSignal runSignal,
         TimeProvider timeProvider)
@@ -82,7 +82,7 @@ public sealed class MailDeletionRecorder
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(targets);
         ArgumentNullException.ThrowIfNull(deleteDispositions);
-        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(submission);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(runSignal);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -91,7 +91,7 @@ public sealed class MailDeletionRecorder
         this.scopeResolver = scopeResolver;
         this.targets = targets;
         this.deleteDispositions = deleteDispositions;
-        this.records = records;
+        this.submission = submission;
         this.commitPolicy = commitPolicy;
         this.runSignal = runSignal;
         this.timeProvider = timeProvider;
@@ -155,13 +155,26 @@ public sealed class MailDeletionRecorder
             ? this.timeProvider.GetUtcNow() + granted
             : (DateTimeOffset?)null;
 
-        var record = await this.commitPolicy.CommitAsync(
-            (session, attemptCancellationToken) => this.records.OpenAsync(
+        var submitted = await this.commitPolicy.CommitAsync(
+            (session, attemptCancellationToken) => this.submission.SubmitAsync(
                 session,
                 request,
+                destination: null,
                 heldUntil,
                 attemptCancellationToken),
             cancellationToken);
+
+        if (submitted.Outcome == MailboxChangeSubmissionOutcome.Applied && submitted.Change is { } change)
+        {
+            this.submission.Announce(change);
+
+            return AuthoredMailDeletionResult.Applied();
+        }
+
+        if (submitted.Record is not { } record)
+        {
+            return AuthoredMailDeletionResult.NotRecorded(MailDeletionOutcome.MessageNotFound);
+        }
 
         if (heldUntil is null)
         {

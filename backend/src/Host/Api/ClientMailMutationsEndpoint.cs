@@ -20,7 +20,9 @@ namespace MailFathom.Host.Api;
 /// <summary>Takes the changes a person makes to their own mailbox from the client, and reports where each one got to.</summary>
 /// <remarks>
 /// <para>
-/// Nothing here reaches a mail server. Every route writes a durable record per change and answers with it, and the
+/// Nothing here reaches a mail server. On an account MailFathom holds itself a flag, a keyword, a move, and a first
+/// delete are committed to stored state in the request's own transaction and answered <c>applied</c>, with no record to
+/// follow. Otherwise every route writes a durable record per change and answers with it, and the
 /// account's own convergence pass issues the IMAP command later — which is
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>'s
 /// arrangement rather than a second one. So a screen never waits on IMAP, a crash between the record and the command
@@ -663,6 +665,9 @@ internal static class ClientMailChangeOutcomes
     /// <summary>The change was written down, and the account's next convergence pass will issue it.</summary>
     internal const string Recorded = "recorded";
 
+    /// <summary>The account is held and the change has already been applied to the mail MailFathom keeps, so there is no record to follow.</summary>
+    internal const string Applied = "applied";
+
     /// <summary>This deployment serves no readable message under that identity, so there was nothing to change.</summary>
     internal const string MessageNotFound = "message-not-found";
 
@@ -757,7 +762,7 @@ internal sealed record ClientMailFlagChangeResultResponse(
 
         return new ClientMailFlagChangeResultResponse(
             recorded.StoredEmailId.Value,
-            ClientMailChangeOutcomes.Recorded,
+            recorded.IsApplied ? ClientMailChangeOutcomes.Applied : ClientMailChangeOutcomes.Recorded,
             Detail: null,
             [.. recorded.Recorded.Select(ClientMailRecordedChangeResponse.For)]);
     }
@@ -835,6 +840,7 @@ internal sealed record ClientMailMoveResultResponse(
         MailRelocationOutcome.DestinationNotFound => ClientMailChangeOutcomes.DestinationNotFound,
         MailRelocationOutcome.AlreadyInDestination => ClientMailChangeOutcomes.AlreadyInDestination,
         MailRelocationOutcome.AccountNoLongerConfigured => ClientMailChangeOutcomes.AccountNoLongerConfigured,
+        MailRelocationOutcome.Applied => ClientMailChangeOutcomes.Applied,
         _ => throw new ArgumentOutOfRangeException(
             nameof(outcome),
             outcome,
@@ -898,6 +904,7 @@ internal sealed record ClientMailDeleteResultResponse(
         MailDeletionOutcome.Recorded => ClientMailChangeOutcomes.Recorded,
         MailDeletionOutcome.MessageNotFound => ClientMailChangeOutcomes.MessageNotFound,
         MailDeletionOutcome.AccountNoLongerConfigured => ClientMailChangeOutcomes.AccountNoLongerConfigured,
+        MailDeletionOutcome.Applied => ClientMailChangeOutcomes.Applied,
         _ => throw new ArgumentOutOfRangeException(
             nameof(outcome),
             outcome,

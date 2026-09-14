@@ -98,6 +98,13 @@ describe('readSubmission', () => {
         expect(reading.refused.get('message-not-found')).toStrictEqual(['gone']);
     });
 
+    it('reads a change the deployment already applied as neither followed nor refused', () => {
+        const reading = readSubmission(answered([{ storedEmailId, outcome: 'applied', changes: [] }]));
+
+        expect(reading.followed).toStrictEqual([]);
+        expect(reading.refused.size).toBe(0);
+    });
+
     it('reads a submission that never reached the deployment as one with nothing to follow', () => {
         const reading = readSubmission({ ...answered([]), results: null });
 

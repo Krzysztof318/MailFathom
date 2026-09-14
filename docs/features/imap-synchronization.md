@@ -613,6 +613,19 @@ on a server without `MOVE` is a copy, a flag, and an expunge, and a process that
 mailbox nothing can interpret afterwards. A second run reads the record and continues from the stage it names, so the
 message ends up filed once whichever command the stop landed between.
 
+**An account whose mailbox MailFathom holds itself writes no record for most changes**, because there is no server to
+issue one to. A flag, a keyword, a move, or a delete into the local trash is made to the stored message in the
+transaction that authored it, beside its audit entry where the account keeps one, and the answer says `applied` rather than naming a record; the
+[client endpoint](../operations/client-endpoint.md#the-local-folder-routes) holds what each act does there. The exception
+is a delete of a message already in the local trash: it erases the message and every row derived from it, so it is
+recorded like any delete and held for its withdrawal window, and once that window passes the account's run erases the
+message instead of opening a write session. The run does not tell such a delete from any other delete record: every
+outstanding delete record on a held account is run as an erasure once its window has passed, including one opened
+before the account became held, whatever local disposition it was authored with. A record of any other change opened
+before then is left where it is rather than issued, because the server it named is no longer the mailbox's truth: the
+run reads only a held account's delete records, so however many such records wait, none of them stands ahead of an
+erasure, and each stays counted as pending.
+
 **A change somebody asked for also ends the account's wait** — a change recorded by the client's mutation routes or by
 `set_mail_flags`, and not the other two origins above. What issues any of them is the account's ordinary
 synchronization run, so a change nothing brought that run forward for sits until the interval is out, and on an account

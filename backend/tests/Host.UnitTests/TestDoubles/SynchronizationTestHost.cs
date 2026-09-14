@@ -28,6 +28,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Mail.Mutations.Destinations;
+using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules;
@@ -228,6 +229,11 @@ internal static class SynchronizationTestHost
             provider.GetRequiredService<MailSynchronizationTelemetry>());
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
         services.AddScoped<MailboxMutationConverger>();
+        // The converger erases a held account's due deletes through the submission. No account these tests configure is
+        // held, so the substituted state store is composed and never asked.
+        services.AddSingleton(Substitute.For<ILocalEmailStateStore>());
+        services.AddSingleton(ClientSignalPublishers.ReachingNobody);
+        services.AddScoped<MailboxChangeSubmission>();
 
         // The trail and its retention pass are composed here for the same reason convergence is: a supervisor resolves
         // both from its scope. Neither is what these tests are about — the trail is off for every account they

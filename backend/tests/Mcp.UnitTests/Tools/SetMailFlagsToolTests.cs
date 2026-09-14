@@ -5,10 +5,13 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Authoring;
 using MailFathom.Application.Mail.Mutations.Authoring.Failures;
 using MailFathom.Application.Mail.Mutations.Convergence;
+using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Access;
@@ -67,6 +70,7 @@ public sealed class SetMailFlagsToolTests
         Assert.Equal(storedEmailId.ToString(), result.StoredEmailId);
         Assert.Equal(Account.Value, result.AccountId);
         Assert.Equal(Inbox.Value, result.FolderAlias);
+        Assert.False(result.Applied);
         Assert.Equal(
             ["set-seen", "set-flagged", "add-keywords"],
             result.RecordedChanges.Select(recorded => recorded.Change));
@@ -74,6 +78,25 @@ public sealed class SetMailFlagsToolTests
         // Nothing has been issued to a mail server yet, which is the whole reason the result reports records.
         Assert.All(result.RecordedChanges, recorded => Assert.Equal("pending", recorded.State));
         Assert.All(result.RecordedChanges, recorded => Assert.True(Guid.TryParse(recorded.ChangeRecordId, out _)));
+    }
+
+    /// <summary>On a held account there is no mail server to wait on, so the result says the change is made and names no record to follow.</summary>
+    [Fact]
+    public async Task SetMailFlagsAsync_AHeldAccount_AnswersAppliedWithNoRecords()
+    {
+        // Arrange
+        var tool = ToolOver(out var records, out _, held: true);
+
+        // Act
+        var result = await tool.SetMailFlagsAsync(
+            Guid.CreateVersion7().ToString(),
+            seen: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(result.Applied);
+        Assert.Empty(result.RecordedChanges);
+        Assert.Empty(records.OpenedRequests);
     }
 
     /// <summary>A value the call left out is a value no record is written for, which is what makes each one optional.</summary>
@@ -324,11 +347,32 @@ public sealed class SetMailFlagsToolTests
     private static SetMailFlagsTool ToolOver(
         out RecordingMailboxMutationRecordStore records,
         out IAuthoredMailboxTargetReader targets,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        bool held = false)
     {
         records = new RecordingMailboxMutationRecordStore();
 
         var folder = MailFolderResolution.FirstBindingOf(Inbox, RemoteFolderPath.Create("INBOX", '/'));
+        var localFolders = Substitute.For<ILocalMailFolderStore>();
+        var states = Substitute.For<ILocalEmailStateStore>();
+        var auditSettings = Substitute.For<IMailboxMutationAuditSettingsReader>();
+
+        if (held)
+        {
+            localFolders
+                .ReadAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<LocalMailFolderHolding?>(
+                    new LocalMailFolderHolding(MailAccountCustodyPhase.Held, [], [])));
+            states
+                .ReadAsync(
+                    Arg.Any<IPersistenceSession>(),
+                    Arg.Any<MailAccountIdentity>(),
+                    Arg.Any<StoredEmailId>(),
+                    Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<LocalEmailState?>(
+                    new LocalEmailState(folder, Folder: null, IsSeen: false, IsFlagged: false, RemoteEmailKeywords.Create([]))));
+            auditSettings.GetAuditSettings(Arg.Any<MailAccountId>()).Returns(MailboxMutationAuditSettings.Disabled);
+        }
         targets = Substitute.For<IAuthoredMailboxTargetReader>();
         targets
             .FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
@@ -351,7 +395,14 @@ public sealed class SetMailFlagsToolTests
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             targets,
-            records,
+            new MailboxChangeSubmission(
+                localFolders,
+                records,
+                states,
+                auditSettings,
+                Substitute.For<IMailboxMutationAuditEntryStore>(),
+                ClientSignalPublishers.ReachingNobody,
+                new FakeTimeProvider()),
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
@@ -453,6 +504,13 @@ public sealed class SetMailFlagsToolTests
 
         public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
             MailAccountIdentity account,
+            int limit,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
+            MailAccountIdentity account,
+            MailboxMutation mutation,
             int limit,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();

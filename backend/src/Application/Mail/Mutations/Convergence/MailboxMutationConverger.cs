@@ -3,10 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Transport;
 
 namespace MailFathom.Application.Mail.Mutations.Convergence;
@@ -47,6 +49,8 @@ public sealed class MailboxMutationConverger
     private readonly IMailboxMutationAuditTrail auditTrail;
     private readonly MailboxConvergenceOptions options;
     private readonly TimeProvider timeProvider;
+    private readonly ILocalMailFolderStore localFolders;
+    private readonly MailboxChangeSubmission submission;
 
     /// <summary>Initializes the converger from the record store and the one path able to perform a change.</summary>
     /// <param name="store">Reads the outstanding records and, through the journal, is written back to.</param>
@@ -56,6 +60,8 @@ public sealed class MailboxMutationConverger
     /// <param name="auditTrail">Keeps the history a finished mutation leaves behind, where the account asked for one.</param>
     /// <param name="options">Bounds one pass and carries the unknown-outcome grace period.</param>
     /// <param name="timeProvider">Measures how long an unresolved outcome has been unresolved.</param>
+    /// <param name="localFolders">Answers whether the account is held, where no change is carried to a server.</param>
+    /// <param name="submission">Runs a held account's erasure once its window has passed.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the configured pass bound is below one or the grace period is negative.</exception>
     public MailboxMutationConverger(
@@ -65,7 +71,9 @@ public sealed class MailboxMutationConverger
         OptimisticConcurrencyRetryPolicy commitPolicy,
         IMailboxMutationAuditTrail auditTrail,
         MailboxConvergenceOptions options,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ILocalMailFolderStore localFolders,
+        MailboxChangeSubmission submission)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(performer);
@@ -74,6 +82,8 @@ public sealed class MailboxMutationConverger
         ArgumentNullException.ThrowIfNull(auditTrail);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(localFolders);
+        ArgumentNullException.ThrowIfNull(submission);
         ArgumentOutOfRangeException.ThrowIfLessThan(options.MaxMutationsPerPass, 1, nameof(options));
         ArgumentOutOfRangeException.ThrowIfLessThan(options.UnknownOutcomeGrace, TimeSpan.Zero, nameof(options));
 
@@ -84,6 +94,8 @@ public sealed class MailboxMutationConverger
         this.auditTrail = auditTrail;
         this.options = options;
         this.timeProvider = timeProvider;
+        this.localFolders = localFolders;
+        this.submission = submission;
     }
 
     /// <summary>Takes one bounded pass over everything the account has asked a mail server for and not seen finished.</summary>
@@ -101,15 +113,20 @@ public sealed class MailboxMutationConverger
         MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        var outstanding = await this.store.ReadOutstandingAsync(
-            account,
-            this.options.MaxMutationsPerPass,
-            cancellationToken);
+        var isHeld = await this.localFolders.ReadAsync(account, cancellationToken) is { Phase: MailAccountCustodyPhase.Held };
 
-        if (outstanding.Count == 0)
+        // A held account issues no IMAP command, so a record of any other change opened before the hold is work no pass on
+        // it can do. Reading only its deletes keeps those records out of the page instead of letting them fill it ahead of
+        // the erasures behind them; they stay pending in the lifecycle counts, which is what they are.
+        var outstanding = isHeld
+            ? await this.store.ReadOutstandingAsync(account, MailboxMutation.Delete, this.options.MaxMutationsPerPass, cancellationToken)
+            : await this.store.ReadOutstandingAsync(account, this.options.MaxMutationsPerPass, cancellationToken);
+
+        if (outstanding.Count == 0 && !isHeld)
         {
-            // Nothing outstanding is nothing to count: the lifecycle read answers over the same rows, so an account with
-            // no unfinished mutation — which is nearly every account on nearly every run — costs one query rather than two.
+            // An empty unfiltered page is nothing to count: the lifecycle read answers over the same rows, so an account with
+            // no unfinished mutation — which is nearly every account on nearly every run — spares that query. A held
+            // account's page holds only its deletes, so an empty one can still leave inherited records to report.
             return new MailboxConvergenceReport(0, 0, 0, 0, []);
         }
 
@@ -127,6 +144,13 @@ public sealed class MailboxMutationConverger
                 continue;
             }
 
+            if (isHeld)
+            {
+                await this.EraseHeldAsync(candidate, tally, cancellationToken);
+
+                continue;
+            }
+
             await this.ConvergeOneAsync(candidate, transportSecurityPolicy, tally, cancellationToken);
         }
 
@@ -138,6 +162,51 @@ public sealed class MailboxMutationConverger
             tally.DeferredCount,
             tally.FailedCount,
             outstandingCounts);
+    }
+
+    /// <summary>Runs one delete record of a held account whose window has passed as an erasure.</summary>
+    /// <remarks>
+    /// A held account writes no record for anything but an erasure, so this issues no IMAP command at all. It does not
+    /// tell an erasure apart from a delete recorded before the account became held: every delete record is erased, whatever
+    /// disposition it carries, and #2007 owns telling the two apart. A record of another kind left from before the account
+    /// became held never reaches here, because the pass reads only a held account's deletes; it stays where it is rather
+    /// than being carried to a source that is no longer the truth. The isolation is the one a remote change gets, for the
+    /// same reason.
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A pass isolates one erasure's failure so the account's remaining records are still taken in hand; the record stays outstanding and the next pass tries it again.")]
+    private async Task EraseHeldAsync(
+        OutstandingMailboxMutation candidate,
+        ConvergenceTally tally,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var erased = await this.commitPolicy.CommitAsync(
+                (session, token) => this.submission.EraseAsync(session, candidate.Record, token),
+                cancellationToken);
+
+            if (erased is not null)
+            {
+                this.submission.Announce(erased);
+            }
+            else
+            {
+                // The cascade removes the record with the message, so only a message that was already gone leaves the
+                // record behind, and completing it is what stops every later pass reading it as outstanding again.
+                await new MailboxMutationJournal(this.store, this.commitPolicy, this.auditTrail, candidate.Record, candidate.Folder)
+                    .CompleteAsync(candidate.Record.Placement, cancellationToken);
+            }
+
+            tally.CompletedCount++;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            tally.FailedCount++;
+        }
     }
 
     /// <summary>Moves one record, and absorbs whatever moving it failed on.</summary>

@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Authoring;
@@ -395,7 +396,7 @@ public sealed class MailRelocationRecorderTests
             targets,
             this.DestinationResolver(sessions),
             this.dispositions,
-            this.records,
+            MailboxChangeSubmissions.Over(this.records),
             new OptimisticConcurrencyRetryPolicy(
                 sessions,
                 new PersistenceConcurrencyOptions(),
@@ -427,7 +428,8 @@ public sealed class MailRelocationRecorderTests
                 sessionFactory,
                 ClientSignalPublishers.ReachingNobody,
                 new FakeTimeProvider(RecordedAt)),
-            transportSecurityPolicies);
+            transportSecurityPolicies,
+            Substitute.For<ILocalMailFolderStore>());
     }
 
     private static AuthoredMailboxTarget TargetIn(MailFolderAlias folderAlias)

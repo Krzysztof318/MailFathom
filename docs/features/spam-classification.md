@@ -216,6 +216,14 @@ Nothing else is ever done. No delete, no flag other than `\Seen`, no folder crea
 [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 refuses the rest and this feature does not reopen that record.
 
+**On an account whose mailbox MailFathom holds itself**, there is no server to write to, so both acts are made to the
+stored message as the classification commits, where the junk destination is a mapping the account mirrors: the message
+is marked read and filed into the account's local junk folder in that transaction, with an audit entry for each where
+the account keeps one. Nothing is written down to converge later, which is also why a held message moved back out of
+junk is not recognized as one already filed. **An unmirrored junk destination resolves to nothing on a held account**,
+and so does one no local folder corresponds to, so the verdict ends as an unresolved destination and neither act is
+made — the message stays unread where it is.
+
 ### Where junk is filed, and why it need not be mirrored
 
 The destination is whichever folder the account maps to the `Junk` role, or a folder named explicitly in the

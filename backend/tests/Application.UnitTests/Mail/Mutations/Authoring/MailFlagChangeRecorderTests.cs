@@ -361,7 +361,7 @@ public sealed class MailFlagChangeRecorderTests
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             targets,
-            records,
+            MailboxChangeSubmissions.Over(records),
             new OptimisticConcurrencyRetryPolicy(
                 sessions,
                 new PersistenceConcurrencyOptions(),

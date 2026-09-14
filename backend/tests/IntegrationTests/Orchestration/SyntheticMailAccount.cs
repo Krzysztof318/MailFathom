@@ -115,6 +115,7 @@ internal sealed class SyntheticMailAccount(
         "extraction-backfill",
         "hybrid-retrieval",
         "lexical-search",
+        "local-email-state",
         "mail-ownership",
         "manual-move-source",
         "manual-move-target",

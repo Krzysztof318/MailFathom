@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
@@ -44,6 +45,44 @@ public sealed class MailboxDestinationResolverTests
         Assert.Equal(binding.RemotePath, destination.Path);
         Assert.True(destination.IsMirrored);
         Assert.Equal(0, context.ListedFolderCount);
+    }
+
+    /// <summary>A mirrored mapping to a role carries that role, which is how a held account finds the role's own local folder.</summary>
+    [Fact]
+    public async Task ResolveAsync_AMirroredMappingToARole_CarriesTheRole()
+    {
+        // Arrange
+        var context = new DestinationContext();
+        context.Mappings.With(Account.Id, MailFolderMapping.ToSpecialUse(Junk, MailFolderSpecialUse.Junk));
+        context.Bindings.Bind(Account.Id, Junk, "INBOX/Junk");
+
+        // Act
+        var resolution = await context.ResolveAsync(MailFolderReference.ToAlias(Junk));
+
+        // Assert
+        Assert.Equal(MailboxDestinationOutcome.Resolved, resolution.Outcome);
+        Assert.True(resolution.Destination!.IsMirrored);
+        Assert.Equal(MailFolderSpecialUse.Junk, resolution.Destination.Role);
+    }
+
+    /// <summary>A role resolved on demand carries the role as well, so both answering paths hand a held account the same thing.</summary>
+    [Fact]
+    public async Task ResolveAsync_AnUnmirroredMappingToARole_CarriesTheRole()
+    {
+        // Arrange
+        var context = new DestinationContext(
+            new RemoteFolder(RemoteFolderPath.Create("INBOX.Junk", '.'), [MailFolderSpecialUse.Junk]));
+        context.Mappings.With(
+            Account.Id,
+            MailFolderMapping.ToSpecialUse(Junk, MailFolderSpecialUse.Junk, MailFolderParticipation.MappedOnly));
+
+        // Act
+        var resolution = await context.ResolveAsync(MailFolderReference.ToRole(MailFolderSpecialUse.Junk));
+
+        // Assert
+        Assert.Equal(MailboxDestinationOutcome.Resolved, resolution.Outcome);
+        Assert.False(resolution.Destination!.IsMirrored);
+        Assert.Equal(MailFolderSpecialUse.Junk, resolution.Destination.Role);
     }
 
     /// <summary>No run schedules an unmirrored folder, so the moment it is needed as a destination is when it is resolved.</summary>
@@ -201,6 +240,25 @@ public sealed class MailboxDestinationResolverTests
             destinations.Find(MailFolderReference.ToAlias(Archive)).Outcome);
     }
 
+    /// <summary>A held account keeps no local folder for a source folder it never mirrored, and must not wait on a server listing to learn that.</summary>
+    [Fact]
+    public async Task ResolveAsync_AnUnmirroredDestinationOnAHeldAccount_ReportsItAsUnmappedWithoutListingTheServer()
+    {
+        // Arrange
+        var context = new DestinationContext(new RemoteFolder(RemoteFolderPath.Create("INBOX.Spam", '.'), []));
+        context.Mappings.With(Account.Id, MappedOnlyPathTo(Junk, "INBOX.Spam"));
+        context.LocalFolders
+            .ReadAsync(Account, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<LocalMailFolderHolding?>(new LocalMailFolderHolding(MailAccountCustodyPhase.Held, [], [])));
+
+        // Act
+        var resolution = await context.ResolveAsync(MailFolderReference.ToAlias(Junk));
+
+        // Assert
+        Assert.Equal(MailboxDestinationOutcome.Unmapped, resolution.Outcome);
+        Assert.Equal(0, context.ListedFolderCount);
+    }
+
     /// <summary>A folder MailFathom knows by name and mirrors nothing of, which is what this issue's destination is.</summary>
     private static MailFolderMapping MappedOnlyPathTo(MailFolderAlias alias, string remotePath) =>
         MailFolderMapping.ToRemotePath(
@@ -261,8 +319,11 @@ public sealed class MailboxDestinationResolverTests
                     persistenceSessionFactory,
                     ClientSignalPublishers.ReachingNobody,
                     new FakeTimeProvider(new DateTimeOffset(2026, 8, 12, 9, 0, 0, TimeSpan.Zero))),
-                transportSecurityPolicies);
+                transportSecurityPolicies,
+                this.LocalFolders);
         }
+
+        internal ILocalMailFolderStore LocalFolders { get; } = Substitute.For<ILocalMailFolderStore>();
 
         internal StubMailFolderMappings Mappings { get; } = StubMailFolderMappings.Nothing;
 

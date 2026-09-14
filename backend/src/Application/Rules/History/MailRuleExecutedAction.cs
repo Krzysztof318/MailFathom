@@ -13,7 +13,7 @@ namespace MailFathom.Application.Rules.History;
 /// <param name="Outcome">What became of it.</param>
 /// <param name="Destination">The folder the action named, and <see langword="null" /> for an action naming none.</param>
 /// <param name="FailureReason">Why nothing was recorded, which is present exactly when the outcome is <see cref="MailRuleExecutedActionOutcome.Refused" />.</param>
-/// <param name="MutationRecordId">The record carrying the request, which is present exactly when the outcome is <see cref="MailRuleExecutedActionOutcome.Requested" />.</param>
+/// <param name="MutationRecordId">The record carrying the request, which is present only when the outcome is <see cref="MailRuleExecutedActionOutcome.Requested" /> and absent there too where a held account needed none: it committed the change to stored state, or the message already stood in the folder a move named.</param>
 /// <remarks>
 /// <para>
 /// Every value here is MailFathom's own name for something: a mutation name, a configured folder alias, a bounded

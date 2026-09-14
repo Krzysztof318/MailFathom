@@ -13,6 +13,10 @@ namespace MailFathom.Application.Rules.History;
 public enum MailRuleExecutedActionOutcome
 {
     /// <summary>A mutation record was opened for the action, and the account's convergence pass carries it from there.</summary>
+    /// <remarks>
+    /// On a held account no record is opened: the change is committed to stored state as the pass commits, or a move
+    /// names the local folder the message is already in, which leaves the mailbox saying what the action asked for.
+    /// </remarks>
     Requested = 0,
 
     /// <summary>Another rule matching the same email had already settled what this action would have decided.</summary>

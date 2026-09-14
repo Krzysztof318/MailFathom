@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
@@ -719,7 +720,8 @@ public sealed class MailRuleEvaluationPassTests
                 Substitute.For<IPersistenceSessionFactory>(),
                 ClientSignalPublishers.ReachingNobody,
                 this.timeProvider),
-            Substitute.For<IMailTransportSecurityPolicyReader>());
+            Substitute.For<IMailTransportSecurityPolicyReader>(),
+            Substitute.For<ILocalMailFolderStore>());
     }
 
     private MailRuleEvaluationPass CreatePass(
@@ -738,7 +740,10 @@ public sealed class MailRuleEvaluationPassTests
             new MailRuleSetEvaluator(this.timeProvider),
             this.store,
             this.runStore,
-            new MailRuleActionRecorder(this.mutations, this.deleteDispositions, this.permissions),
+            new MailRuleActionRecorder(
+                MailboxChangeSubmissions.Over(this.mutations),
+                this.deleteDispositions,
+                this.permissions),
             this.CreateDestinationResolver(),
             this.history,
             this.folderMappings,

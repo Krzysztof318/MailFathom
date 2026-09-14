@@ -12,7 +12,8 @@ namespace MailFathom.Mcp.Tools.Results;
 /// <para>
 /// It answers with records rather than with a mailbox, because at the moment it is produced no IMAP command has gone
 /// out. Saying that plainly is what stops a caller reading the result as the star already being on the message: the
-/// account's own run carries each record to the server, and a change that never arrives is found by its record.
+/// account's own run carries each record to the server, and a change that never arrives is found by its record. A held
+/// account has no server: it applies the change at once, says so, and publishes no record.
 /// </para>
 /// <para>
 /// Nothing derived from the message appears. The email's own identifier, the account, the folder alias, and MailFathom's
@@ -20,7 +21,7 @@ namespace MailFathom.Mcp.Tools.Results;
 /// is text the user chose and can name a person or a case, and the caller already holds what it wrote.
 /// </para>
 /// </remarks>
-[Description("What the change was written down as: one durable record per value asked for, each carried to the mail server by the account's next run.")]
+[Description("What the change was written down as: one durable record per value asked for, each carried to the mail server by the account's next run — or, on a held account, that it was applied at once.")]
 internal sealed record SetMailFlagsToolResult
 {
     /// <summary>Gets the email the change was written down against.</summary>
@@ -28,15 +29,19 @@ internal sealed record SetMailFlagsToolResult
     public required string StoredEmailId { get; init; }
 
     /// <summary>Gets the account whose run will carry the change.</summary>
-    [Description("The account the email belongs to. Its next synchronization run is what issues the change to the mail server.")]
+    [Description("The account the email belongs to. Its next synchronization run is what issues a recorded change to the mail server; an applied change has no mail server to reach.")]
     public required string AccountId { get; init; }
 
     /// <summary>Gets the operator's own name for the folder the email is in.</summary>
     [Description("The folder alias the email is in, as MailFathom's configuration names it.")]
     public required string FolderAlias { get; init; }
 
+    /// <summary>Gets whether the change was applied to a held account's mail rather than written down for a mail server.</summary>
+    [Description("True when the account is held, meaning MailFathom alone keeps its mail: the change has already been applied, and recordedChanges is empty because there is nothing left to carry to a mail server.")]
+    public required bool Applied { get; init; }
+
     /// <summary>Gets one entry per value the call asked for.</summary>
-    [Description("One entry per value asked for, in the order seen, flagged, keywords. A call that asked for one value carries one entry.")]
+    [Description("One entry per value asked for, in the order seen, flagged, keywords. A call that asked for one value carries one entry, and an applied call carries none.")]
     public required IReadOnlyList<RecordedMailboxChange> RecordedChanges { get; init; }
 
     /// <summary>Publishes what the use case recorded.</summary>
@@ -52,6 +57,7 @@ internal sealed record SetMailFlagsToolResult
             StoredEmailId = result.StoredEmailId.ToString(),
             AccountId = result.AccountId.Value,
             FolderAlias = result.FolderAlias.Value,
+            Applied = result.IsApplied,
             RecordedChanges =
             [
                 .. result.Recorded.Select(static recorded => new RecordedMailboxChange

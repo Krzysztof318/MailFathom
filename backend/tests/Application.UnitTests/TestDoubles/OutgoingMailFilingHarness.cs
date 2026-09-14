@@ -4,6 +4,7 @@
 
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
@@ -95,7 +96,8 @@ internal sealed class OutgoingMailFilingHarness
                 persistenceSessions,
                 ClientSignalPublishers.ReachingNobody,
                 clock),
-            transportSecurityPolicies);
+            transportSecurityPolicies,
+            Substitute.For<ILocalMailFolderStore>());
 
         var commitPolicy = new OptimisticConcurrencyRetryPolicy(
             persistenceSessions,

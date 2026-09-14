@@ -3,9 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
+using MailFathom.Application.Mail.Mutations.Local;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.UnitTests.TestDoubles;
@@ -448,6 +450,46 @@ public sealed class SpamActionRecorderTests
         Assert.Equal("Quarantine", request.DestinationPath?.Value);
     }
 
+    /// <summary>
+    /// On a held account a filing no local folder corresponds to is refused after the read change was already made in
+    /// the same transaction, so the verdict ends unresolved and that transaction is never committed.
+    /// </summary>
+    [Fact]
+    public async Task RecordAsync_AHeldFilingWithNoLocalFolder_WithholdsTheReadChangeByNotCommitting()
+    {
+        // Arrange
+        var elsewhere = MailFolderAlias.Create("QUARANTINE");
+        this.mappings.With(
+            Account.Id,
+            MailFolderMapping.ToRemotePath(elsewhere, RemoteFolderPath.Create("Quarantine")));
+        this.bindings.Bind(Account.Id, elsewhere, "Quarantine");
+
+        var states = new InMemoryLocalEmailStateStore(Account);
+        states.Store(
+            Email,
+            new LocalEmailState(
+                MailFolderResolution.FirstBindingOf(Inbox, RemoteFolderPath.Create("INBOX")),
+                Folder: null,
+                IsSeen: false,
+                IsFlagged: false,
+                RemoteEmailKeywords.Create([])));
+        var session = Substitute.For<IPersistenceSession>();
+        var recorder = this.Recorder(
+            SpamActionSettings.Create(filesJunk: true, marksJunkRead: true, MailFolderReference.ToAlias(elsewhere)),
+            submission: MailboxChangeSubmissions.Over(
+                this.records,
+                new InMemoryLocalMailFolderStore(Account, MailAccountCustodyPhase.Held),
+                states),
+            session: session);
+
+        // Act
+        var result = await recorder.RecordAsync(SyntheticMailUser.Deployment, SpamVerdictOf(SpamVerdict.Spam), SpamActionPosture.Acting, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(SpamActionOutcome.DestinationUnresolved, result.Outcome);
+        await session.DidNotReceive().CommitAsync(Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task RecordAsync_AnyRequest_NamesTheClassificationAsWhatAskedForIt()
     {
@@ -634,6 +676,8 @@ public sealed class SpamActionRecorderTests
     /// <param name="settings">The switches the acting user has set.</param>
     /// <param name="occurrences">Where the message sits, defaulting to an unread occurrence in the inbox.</param>
     /// <param name="actingFor">The user those switches belong to, defaulting to the one this class's account carries.</param>
+    /// <param name="submission">What the changes are submitted through, defaulting to one over an account that is not held.</param>
+    /// <param name="session">The session every commit is staged in, defaulting to one that commits.</param>
     /// <remarks>
     /// Configured per user rather than for any user, so a recorder forwarding a constant reads as no action taken and
     /// fails the test that expected one. Separating that constant from the account's own user needs
@@ -643,7 +687,9 @@ public sealed class SpamActionRecorderTests
     private SpamActionRecorder Recorder(
         SpamActionSettings settings,
         ISpamActionOccurrenceReader? occurrences = null,
-        MailUserId? actingFor = null)
+        MailUserId? actingFor = null,
+        MailboxChangeSubmission? submission = null,
+        IPersistenceSession? session = null)
     {
         var settingsReader = Substitute.For<ISpamActionSettingsReader>();
         settingsReader.ActionsFor(Arg.Any<MailUserId>()).Returns(SpamActionSettings.None);
@@ -651,12 +697,13 @@ public sealed class SpamActionRecorderTests
         this.settingsReader = settingsReader;
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
-        sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
+        sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => session ?? new CommittingSession());
 
         return new SpamActionRecorder(
             settingsReader,
             occurrences ?? ReaderOf(OccurrenceIn(Inbox, isRemotelySeen: false)),
             this.records,
+            submission ?? MailboxChangeSubmissions.Over(this.records),
             this.DestinationResolver(sessionFactory),
             this.dispositions,
             new OptimisticConcurrencyRetryPolicy(
@@ -690,7 +737,8 @@ public sealed class SpamActionRecorderTests
                 sessionFactory,
                 ClientSignalPublishers.ReachingNobody,
                 new FakeTimeProvider(EvaluatedAt)),
-            transportSecurityPolicies);
+            transportSecurityPolicies,
+            Substitute.For<ILocalMailFolderStore>());
     }
 
     private static ISpamActionOccurrenceReader ReaderOf(SpamActionOccurrence occurrence)

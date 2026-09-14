@@ -7,11 +7,11 @@ using MailFathom.Domain.Mutations;
 
 namespace MailFathom.Application.Rules.Actions;
 
-/// <summary>One action a rule asked for and a durable mutation record was opened against.</summary>
+/// <summary>One action a rule asked for and a durable mutation record was opened against, or a held account committed.</summary>
 /// <param name="RuleName">The rule that asked, which is MailFathom's own configured name for it.</param>
 /// <param name="Position">Where the action sits in the order its own rule declares its changes, counted from zero.</param>
 /// <param name="Mutation">The change asked for, which is the same word a log line and a counter use.</param>
-/// <param name="RecordId">The record carrying the request, which is where what happened on the server is answered from.</param>
+/// <param name="RecordId">The record carrying the request, which is where what happened on the server is answered from, or <see langword="null" /> where a held account committed the change with no record.</param>
 /// <param name="DestinationAlias">The folder the action named, and <see langword="null" /> for an action naming none.</param>
 /// <remarks>
 /// The record identifier is what makes the rule history a pointer rather than a second lifecycle. A request opened here
@@ -22,5 +22,5 @@ public sealed record RecordedMailRuleAction(
     string RuleName,
     int Position,
     MailboxMutation Mutation,
-    MailboxMutationRecordId RecordId,
+    MailboxMutationRecordId? RecordId,
     MailFolderAlias? DestinationAlias = null);

@@ -46,37 +46,37 @@ public sealed class MailFlagChangeRecorder
     private readonly AccessAuthorization authorization;
     private readonly MailboxScopeResolver scopeResolver;
     private readonly IAuthoredMailboxTargetReader targets;
-    private readonly IMailboxMutationRecordStore records;
+    private readonly MailboxChangeSubmission submission;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly MailAccountRunSignal runSignal;
 
-    /// <summary>Initializes the use case over the grant it asks first and the record it writes.</summary>
+    /// <summary>Initializes the use case over the grant it asks first and the submission it writes through.</summary>
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <param name="scopeResolver">Answers whether a tool may reach the mailbox an email was stored from.</param>
     /// <param name="targets">Answers where the named email currently is.</param>
-    /// <param name="records">Opens the durable record one change is carried by.</param>
-    /// <param name="commitPolicy">Commits a call's records together, retrying an optimistic conflict.</param>
+    /// <param name="submission">Records one change, or commits it where the account is held.</param>
+    /// <param name="commitPolicy">Commits a call's changes together, retrying an optimistic conflict.</param>
     /// <param name="runSignal">Brings the account's next synchronization run forward, which is what carries the change to the mail server.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     public MailFlagChangeRecorder(
         AccessAuthorization authorization,
         MailboxScopeResolver scopeResolver,
         IAuthoredMailboxTargetReader targets,
-        IMailboxMutationRecordStore records,
+        MailboxChangeSubmission submission,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         MailAccountRunSignal runSignal)
     {
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(targets);
-        ArgumentNullException.ThrowIfNull(records);
+        ArgumentNullException.ThrowIfNull(submission);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(runSignal);
 
         this.authorization = authorization;
         this.scopeResolver = scopeResolver;
         this.targets = targets;
-        this.records = records;
+        this.submission = submission;
         this.commitPolicy = commitPolicy;
         this.runSignal = runSignal;
     }
@@ -85,7 +85,7 @@ public sealed class MailFlagChangeRecorder
     /// <param name="change">What the caller asked for.</param>
     /// <param name="requester">The invocation asking, which is what decides whether asking again is the same request.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>The record opened for each value, in the order the change states them.</returns>
+    /// <returns>The record opened for each value, in the order the change states them, or no record where a held account applied the change.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="change" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the writing grant.</exception>
     /// <exception cref="AuthoredMailChangeTargetNotFoundException">Thrown when this deployment serves no readable email under that identity, or when the email it serves names a remote occurrence the mail server no longer holds.</exception>
@@ -96,7 +96,8 @@ public sealed class MailFlagChangeRecorder
     /// what makes a retried call safe to make, and it is why the identity is the invocation's rather than the change's —
     /// a caller that starred a message, unstarred it, and starred it again has made three requests and means all three.
     /// A second call is a retry only when it asks for what the first asked for, which is why the terms are compared
-    /// rather than assumed from the identity.
+    /// rather than assumed from the identity. All of this is the record's: a held account applies the change and keeps no
+    /// record for a repeat to be matched against, so there every call applies the change it names.
     /// </remarks>
     public async Task<AuthoredMailFlagChangeResult> RecordAsync(
         AuthoredMailFlagChange change,
@@ -121,6 +122,7 @@ public sealed class MailFlagChangeRecorder
             .ToArray();
 
         var opened = new List<RecordedMailFlagMutation>(requests.Length);
+        var applied = new List<AppliedMailboxChange>(requests.Length);
 
         await this.commitPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
@@ -128,20 +130,51 @@ public sealed class MailFlagChangeRecorder
                 // Cleared per attempt, because a retried commit re-opens every record and would otherwise report the
                 // losing attempt's rows beside the winning one's.
                 opened.Clear();
+                applied.Clear();
 
                 foreach (var request in requests)
                 {
-                    var record = await this.records.OpenAsync(session, request, heldUntil: null, attemptCancellationToken);
+                    var submitted = await this.submission.SubmitAsync(
+                        session,
+                        request,
+                        destination: null,
+                        heldUntil: null,
+                        attemptCancellationToken);
 
-                    if (!StatesTheSameChangeAs(record.Request, request))
+                    switch (submitted.Outcome)
                     {
-                        throw MailFlagChangeInvalidException.RequestIdAlreadyAskedForAnother();
-                    }
+                        case MailboxChangeSubmissionOutcome.Recorded when submitted.Record is { } record:
+                            if (!StatesTheSameChangeAs(record.Request, request))
+                            {
+                                throw MailFlagChangeInvalidException.RequestIdAlreadyAskedForAnother();
+                            }
 
-                    opened.Add(new RecordedMailFlagMutation(request.Mutation, record.Id, record.Lifecycle));
+                            opened.Add(new RecordedMailFlagMutation(request.Mutation, record.Id, record.Lifecycle));
+                            break;
+                        case MailboxChangeSubmissionOutcome.Applied when submitted.Change is { } change:
+                            applied.Add(change);
+                            break;
+                        default:
+                            throw new AuthoredMailChangeTargetNotFoundException();
+                    }
                 }
             },
             cancellationToken);
+
+        if (applied.Count > 0)
+        {
+            foreach (var committed in applied)
+            {
+                this.submission.Announce(committed);
+            }
+
+            return new AuthoredMailFlagChangeResult(
+                change.StoredEmailId,
+                target.Occurrence.AccountId,
+                target.Folder.Alias,
+                [],
+                IsApplied: true);
+        }
 
         // Raised once the records are durable, and never before: the run this brings forward reads the records rather
         // than the raise, so a raise ahead of the commit would be a run that found nothing and a change that then waited

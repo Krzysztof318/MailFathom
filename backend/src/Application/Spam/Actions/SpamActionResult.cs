@@ -26,12 +26,17 @@ public sealed record SpamActionResult(
     /// <returns>The result.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="outcome" /> is <see cref="SpamActionOutcome.Requested" />, which records the changes instead.</exception>
     public static SpamActionResult NotActedOn(SpamActionOutcome outcome) =>
-        outcome is SpamActionOutcome.Requested
+        outcome is SpamActionOutcome.Requested or SpamActionOutcome.Applied
             ? throw new ArgumentOutOfRangeException(
                 nameof(outcome),
                 outcome,
                 "A result that asked for nothing does not carry the requested outcome.")
             : new SpamActionResult(outcome, MarkedReadRecordId: null, FiledRecordId: null);
+
+    /// <summary>Records changes applied to a held account's mail, which leave no record to name.</summary>
+    /// <returns>The result.</returns>
+    public static SpamActionResult Applied() =>
+        new(SpamActionOutcome.Applied, MarkedReadRecordId: null, FiledRecordId: null);
 
     /// <summary>Records the changes that were written down.</summary>
     /// <param name="markedReadRecordId">The record carrying the <c>\Seen</c> change, or <see langword="null" /> when none was asked for.</param>

@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Folders.Local;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Drafts;
@@ -242,7 +243,8 @@ internal sealed class MailDraftHarness
                 this.persistenceSessions,
                 ClientSignalPublishers.ReachingNobody,
                 this.clock),
-            this.transportSecurityPolicies);
+            this.transportSecurityPolicies,
+            Substitute.For<ILocalMailFolderStore>());
 
         this.Filer = new MailDraftFiler(
             new MailboxCopyAppender(

@@ -6,7 +6,8 @@ namespace MailFathom.Application.Spam.Actions;
 
 /// <summary>How one attempt to act on a spam verdict ended.</summary>
 /// <remarks>
-/// Every member but <see cref="Requested" /> is a reason no mailbox was written to, and none of them is a failure. They
+/// Every member but <see cref="Requested" /> and <see cref="Applied" /> is a reason no mailbox was written to, and none
+/// of them is a failure. They
 /// are separate members rather than one negative because a caller reporting what a run did — above all a run an operator
 /// asked for over a whole mailbox — has to say why a message was left alone, and <em>nothing to change</em> and <em>the
 /// user has already moved this back</em> are different answers to that question.
@@ -83,4 +84,7 @@ public enum SpamActionOutcome
     /// taken rather than a guess at it. What is absent is the pair of record identifiers, because no record was opened.
     /// </remarks>
     WouldRequest = 9,
+
+    /// <summary>The account is held, and the changes were applied to the mail MailFathom keeps with no record to carry.</summary>
+    Applied = 10,
 }
