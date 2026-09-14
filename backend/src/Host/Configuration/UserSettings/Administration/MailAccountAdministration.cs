@@ -404,9 +404,16 @@ internal sealed class MailAccountAdministration(
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="folderJson" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailAccountsWrite" />.</exception>
     /// <remarks>
+    /// <para>
     /// The folder acts carry the grant an account's own settings carry rather than one of their own: a folder names a
     /// path on that account's server and decides what is mirrored from it, so a deployment that lets somebody state
     /// their own mailboxes has already let them state what is read out of one.
+    /// </para>
+    /// <para>
+    /// Part of what they may state is fixed, and <see cref="MailAccountFolderComposition" /> is where those rules are:
+    /// the synchronization switches, the role a folder plays, and the name a folder playing one carries. They hold on
+    /// all three folder acts and on a user's own account declaration, and on nothing an administrator states.
+    /// </para>
     /// </remarks>
     internal Task<UserRecordWriteOutcome?> AddOwnFolderAsync(
         string accountId,
@@ -594,11 +601,38 @@ internal sealed class MailAccountAdministration(
             return (null, AddressRefusedForUser(record.Version));
         }
 
+        var document = declaration.Document;
+
+        // A declared account carries its folders, so a user declaring one reaches the folder routes' rules through it
+        // rather than around them. An administrator states a whole account, which those rules do not bind.
+        if (authority == UserRecordAuthority.User)
+        {
+            MailAccountFolderChange folders;
+
+            try
+            {
+                folders = MailAccountFolderComposition.WithFoldersDeclared(document);
+            }
+            catch (Exception refused) when (refused is FormatException or JsonException)
+            {
+                return (null, NotADeclaration(record.Version, refused));
+            }
+
+            if (folders.Refusal is { } broken)
+            {
+                return (
+                    null,
+                    UserRecordWriteOutcome.Refused(MailFathomErrorCode.ConfigurationCandidateInvalid, record.Version, [broken]));
+            }
+
+            document = folders.Candidate ?? document;
+        }
+
         var candidate = new MailAccountRecord(
             Guid.NewGuid(),
             declaration.EmailAddress,
             declaration.DisplayName,
-            declaration.Document,
+            document,
             Version: 0);
 
         var judgement = await this.JudgeAsync(
@@ -639,7 +673,7 @@ internal sealed class MailAccountAdministration(
     private async Task<UserRecordWriteOutcome?> ChangeOwnFolderAsync(
         string accountId,
         long expectedVersion,
-        Func<string, string?> compose,
+        Func<string, MailAccountFolderChange> compose,
         string? unmatched,
         CancellationToken cancellationToken)
     {
@@ -662,11 +696,11 @@ internal sealed class MailAccountAdministration(
             return NotAssigned(record.Version, accountId);
         }
 
-        string? candidateDocument;
+        MailAccountFolderChange change;
 
         try
         {
-            candidateDocument = compose(account.Document);
+            change = compose(account.Document);
         }
         catch (Exception refused) when (refused is FormatException or JsonException)
         {
@@ -676,7 +710,12 @@ internal sealed class MailAccountAdministration(
                 [$"The folder change is not one this deployment can compose over the mail account, so nothing was written: {refused.Message}"]);
         }
 
-        if (candidateDocument is null)
+        if (change.Refusal is { } broken)
+        {
+            return UserRecordWriteOutcome.Refused(MailFathomErrorCode.ConfigurationCandidateInvalid, record.Version, [broken]);
+        }
+
+        if (change.Candidate is not { } candidateDocument)
         {
             return UserRecordWriteOutcome.Refused(MailFathomErrorCode.ConfigurationCandidateInvalid, record.Version, [unmatched!]);
         }
