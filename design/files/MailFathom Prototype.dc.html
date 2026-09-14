@@ -654,7 +654,7 @@
               </sc-if>
               <sc-if value="{{ g.open }}" hint-placeholder-val="{{ true }}">
                 <sc-for list="{{ g.folders }}" as="mb" hint-placeholder-count="3">
-                  <div onClick="{{ mb.pick }}" onContextMenu="{{ mb.ctxOpen }}" onTouchStart="{{ mb.pressDown }}" onTouchEnd="{{ mb.pressUp }}" onTouchMove="{{ mb.pressUp }}" title="{{ mb.title }}" style="{{ mb.style }}" style-hover="cursor:pointer;background:var(--hover)">
+                  <div onClick="{{ mb.pick }}" onContextMenu="{{ mb.ctxOpen }}" onTouchStart="{{ mb.pressDown }}" onTouchEnd="{{ mb.pressUp }}" onTouchMove="{{ mb.pressUp }}" onDragOver="{{ mb.dragOver }}" onDragEnter="{{ mb.dragOver }}" onDragLeave="{{ mb.dragLeave }}" onDrop="{{ mb.drop }}" title="{{ mb.title }}" style="{{ mb.style }}" style-hover="cursor:pointer;background:var(--hover)">
                     <span style="{{ mb.iconStyle }}">{{ mb.icon }}</span>
                     <sc-if value="{{ mb.expanded }}" hint-placeholder-val="{{ true }}">
                       <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ mb.label }}</span>
@@ -759,7 +759,7 @@
               <sc-if value="{{ t.swiping }}" hint-placeholder-val="{{ false }}">
                 <div style="{{ t.swipeBgStyle }}"><span style="{{ t.swipeIconStyle }}">{{ t.swipeIcon }}</span><span style="{{ t.swipeTextStyle }}">{{ t.swipeLabel }}</span></div>
               </sc-if>
-              <div onClick="{{ t.select }}" onContextMenu="{{ t.longPress }}" onTouchStart="{{ t.touchStart }}" onTouchEnd="{{ t.touchEnd }}" onTouchMove="{{ t.touchMove }}" style="{{ t.rowStyle }}" style-hover="cursor:pointer;background:var(--hover)">
+              <div onClick="{{ t.select }}" draggable="{{ true }}" onDragStart="{{ t.dragStart }}" onDragEnd="{{ t.dragEnd }}" onContextMenu="{{ t.longPress }}" onTouchStart="{{ t.touchStart }}" onTouchEnd="{{ t.touchEnd }}" onTouchMove="{{ t.touchMove }}" style="{{ t.rowStyle }}" style-hover="cursor:pointer;background:var(--hover)">
                 <div style="display:flex;align-items:center;gap:9px;min-width:0"><sc-if value="{{ t.selected }}" hint-placeholder-val="{{ false }}"><span style="align-self:center;width:17px;height:17px;flex:0 0 17px;border-radius:50%;background:var(--accent);color:var(--onaccent);display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:13px;line-height:1">check</span></sc-if><sc-if value="{{ t.hasAvatar }}" hint-placeholder-val="{{ false }}"><span title="{{ t.from }}" style="{{ t.avatarImgStyle }}"></span></sc-if><sc-if value="{{ t.noAvatar }}" hint-placeholder-val="{{ true }}"><span title="{{ t.from }}" style="{{ t.avatarStyle }}">{{ t.initials }}</span></sc-if><span style="{{ t.fromStyle }}">{{ t.from }}</span><span style="{{ t.orgStyle }}">{{ t.org }}</span><span style="margin-left:auto;flex:0 0 auto;display:flex;align-items:center;gap:7px"><sc-if value="{{ t.flagged }}" hint-placeholder-val="{{ false }}"><span title="Flagged" style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:15px;line-height:1;color:var(--warn)">flag</span></sc-if><sc-if value="{{ t.isUnread }}" hint-placeholder-val="{{ false }}"><span title="Unread" style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></span></sc-if><sc-if value="{{ t.multi }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;color:var(--text2);background:var(--rail);border:1px solid var(--line2);border-radius:9px;padding:1px 6px">{{ t.count }}</span></sc-if><span onClick="{{ t.openAiSum }}" title="AI summary" style="{{ t.aiBtnStyle }}" style-hover="cursor:pointer;background:var(--accent-soft);color:var(--accent-d)">auto_awesome</span><span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;color:var(--faint)">{{ t.time }}</span></span></div>
                 <div style="{{ t.subjStyle }}">{{ t.subject }}</div>
                 <sc-if value="{{ t.showMoved }}" hint-placeholder-val="{{ false }}">
@@ -2405,9 +2405,9 @@
   <sc-if value="{{ settingsOpen }}" hint-placeholder-val="{{ false }}">
     <div style="{{ settingsScrimStyle }}">
       <div style="{{ settingsCardStyle }}">
-        <div style="{{ settingsHeadStyle }}">
+        <div onPointerDown="{{ settingsHeadDown }}" style="{{ settingsHeadStyle }}">
           <div style="{{ settingsTitleStyle }}">Settings</div>
-          <div onClick="{{ closeSettings }}" style="{{ closeBtnAutoStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="{{ closeIconStyle }}">close</span></div>
+          <div data-nodrag="1" onClick="{{ closeSettings }}" style="{{ closeBtnAutoStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="{{ closeIconStyle }}">close</span></div>
         </div>
         <div style="display:flex;align-items:stretch;gap:18px;padding:0 22px;border-bottom:1px solid var(--line);background:var(--sub)">
           <sc-for list="{{ settingsTabs }}" as="tab" hint-placeholder-count="2">
@@ -2451,10 +2451,7 @@
                 <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:20px;line-height:1;color:var(--faint);margin-top:2px">chevron_right</span>
               </div>
             </sc-for>
-            <div onClick="{{ acctAdd }}" style="display:flex;align-items:center;justify-content:center;gap:7px;padding:10px;max-width:620px;border:1px dashed var(--border2);border-radius:10px;font-size:14px;color:var(--accent-d)" style-hover="cursor:pointer;background:var(--accent-soft);border-color:var(--accent)">
-              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1">add</span>Add account
-            </div>
-            <div style="font-size:13px;line-height:1.5;max-width:620px;color:var(--muted);text-wrap:pretty">Passwords stay in this device's keychain. MailFathom only keeps the server addresses so it can reconnect after a restart.</div>
+            <div style="font-size:13px;line-height:1.5;max-width:620px;color:var(--muted);text-wrap:pretty">Accounts are set up by your administrator — here you can open one and change its settings. Passwords stay in this device's keychain; MailFathom only keeps the server addresses so it can reconnect after a restart.</div>
           </sc-if>
           <sc-if value="{{ acctEditShown }}" hint-placeholder-val="{{ false }}">
             <div style="display:flex;align-items:center;gap:9px">
@@ -2467,7 +2464,8 @@
             </div>
             <div style="display:flex;flex-direction:column;gap:4px">
               <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.08em;color:var(--faint)">E-MAIL ADDRESS</div>
-              <input value="{{ acctMail }}" onChange="{{ onAcctMail }}" placeholder="name@company.com" style="width:100%;max-width:440px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;outline:none" style-focus="border-color:var(--accent)" />
+              <input value="{{ acctMail }}" readOnly="{{ true }}" tabIndex="{{ -1 }}" style="width:100%;max-width:440px;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text2);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;outline:none;cursor:default" />
+              <div style="font-size:12.5px;color:var(--faint)">The address identifies the account and cannot be changed here.</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:4px">
               <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.08em;color:var(--faint)">LOGIN</div>
@@ -2585,33 +2583,27 @@
               </div>
               <span style="{{ acctSaveSentSwitchStyle }}"><span style="{{ denseKnobStyle }}"></span></span>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;padding-top:6px">
-              <div onClick="{{ acctSave }}" style="{{ acctSaveStyle }}" style-hover="cursor:pointer;filter:brightness(1.06)">Save account</div>
-              <div onClick="{{ acctBack }}" style="{{ acctCancelStyle }}" style-hover="cursor:pointer;background:var(--hover)">Cancel</div>
-            </div>
-            <sc-if value="{{ acctIsExisting }}" hint-placeholder-val="{{ false }}">
-              <div style="height:1px;background:var(--line2);margin:4px 0"></div>
-              <div onClick="{{ acctAskDelete }}" style="{{ acctDeleteStyle }}" style-hover="cursor:pointer;background:var(--err-soft)">
-                <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1">delete</span>Remove this account
-              </div>
-            </sc-if>
-          </sc-if>
-          <sc-if value="{{ tabAi }}" hint-placeholder-val="{{ false }}">
-            <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">BEFORE SENDING TO THE MODEL</div>
-            <div onClick="{{ toggleSecretScan }}" style="display:flex;align-items:flex-start;gap:11px;padding:11px 12px;max-width:620px;border:1px solid var(--line);border-radius:9px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover)">
+            <div style="height:1px;background:var(--line2);margin:4px 0"></div>
+            <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">BEFORE SENDING TO THE MODEL — THIS ACCOUNT ONLY</div>
+            <div onClick="{{ toggleAcctSecretScan }}" style="display:flex;align-items:flex-start;gap:11px;padding:11px 12px;max-width:620px;border:1px solid var(--line);border-radius:9px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover)">
               <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
                 <div style="font-size:14.5px">Check the text for secrets</div>
-                <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">Before a message, an event or an attachment goes to the AI model, MailFathom looks for passwords, access keys, tokens and card numbers. Anything it finds is shown to you first — you decide whether to hide it or send it anyway.</div>
+                <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">Before a message, an event or an attachment from this account goes to the AI model, MailFathom looks for passwords, access keys, tokens and card numbers. Anything it finds is shown to you first — you decide whether to hide it or send it anyway.</div>
               </div>
-              <span style="{{ secretScanSwitchStyle }}"><span style="{{ denseKnobStyle }}"></span></span>
+              <span style="{{ acctSecretScanSwitchStyle }}"><span style="{{ denseKnobStyle }}"></span></span>
             </div>
-            <sc-if value="{{ secretScanWarn }}" hint-placeholder-val="{{ false }}">
+            <sc-if value="{{ acctSecretScanWarn }}" hint-placeholder-val="{{ false }}">
               <div style="display:flex;align-items:flex-start;gap:8px;padding:9px 10px;max-width:620px;border:1px solid var(--warn);border-radius:9px;background:var(--warn-soft);font-size:12.5px;line-height:1.5;color:var(--warn-text);text-wrap:pretty">
                 <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1.3">gpp_maybe</span>
                 <span>The check works on a best-effort basis: it recognises common patterns, so it can miss a secret written in an unusual way, and it can hide ordinary text that merely looks like a key. Always read what is about to be sent.</span>
               </div>
             </sc-if>
-            <div style="height:1px;background:var(--line2);margin:4px 0"></div>
+            <div style="display:flex;align-items:center;gap:8px;padding-top:6px">
+              <div onClick="{{ acctSave }}" style="{{ acctSaveStyle }}" style-hover="cursor:pointer;filter:brightness(1.06)">Save account</div>
+              <div onClick="{{ acctBack }}" style="{{ acctCancelStyle }}" style-hover="cursor:pointer;background:var(--hover)">Cancel</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ tabAi }}" hint-placeholder-val="{{ false }}">
             <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">LANGUAGE OF AI-WRITTEN CONTENT</div>
             <div style="display:flex;flex-wrap:wrap;gap:5px">
               <sc-for list="{{ aiLangOptions }}" as="al" hint-placeholder-count="2">
@@ -2622,6 +2614,11 @@
             <div style="display:flex;align-items:flex-start;gap:8px;max-width:620px;font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">
               <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1.3;color:var(--faint)">info</span>
               <span>A change applies only to content written from now on. Summaries, notes and drafts that already exist keep the language they were created in.</span>
+            </div>
+            <div style="height:1px;background:var(--line2);margin:4px 0"></div>
+            <div style="display:flex;align-items:flex-start;gap:8px;max-width:620px;font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1.3;color:var(--faint)">shield</span>
+              <span>Checking the text for secrets before it goes to the model is set separately for each mail account — open <b style="font-weight:600">Accounts</b> and pick the account.</span>
             </div>
             <div onClick="{{ toggleAiMatch }}" style="display:flex;align-items:flex-start;gap:11px;padding:9px 10px;max-width:620px;border:1px solid var(--line);border-radius:9px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover)">
               <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
@@ -2651,6 +2648,26 @@
                 <div style="font-size:13px;line-height:1.5;max-width:620px;color:var(--muted);text-wrap:pretty">The mail, task or event behind a notification is never touched — only the entry in the notification list goes.</div>
               </div>
             </sc-if>
+            <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint);padding-top:4px">THIS DEVICE</div>
+            <div onClick="{{ toggleNotifDevice }}" style="display:flex;align-items:flex-start;gap:11px;padding:10px 12px;max-width:620px;border:1px solid var(--line);border-radius:9px;background:var(--sub)" style-hover="cursor:pointer;background:var(--hover)">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                <div style="font-size:14px">Notify me on this device</div>
+                <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">When the window is not in front of you, this device tells you how many things arrived and of what kind — never from whom, never what it is about.</div>
+              </div>
+              <span style="{{ notifDeviceSwitchStyle }}"><span style="{{ denseKnobStyle }}"></span></span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px;padding:10px 12px;max-width:620px;border:1px solid var(--line);border-radius:9px;background:var(--sub)">
+              <div style="display:flex;align-items:baseline;gap:12px">
+                <div style="flex:1;min-width:0;font-size:14px">How long a notification stays visible</div>
+                <div style="flex:0 0 auto;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--accent-d)">{{ notifDurationLabel }}</div>
+              </div>
+              <div style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">In whole seconds, from 1 to 30. You get the same window to undo a permanent delete, which waits exactly as long as its notification is up.</div>
+              <input type="range" min="1" max="30" step="1" value="{{ notifDuration }}" onChange="{{ onNotifDuration }}" style="width:100%;margin:2px 0 0;accent-color:var(--accent);background:transparent" />
+              <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums">
+                <span>1 s</span>
+                <span>30 s</span>
+              </div>
+            </div>
           </sc-if>
           <sc-if value="{{ tabApp }}" hint-placeholder-val="{{ false }}">
           <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11.5px;letter-spacing:0.1em;color:var(--faint)">LANGUAGE</div>
@@ -2733,38 +2750,6 @@
           </div>
         </sc-if>
       </div>
-      <sc-if value="{{ acctDelOpen }}" hint-placeholder-val="{{ false }}">
-        <div style="position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--scrim)">
-          <div style="width:400px;max-width:100%;display:flex;flex-direction:column;gap:12px;padding:18px;background:var(--panel);border:1px solid var(--line);border-radius:13px;box-shadow:0 22px 52px var(--sh-3)">
-            <sc-if value="{{ acctDelStep1 }}" hint-placeholder-val="{{ true }}">
-              <div style="display:flex;align-items:flex-start;gap:11px">
-                <span style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:var(--err-soft);color:var(--err-text);font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:21px">warning</span>
-                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
-                  <div style="font-size:16px;font-weight:600">Remove this account?</div>
-                  <div style="font-size:13.5px;line-height:1.5;color:var(--text2);text-wrap:pretty">{{ acctDelName }} — {{ acctDelMail }}</div>
-                  <div style="font-size:12.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">Locally cached mail, drafts and the saved password for this account are deleted. Mail on the server is untouched.</div>
-                </div>
-              </div>
-              <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">
-                <div onClick="{{ acctDelCancel }}" style="{{ acctCancelStyle }}" style-hover="cursor:pointer;background:var(--hover)">Cancel</div>
-                <div onClick="{{ acctDelNext }}" style="{{ acctDeleteStyle }}" style-hover="cursor:pointer;background:var(--err-soft)">Continue</div>
-              </div>
-            </sc-if>
-            <sc-if value="{{ acctDelStep2 }}" hint-placeholder-val="{{ false }}">
-              <div style="display:flex;flex-direction:column;gap:5px">
-                <div style="font-size:16px;font-weight:600">Confirm by typing the account name</div>
-                <div style="font-size:12.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">Type the name exactly as shown below, then press Delete.</div>
-              </div>
-              <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:14px;font-weight:600;padding:8px 11px;border-radius:8px;background:var(--sub);border:1px dashed var(--border2);user-select:all;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ acctDelName }}</div>
-              <input value="{{ acctDelText }}" onChange="{{ onAcctDelText }}" placeholder="Account name" style="{{ acctDelInputStyle }}" />
-              <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">
-                <div onClick="{{ acctDelCancel }}" style="{{ acctCancelStyle }}" style-hover="cursor:pointer;background:var(--hover)">Cancel</div>
-                <div onClick="{{ acctDelConfirm }}" style="{{ acctDelConfirmStyle }}" style-hover="cursor:pointer;filter:brightness(1.06)">Delete</div>
-              </div>
-            </sc-if>
-          </div>
-        </div>
-      </sc-if>
     </div>
   </sc-if>
   <sc-if value="{{ notifCenterOpen }}" hint-placeholder-val="{{ false }}">
@@ -5079,8 +5064,8 @@ class Component extends DCLogic {
   openMove = (ids) => this.setState({ moveFor: this.opTargets(ids) });
   closeMove = () => this.setState({ moveFor: null });
 
-  moveThreads = (folder, account) => {
-    const t = this.state.moveFor || [];
+  moveThreads = (folder, account, ids) => {
+    const t = ids || this.state.moveFor || [];
     this.setState(s => {
       const moved = Object.assign({}, s.moved || {});
       t.forEach(id => { moved[id] = folder; });
@@ -5088,6 +5073,31 @@ class Component extends DCLogic {
     });
     t.forEach(id => this.setRowAnim(id, "move", 900));
     this.notify("Moved to “" + folder + "”" + (account ? " in " + account : "") + " — " + this.countWord(t.length), true);
+  };
+
+  /* Drag a thread (or the whole selection) from the list onto a folder in the sidebar. */
+  dragThreadsStart = (id, e) => {
+    const sel = this.state.sel || [];
+    const ids = sel.indexOf(id) >= 0 && sel.length > 1 ? sel.slice() : [id];
+    this.cancelLongPress();
+    this.setState({ dragIds: ids, dragOverKey: "" });
+    if (e && e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      try { e.dataTransfer.setData("text/plain", ids.join(",")); } catch (err) {}
+    }
+  };
+  dragThreadsEnd = () => { if (this.state.dragIds) this.setState({ dragIds: null, dragOverKey: "" }); };
+  dragOverFolder = (fk, e) => {
+    if (!(this.state.dragIds || []).length) return;
+    if (e) { if (e.preventDefault) e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = "move"; }
+    if (this.state.dragOverKey !== fk) this.setState({ dragOverKey: fk });
+  };
+  dragLeaveFolder = (fk) => { if (this.state.dragOverKey === fk) this.setState({ dragOverKey: "" }); };
+  dropOnFolder = (folder, account, e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const ids = this.state.dragIds || [];
+    this.setState({ dragIds: null, dragOverKey: "" });
+    if (ids.length) this.moveThreads(folder, account, ids);
   };
 
   undoOp = () => {
@@ -7079,6 +7089,7 @@ class Component extends DCLogic {
             const label = node.path.split("/").pop();
             const fk = g.key + "·" + node.path;
             const active = (st.folderKey || "acc1·Inbox") === fk;
+            const dragOver = st.dragOverKey === fk;
             const canNest = node.path.split("/").length < this.MAX_DEPTH;
             const fpress = g.key === "all" ? null : this.pressFor("folder", fk, label, this.folderMenu(g.key, g.label, node.path, canNest, node.custom));
             return {
@@ -7086,6 +7097,9 @@ class Component extends DCLogic {
             icon: node.icon, label: label, count: node.count, expanded: !sideCollapsed,
             title: g.title + " — " + node.path.split("/").join(" / ") + (node.count ? " · " + node.count : ""),
             pick: () => this.pickFolder(fk, label),
+            dragOver: (e) => this.dragOverFolder(fk, e),
+            dragLeave: () => this.dragLeaveFolder(fk),
+            drop: (e) => this.dropOnFolder(label, g.label, e),
             twisty: node.open ? "expand_more" : "chevron_right",
             hasKids: node.kids > 0 && !sideCollapsed,
             twistyTitle: node.open ? "Collapse subfolders" : "Show subfolders",
@@ -7094,7 +7108,8 @@ class Component extends DCLogic {
             style: (sideCollapsed
               ? "display:flex;align-items:center;justify-content:center;height:34px;border-radius:8px;font-size:14px;"
               : "display:flex;align-items:center;gap:10px;font-size:14px;padding:7px 11px 7px " + (11 + node.depth * 15) + "px;border-radius:7px;") +
-              (active ? "background:var(--accent-soft);color:var(--accent-d);font-weight:600;" : ""),
+              (active ? "background:var(--accent-soft);color:var(--accent-d);font-weight:600;" : "") +
+              (dragOver ? "background:var(--accent-soft);color:var(--accent-d);box-shadow:inset 0 0 0 2px var(--accent);" : ""),
             iconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;line-height:1;text-align:center;" + (sideCollapsed ? "font-size:23px;width:24px;" : "font-size:18px;width:20px;flex:0 0 20px;") + (active ? "" : "color:var(--muted);"),            countStyle: active ? "font-size:13px" : "font-size:13px;color:var(--faint)",
           };
           }),
@@ -8128,7 +8143,10 @@ class Component extends DCLogic {
         },
         touchMove: (e) => { this.cancelLongPress(); if (isMobile) this.swipeMove(t.id, e); },
         touchEnd: () => { this.cancelLongPress(); if (isMobile) this.swipeEnd(t.id); },
+        dragStart: (e) => this.dragThreadsStart(t.id, e),
+        dragEnd: this.dragThreadsEnd,
         rowStyle: rowStyleFor(!isMobile && t.id === st.threadId && !selectionOn, sel.indexOf(t.id) >= 0) +
+          ((st.dragIds || []).indexOf(t.id) >= 0 ? "opacity:0.45;" : "") +
           (isMobile && st.swipeId === t.id
             ? "transform:translateX(" + (st.swipeDx || 0) + "px);"
             : "transform:translateX(0);transition:transform 160ms ease,background 120ms ease;") +
@@ -8337,7 +8355,35 @@ class Component extends DCLogic {
       appBuild: APP_BUILD,
       settingsCardStyle: singlePane
         ? "flex:1;min-width:0;display:flex;flex-direction:column;background:var(--panel)"
-        : "position:relative;width:" + Math.min(st.settingsW || 700, w - 40) + "px;height:" + Math.min(st.settingsH || 720, Math.round((st.vh || (typeof window !== "undefined" ? window.innerHeight : 900)) * 0.92)) + "px;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:13px;box-shadow:0 22px 52px var(--sh-3);overflow:hidden",
+        : "position:relative;width:" + Math.min(st.settingsW || 700, w - 40) + "px;height:" + Math.min(st.settingsH || 720, Math.round((st.vh || (typeof window !== "undefined" ? window.innerHeight : 900)) * 0.92)) + "px;transform:translate(" + (st.settingsDX || 0) + "px," + (st.settingsDY || 0) + "px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:13px;box-shadow:0 22px 52px var(--sh-3);overflow:hidden",
+      settingsHeadDown: singlePane ? null : (e) => {
+        if (e.target && e.target.closest && e.target.closest("[data-nodrag]")) return;
+        const card = e.currentTarget.parentElement;
+        if (!card) return;
+        e.preventDefault();
+        const x0 = e.clientX, y0 = e.clientY, dx0 = st.settingsDX || 0, dy0 = st.settingsDY || 0;
+        const r = card.getBoundingClientRect();
+        const move = (ev) => {
+          const maxX = Math.max(0, Math.round((window.innerWidth - r.width) / 2));
+          const maxY = Math.max(0, Math.round((window.innerHeight - r.height) / 2));
+          this.setState({
+            settingsDX: Math.max(-maxX, Math.min(maxX, dx0 + ev.clientX - x0)),
+            settingsDY: Math.max(-maxY, Math.min(maxY, dy0 + ev.clientY - y0)),
+          });
+        };
+        const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+      },
+      notifDevice: !!st.notifDevice,
+      notifDeviceSwitchStyle: "flex:0 0 auto;margin-top:2px;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (st.notifDevice ? "--accent" : "--border2") + ");justify-content:" + (st.notifDevice ? "flex-end" : "flex-start"),
+      toggleNotifDevice: () => this.setState(s => ({ notifDevice: !s.notifDevice })),
+      notifDuration: st.notifDuration == null ? 5 : st.notifDuration,
+      notifDurationLabel: (st.notifDuration == null ? 5 : st.notifDuration) + " s",
+      onNotifDuration: (e) => {
+        const n = parseInt(e.target.value, 10);
+        this.setState({ notifDuration: isNaN(n) ? 5 : Math.max(1, Math.min(30, n)) });
+      },
       settingsResizable: !singlePane,
       settingsResizeDown: (e) => {
         const card = e.currentTarget.parentElement;
@@ -8357,7 +8403,7 @@ class Component extends DCLogic {
         : "flex:1;min-height:0;display:flex;flex-direction:column;gap:11px;padding:18px 22px 24px;overflow:auto",
       settingsHeadStyle: singlePane
         ? "display:flex;align-items:center;gap:12px;padding:14px 14px 12px;border-bottom:1px solid var(--line);background:var(--sub)"
-        : "display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--sub)",
+        : "display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--sub);cursor:move;user-select:none",
       settingsTitleStyle: singlePane ? "font-size:18px;font-weight:600" : "font-size:15px;font-weight:600",
       tabProfil: (st.settingsTab || "profil") === "profil",
       tabApp: st.settingsTab === "app",
@@ -8410,9 +8456,6 @@ class Component extends DCLogic {
         ];
         const accounts = st.accounts || DEF;
         const d = st.acctDraft || null;
-        const del = st.acctDel || null;
-        const delAcct = del ? accounts.find(a => a.id === del.id) : null;
-        const delReady = !!delAcct && (st.acctDelText || "").trim() === delAcct.name;
         const upd = (k, v) => this.setState(s => ({ acctDraft: Object.assign({}, s.acctDraft, { [k]: v }), acctTest: null }));
         const test = st.acctTest || null;
         const missing = !d ? [] : [
@@ -8428,6 +8471,7 @@ class Component extends DCLogic {
         const hardDel = d ? d.hardDelete !== false : true;
         const purgeGone = d ? d.purgeGone !== false : true;
         const saveSent = d ? d.saveSent !== false : true;
+        const secretScan = d ? d.secretScan !== false : true;
         const sw = on => "flex:0 0 auto;margin-top:2px;width:30px;height:17px;border-radius:9px;display:flex;align-items:center;padding:2px;background:var(" + (on ? "--accent" : "--border2") + ");justify-content:" + (on ? "flex-end" : "flex-start");
         const FOLD = [["inbox", "Inbox", "inbox", "INBOX"], ["sent", "Sent", "send", "Sent"], ["drafts", "Drafts", "draft", "Drafts"], ["archive", "Archive", "archive", "Archive"], ["junk", "Spam", "report", "Junk"], ["trash", "Trash", "delete", "Trash"]];
         const DEFFOLD = { inbox: "INBOX", sent: "Sent", drafts: "Drafts", archive: "Archive", junk: "Junk", trash: "Trash" };
@@ -8449,7 +8493,7 @@ class Component extends DCLogic {
           resetLayoutDone: !!st.layoutReset,
           resetLayout: () => {
             this.setState({
-              listW: null, historyPanelW: null, settingsW: null, settingsH: null,
+              listW: null, historyPanelW: null, settingsW: null, settingsH: null, settingsDX: 0, settingsDY: 0,
               notifH: null, notifDrag: null, docZoom: null, layoutReset: true,
             });
             setTimeout(() => this.setState({ layoutReset: false }), 3200);
@@ -8460,10 +8504,6 @@ class Component extends DCLogic {
           notifAutoClearAfter: st.notifAutoClearAfter || "24h",
           onNotifAutoClearAfter: e => this.setState({ notifAutoClearAfter: e.target.value }),
           notifAfterOptions: [["now", "Right away"], ["1h", "After 1 hour"], ["24h", "After 24 hours"], ["7d", "After 7 days"]].map(([v, label]) => ({ v, label })),
-          secretScan: !!st.secretScan,
-          secretScanSwitchStyle: sw(!!st.secretScan),
-          toggleSecretScan: () => this.setState(s => ({ secretScan: !s.secretScan })),
-          secretScanWarn: !!st.secretScan,
           aiLangOptions: [["pl", "Polski"], ["en", "English"]].map(([v, label]) => ({
             label,
             pick: () => onAiLang(v),
@@ -8485,9 +8525,8 @@ class Component extends DCLogic {
             dotStyle: "flex:0 0 8px;width:8px;height:8px;border-radius:50%;margin-top:6px;background:" + a.dot,
             edit: () => this.setState({ acctDraft: Object.assign({}, a), acctPassShown: false }),
           })),
-          acctAdd: () => this.setState({ acctPassShown: false, acctDraft: { id: "", name: "", mail: "", login: "", pass: "", dot: "#7a8aa0", imapHost: "", imapPort: "993", imapEnc: "auto", smtpHost: "", smtpPort: "465", smtpEnc: "auto", earliest: "", folders: Object.assign({}, DEFFOLD) } }),
           acctBack: () => this.setState({ acctDraft: null }),
-          acctTitle: d && d.id ? "Edit account" : "New account",
+          acctTitle: d ? "Edit account" : "",
           acctIsExisting: !!d && !!d.id,
           acctName: d ? d.name : "",
           acctMail: d ? d.mail : "",
@@ -8499,8 +8538,11 @@ class Component extends DCLogic {
           acctSmtpHost: d ? d.smtpHost : "",
           acctSmtpPort: d ? d.smtpPort : "",
           acctSmtpEnc: d ? (d.smtpEnc || "auto") : "auto",
+          acctSecretScan: secretScan,
+          acctSecretScanSwitchStyle: sw(secretScan),
+          acctSecretScanWarn: secretScan,
+          toggleAcctSecretScan: () => upd("secretScan", !secretScan),
           onAcctName: ev("name"),
-          onAcctMail: ev("mail"),
           onAcctLogin: ev("login"),
           onAcctPass: ev("pass"),
           onAcctImapHost: ev("imapHost"),
@@ -8569,28 +8611,6 @@ class Component extends DCLogic {
             });
           },
           acctCancelStyle: btn("background:var(--sub);border:1px solid var(--border2);color:var(--text2);"),
-          acctDeleteStyle: btn("background:transparent;border:1px solid var(--err);color:var(--err-text);"),
-          acctAskDelete: () => this.setState(s => ({ acctDel: { id: s.acctDraft.id, step: 1 }, acctDelText: "" })),
-          acctDelOpen: !!del,
-          acctDelStep1: !!del && del.step === 1,
-          acctDelStep2: !!del && del.step === 2,
-          acctDelName: delAcct ? delAcct.name : "",
-          acctDelMail: delAcct ? delAcct.mail : "",
-          acctDelCancel: () => this.setState({ acctDel: null, acctDelText: "" }),
-          acctDelNext: () => this.setState(s => ({ acctDel: { id: s.acctDel.id, step: 2 }, acctDelText: "" })),
-          acctDelText: st.acctDelText || "",
-          onAcctDelText: e => this.setState({ acctDelText: e.target.value }),
-          acctDelInputStyle: "width:100%;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--text);background:var(--panel);border:1px solid var(" + (delReady ? "--err" : "--border2") + ");border-radius:8px;padding:9px 11px;outline:none",
-          acctDelConfirmStyle: btn(delReady
-            ? "background:var(--err);color:#fff;"
-            : "background:var(--border2);color:var(--panel);opacity:0.6;pointer-events:none;"),
-          acctDelConfirm: () => {
-            if (!delReady) return;
-            this.setState(s => ({
-              accounts: (s.accounts || DEF).filter(a => a.id !== s.acctDel.id),
-              acctDel: null, acctDelText: "", acctDraft: null,
-            }));
-          },
         };
       })(),
       settingsOpen: !!st.settings,

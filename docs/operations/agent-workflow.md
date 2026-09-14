@@ -142,7 +142,10 @@ component it boots rather than a document a browser draws, and the parity loop
 below serves the mirror to a browser. An unchanged project costs the listing and nothing
 else. Its other four commands are `extract`, which takes the wrapper off a read
 result the harness saved to a file and copies bytes that never passed through a
-model at all, `decode`, which is for the opposite case — a result small enough to
+model at all — including the note the server appends to a window that hit the
+cap, which is a message about the read rather than a line of the file and would
+otherwise land in the middle of the screen source at every window boundary —
+`decode`, which is for the opposite case — a result small enough to
 come back inline, which the session wrote onto disk by hand — and only undoes the
 entity escaping on what is already there, `record`, which writes the manifest and
 checks every mirrored file against the byte count the project states, and
