@@ -30,7 +30,7 @@ public sealed record SearchEmailsRequest
     public string? QueryText { get; init; }
 
     /// <summary>Gets the text naming the accounts to search, or empty for every account this deployment serves.</summary>
-    /// <remarks>An account may be named by its configured identifier or by the display name it is published under, and the use case settles which against the accounts it serves.</remarks>
+    /// <remarks>An account may be named by the identifier the deployment generated for it or by the display name it is published under, and the use case settles which against the accounts it serves.</remarks>
     public IReadOnlyList<MailAccountSelector> Accounts { get; init; } = [];
 
     /// <summary>Gets the folders to search, or empty for every folder of the named accounts.</summary>

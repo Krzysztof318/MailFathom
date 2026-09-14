@@ -97,7 +97,6 @@ readonly client_username='end-to-end'
 readonly client_password='end-to-end-password'
 readonly admin_api_key_name='end-to-end-admin'
 readonly admin_api_key='end-to-end-only-admin-api-key'
-readonly account_identifier='end-to-end'
 
 readonly corpus_archive='backend/tools/SyntheticMail/corpora/office-en.zip'
 
@@ -333,15 +332,9 @@ served_user="$(
     | jq --raw-output '.id'
 )"
 
-# The mailbox is a declaration in that user's record, written against the version the record stands at. The three
-# transport opt-ins are here rather than in the environment for one reason: the mail server beside this run speaks no
-# TLS, and a deployment reaching a clear-text server has to say so wherever the mailbox is declared.
-
-record_version="$(
-  curl --fail --silent --header "Authorization: Bearer $admin_api_key" \
-    "$admin_origin/api/admin/users/$served_user/record" \
-    | jq --raw-output '.version'
-)"
+# The mailbox is a mail account record of its own, assigned to that user as it is created. The three transport opt-ins
+# are here rather than in the environment for one reason: the mail server beside this run speaks no TLS, and a
+# deployment reaching a clear-text server has to say so wherever the mailbox is declared.
 
 # A refusal answers 200 with the reasons rather than a failing status, because every one of them is something the caller
 # composes the next attempt from. So the outcome is read rather than the status code.
@@ -351,16 +344,16 @@ mailbox_declaration="$(
     --header 'Content-Type: application/json' \
     --data "$(
       jq --null-input \
-        --argjson version "$record_version" \
-        --arg accountId "$account_identifier" \
+        --arg user "$served_user" \
+        --arg emailAddress "$mailbox_address" \
         --arg host "$loopback" \
         --argjson port "$imap_port" \
         --arg userName "$mailbox_login" \
         --arg password "$mailbox_password" \
         '{
-           version: $version,
+           userId: $user,
            account: ({
-             AccountId: $accountId,
+             EmailAddress: $emailAddress,
              DisplayName: "End-to-end mailbox",
              Host: $host,
              Port: $port,
@@ -379,7 +372,7 @@ mailbox_declaration="$(
            } | tojson)
          }'
     )" \
-    "$admin_origin/api/admin/users/$served_user/record/mail-accounts"
+    "$admin_origin/api/admin/mail-accounts"
 )"
 
 printf '%s' "$mailbox_declaration" \

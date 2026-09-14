@@ -95,6 +95,18 @@ internal static class UserAccountErasure
             userId,
             cancellationToken);
 
+        // An account nobody else is assigned goes with its last user, as an account unassigned from its last user does.
+        // Its mail is this user's rows and has just been reached above; what is left is the record itself.
+        await writeContext.Database.ExecuteSqlAsync(
+            $"""
+             DELETE FROM settings_mail_accounts AS account
+             WHERE EXISTS (SELECT 1 FROM mail_account_assignments AS own
+                           WHERE own."MailAccountId" = account."Id" AND own."UserId" = {userId})
+               AND NOT EXISTS (SELECT 1 FROM mail_account_assignments AS other
+                               WHERE other."MailAccountId" = account."Id" AND other."UserId" <> {userId})
+             """,
+            cancellationToken);
+
         var erasedUsers = await writeContext.UserAccounts
             .Where(user => user.Id == userId)
             .ExecuteDeleteAsync(cancellationToken);
@@ -111,6 +123,58 @@ internal static class UserAccountErasure
             cancellationToken);
 
         return new UserErasure(erasedUsers > 0, rowsErasedBesideTheCascade);
+    }
+
+    /// <summary>Erases everything stored for one mail account, for every user or for one of them.</summary>
+    /// <param name="session">The transaction the erasure runs in.</param>
+    /// <param name="accountId">The account, as the text every mail row names it by.</param>
+    /// <param name="userId">The one user whose copy is erased, or <see langword="null" /> for everybody's.</param>
+    /// <param name="cancellationToken">Cancels the erasure.</param>
+    /// <returns>How many rows the statements removed beside the cascade.</returns>
+    /// <remarks>
+    /// The same walk a user's erasure takes, narrowed on the account column rather than on the user, and ended by
+    /// deleting the account's <c>mailbox_accounts</c> rows so the cascade takes the folders and everything beneath them.
+    /// The record of the account itself is the caller's to delete, because a user unassigned from a shared account
+    /// takes their copy of its mail and leaves the account standing.
+    /// </remarks>
+    [RequiresIntegrationCoverage]
+    public static async Task<int> EraseMailOfAccountAsync(
+        IPersistenceSession session,
+        string accountId,
+        Guid? userId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+
+        await ReleasedContentObjects.ReleaseForMailAccountAsync(session, accountId, userId, cancellationToken);
+
+        var erased = 0;
+        var tables = TablesTheCascadeDoesNotReach(writeContext.Model)
+            .Append(MailboxAccountEntityTypeOf(writeContext.Model));
+
+        foreach (var entityType in tables)
+        {
+            var accountColumn = entityType == MailboxAccountEntityTypeOf(writeContext.Model)
+                ? QuotedColumn(entityType, nameof(MailboxAccountEntity.Id))
+                : QuotedColumn(entityType, AccountIdentifierPropertyName);
+
+            // Every identifier in it is one the model supplied, and both values are parameters.
+            var statement = $$"""
+                DELETE FROM {{QuotedTable(entityType)}}
+                WHERE {{accountColumn}} = {0}
+                  AND ({1}::uuid IS NULL OR {{QuotedColumn(entityType, UserPropertyName)}} = {1}::uuid)
+                """;
+
+            erased += await writeContext.Database.ExecuteSqlRawAsync(
+                statement,
+                [accountId, (object?)userId ?? DBNull.Value],
+                cancellationToken);
+        }
+
+        return erased;
     }
 
     /// <summary>Deletes one user's rows from every table the cascade leaves behind.</summary>

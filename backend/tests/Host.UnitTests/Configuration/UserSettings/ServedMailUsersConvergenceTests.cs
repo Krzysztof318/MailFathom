@@ -25,20 +25,34 @@ public sealed class ServedMailUsersConvergenceTests
 
     private static readonly MailUserId Alex = MailUserId.Create(new Guid("33333333-3333-3333-3333-333333333333"));
 
-    /// <summary>A record committed on another replica is published here at the version the row holds.</summary>
+    /// <summary>A mailbox assigned to Alex, which is a record of its own rather than part of Alex's.</summary>
+    private static readonly MailAccountRecord WorkMailbox = new(
+        new Guid("0197a3c0-0000-7000-8000-000000000001"),
+        "alex@example.test",
+        "work",
+        """
+        {
+          "Host": "imap.example.test",
+          "UserName": "alex@example.test",
+          "Secrets": { "Password": { "Name": "imap-password", "SecretReference": "systemd-credential:imap-password" } }
+        }
+        """,
+        Version: 1);
+
+    /// <summary>A record committed on another replica is published here at the version the row holds, with the accounts assigned beside it.</summary>
     [Fact]
     public async Task ConvergeAsync_ARecordCommittedOnAnotherReplica_PublishesItsNewerVersion()
     {
         // Arrange
         var roster = ServingAlexAt(version: 2);
-        var documents = Holding((Alex, DeclaringMailbox("work"), 3));
+        var documents = Holding([new UserSettingsDocument(Alex, "alex", LanguageOnly, 3) { MailAccounts = [WorkMailbox] }]);
 
         // Act
         await Convergence(documents, roster).ConvergeAsync(TestContext.Current.CancellationToken);
 
         // Assert
         var served = Assert.Single(roster.Users);
-        Assert.Equal(["work"], served.MailAccounts.Select(account => account.AccountId));
+        Assert.Equal([WorkMailbox.Id.ToString("D")], served.MailAccounts.Select(account => account.AccountId));
         Assert.Equal(3, roster.PublishedVersionOf(Alex));
     }
 
@@ -139,7 +153,10 @@ public sealed class ServedMailUsersConvergenceTests
     }
 
     /// <summary>The rows a deployment holds: each user's version, and the record a read of that user answers with.</summary>
-    private static IUserSettingsDocumentReader Holding(params (MailUserId User, string Json, long Version)[] records)
+    private static IUserSettingsDocumentReader Holding(params (MailUserId User, string Json, long Version)[] records) =>
+        Holding([.. records.Select(record => new UserSettingsDocument(record.User, "alex", record.Json, record.Version))]);
+
+    private static IUserSettingsDocumentReader Holding(IReadOnlyList<UserSettingsDocument> records)
     {
         var documents = Substitute.For<IUserSettingsDocumentReader>();
 
@@ -149,8 +166,7 @@ public sealed class ServedMailUsersConvergenceTests
         foreach (var record in records)
         {
             documents.ReadAsync(record.User, Arg.Any<CancellationToken>())
-                .Returns(Task.FromResult<UserSettingsDocument?>(
-                    new UserSettingsDocument(record.User, "alex", record.Json, record.Version)));
+                .Returns(Task.FromResult<UserSettingsDocument?>(record));
         }
 
         return documents;
@@ -169,20 +185,4 @@ public sealed class ServedMailUsersConvergenceTests
                     Options.Create(new SensitiveContentOptions()))),
             roster,
             log ?? new RecordingLogger<ServedMailUsersConvergence>());
-
-    private static string DeclaringMailbox(string accountId) =>
-        $$"""
-          {
-            "Language": "English",
-            "MailAccounts": [
-              {
-                "AccountId": "{{accountId}}",
-                "DisplayName": "{{accountId}}",
-                "Host": "imap.example.test",
-                "UserName": "alex@example.test",
-                "Secrets": { "Password": { "Name": "imap-password", "SecretReference": "systemd-credential:imap-password" } }
-              }
-            ]
-          }
-          """;
 }

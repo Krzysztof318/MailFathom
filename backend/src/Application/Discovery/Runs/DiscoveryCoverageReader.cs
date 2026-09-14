@@ -25,7 +25,7 @@ namespace MailFathom.Application.Discovery.Runs;
 /// be why it did not — so an account that yielded nothing is reported with its freshness and with no dates.
 /// </para>
 /// <para>
-/// It reaches no mail server and returns no mail: an account's configured identifier, one instant, and the two ends of
+/// It reaches no mail server and returns no mail: an account's generated identifier, one instant, and the two ends of
 /// what the run drew on are the whole of what a caller receives. It applies no permission of its own, because it is
 /// composed inside a run that has already required its grant and is bounded by that run's own scope.
 /// </para>

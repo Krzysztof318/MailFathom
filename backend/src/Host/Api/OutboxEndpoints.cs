@@ -98,7 +98,7 @@ internal static class OutboxEndpoints
     }
 
     /// <summary>Serves how much stands at each stage of an outbox.</summary>
-    /// <param name="account">The configured identifier of the account to narrow to, or <see langword="null" /> for every account.</param>
+    /// <param name="account">The identifier the deployment generated for the account to narrow to, or <see langword="null" /> for every account.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="outbox">Reads the counts.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
@@ -123,7 +123,7 @@ internal static class OutboxEndpoints
     }
 
     /// <summary>Serves one page of the sends this deployment has recorded, newest first.</summary>
-    /// <param name="account">The configured identifier of the account to narrow to, or <see langword="null" /> for every account.</param>
+    /// <param name="account">The identifier the deployment generated for the account to narrow to, or <see langword="null" /> for every account.</param>
     /// <param name="stage">The stage to narrow to, or <see langword="null" /> for every stage.</param>
     /// <param name="pageSize">How many sends the page may hold, or <see langword="null" /> for the default.</param>
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>

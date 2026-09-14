@@ -186,6 +186,7 @@ internal static class AdminApiEndpoints
         api.MapMailFolderErasure();
         api.MapContacts();
         api.MapUserRecords();
+        api.MapMailAccounts();
         api.MapUserCredentials();
         api.MapOrganizations();
         api.MapConfiguration();

@@ -627,8 +627,9 @@ which are counts and nothing about what they were spent on.
   saw, with `wasObserved` saying whether any run has looked; reading through MailFathom never changes them. A change you
   asked for with `set_mail_flags` shows up in those fields once the next run has both issued it and read the folder
   back, so a listing taken immediately afterwards still reports the value the server was last seen to hold.
-- **Removing an account from configuration makes its stored mail unreachable** through the tools, though the rows
-  remain until removed. Disabling synchronization does not — the copy already stored stays readable.
+- **Removing an account erases its stored mail**, with its folders and attachments, and so does unassigning its user,
+  since an account is served to one user at a time. Disabling synchronization does not — the copy already stored stays
+  readable.
 - **What happens to locally stored mail the server deleted is per account**: the default keeps a hidden tombstone,
   and a deployment can choose erasure instead. [IMAP synchronization](../features/imap-synchronization.md) records
   both dispositions.

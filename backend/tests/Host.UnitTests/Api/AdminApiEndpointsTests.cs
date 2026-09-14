@@ -152,7 +152,10 @@ public sealed class AdminApiEndpointsTests
         // path for the erasure, once at the label's path for the rename, twice at their record's path for the reading
         // and the saving, and once at the secret path for a sealed write.
         // The organizations appear twice at their own path, which is the listing and the recording, and a user's
-        // membership is set at a path of its own beneath the user.
+        // membership is set at a path of its own beneath the user. The mail accounts appear twice at their collection
+        // path, which is the listing and the creation, three times at one account's path for the reading, the saving,
+        // and the erasure, and once at each of the assignment paths, because assigning an account and ending an
+        // assignment are published under different grants.
         Assert.Equal(
             [
                 $"{AdminEndpointOptions.RoutePrefix}{MailAnsweringAuditEndpoint.Route}",
@@ -179,6 +182,13 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{JobDeadLetterEndpoints.DeadLettersRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{JobDeadLetterEndpoints.DropRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{JobDeadLetterEndpoints.RetryRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailAccountEndpoints.MailAccountsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailAccountEndpoints.MailAccountsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailAccountEndpoints.MailAccountRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailAccountEndpoints.MailAccountRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailAccountEndpoints.MailAccountRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailAccountEndpoints.AssignmentsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailAccountEndpoints.AssignmentRemovalRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxMutationAuditEndpoint.Route}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxMaintenanceEndpoints.RederivationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxMaintenanceEndpoints.RederivationRoute}",
@@ -217,8 +227,6 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{OrganizationEndpoints.UserOrganizationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserRecordRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserRecordRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserMailAccountsRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserMailAccountRemovalRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserSecretsRoute}",
             ],
             routes);
@@ -312,8 +320,13 @@ public sealed class AdminApiEndpointsTests
                 $"PUT {prefix}{UserRecordEndpoints.UserEndpointAccessRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
                 $"GET {prefix}{UserRecordEndpoints.UserRecordRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{UserRecordEndpoints.UserRecordRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
-                $"POST {prefix}{UserRecordEndpoints.UserMailAccountsRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
-                $"POST {prefix}{UserRecordEndpoints.UserMailAccountRemovalRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"GET {prefix}{MailAccountEndpoints.MailAccountsRoute} -> {MailFathomPermission.AdminRead.Name}",
+                $"POST {prefix}{MailAccountEndpoints.MailAccountsRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"GET {prefix}{MailAccountEndpoints.MailAccountRoute} -> {MailFathomPermission.AdminRead.Name}",
+                $"POST {prefix}{MailAccountEndpoints.MailAccountRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"DELETE {prefix}{MailAccountEndpoints.MailAccountRoute} -> {MailFathomPermission.AdminErase.Name}",
+                $"POST {prefix}{MailAccountEndpoints.AssignmentsRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"POST {prefix}{MailAccountEndpoints.AssignmentRemovalRoute} -> {MailFathomPermission.AdminErase.Name}",
                 $"POST {prefix}{UserRecordEndpoints.UserSecretsRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
                 $"GET {prefix}{UserCredentialEndpoints.UserCredentialsRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{UserCredentialEndpoints.UserCredentialsRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
@@ -395,10 +408,10 @@ public sealed class AdminApiEndpointsTests
     }
 
     /// <summary>
-    /// The bound on each user-route body, which the routes carry as metadata the routing pipeline reads. Without it
-    /// the server's own default applies, and a saved record is a body an authenticated client states the whole of. The
-    /// verb is named beside the path because three of these paths carry a read as well, and reading the bound off
-    /// whichever endpoint the pattern matched first would pass with the write's metadata deleted.
+    /// The bound on each user-route and mail-account-route body, which the routes carry as metadata the routing pipeline
+    /// reads. Without it the server's own default applies, and a saved record is a body an authenticated client states
+    /// the whole of. The verb is named beside the path because several of these paths carry a read as well, and reading
+    /// the bound off whichever endpoint the pattern matched first would pass with the write's metadata deleted.
     /// </summary>
     /// <param name="method">The verb the write is made with.</param>
     /// <param name="route">The route it is made on.</param>
@@ -407,9 +420,11 @@ public sealed class AdminApiEndpointsTests
     [InlineData("PUT", UserRecordEndpoints.UserDisplayNameRoute)]
     [InlineData("PUT", UserRecordEndpoints.UserEndpointAccessRoute)]
     [InlineData("POST", UserRecordEndpoints.UserRecordRoute)]
-    [InlineData("POST", UserRecordEndpoints.UserMailAccountsRoute)]
-    [InlineData("POST", UserRecordEndpoints.UserMailAccountRemovalRoute)]
-    public void MapAdminApi_AUserRouteThatReadsABody_CarriesTheRequestBodyBound(string method, string route)
+    [InlineData("POST", MailAccountEndpoints.MailAccountsRoute)]
+    [InlineData("POST", MailAccountEndpoints.MailAccountRoute)]
+    [InlineData("POST", MailAccountEndpoints.AssignmentsRoute)]
+    [InlineData("POST", MailAccountEndpoints.AssignmentRemovalRoute)]
+    public void MapAdminApi_AUserOrMailAccountRouteThatReadsABody_CarriesTheRequestBodyBound(string method, string route)
     {
         // Arrange
         var endpoints = BuildRouteBuilder();

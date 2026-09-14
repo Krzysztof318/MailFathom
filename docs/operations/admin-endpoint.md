@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Configuration/UserSettings/Administration/StoredSecretAdministration.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Configuration*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/User*.cs, backend/src/Host/Api/Organization*.cs, backend/src/Application/Access/Organizations/**, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/AdminTransportSecurityExtensions.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Configuration/UserSettings/Administration/StoredSecretAdministration.cs, backend/src/Host/Configuration/UserSettings/Administration/MailAccount*.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Configuration*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/User*.cs, backend/src/Host/Api/Organization*.cs, backend/src/Application/Access/Organizations/**, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/AdminTransportSecurityExtensions.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -220,10 +220,15 @@ what it was never granted is what the record exists to make visible.
 | `PUT /api/admin/users/{userId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the label the user is told apart by. It answers with no body — the label the request carried is the whole of what changed — refuses a label another user carries, naming what to change, and answers `404` for a user this deployment holds no record for, as every other user-scoped route does. |
 | `PUT /api/admin/users/{userId}/endpoint-access` | `mailfathom.admin.configuration.write` | Keeps the user off [the MCP endpoint, the client endpoint, or both](#users-and-their-records), or lets them back on, from `mcpEndpoint` and `clientEndpoint` in the body; a switch the body leaves out stays where it is and a body naming neither is refused. It writes them into the user's record, answers both switches as the record now states them, and answers `404` for a user this deployment holds no record for and `409` where another write moved the record first. |
 | `DELETE /api/admin/users/{userId}` | `mailfathom.admin.erase` | Erases the user and every message, folder, attachment, and derived index this deployment holds for them. **This is the one route here that destroys mail, and it cannot be undone.** A user this deployment does not hold is reported as nothing erased rather than as a refusal. |
-| `GET /api/admin/users/{userId}/record` | `mailfathom.admin.read` | Hands over one user's record as the redacted JSON an editing session opens, with the version it was read at and where this deployment currently reads that user's mail accounts from. |
+| `GET /api/admin/users/{userId}/record` | `mailfathom.admin.read` | Hands over one user's record as the redacted JSON an editing session opens, with the version it was read at. The record carries no mail accounts: [those are read on their own routes](#mail-accounts-and-who-they-are-assigned-to), under `/api/admin/mail-accounts`. |
 | `POST /api/admin/users/{userId}/record` | `mailfathom.admin.configuration.write` | Takes that record back edited and commits it as one change against the version it was opened over. It is what `mfctl user edit` sends when the editor exits, and a record another writer moved past is refused as superseded rather than merged. |
-| `POST /api/admin/users/{userId}/record/mail-accounts` | `mailfathom.admin.configuration.write` | Declares one more mailbox in the record, from the mail-account block the body carries. |
-| `POST /api/admin/users/{userId}/record/mail-accounts/removal` | `mailfathom.admin.configuration.write` | Stops the record declaring one mailbox, named by the identifier it was declared under. It withdraws no mail: everything already stored for that account stays where it is. |
+| `GET /api/admin/mail-accounts` | `mailfathom.admin.read` | Reads [the mail accounts this deployment holds](#mail-accounts-and-who-they-are-assigned-to), at most 1024 in the order they were created in, each with its identifier, its version, the users it is assigned to, its address, and its display name, and `truncated` saying whether more were held than the answer carries. The declaration itself is read one account at a time. |
+| `POST /api/admin/mail-accounts` | `mailfathom.admin.configuration.write` | Creates a mail account from the declaration the body carries and assigns it to the user `userId` names, answering with the identifier it was generated under. An address another account already holds is refused. |
+| `GET /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.read` | Hands over one account's declaration as the redacted JSON an editing session opens, with the version it was read at, or `400` naming the row to correct when the stored declaration is not one of settings. |
+| `POST /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.configuration.write` | Takes that declaration back edited and commits it against the version it was opened over, judged against every user the account is assigned to. |
+| `DELETE /api/admin/mail-accounts/{accountId}` | `mailfathom.admin.erase` | Erases the account, every assignment to it, and every message this deployment holds for it. **This cannot be undone.** |
+| `POST /api/admin/mail-accounts/{accountId}/assignments` | `mailfathom.admin.configuration.write` | Assigns an account nobody else is assigned to the user named by `userId`. An account somebody else holds is refused, because an account is served to one user at a time. |
+| `POST /api/admin/mail-accounts/{accountId}/assignments/removal` | `mailfathom.admin.erase` | Ends one user's assignment and erases the mail stored for them under the account. **Ending the last one erases the account and every message this deployment holds for it.** |
 | `POST /api/admin/users/{userId}/secrets` | `mailfathom.admin.configuration.write` | Seals the material carried in the body under the active data-encryption key and answers only with its `database:<uuid>` reference. Sending the same declared name for that user rotates the existing row and returns the same reference. It refuses when the user does not exist or the deployment configures no data-encryption key ring. |
 | `GET /api/admin/organizations` | `mailfathom.admin.read` | Reads [the organizations](#organizations) this deployment holds, ordered by short name and at most 1000, each with its display name, its short name, how many users belong to it, and when it was recorded. This is what `mfctl organization list` asks. |
 | `POST /api/admin/organizations` | `mailfathom.admin.configuration.write` | Records an organization from the display name and short name the body carries, and answers with the identifier it was minted under. It answers `409` for a short name another organization holds or for a deployment already holding 1000 organizations, and `400` naming what was wrong with either name. |
@@ -242,7 +247,7 @@ here than it does for a session probe: the stored-secret route, the refresh-toke
 routes that provision a password or replace one.
 
 `POST /api/admin/mailbox/refresh-token` carries a long-lived credential for a named mailbox user. It refuses, with
-`400` and a sentence naming what was wrong, an account this deployment does not configure and a body missing either
+`400` and a sentence naming what was wrong, an account this deployment does not hold and a body missing either
 field; a second grant for the same account replaces the first rather than adding to it. It reads at most 16 KB, which is far more than any authorization
 server's refresh token and far less than the server's own default. It answers with no body at all, so nothing it stores
 can be read back out through it.
@@ -349,7 +354,7 @@ instruction, so a caller names whose history they are reading rather than asking
 
 | Query parameter | What it does |
 | --- | --- |
-| `account` | Required. The configured identifier of the account whose trail is read. |
+| `account` | Required. The identifier this deployment generated for the account whose trail is read. |
 | `mutation` | Narrows to one change: `relocate`, `delete`, `set-seen`, `copy`, `set-flagged`, `add-keywords`, `remove-keywords`, or `set-keywords`. |
 | `from`, `before` | Narrows to entries that ended within a range; `from` is inclusive and `before` is exclusive. |
 | `pageSize` | Between 1 and 200; 50 when omitted. |
@@ -357,14 +362,14 @@ instruction, so a caller names whose history they are reading rather than asking
 
 ```console
 $ curl -sS -H "X-API-Key: $MAILFATHOM_ADMIN_KEY" \
-    "http://127.0.0.1:8090/api/admin/mailbox/mutations/audit?account=work&mutation=delete&pageSize=2"
+    "http://127.0.0.1:8090/api/admin/mailbox/mutations/audit?account=5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10&mutation=delete&pageSize=2"
 ```
 
 The response carries the entries and, while more remain, the cursor the next page is asked with. **A walk ends when no
 cursor comes back**, never by comparing a short page against the size you asked for. A cursor names a boundary within
 the filters it was issued for, so presenting one alongside different filters is refused with `400`; changing only the
 page size is not, because pacing is not a filter. Every other refusal is `400` too, with a sentence naming what to
-change: an account this deployment does not configure, a mutation name that is not one of the eight, a page size outside
+change: an account this deployment does not hold, a mutation name that is not one of the eight, a page size outside
 the range, a range that ends where it begins, and a cursor this deployment did not issue.
 
 Nothing in the answer is mail. Folder paths, UIDs, the local email identifier, the requester, the two timestamps, and
@@ -382,7 +387,7 @@ therefore has no cascade to ride:
 
 ```sql
 DELETE FROM mailbox_mutation_audit_entries
-WHERE "MailboxAccountId" = 'work'
+WHERE "MailboxAccountId" = '<account id>'
   AND "StoredEmailId" = ANY($1);
 ```
 
@@ -399,14 +404,14 @@ retrieved from an account, and which of them the response went on to cite.
 
 | Query parameter | What it does |
 | --- | --- |
-| `account` | Required. The configured identifier of the account whose record is read. |
+| `account` | Required. The identifier this deployment generated for the account whose record is read. |
 | `from`, `before` | Narrows to runs that ended within a range; `from` is inclusive and `before` is exclusive. |
 | `pageSize` | Between 1 and 100; 50 when omitted. |
 | `cursor` | The `nextCursor` the previous page returned. |
 
 ```console
 $ curl -sS -H "X-API-Key: $MAILFATHOM_ADMIN_KEY" \
-    "http://127.0.0.1:8090/api/admin/answering/audit?account=work&pageSize=2"
+    "http://127.0.0.1:8090/api/admin/answering/audit?account=5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10&pageSize=2"
 ```
 
 The page is smaller than the mutation trail's because an entry here carries a list rather than a fixed set of columns:
@@ -422,7 +427,7 @@ Nothing in the answer is mail. There is no question, no answer, no retrieved ext
 are what a reader fetches the messages themselves with, through the reads that already serve them, and storing anything
 more would make this record a second copy of the mailbox with its own retention.
 
-The same refusals apply, for the same reasons: an account this deployment does not configure, a page size outside the
+The same refusals apply, for the same reasons: an account this deployment does not hold, a page size outside the
 range, a range that ends where it begins, and a cursor this deployment did not issue are each `400` with a sentence
 naming what to change. An entry a later build wrote and this one cannot interpret — one naming an ending or a
 degradation this version does not declare — is left out of the page rather than failing it, and a warning names the
@@ -436,7 +441,7 @@ trail takes:
 
 ```sql
 DELETE FROM mail_answering_audit_entries
-WHERE "MailboxAccountId" = 'work';
+WHERE "MailboxAccountId" = '<account id>';
 ```
 
 Take it as a deliberate administrative act on a database you have a backup of.
@@ -598,10 +603,10 @@ synchronization run, so this terminal is not what keeps it alive and closing it 
 asking once, and the command says which of the two happened:
 
 ```console
-$ mfctl rules run --account work
+$ mfctl rules run --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 A rule run over work has been asked for.
 Progress:  0 evaluated, 0 matched, 0 skipped
-The run is carried by the account's synchronization runs. Watch it with 'mfctl rules run-status --account work'.
+The run is carried by the account's synchronization runs. Watch it with 'mfctl rules run-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10'.
 ```
 
 `mfctl rules run-status --account <id>` is where it is watched from, and an account nobody has ever asked for a run is
@@ -618,7 +623,7 @@ and never matches; narrowing to a message with `--email` answers "why is this me
 `--cursor` walk it, newest first:
 
 ```console
-$ mfctl rules history --account work --rule file-invoices
+$ mfctl rules history --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10 --rule file-invoices
 Evaluated             Rule           Outcome  Message                               Rule set                             Read                           Asked
 2026-08-08 11:59:00Z  file-invoices  Matched  0199c3d0-0000-7000-8000-000000000002  a1b2c3d4e5f6 (RequestedRun, 4.0 ms)  senderDomain, attachmentCount  relocate → archive: Requested
 ```
@@ -667,12 +672,12 @@ written the request down and never waits for the walk; the run is carried by the
 this terminal is not what keeps it alive and closing it cannot cancel one:
 
 ```console
-$ mfctl spam run --account work
+$ mfctl spam run --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 A classification run over work has been asked for.
 Folders:   INBOX
 Acting:    no — this is a dry run; it records verdicts and leaves the mailbox alone. Add --apply to carry out what the switches ask for.
 Progress:  0 scored, 0 already decided, 0 unreadable
-The run is carried by the account's synchronization runs. Watch it with 'mfctl spam run-status --account work'.
+The run is carried by the account's synchronization runs. Watch it with 'mfctl spam run-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10'.
 ```
 
 `--folder` narrows the walk and is repeatable; it narrows *within* that user's own scope, and a folder outside it is
@@ -686,7 +691,7 @@ request carried were not applied to the walk under way.
 is read:
 
 ```console
-$ mfctl spam run-status --account work
+$ mfctl spam run-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 Account:    work — Completed at 2026-08-12 11:30:00Z
 Requested:  2026-08-12 11:00:00Z
 Folders:    INBOX
@@ -707,7 +712,7 @@ answers "why is this in junk"; narrowing with `--verdict` answers "what would th
 `--cursor` walk it, newest first:
 
 ```console
-$ mfctl spam classifications --account work --verdict Spam
+$ mfctl spam classifications --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10 --verdict Spam
 Evaluated             Verdict                Message                               Folder  Under                                                     Signals                  Asked
 2026-08-12 11:04:11Z  Spam (Scanner 15.2/5)  0199c3d0-0000-7000-8000-000000000002  INBOX   a1b2c3d4e5f6, scanner corpus spamassassin.4.0.2+20260801  X-Spam-Status, BAYES_99  relocate (0199c3d0-0000-7000-8000-000000000009)
 ```
@@ -721,7 +726,7 @@ answers.
 
 Nothing any of these three routes answers with is mail: counts, verdicts, scores, signal names, folder aliases,
 mutation names, instants, and identifiers are the whole of it. Every refusal is `400` naming what to change, including
-an account this deployment does not configure, and the run route reads at most 8 KB of body.
+an account this deployment does not hold, and the run route reads at most 8 KB of body.
 
 ### Reading the background work that stopped, and deciding what becomes of it
 
@@ -847,7 +852,7 @@ file](../features/imap-synchronization.md#what-a-mapping-decides-beyond-where-th
 somebody's mail. That leaves an operator who means it with nothing to ask, and this is the ask.
 
 ```console
-$ mfctl folder erase --account work --folder archive
+$ mfctl folder erase --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10 --folder archive
 500 stored emails erased so far
 1000 stored emails erased so far
 1043 stored emails erased from ARCHIVE under work. The folder holds none, and its checkpoint went with them, so
@@ -889,11 +894,11 @@ own disk, so it is a local read, a parse, and an update of the message's own col
 it cannot set `\Seen`, and it rewrites no stored content:
 
 ```console
-$ mfctl mailbox rederive --account work
+$ mfctl mailbox rederive --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 A re-derivation of every folder under work has been asked for.
 Requested:  2026-08-18 12:00:00Z
 Progress:   0 re-read, 0 unparseable, 0 no longer stored
-The deployment carries the run in the background. Watch it with 'mfctl mailbox rederive-status --account work'.
+The deployment carries the run in the background. Watch it with 'mfctl mailbox rederive-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10'.
 ```
 
 **The request records the run and returns; the deployment carries it.** The walk is durable background work under the
@@ -914,7 +919,7 @@ nothing is walking would wait forever, and the two are undone by different comma
 **A second command reads it**, on the same path with `GET` and the scope in the query string:
 
 ```console
-$ mfctl mailbox rederive-status --account work
+$ mfctl mailbox rederive-status --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 Scope:      every folder under work — under way
 Requested:  2026-08-18 12:00:00Z
 Progress:   1,043 re-read, 0 unparseable, 0 no longer stored
@@ -934,7 +939,7 @@ flag, a keyword, the internal date. It discards the durable synchronization prog
 the next runs read them from the first UID inside the account's window and everything the server knows is read again:
 
 ```console
-$ mfctl mailbox rewind --account work
+$ mfctl mailbox rewind --account 5b0c7d2e-8f41-4a7e-9c1d-2f6b3a9e4d10
 Scope:  every folder under work
 Cost:   22,500 stored emails would be fetched from the mail server, re-read, and stored again.
 Rewind that scope? [y/N] y
@@ -961,7 +966,7 @@ whose bindings held progress, which is what says the removal won.
 All three take `--account` and an optional `--folder`; without it they cover every folder the account holds mail in,
 including one whose mapping was withdrawn. Two scopes are two runs, so re-deriving one folder says nothing about the
 account's own walk. Each write reads at most 4 KB of body — both reads are a `GET` and name their scope in the query
-string — and every refusal is `400` naming what to change: an account this deployment does not configure, and text that
+string — and every refusal is `400` naming what to change: an account this deployment does not hold, and text that
 is not a folder alias. A folder named blank is an omission rather than a refusal, because a caller writing a URL cannot
 express the difference.
 
@@ -1207,9 +1212,10 @@ MailFathom setting, which is every override written for this deployment on purpo
 
 ### Users and their records
 
-A user is a person this deployment reads mail for, and a record is what it reads for them: the mailboxes, the
-credentials each one is reached with, and the settings that are theirs rather than the deployment's. A fresh
-deployment starts holding nobody and reads no mail until these routes record a user and declare their mailboxes,
+A user is a person this deployment reads mail for, and a record is what it reads for them: the settings that are
+theirs rather than the deployment's. The mailboxes they are served are [mail accounts of their
+own](#mail-accounts-and-who-they-are-assigned-to), assigned to them. A fresh deployment starts holding nobody and reads
+no mail until these routes record a user and an account is created for them,
 whether it will end up serving one person or a household: no configuration section names a user, and none declares a
 mailbox. **A user is recorded here rather than declared
 anywhere**, and one recorded is served without a restart.
@@ -1228,8 +1234,6 @@ such user exists rather than editing somebody else's mailboxes.
 | `mfctl user edit` | Opens that record in your `$VISUAL` or `$EDITOR` and commits what you saved as one change |
 | `mfctl user rename --display-name <name>` | Replaces the label that user is told apart by |
 | `mfctl user endpoints [--mcp true\|false] [--client true\|false]` | Keeps that user off the MCP endpoint, the client endpoint, or both, or lets them back on |
-| `mfctl user account add --from-file <path>` | Declares one more mailbox in that record |
-| `mfctl user account remove --id <account>` | Stops the record declaring one mailbox, leaving its stored mail alone |
 | `mfctl user set-organization (--organization <id> \| --none)` | Moves that user into an [organization](#organizations), or out of every one, which changes the login their passwords are typed as |
 | `mfctl user remove` | Erases the user and every message this deployment holds for them, which cannot be undone |
 
@@ -1311,39 +1315,36 @@ ends that, and it changes the capability's own format.
 
 **Nothing imports a mailbox a file used to declare.** A deployment upgrading from a release that stated its own mail
 accounts does not start until `MailSynchronization:Accounts` is removed, and the refusal names these commands: record
-the person with `mfctl user add`, state each of their mailboxes with `mfctl user account add`, and remove the section.
+the person with `mfctl user add`, create each of their mailboxes with `mfctl account add`, and remove the section.
 The credentials each account needs are stated afresh as part of it, because nothing carries a secret reference across
-for you. Every user's record is their own from the first moment they are recorded.
+for you.
 
 `mfctl config adopt` is a different command about a different thing — the deployment's own settings moving into the
 persisted layer, which has nothing to do with whose mailboxes these are — and it is unaffected.
 
-**`mfctl user edit` is the command for a change that is more than one mailbox.** `user account add` and
-`user account remove` each name one, and the deployment composes it into the record, so changing two of them — or
-anything else the record carries — is a run of commands each committing a version of its own, with every intermediate one
-an account set this deployment briefly read. The editing session is one change instead: the record is fetched with its
-version, opened in `$VISUAL` or `$EDITOR`, and committed against that version. An emptied buffer abandons the session
+**`mfctl user edit` changes the whole record as one change.** The record is fetched with its version, opened in
+`$VISUAL` or `$EDITOR`, and committed against that version. It carries no mail account: a saved record naming
+`MailAccounts` is refused, naming `mfctl account edit` as where an account is changed. An emptied buffer abandons the session
 and a buffer saved unchanged writes nothing, both reported as what they are rather than as a failure; a graphical editor
 needs the flag that makes it wait, such as `VISUAL="code --wait"`, because the command reads the file back when the
 editor exits.
 
-**A record is committed whole or not at all, over the version it was read at.** A candidate is bound strictly against
-the same rules a configuration file is, checked for two mail accounts declared under one identifier, checked that every
-account in it belongs to the user whose record it is, put through the same mail-synchronization validators a start
-applies, and judged for [what it asks about scanning that user's
+**A record is committed whole or not at all, over the version it was read at.** A candidate is composed with the mail
+accounts assigned to that user, bound strictly against the same rules a configuration file is, put through the same
+mail-synchronization validators a start applies, and judged for [what it asks about scanning that user's
 mail](configuration-sources.md#what-a-user-may-say-about-scanning-their-own-mail) — and a candidate failing any of
 those is refused with what to correct rather than committed and discovered at the next restart. A scanning refusal
 names the deployment setting behind it and never quotes the record. A record another writer moved on in the meantime is refused as superseded, so nothing silently
 overwrites a change made from the client or from another terminal.
 
-**Every secret reference in the record is resolved before a commit, and a change that leaves the mail accounts alone is
-not refused over what they already carried.** A reference that reaches nothing, a secret name repeated within the
-record, or a trust anchor that cannot be loaded refuses any change that touches a mail account — a mailbox added,
-withdrawn, or edited, including one whose broken reference is replaced by another broken one. A change that leaves
-every mail account setting exactly as the record held it cannot have introduced such a problem, so it commits: an edit
-to spam classification beside a password reference that stopped resolving goes through, and the answer names that
-setting, says the record already carried it, and says what clears it. It is still worth clearing before the next
-restart, because a start refuses a record carrying it.
+**Every secret reference is resolved before a commit, and a change is not refused over what an account already
+carried.** A user record's save never touches an account, so a reference that stopped resolving in one of that user's
+accounts is reported beside the commit rather than refusing it: the answer names the setting, says the account already
+carried it, and names `mfctl account edit` as what clears it. An account write that introduces a reference reaching
+nothing, a secret name repeated within the composed record, or a trust anchor that cannot be loaded is refused,
+including one whose broken reference is replaced by another broken one; a problem the account already carried and the
+write leaves exactly as it was is reported the same way. It is still worth clearing before the next restart, because a
+start refuses a record carrying it.
 
 **Nothing here reports a secret.** A record is handed over with every password, token, and client secret replaced by the
 redaction marker, and a save is read as the difference from what the row holds — so a marker saved back leaves the
@@ -1402,6 +1403,101 @@ users in none — already holds one of that user's usernames for somebody else, 
 
 **An organization with members is not removed.** The refusal says how many it still has, so an operator moves each of
 them out first rather than leaving users whose logins name a short name nobody holds.
+
+### Mail accounts and who they are assigned to
+
+A mail account is a record of its own rather than part of any user's. It holds the mailbox's address, the display name
+it is told apart by, and every setting it is read with, and it is assigned to the user it serves. What a user is served
+is their own record composed with every account assigned to them, so each user's rules about their mailboxes are judged
+over exactly that set.
+
+| Command | What it does |
+| --- | --- |
+| `mfctl account list` | Reads the accounts this deployment holds, at most 1024, with each one's identifier, address, display name, version, and who it is assigned to, and says so when more were held than it lists |
+| `mfctl account show --account <id>` | Reads one account's declaration, secrets redacted |
+| `mfctl account add [--user <id>] --from-file <path>` | Creates an account from the declaration in the file, assigns it to that user, and reports the identifier it was generated under |
+| `mfctl account edit --account <id>` | Opens that declaration in your `$VISUAL` or `$EDITOR` and commits what you saved as one change |
+| `mfctl account assign --account <id> --user <id>` | Assigns an account nobody else is assigned to that user, and is refused for one somebody else holds |
+| `mfctl account unassign --account <id> --user <id>` | Ends one user's assignment, erasing the account and its mail when it was the last one |
+| `mfctl account delete --account <id>` | Erases the account and every message this deployment holds for it |
+
+`--user` on `add` is optional on a deployment holding one person, exactly as on the user commands. `unassign` and
+`delete` show what they are about to erase and ask, and take `--yes` where nothing is at the terminal to answer.
+
+**A declaration is the account's address and name beside its settings.** It is a JSON object stating `EmailAddress`,
+`DisplayName`, and the keys [one account](configuration-mail.md#one-account--a-mailbox-in-a-users-record) lists, with
+credentials as references. It states no `AccountId`: the deployment generates the identifier, a random UUID, and a
+declaration that states one is refused. The identifier is what every tool argument, stored row, and log line names the
+account by from then on.
+
+```json
+{
+  "EmailAddress": "alex@example.test",
+  "DisplayName": "Work mail",
+  "Host": "imap.example.test",
+  "UserName": "alex@example.test",
+  "Secrets": { "Password": { "Name": "alex-work-password", "SecretReference": "file:/etc/mailfathom/secrets/alex-work-password" } }
+}
+```
+
+**One address is held by one account in the whole deployment.** The address is compared without regard to case or
+surrounding white space, and the guarantee is a unique index rather than a read before the write, so two writers
+claiming one address at once cannot both succeed. Creating an account for an address another account holds is refused,
+naming the address:
+
+```
+Another mail account already holds 'alex@example.test', and one address is held by one account in this deployment, so nothing was written.
+```
+
+**An account is served to one user at a time.** Assigning an account somebody else is already assigned is refused, so
+`mfctl account assign` places an account nobody holds. The guarantee is a unique index over the assignment's account
+rather than a read before the write, so two writers assigning one unheld account to two users at once cannot both
+succeed, and the one that loses is refused the same way:
+
+```
+This mail account is already assigned to another user, and an account is served to one user at a time, so nothing was written.
+```
+
+**A person adding a mailbox is never told who holds its address.** Adding a mailbox from [the
+client](client-endpoint.md#the-record-routes) creates an account assigned to that person and nobody else, and an address
+somebody's account already holds is refused there with the same sentence whoever holds it. The answer tells them the
+address cannot be added, and it never says who holds it:
+
+```
+This mail account cannot be added for you. Ask whoever administers this deployment to add it.
+```
+
+**A display name is unique within each user's assigned set.** Two of one person's accounts may not share one, or take
+the other's identifier, so a name always names one mailbox for that person; two people's accounts may. An assignment
+that would give a user a second account under a name they already have is refused, as is one past the 64 accounts one
+user is assigned at most.
+
+**An account write is judged against every user it is assigned to.** A save composes each of those users' records with
+the account as it would stand and binds each of them, so a change that would break any one user's record is refused
+whole. Every committed write moves the version of each of those users' records, which is what a client composing
+against its own record's version sees move.
+
+**Ending an assignment erases mail, and ending the last one erases the account.** `mfctl account unassign` erases the
+mail this deployment stored for that user under the account. An account nobody is assigned to serves nobody, so ending
+the last assignment also erases the account and every message, folder, attachment, and derived index this deployment
+holds for it, exactly as `mfctl account delete` does.
+
+**A read hands over what it can, and names what it cannot.** `mfctl account list` reads at most 1024 accounts, each as
+its identifier, address, display name, version, and assignments rather than its declaration, and says when more were
+held. `mfctl account show` reads one declaration, and an account whose stored declaration is not one of settings is
+answered `400` there rather than read:
+
+```
+A mail account this deployment holds is not a declaration of settings, so it cannot be read or edited. Correct the row where it was written.
+```
+
+```console
+$ mfctl account unassign --account 5b0c... --user 7c02...
+Ended the last assignment of mail account 5b0c..., and erased the account and every message this deployment held for it.
+```
+
+**An account holding no address is not served.** A start reports such accounts at `Warning`, naming the user they are
+assigned to, and `mfctl account list` marks each one; `mfctl account edit` is where the address is stated.
 
 ### User credentials
 

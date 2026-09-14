@@ -69,20 +69,6 @@ internal sealed record UserRecordSaveRequest(
     [property: JsonPropertyName("version")] long Version,
     [property: JsonPropertyName("document")] string Document);
 
-/// <summary>One mail account declared into a user's record.</summary>
-/// <param name="Version">The version the record was read at.</param>
-/// <param name="Account">The declaration, as the JSON object a configuration file would have written.</param>
-internal sealed record UserMailAccountRequest(
-    [property: JsonPropertyName("version")] long Version,
-    [property: JsonPropertyName("account")] string Account);
-
-/// <summary>The mail account a user's record stops declaring.</summary>
-/// <param name="Version">The version the record was read at.</param>
-/// <param name="AccountId">The identifier the account was declared under.</param>
-internal sealed record UserMailAccountRemovalRequest(
-    [property: JsonPropertyName("version")] long Version,
-    [property: JsonPropertyName("accountId")] string AccountId);
-
 /// <summary>What one write to a user's record produced.</summary>
 /// <param name="Committed">Whether the record moved to a new version.</param>
 /// <param name="Version">The version now in force, whether the write committed, was refused, or changed nothing.</param>

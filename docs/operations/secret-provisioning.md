@@ -30,12 +30,12 @@ Every secret-bearing setting is a JSON object carrying a `Name`, a `SecretRefere
 ```
 
 The same block is what a mail account carries, and it is written the same way — except that the account is a
-declaration in one user's record rather than a section of a configuration file, so what states it is
-`mfctl user account add` rather than an editor:
+record the deployment holds rather than a section of a configuration file, so what states it is
+`mfctl account add` rather than an editor:
 
 ```json
 {
-  "AccountId": "primary",
+  "EmailAddress": "mailfathom@example.test",
   "DisplayName": "Personal mail",
   "Host": "imap.example.test",
   "Port": 993,
@@ -321,8 +321,8 @@ The block is a nested object in JSON but requires no JSON provider. Every hierar
 | Azure App Configuration | `Persistence:Password:SecretReference` |
 | Environment block | `Persistence__Password__SecretReference` |
 
-A mailbox password is not among them. Every mail account belongs to a user's record rather than to a configuration
-source, so the reference it carries is written with `mfctl user account add` and reaches no provider here.
+A mailbox password is not among them. Every mail account is a record the deployment holds rather than part of a
+configuration source, so the reference it carries is written with `mfctl account add` and reaches no provider here.
 
 Combined with `InlineOnly`, that is the complete Azure App Configuration path: the store holds the key, Key Vault holds the secret, the provider maps one to the other, and MailFathom binds an already-resolved value and uses it as material.
 

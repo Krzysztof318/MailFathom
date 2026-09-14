@@ -577,27 +577,27 @@ public static class OrchestrationContract
     /// </remarks>
     public const string ObjectStorageSecretKey = "mailfathom-integration-secret";
 
-    /// <summary>The MailFathom account identifier every occurrence the integration-test topology stores belongs to.</summary>
+    /// <summary>The MailFathom account identifier the in-process integration suite stores its mail under.</summary>
     /// <remarks>
-    /// Declared here because two sides have to agree on it: the suite writes its mail under this identifier, and the
-    /// composed host is configured to serve it so that a tool call over the MCP endpoint reads the mail the suite
-    /// stored. A deployment serves the accounts configuration names, so a host that named none would answer every
-    /// mailbox read with an empty window over a database that was not empty — which reads as the query being wrong
-    /// rather than as the account being absent.
+    /// Stated rather than generated, because those tests compose their services in process and supply the account ports
+    /// themselves, so no account record is created and nothing mints an identifier for them. The composed host is the
+    /// other case: it serves the mailbox the suite records through its administrative surface, under the identifier that
+    /// deployment generated, so a test talking to that host reads the identifier from the fixture and never names this
+    /// one.
     /// </remarks>
     public const string ServedMailAccountId = "integration";
 
-    /// <summary>The display name the integration-test topology publishes that account under.</summary>
+    /// <summary>The display name the integration-test topology publishes its one account under, in process and on the composed host alike.</summary>
     /// <remarks>
-    /// Declared beside the identifier and deliberately different from it, because a display name is required
-    /// configuration and the two spellings are separately resolvable: a topology that reused the identifier here would
-    /// let a contract test pass while only one of the two ways of naming an account worked.
+    /// Deliberately unlike any identifier, because a display name is required configuration and the two spellings are
+    /// separately resolvable: a topology whose name read like the identifier would let a contract test pass while only
+    /// one of the two ways of naming an account worked.
     /// </remarks>
     public const string ServedMailAccountDisplayName = "Integration mailbox";
 
     /// <summary>The one folder the composed host maps, which is the folder a tool call over its MCP endpoint reads.</summary>
     /// <remarks>
-    /// Declared here for the reason the account identifier is, and it is the same failure one step further in: a mapping
+    /// Declared here because the account the composed host is handed maps it and the suite seeds into it: a mapping
     /// is what makes MailFathom have a folder at all, so a host that mapped none resolves an empty readable scope and
     /// answers every tool call with an empty window over mail the suite had just stored. One alias rather than the
     /// suite's whole list, because the composed host is reached by the tests that prove a request pipeline and only one
@@ -838,10 +838,6 @@ public static class OrchestrationContract
             ["ClientEndpoint__Enabled"] = "true",
             ["ClientEndpoint__Authentication__0__Method"] = "password",
         }.ToFrozenDictionary(StringComparer.Ordinal);
-
-    /// <summary>The identifier the normal local run declares its one mail account under.</summary>
-    /// <remarks>Declared here rather than beside the write, because it is what a developer names the account by afterwards — in a rule's scope, in a tool argument, and in <c>mfctl user account</c>.</remarks>
-    public const string DevelopmentMailAccountId = "local";
 
     /// <summary>The label the normal local run records that account under.</summary>
     public const string DevelopmentMailAccountDisplayName = "Local mailbox";

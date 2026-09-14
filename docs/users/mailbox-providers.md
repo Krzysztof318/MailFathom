@@ -51,7 +51,7 @@ the credential block, and, in one case, `TransportSecurity`:
 
 ```json
 {
-  "AccountId": "primary",
+  "EmailAddress": "you@example.test",
   "DisplayName": "Personal mail",
   "Host": "imap.example.test",
   "Port": 993,
@@ -70,8 +70,8 @@ the credential block, and, in one case, `TransportSecurity`:
 ```
 
 It stands on its own rather than inside a configuration file, because a deployment declares no mail account in its own
-file: the block above is written into the record of the user whose mailbox it is, with
-`mfctl user account add --from-file`. Turning synchronization on at all is the deployment's own
+file: the block above creates a mail account the deployment holds and assigns to a user, with
+`mfctl account add --from-file`. Turning synchronization on at all is the deployment's own
 `MailSynchronization:Enabled`, and it is the whole of what a configuration source says about mail.
 
 A service that will not accept a password takes an `OAuth` block in place of `Secrets` instead;

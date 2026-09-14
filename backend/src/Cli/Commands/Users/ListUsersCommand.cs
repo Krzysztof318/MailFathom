@@ -54,7 +54,7 @@ internal static class ListUsersCommand
         {
             context.Console.WriteLine(
                 "This deployment holds no user records. Record the first one with 'user add', then give them a "
-                + "mailbox with 'user account add'.");
+                + "mailbox with 'account add'.");
 
             return CliExitCode.Success;
         }

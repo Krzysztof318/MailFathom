@@ -149,6 +149,57 @@ internal static class ReleasedContentObjects
             cancellationToken);
     }
 
+    /// <summary>Releases the object-stored payloads of one mail account, for every user or for one of them.</summary>
+    /// <param name="session">The transaction the erasure runs in.</param>
+    /// <param name="accountId">The account whose payloads are released.</param>
+    /// <param name="userId">The one user whose copy is released, or <see langword="null" /> for everybody's.</param>
+    /// <param name="cancellationToken">Cancels the reads.</param>
+    /// <returns>A task that completes once every locator is registered for release on commit.</returns>
+    public static async Task ReleaseForMailAccountAsync(
+        IPersistenceSession session,
+        string accountId,
+        Guid? userId,
+        CancellationToken cancellationToken)
+    {
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+
+        await ReleaseAsync(
+            session,
+            sessionContext.EmailMessageContents
+                .Where(content => content.StoredEmail.MailboxAccountId == accountId
+                    && (userId == null || content.StoredEmail.UserId == userId)
+                    && content.Backend == ContentStorageBackend.ObjectStorage)
+                .Select(content => content.ObjectLocator!),
+            cancellationToken);
+
+        await ReleaseAsync(
+            session,
+            sessionContext.OutgoingEmailContents
+                .Where(content => content.OutgoingEmail.MailboxAccountId == accountId
+                    && (userId == null || content.OutgoingEmail.UserId == userId)
+                    && content.Backend == ContentStorageBackend.ObjectStorage)
+                .Select(content => content.ObjectLocator!),
+            cancellationToken);
+
+        await ReleaseAsync(
+            session,
+            sessionContext.MailDraftContents
+                .Where(content => content.MailDraft.MailboxAccountId == accountId
+                    && (userId == null || content.MailDraft.UserId == userId)
+                    && content.Backend == ContentStorageBackend.ObjectStorage)
+                .Select(content => content.ObjectLocator!),
+            cancellationToken);
+
+        await ReleaseAsync(
+            session,
+            sessionContext.RecurringSendDrafts
+                .Where(draft => draft.RecurringSend.MailboxAccountId == accountId
+                    && (userId == null || draft.RecurringSend.UserId == userId)
+                    && draft.Backend == ContentStorageBackend.ObjectStorage)
+                .Select(draft => draft.ObjectLocator!),
+            cancellationToken);
+    }
+
     private static async Task ReleaseAsync(
         IPersistenceSession session,
         IQueryable<string> objectLocators,

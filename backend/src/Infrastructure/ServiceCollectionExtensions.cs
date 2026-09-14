@@ -618,6 +618,10 @@ public static class ServiceCollectionExtensions
         // never administers a user still reads one on every start, and the two are granted separately in the
         // database.
         services.AddSingleton<IUserSettingsDocumentWriter, PersistedUserSettingsDocumentWriter>();
+        // The mail accounts a deployment holds and who each is served to. Scoped rather than a singleton over the pool,
+        // because an erasure of an account runs the same model-derived walk a user's erasure runs, in one of the
+        // request's own transactions.
+        services.AddScoped<IMailAccountRecordStore, PersistedMailAccountRecordStore>();
         // What one person set about their own client, which is beside the record above rather than in it: this is a
         // preference about the client and that document is configuration. Scoped because both the read and the upsert
         // are ordinary statements on the request's own context, and registered unconditionally because it is a store

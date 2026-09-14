@@ -695,13 +695,12 @@ mechanism depends on.
 where a person's mail has been, when, and at whose instruction — so a deployment that never asked for it never
 accumulates one. An account turns it on and states how long it keeps entries:
 
-```yaml
-MailAccounts:
-  - AccountId: work
-    DisplayName: Work mail
-    AuditTrail:
-      Enabled: true
-      Retention: 90.00:00:00
+```json
+{
+  "EmailAddress": "alex@example.test",
+  "DisplayName": "Work mail",
+  "AuditTrail": { "Enabled": true, "Retention": "90.00:00:00" }
+}
 ```
 
 The answer is resolved when a change is written down and travels on its record, so switching the trail on or off while a
@@ -1927,41 +1926,37 @@ Synchronization is disabled by default:
 ```
 
 Every key above bounds the deployment rather than a mailbox, which is why the accounts are not among them: a mail
-account belongs to the record of the user whose mailbox it is, written with
-[`mfctl user account add`](../operations/admin-endpoint.md#users-and-their-records) rather than read from a
-configuration source. What a record declares is the same shape a section once carried:
+account is a record the deployment holds and assigns to the users it serves, created with
+[`mfctl account add`](../operations/admin-endpoint.md#mail-accounts-and-who-they-are-assigned-to) rather than read from
+a configuration source. An account is declared like this:
 
 ```json
 {
-  "MailAccounts": [
-    {
-      "AccountId": "primary",
-      "DisplayName": "Personal mail",
-      "Host": "imap.example.test",
-      "Port": 993,
-      "UserName": "mailfathom@example.test",
-      "Mode": "Push",
-      "EarliestEmailReceivedDate": "2024-01-01",
-      "RemotelyDeletedEmailDisposition": "RetainTombstone",
-      "AuthoredDeleteEmailDisposition": "RetainLocalCopy",
-      "Secrets": {
-        "Password": {
-          "Name": "imap-primary-password",
-          "SecretReference": "systemd-credential:imap-primary-password"
-        }
-      },
-      "TransportSecurity": {
-        "ConnectionSecurity": "TlsOnConnect",
-        "PermittedAuthenticationMechanisms": [ "SCRAM-SHA-256", "PLAIN" ],
-        "AllowInsecureConnection": false,
-        "AllowClearTextAuthenticationOverUnencryptedConnection": false,
-        "CertificateTrust": "SystemTrustStore"
-      },
-      "Folders": [
-        { "Alias": "inbox", "SpecialUse": "Inbox" },
-        { "Alias": "archive", "RemotePath": "Archief/2026" }
-      ]
+  "EmailAddress": "mailfathom@example.test",
+  "DisplayName": "Personal mail",
+  "Host": "imap.example.test",
+  "Port": 993,
+  "UserName": "mailfathom@example.test",
+  "Mode": "Push",
+  "EarliestEmailReceivedDate": "2024-01-01",
+  "RemotelyDeletedEmailDisposition": "RetainTombstone",
+  "AuthoredDeleteEmailDisposition": "RetainLocalCopy",
+  "Secrets": {
+    "Password": {
+      "Name": "imap-primary-password",
+      "SecretReference": "systemd-credential:imap-primary-password"
     }
+  },
+  "TransportSecurity": {
+    "ConnectionSecurity": "TlsOnConnect",
+    "PermittedAuthenticationMechanisms": [ "SCRAM-SHA-256", "PLAIN" ],
+    "AllowInsecureConnection": false,
+    "AllowClearTextAuthenticationOverUnencryptedConnection": false,
+    "CertificateTrust": "SystemTrustStore"
+  },
+  "Folders": [
+    { "Alias": "inbox", "SpecialUse": "Inbox" },
+    { "Alias": "archive", "RemotePath": "Archief/2026" }
   ]
 }
 ```
@@ -1998,9 +1993,9 @@ The extraction backfill has a section of its own rather than a block inside the 
 
 `AuthoredDeleteEmailDisposition` answers the same question for the opposite act — a deletion MailFathom performed on the user's instruction rather than one it observed — and [takes precedence over the setting above](#what-becomes-of-a-message-mailfathom-deleted-itself) for every such deletion. It binds as `RetainLocalCopy`, `RetainTombstone`, or `EraseLocalCopy`, is validated the same way, fails startup the same way, and defaults to keeping the local copy readable.
 
-Every declared account carries a `DisplayName`, whether or not synchronization is enabled, because the stored copy stays readable after the switch is turned off and the name is what a caller reads the account back as. There is no fallback to `AccountId`: a name MailFathom invented would be published to callers as though an operator had chosen it. The two share one naming space — a request may name an account by either — so a declaration is refused where a display name another of that user's accounts already carries as an identifier or a display name, compared without regard to case; one equal to the account's own identifier is accepted, since both spellings then reach the same mailbox. Both names are judged within one user's own record rather than across the deployment.
+Every declared account carries a `DisplayName`, whether or not synchronization is enabled, because the stored copy stays readable after the switch is turned off and the name is what a caller reads the account back as. There is no fallback to the generated identifier: a name MailFathom invented would be published to callers as though an operator had chosen it. The two share one naming space — a request may name an account by either — so a write is refused where a display name another of that user's accounts already carries as an identifier or a display name, compared without regard to case. Display names are judged within each assigned user's set rather than across the deployment; the address is the one name judged across the deployment.
 
-An enabled synchronization needs no account: a deployment holding no user, or holding users who have declared no mailbox, starts and reports that it has nothing to synchronize rather than refusing. A declared account carries a non-blank `AccountId`, host, and user name, and the write that declares it is refused where it does not. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and the declaration is refused where it cannot be resolved. Each entry of `Folders` names an alias and at least one of `RemotePath` and `SpecialUse`; naming neither, or naming a role that does not exist, is refused with a message identifying the alias. Naming both is how a folder found by its path still [plays a role](#what-a-role-says-beside-how-a-folder-is-found), and two folders of one account naming the same role is refused with a message identifying both aliases and the role. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, `Important`, and `Outbox`; `Outbox` is MailFathom's own rather than one RFC 6154 defines, so an entry naming it without a `RemotePath` is refused naming the alias. An entry naming a `RemotePath` may additionally set `CreateIfMissing`, which defaults to `false` and is what [creates the folder](#a-folder-the-mapping-asked-for-is-created) when the server advertises none at that path; setting it on an entry that names no `RemotePath` is refused naming the alias. If an account omits `Folders`, its supervisor applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
+An enabled synchronization needs no account: a deployment holding no user, or holding users assigned no mailbox, starts and reports that it has nothing to synchronize rather than refusing. A declared account carries an `EmailAddress`, a `DisplayName`, a host, and a user name, and the write that declares it is refused where it does not; it carries no `AccountId`, which the deployment generates. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and the declaration is refused where it cannot be resolved. Each entry of `Folders` names an alias and at least one of `RemotePath` and `SpecialUse`; naming neither, or naming a role that does not exist, is refused with a message identifying the alias. Naming both is how a folder found by its path still [plays a role](#what-a-role-says-beside-how-a-folder-is-found), and two folders of one account naming the same role is refused with a message identifying both aliases and the role. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, `Important`, and `Outbox`; `Outbox` is MailFathom's own rather than one RFC 6154 defines, so an entry naming it without a `RemotePath` is refused naming the alias. An entry naming a `RemotePath` may additionally set `CreateIfMissing`, which defaults to `false` and is what [creates the folder](#a-folder-the-mapping-asked-for-is-created) when the server advertises none at that path; setting it on an entry that names no `RemotePath` is refused naming the alias. If an account omits `Folders`, its supervisor applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
 
 ### Bounding how far back a run reaches
 

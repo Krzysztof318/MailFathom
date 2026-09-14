@@ -4,7 +4,6 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Failures;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -433,88 +432,6 @@ public sealed class UserRecordEndpointsTests
 
         // Assert
         AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    public async Task AddMailAccountAsync_ARequestCarryingNoDeclaration_IsRefused(string? account)
-    {
-        // Arrange
-        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-
-        // Act
-        var result = await UserRecordEndpoints.AddMailAccountAsync(
-            SyntheticMailUser.Deployment.Value,
-            deployment.Records,
-            new UserMailAccountRequest(1, account),
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    public async Task RemoveMailAccountAsync_ARequestNamingNoAccount_IsRefused(string? accountId)
-    {
-        // Arrange
-        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-
-        // Act
-        var result = await UserRecordEndpoints.RemoveMailAccountAsync(
-            SyntheticMailUser.Deployment.Value,
-            deployment.Records,
-            new UserMailAccountRemovalRequest(1, accountId),
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
-    }
-
-    /// <summary>
-    /// Every refusal about the record itself is a success status carrying the outcome, because each is something the
-    /// administrator acts on and continues from — and each carries the version they compose the next attempt over.
-    /// </summary>
-    [Fact]
-    public async Task AddMailAccountAsync_AWriteTheRecordRefuses_AnswersWithTheOutcomeRatherThanAnError()
-    {
-        // Arrange
-        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 6);
-
-        // Act
-        var result = await UserRecordEndpoints.AddMailAccountAsync(
-            SyntheticMailUser.Deployment.Value,
-            deployment.Records,
-            new UserMailAccountRequest(2, """{"AccountId":"archive"}"""),
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        var written = Assert.IsType<Ok<UserRecordWriteResponse>>(result.Result).Value!;
-
-        Assert.False(written.Committed);
-        Assert.Equal(6, written.Version);
-        Assert.Equal(MailFathomErrorCode.ConfigurationVersionSuperseded.Value, written.Code);
-    }
-
-    [Fact]
-    public async Task AddMailAccountAsync_AUserThisDeploymentDoesNotHold_AnswersThatThereIsNoSuchUser()
-    {
-        // Arrange
-        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-
-        // Act
-        var result = await UserRecordEndpoints.AddMailAccountAsync(
-            SyntheticMailUser.Another.Value,
-            deployment.Records,
-            new UserMailAccountRequest(1, """{"AccountId":"archive"}"""),
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.IsType<NotFound<ProblemDetails>>(result.Result);
     }
 
     [Fact]

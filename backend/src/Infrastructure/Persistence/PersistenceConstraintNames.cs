@@ -566,6 +566,21 @@ internal static class PersistenceConstraintNames
     /// </remarks>
     internal const string UserAccountDisplayNameUniqueIndexName = "ix_settings_accounts_display_name";
 
+    /// <summary>The index that keeps one mailbox address to one mail account across the deployment.</summary>
+    /// <remarks>Stated rather than left to convention because the store reads it: a write that violates it is an address another account holds, which is a refusal rather than a failure.</remarks>
+    internal const string MailAccountRecordAddressUniqueIndexName = "ix_settings_mail_accounts_normalized_email_address";
+
+    /// <summary>The index that keeps a mail account assigned to one user at a time.</summary>
+    /// <remarks>Stated rather than left to convention because it is the guarantee the refusal of a second assignment rests on when two administrators assign one account at once.</remarks>
+    internal const string MailAccountAssignmentAccountUniqueIndexName = "ix_mail_account_assignments_mail_account_id";
+
+    /// <summary>The foreign key that ends a user's assignments with the user.</summary>
+    internal const string MailAccountAssignmentUserForeignKeyName = "fk_mail_account_assignments_settings_accounts";
+
+    /// <summary>The foreign key that ends an account's assignments with the account.</summary>
+    internal const string MailAccountAssignmentAccountForeignKeyName =
+        "fk_mail_account_assignments_settings_mail_accounts";
+
     /// <summary>The index a count of one organization's members is answered from.</summary>
     internal const string UserAccountOrganizationIndexName = "ix_settings_accounts_organization";
 

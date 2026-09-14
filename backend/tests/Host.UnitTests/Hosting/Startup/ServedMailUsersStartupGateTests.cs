@@ -30,8 +30,9 @@ namespace MailFathom.Host.UnitTests.Hosting.Startup;
 
 /// <summary>
 /// Covers how a start settles who this deployment serves: the rows the database holds, the record each of them is
-/// composed from, and the refusals a roster it could not serve is stopped by. No configuration source declares a user
-/// or a mailbox any more, so every case here is a row and the document beside it.
+/// composed from together with the mail accounts assigned to them, and the refusals a roster it could not serve is
+/// stopped by. No configuration source declares a user or a mailbox any more, so every case here is a row and the
+/// records beside it.
 /// </summary>
 public sealed class ServedMailUsersStartupGateTests
 {
@@ -39,6 +40,16 @@ public sealed class ServedMailUsersStartupGateTests
     private const string LanguageOnlyRecord = """{"Language":"English"}""";
 
     private static readonly Guid RecordedIdentifier = new("33333333-3333-3333-3333-333333333333");
+
+    private static readonly MailAccountRecord AlexWork = Mailbox(
+        new Guid("0197a3c0-0000-7000-8000-000000000001"),
+        "alex@example.test",
+        "work");
+
+    private static readonly MailAccountRecord SamWork = Mailbox(
+        new Guid("0197a3c0-0000-7000-8000-000000000002"),
+        "sam@example.test",
+        "work");
 
     /// <summary>
     /// The state a fresh database is in, and so is a deployment whose every user was erased, and one a start
@@ -68,11 +79,10 @@ public sealed class ServedMailUsersStartupGateTests
 
     /// <summary>
     /// A switch left on with nothing to synchronize is what every deployment looks like between its first start and
-    /// its first recorded mailbox, so it is reported and the deployment runs. It refused a start until this release,
-    /// which made the empty deployment unstartable for the one setting an operator turns on first.
+    /// its first recorded mailbox, so it is reported and the deployment runs.
     /// </summary>
     [Fact]
-    public async Task StartAsync_SynchronizationOnAndNobodyRecordingAMailbox_ReportsItRatherThanRefusing()
+    public async Task StartAsync_SynchronizationOnAndNobodyAssignedAMailbox_ReportsItRatherThanRefusing()
     {
         // Arrange
         var roster = new ServedMailUsers();
@@ -83,7 +93,7 @@ public sealed class ServedMailUsersStartupGateTests
                 [Held(SyntheticMailUser.Deployment, "alex")],
                 SynchronizationSwitchedOn(),
                 servedUsers: roster,
-                documents: RecordsHolding((SyntheticMailUser.Deployment, LanguageOnlyRecord)),
+                documents: RecordsHolding(Record(SyntheticMailUser.Deployment, LanguageOnlyRecord)),
                 startupLog: startupLog)
             .StartAsync(TestContext.Current.CancellationToken);
 
@@ -94,9 +104,9 @@ public sealed class ServedMailUsersStartupGateTests
             message => message.Contains("nothing to synchronize", StringComparison.Ordinal));
     }
 
-    /// <summary>The ordinary deployment: one row, and the mailbox that user's own record names.</summary>
+    /// <summary>The ordinary deployment: one row, and the mailbox assigned to that user, served under the identifier the deployment generated for it.</summary>
     [Fact]
-    public async Task StartAsync_AUserWhoseRecordNamesAMailbox_ServesThemFromIt()
+    public async Task StartAsync_AUserAssignedAMailbox_ServesThemWithIt()
     {
         // Arrange
         var user = MailUserId.Create(RecordedIdentifier);
@@ -106,14 +116,14 @@ public sealed class ServedMailUsersStartupGateTests
         await CreateGate(
                 [Held(user, "alex")],
                 servedUsers: roster,
-                documents: RecordsHolding((user, RecordDeclaring("work", "alex@example.test"))))
+                documents: RecordsHolding(Record(user, LanguageOnlyRecord, AlexWork)))
             .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
         var served = Assert.Single(roster.Users);
         Assert.Equal(user, served.User);
         Assert.Equal("alex", served.DisplayName);
-        Assert.Equal(["work"], served.MailAccounts.Select(account => account.AccountId));
+        Assert.Equal([AlexWork.Id.ToString("D")], served.MailAccounts.Select(account => account.AccountId));
     }
 
     /// <summary>
@@ -131,7 +141,7 @@ public sealed class ServedMailUsersStartupGateTests
         await CreateGate(
                 [Held(user, "alex")],
                 servedUsers: roster,
-                documents: RecordsHolding((user, RecordDeclaring("work", "alex@example.test"))))
+                documents: RecordsHolding(Record(user, LanguageOnlyRecord, AlexWork)))
             .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
@@ -140,7 +150,7 @@ public sealed class ServedMailUsersStartupGateTests
 
     /// <summary>Every held row is served, because a row this deployment held and did not serve would be somebody whose mail it stores and never synchronizes.</summary>
     [Fact]
-    public async Task StartAsync_SeveralUsersHeld_ServesEachOfThemFromTheirOwnRecord()
+    public async Task StartAsync_SeveralUsersHeld_ServesEachOfThemWithTheirOwnMailboxes()
     {
         // Arrange
         var roster = new ServedMailUsers();
@@ -151,26 +161,29 @@ public sealed class ServedMailUsersStartupGateTests
 
         // Assert
         Assert.Equal(
-            [(MailUserId.Create(RecordedIdentifier), "alex-work"), (SyntheticMailUser.Another, "sam-work")],
+            [(MailUserId.Create(RecordedIdentifier), AlexWork.Id.ToString("D")), (SyntheticMailUser.Another, SamWork.Id.ToString("D"))],
             roster.Users.Select(user => (user.User, Assert.Single(user.MailAccounts).AccountId)));
     }
 
     /// <summary>
     /// The alternative to failing is a deployment reporting itself started while synchronizing none of the mailboxes
-    /// that user's record names, because the record it was to read them from says nothing usable.
+    /// assigned to that user, because what it was to read them from says nothing usable.
     /// </summary>
     [Fact]
-    public async Task StartAsync_AUserWhoseRecordWillNotBind_FailsStartupNamingTheUser()
+    public async Task StartAsync_AUserWhoseMailboxWillNotBind_FailsStartupNamingTheUser()
     {
         // Arrange
         var user = MailUserId.Create(RecordedIdentifier);
+        var unbindable = AlexWork with
+        {
+            Document = """{"Host":"imap.example.test","Nonsense":"no property binds this"}""",
+        };
 
         // Act
         var refusal = await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
             CreateGate(
                     [Held(user, "alex")],
-                    documents: RecordsHolding(
-                        (user, """{"MailAccounts":[{"AccountId":"work","Nonsense":"no property binds this"}]}""")))
+                    documents: RecordsHolding(Record(user, LanguageOnlyRecord, unbindable)))
                 .StartAsync(TestContext.Current.CancellationToken));
 
         // Assert
@@ -179,25 +192,53 @@ public sealed class ServedMailUsersStartupGateTests
     }
 
     /// <summary>
-    /// A mailbox is a user's record rather than a configuration key, so no reading of the files walks the secrets it
-    /// names. Without this the deployment would start clean and fail one mailbox connection at a time.
+    /// A mailbox is a record rather than a configuration key, so no reading of the files walks the secrets it names.
+    /// Without this the deployment would start clean and fail one mailbox connection at a time.
     /// </summary>
     [Fact]
     public async Task StartAsync_AUserWhoseMailboxNamesASecretNoSchemeResolves_FailsStartupNamingTheUser()
     {
         // Arrange
         var user = MailUserId.Create(RecordedIdentifier);
+        var unresolvable = Mailbox(AlexWork.Id, "alex@example.test", "work", "no-such-scheme:imap-password");
 
         // Act
         var refusal = await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
             CreateGate(
                     [Held(user, "alex")],
-                    documents: RecordsHolding(
-                        (user, RecordDeclaring("work", "alex@example.test", "no-such-scheme:imap-password"))))
+                    documents: RecordsHolding(Record(user, LanguageOnlyRecord, unresolvable)))
                 .StartAsync(TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Contains("'alex'", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An account an upgrade could derive no address for is not served, and the operator is told which user it
+    /// belongs to and how to state one, rather than finding a mailbox that is silently never synchronized.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_AUserAssignedAMailboxHoldingNoAddress_ServesThemWithoutItAndSaysHowToStateOne()
+    {
+        // Arrange
+        var user = MailUserId.Create(RecordedIdentifier);
+        var roster = new ServedMailUsers();
+        var startupLog = new RecordingLogger<ServedMailUsersStartupGate>();
+
+        // Act
+        await CreateGate(
+                [Held(user, "alex")],
+                servedUsers: roster,
+                documents: RecordsHolding(Record(user, LanguageOnlyRecord, AlexWork with { EmailAddress = null })),
+                startupLog: startupLog)
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(Assert.Single(roster.Users).MailAccounts);
+        Assert.Contains(
+            startupLog.Messages,
+            message => message.Contains("hold no email address", StringComparison.Ordinal)
+                && message.Contains("mfctl account edit", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -258,7 +299,7 @@ public sealed class ServedMailUsersStartupGateTests
         await CreateGate(
                 held ? [Held(user, "alex")] : [],
                 servedUsers: roster,
-                documents: RecordsHolding((user, LanguageOnlyRecord)),
+                documents: RecordsHolding(Record(user, LanguageOnlyRecord)),
                 mcpEndpointSettings: new McpEndpointOptions { Enabled = true },
                 clientEndpointSettings: new ClientEndpointOptions { Enabled = true })
             .StartAsync(TestContext.Current.CancellationToken);
@@ -320,11 +361,11 @@ public sealed class ServedMailUsersStartupGateTests
 
     /// <summary>
     /// A rule's scope is a claim about somebody's mailbox, and the roster can lose that mailbox after the rule was
-    /// accepted — its user is erased, or their record stops declaring it. A start refusing then could be undone only
-    /// through the host it refused, so it starts and names the rule rather than letting it reach no mail in silence.
+    /// accepted — its user is erased, or the account is. A start refusing then could be undone only through the host
+    /// it refused, so it starts and names the rule rather than letting it reach no mail in silence.
     /// </summary>
     [Fact]
-    public async Task StartAsync_ARuleScopedToAMailboxNobodyRecords_StartsAndReportsTheRule()
+    public async Task StartAsync_ARuleScopedToAMailboxNobodyIsAssigned_StartsAndReportsTheRule()
     {
         // Arrange
         var roster = new ServedMailUsers();
@@ -335,8 +376,7 @@ public sealed class ServedMailUsersStartupGateTests
                 [Held(SyntheticMailUser.Deployment, "alex")],
                 RuleScopedTo("nobody-records-this"),
                 servedUsers: roster,
-                documents: RecordsHolding(
-                    (SyntheticMailUser.Deployment, RecordDeclaring("work", "alex@example.test"))),
+                documents: RecordsHolding(Record(SyntheticMailUser.Deployment, LanguageOnlyRecord, AlexWork)),
                 startupLog: startupLog)
             .StartAsync(TestContext.Current.CancellationToken);
 
@@ -347,9 +387,9 @@ public sealed class ServedMailUsersStartupGateTests
             message => message.Contains("a mail account named 'nobody-records-this'", StringComparison.Ordinal));
     }
 
-    /// <summary>The control for the report above: a rule scoped to a mailbox a served user's record names is reported by nothing.</summary>
+    /// <summary>The control for the report above: a rule scoped to a mailbox assigned to a served user is reported by nothing.</summary>
     [Fact]
-    public async Task StartAsync_ARuleScopedToAMailboxAServedUserRecords_ReportsNothingAboutTheRule()
+    public async Task StartAsync_ARuleScopedToAMailboxAServedUserIsAssigned_ReportsNothingAboutTheRule()
     {
         // Arrange
         var startupLog = new RecordingLogger<ServedMailUsersStartupGate>();
@@ -357,9 +397,8 @@ public sealed class ServedMailUsersStartupGateTests
         // Act
         await CreateGate(
                 [Held(SyntheticMailUser.Deployment, "alex")],
-                RuleScopedTo("work"),
-                documents: RecordsHolding(
-                    (SyntheticMailUser.Deployment, RecordDeclaring("work", "alex@example.test"))),
+                RuleScopedTo(AlexWork.Id.ToString("D")),
+                documents: RecordsHolding(Record(SyntheticMailUser.Deployment, LanguageOnlyRecord, AlexWork)),
                 startupLog: startupLog)
             .StartAsync(TestContext.Current.CancellationToken);
 
@@ -370,14 +409,11 @@ public sealed class ServedMailUsersStartupGateTests
     }
 
     /// <summary>
-    /// Two users naming one mailbox identifier no longer stops a start. The deployment-wide naming rule went with the
-    /// section that made it deployment-wide, and what is left is a per-account settings lookup keyed by the identifier
-    /// alone, which resolves such a name to whichever record it meets first —
-    /// <see href="https://github.com/Krzysztof318/MailFathom/issues/1325">issue 1325</see> is what keys it by the user
-    /// beside the identifier and ends the ambiguity.
+    /// One account is a mailbox several people may share, and it is served to each of them under the one identifier
+    /// the deployment generated for it, so two users assigned it start the deployment rather than colliding.
     /// </summary>
     [Fact]
-    public async Task StartAsync_TwoUsersWhoseRecordsNameOneMailboxIdentifier_StartsTheDeployment()
+    public async Task StartAsync_TwoUsersAssignedOneMailbox_ServesItToBoth()
     {
         // Arrange
         var roster = new ServedMailUsers();
@@ -387,11 +423,14 @@ public sealed class ServedMailUsersStartupGateTests
                 [Held(SyntheticMailUser.Deployment, "alex"), Held(SyntheticMailUser.Another, "sam")],
                 servedUsers: roster,
                 documents: RecordsHolding(
-                    (SyntheticMailUser.Deployment, RecordDeclaring("work", "alex@example.test")),
-                    (SyntheticMailUser.Another, RecordDeclaring("work", "sam@example.test"))))
+                    Record(SyntheticMailUser.Deployment, LanguageOnlyRecord, AlexWork),
+                    Record(SyntheticMailUser.Another, LanguageOnlyRecord, AlexWork)))
             .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
+        Assert.All(
+            roster.Users,
+            user => Assert.Equal(AlexWork.Id.ToString("D"), Assert.Single(user.MailAccounts).AccountId));
         Assert.Equal(2, roster.Users.Count);
     }
 
@@ -409,7 +448,7 @@ public sealed class ServedMailUsersStartupGateTests
         await CreateGate(
                 [Held(user, "alex")],
                 servedUsers: roster,
-                documents: RecordsHolding((user, $$"""{"Language":"{{written}}"}""")))
+                documents: RecordsHolding(Record(user, $$"""{"Language":"{{written}}"}""")))
             .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
@@ -431,7 +470,7 @@ public sealed class ServedMailUsersStartupGateTests
         await CreateGate(
                 [Held(user, "alex")],
                 servedUsers: roster,
-                documents: RecordsHolding((user, "{}")))
+                documents: RecordsHolding(Record(user, "{}")))
             .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
@@ -450,9 +489,9 @@ public sealed class ServedMailUsersStartupGateTests
         await CreateGate(
                 [Held(user, "alex")],
                 servedUsers: roster,
-                documents: RecordsHolding((
+                documents: RecordsHolding(Record(
                     user,
-                    """{"Language":"English","MailAccounts":[],"SensitiveContent":{"Secrets":{"Enabled":true},"ScreenOutgoingMailFor":["Secrets"]}}""")))
+                    """{"Language":"English","SensitiveContent":{"Secrets":{"Enabled":true},"ScreenOutgoingMailFor":["Secrets"]}}""")))
             .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
@@ -472,7 +511,7 @@ public sealed class ServedMailUsersStartupGateTests
         await CreateGate(
                 [Held(SyntheticMailUser.Deployment, "alex")],
                 startupGates: startupGates,
-                documents: RecordsHolding((SyntheticMailUser.Deployment, LanguageOnlyRecord)))
+                documents: RecordsHolding(Record(SyntheticMailUser.Deployment, LanguageOnlyRecord)))
             .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
@@ -547,69 +586,41 @@ public sealed class ServedMailUsersStartupGateTests
         await directory.Received(1).ReadUsersAsync(Arg.Any<int>(), cancellation.Token);
     }
 
-    /// <summary>
-    /// Two people may each call a mailbox <c>work</c>, and nothing refuses it — but the catalogue of served accounts
-    /// still keys by the name alone and keeps the first, so a start says so, naming the name and both people.
-    /// </summary>
-    [Fact]
-    public async Task StartAsync_TwoUsersRecordingOneMailAccountName_ReportsTheNameAndBothUsers()
-    {
-        // Arrange
-        var startupLog = new RecordingLogger<ServedMailUsersStartupGate>();
-
-        // Act
-        await CreateGate(
-                TwoRecordedUsers(),
-                documents: RecordsHolding(
-                    (MailUserId.Create(RecordedIdentifier), RecordDeclaring("work", "alex@example.test")),
-                    (SyntheticMailUser.Another, RecordDeclaring("work", "sam@example.test"))),
-                startupLog: startupLog)
-            .StartAsync(TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Contains(
-            startupLog.Messages,
-            message => message.Contains("'work'", StringComparison.Ordinal)
-                && message.Contains("'alex'", StringComparison.Ordinal)
-                && message.Contains("'sam'", StringComparison.Ordinal));
-    }
-
     private static MailUserRecord Held(MailUserId user, string displayName) =>
         new(user, displayName);
 
-    /// <summary>A record declaring one mailbox, which is the shape every one of these tests states a mailbox in.</summary>
-    private static string RecordDeclaring(
-        string accountId,
-        string userName,
+    /// <summary>A mailbox as its own record holds it, which is the shape every one of these tests states a mailbox in.</summary>
+    private static MailAccountRecord Mailbox(
+        Guid id,
+        string emailAddress,
+        string displayName,
         string secretReference = "systemd-credential:imap-password") =>
-        $$"""
-          {
-            "Language": "English",
-            "MailAccounts": [
+        new(
+            id,
+            emailAddress,
+            displayName,
+            $$"""
               {
-                "AccountId": "{{accountId}}",
-                "DisplayName": "{{accountId}}",
                 "Host": "imap.example.test",
-                "UserName": "{{userName}}",
+                "UserName": "{{emailAddress}}",
                 "Secrets": { "Password": { "Name": "imap-password", "SecretReference": "{{secretReference}}" } }
               }
-            ]
-          }
-          """;
+              """,
+            Version: 1);
+
+    /// <summary>One user's record, and the mail accounts assigned to them.</summary>
+    private static UserSettingsDocument Record(MailUserId user, string json, params MailAccountRecord[] accounts) =>
+        new(user, $"user-{user.Value:D}", json, Version: 2) { MailAccounts = accounts };
 
     /// <summary>The reader answering each named user with the record beside them, and nobody else with anything.</summary>
-    private static IUserSettingsDocumentReader RecordsHolding(params (MailUserId User, string Json)[] records)
+    private static IUserSettingsDocumentReader RecordsHolding(params UserSettingsDocument[] records)
     {
         var documents = Substitute.For<IUserSettingsDocumentReader>();
 
         foreach (var record in records)
         {
-            documents.ReadAsync(record.User, Arg.Any<CancellationToken>()).Returns(
-                Task.FromResult<UserSettingsDocument?>(new UserSettingsDocument(
-                    record.User,
-                    $"user-{record.User.Value:D}",
-                    record.Json,
-                    Version: 2)));
+            documents.ReadAsync(record.User, Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<UserSettingsDocument?>(record));
         }
 
         return documents;
@@ -641,11 +652,11 @@ public sealed class ServedMailUsersStartupGateTests
         Held(SyntheticMailUser.Another, "sam"),
     ];
 
-    /// <summary>The records those two users are served from, each naming a mailbox of their own.</summary>
+    /// <summary>The records those two users are served from, each assigned a mailbox of their own.</summary>
     private static IUserSettingsDocumentReader RecordsOfTwoUsers() =>
         RecordsHolding(
-            (MailUserId.Create(RecordedIdentifier), RecordDeclaring("alex-work", "alex@example.test")),
-            (SyntheticMailUser.Another, RecordDeclaring("sam-work", "sam@example.test")));
+            Record(MailUserId.Create(RecordedIdentifier), LanguageOnlyRecord, AlexWork),
+            Record(SyntheticMailUser.Another, LanguageOnlyRecord, SamWork));
 
     private static IMailUserDirectory DirectoryOf(IReadOnlyList<MailUserRecord> held)
     {

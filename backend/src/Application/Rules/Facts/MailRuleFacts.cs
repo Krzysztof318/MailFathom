@@ -105,7 +105,7 @@ public sealed class MailRuleFacts
     /// <summary>Gets the facts that have actually been resolved, which is what proves an unnamed fact cost nothing.</summary>
     public IReadOnlyList<MailRuleFact> ResolvedFacts => [.. this.resolvedValues.Keys];
 
-    /// <summary>Gets the configured identifier of the account this email belongs to.</summary>
+    /// <summary>Gets the identifier the deployment generated for the account this email belongs to.</summary>
     /// <remarks>
     /// Published beside the fact surface rather than reached through it, because deciding whether a rule applies to this
     /// account at all happens before the rule's condition is evaluated. Reading it that way also keeps it off

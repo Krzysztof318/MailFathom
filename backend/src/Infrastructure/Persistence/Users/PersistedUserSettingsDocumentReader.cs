@@ -78,6 +78,24 @@ internal sealed class PersistedUserSettingsDocumentReader(
         LIMIT @limit;
         """;
 
+    /// <summary>Reads the accounts assigned to one user, bounded in count and in the size of each document.</summary>
+    /// <remarks>One more than a user may be read with, so a set past the bound is refused rather than silently truncated into a roster that would then drop a mailbox.</remarks>
+    private const string SelectAssignedAccounts =
+        """
+        SELECT
+            account."Id",
+            account."EmailAddress",
+            account."DisplayName",
+            octet_length(account."Document"::text) AS "Length",
+            CASE WHEN octet_length(account."Document"::text) <= @maximumOctets THEN account."Document"::text END AS "Document",
+            account."Version"
+        FROM mail_account_assignments AS assignment
+        JOIN settings_mail_accounts AS account ON account."Id" = assignment."MailAccountId"
+        WHERE assignment."UserId" = @user
+        ORDER BY account."CreatedAt", account."Id"
+        LIMIT @limit;
+        """;
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<UserSettingsDocumentVersion>> ReadVersionsAsync(
         int limit,
@@ -116,6 +134,50 @@ internal sealed class PersistedUserSettingsDocumentReader(
                     exception);
             }
         }
+    }
+
+    /// <summary>Reads the accounts assigned to one user over the connection their record was read on.</summary>
+    private async Task<IReadOnlyList<MailAccountRecord>> ReadAssignedAccountsAsync(
+        NpgsqlConnection connection,
+        MailUserId user,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(SelectAssignedAccounts, connection);
+
+        command.CommandTimeout = (int)commandTimeout.Value.TotalSeconds;
+        command.Parameters.AddWithValue("user", user.Value);
+        command.Parameters.AddWithValue("maximumOctets", UserSettingsDocument.MaximumOctets);
+        command.Parameters.AddWithValue("limit", MailAccountRecord.MaximumAssignedPerUser + 1);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var accounts = new List<MailAccountRecord>();
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            if (accounts.Count == MailAccountRecord.MaximumAssignedPerUser)
+            {
+                throw new UserSettingsUnreadableException(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"User {user.Value} is assigned more than the {MailAccountRecord.MaximumAssignedPerUser} mail accounts one user is served with, so their record was not read. Unassign the accounts they no longer read."));
+            }
+
+            if (reader.GetInt32(3) > UserSettingsDocument.MaximumOctets)
+            {
+                throw new UserSettingsUnreadableException(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Mail account {reader.GetGuid(0)} holds a document past the {UserSettingsDocument.MaximumOctets} octets MailFathom binds one from, so the record of user {user.Value} was not read. Check what wrote the settings_mail_accounts row."));
+            }
+
+            accounts.Add(new MailAccountRecord(
+                reader.GetGuid(0),
+                reader.IsDBNull(1) ? null : reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(4),
+                reader.GetInt64(5)));
+        }
+
+        return accounts;
     }
 
     /// <summary>Opens a connection in a step of its own, so a database out of reach is told apart from one that answered.</summary>
@@ -175,27 +237,32 @@ internal sealed class PersistedUserSettingsDocumentReader(
                 command.Parameters.AddWithValue("user", user.Value);
                 command.Parameters.AddWithValue("maximumOctets", UserSettingsDocument.MaximumOctets);
 
-                await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+                UserSettingsDocument record;
 
-                if (!await reader.ReadAsync(cancellationToken))
+                await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
                 {
-                    return null;
+                    if (!await reader.ReadAsync(cancellationToken))
+                    {
+                        return null;
+                    }
+
+                    var documentOctets = reader.GetInt32(1);
+
+                    if (documentOctets > UserSettingsDocument.MaximumOctets)
+                    {
+                        throw new UserSettingsUnreadableException(string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"The record of user {user.Value} is {documentOctets} octets, past the {UserSettingsDocument.MaximumOctets} MailFathom binds a user's document from, so it was not read. A user record is a page of declarations rather than a payload: check what wrote the settings_accounts row."));
+                    }
+
+                    record = new UserSettingsDocument(
+                        user,
+                        reader.GetString(0),
+                        reader.GetString(2),
+                        reader.GetInt64(3));
                 }
 
-                var documentOctets = reader.GetInt32(1);
-
-                if (documentOctets > UserSettingsDocument.MaximumOctets)
-                {
-                    throw new UserSettingsUnreadableException(string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"The record of user {user.Value} is {documentOctets} octets, past the {UserSettingsDocument.MaximumOctets} MailFathom binds a user's document from, so it was not read. A user record is a page of declarations rather than a payload: check what wrote the settings_accounts row."));
-                }
-
-                return new UserSettingsDocument(
-                    user,
-                    reader.GetString(0),
-                    reader.GetString(2),
-                    reader.GetInt64(3));
+                return record with { MailAccounts = await this.ReadAssignedAccountsAsync(connection, user, cancellationToken) };
             }
             catch (NpgsqlException exception)
             {

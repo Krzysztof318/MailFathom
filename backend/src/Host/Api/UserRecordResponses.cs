@@ -122,9 +122,9 @@ internal sealed record UserRecordSaveRequest(long Version, string? Document);
 /// <remarks>The settings travel as the document a file states them in rather than as a typed body, so what an operator writes for an account of their own is what they would have written for one of the deployment's — and so a setting added to that shape needs nothing added here.</remarks>
 internal sealed record UserMailAccountRequest(long Version, string? Account);
 
-/// <summary>The mail account a user's record stops declaring.</summary>
+/// <summary>The mail account the acting user withdraws, which erases it with every message stored for it.</summary>
 /// <param name="Version">The version the record was read at.</param>
-/// <param name="AccountId">The identifier the account was declared under.</param>
+/// <param name="AccountId">The identifier the deployment generated for the account.</param>
 internal sealed record UserMailAccountRemovalRequest(long Version, string? AccountId);
 
 /// <summary>One folder declared into a mail account of the acting user's record.</summary>

@@ -11,6 +11,7 @@ using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
 using MailFathom.AppHost;
+using MailFathom.Domain.Accounts;
 using Xunit;
 
 namespace MailFathom.IntegrationTests.Orchestration;
@@ -56,6 +57,9 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
     private readonly HashSet<string> startedHostResources = new(StringComparer.Ordinal);
 
     private DistributedApplication? application;
+
+    /// <summary>The identifier the composed host serves its one mail account under, once the suite recorded that account.</summary>
+    private MailAccountId? composedHostAccountId;
 
     /// <summary>Gets the certificates the mutual-TLS host is served with and judges presented certificates against.</summary>
     /// <remarks>Issued when this fixture is constructed, because the material has to exist before the app model is built: the host reads it from the environment variables the build injects it into.</remarks>
@@ -283,6 +287,23 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
             cancellationToken),
         Uri.UriSchemeHttp);
 
+    /// <summary>Starts the composed MailFathom host and reports the identifier it serves its one mail account under.</summary>
+    /// <param name="cancellationToken">Cancels waiting for the host to become reachable.</param>
+    /// <returns>The identifier the host's deployment generated when the suite recorded the account.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started, or when the host resource refused the start command.</exception>
+    /// <remarks>
+    /// Read rather than stated, because a deployment generates an account's identifier: a composed-host test names the
+    /// mailbox by this and seeds its mail under it, where an identifier written down in the suite would name an account
+    /// the host does not serve and read as every tool answering over an empty mailbox.
+    /// </remarks>
+    public async Task<MailAccountId> ComposedHostAccountIdAsync(CancellationToken cancellationToken)
+    {
+        await this.StartMailFathomHostAsync(cancellationToken);
+
+        return this.composedHostAccountId
+            ?? throw new InvalidOperationException("The composed host started without the suite recording its mail account.");
+    }
+
     /// <summary>Starts the composed MailFathom host and reports the address its administrative surface serves on.</summary>
     /// <param name="cancellationToken">Cancels waiting for the host to become reachable.</param>
     /// <returns>The base address of the host's administrative endpoint.</returns>
@@ -478,7 +499,7 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
                 // needs none.
                 if (resourceName == OrchestrationContract.HostResourceName)
                 {
-                    await ComposedHostMailbox.RecordAsync(
+                    this.composedHostAccountId = await ComposedHostMailbox.RecordAsync(
                         AsAddress(
                             startedApplication.GetEndpoint(
                                 resourceName,

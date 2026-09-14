@@ -7,20 +7,22 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using MailFathom.AppHost;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.IntegrationTests.Orchestration;
 
-/// <summary>Declares the mailbox the composed host serves, in the record of the one user that host holds.</summary>
+/// <summary>Adds the mailbox the composed host serves, assigned to the one user that host holds.</summary>
 /// <remarks>
 /// <para>
 /// A deployment reads no mail account from its own file, so the app model cannot configure this one: every account a
-/// host serves belongs to a user's record. The composed host may start holding nobody — a fresh database records no
-/// user — and no mailbox at all, and this is what puts both there: through the administrative surface that host serves,
-/// which is the same act an operator performs with <c>mfctl user add</c> and <c>mfctl user account add</c>.
+/// host serves is a record of its own, assigned to the users it serves. The composed host may start holding nobody — a
+/// fresh database records no user — and no mailbox at all, and this is what puts both there: through the administrative
+/// surface that host serves, which is the same act an operator performs with <c>mfctl user add</c> and
+/// <c>mfctl account add</c>.
 /// </para>
 /// <para>
 /// It runs after the host is healthy rather than before it starts, and that is the arrangement rather than a
-/// concession: a record committed through the running host is published to its roster in the same write, so the
+/// concession: an account committed through the running host is published to its roster in the same write, so the
 /// mailbox is served without a restart. A row written into the database from here would reach a process that never
 /// asked the question again.
 /// </para>
@@ -39,23 +41,33 @@ internal static class ComposedHostMailbox
     /// </summary>
     private const string RecordedUserDisplayName = "user";
 
-    internal static async Task RecordAsync(Uri adminAddress, CancellationToken cancellationToken)
+    /// <summary>Records the mailbox, or finds the one an earlier start over this database recorded, and reports its identifier.</summary>
+    /// <remarks>
+    /// The identifier is the one the deployment generated, so it is read back rather than stated: a composed-host test
+    /// names the mailbox by it and seeds mail under it. An address is held by one account in the whole deployment, so an
+    /// account already assigned to the user for this address is reused rather than created again and refused.
+    /// </remarks>
+    internal static async Task<MailAccountId> RecordAsync(Uri adminAddress, CancellationToken cancellationToken)
     {
         using var client = new HttpClient { BaseAddress = adminAddress };
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", OrchestrationContract.AdminApiKey);
 
         var user = await ReadOrRecordSoleUserAsync(client, cancellationToken);
-        var version = await ReadRecordVersionAsync(client, user, cancellationToken);
+
+        if (await FindAssignedAccountAsync(client, user, cancellationToken) is { } recorded)
+        {
+            return recorded;
+        }
 
         var requestBody = new JsonObject
         {
-            ["version"] = version,
+            ["userId"] = user.ToString("D"),
             ["account"] = Declaration().ToJsonString(),
         };
         using var content = new StringContent(requestBody.ToJsonString(), Encoding.UTF8, "application/json");
         using var response = await client.PostAsync(
-            new Uri($"api/admin/users/{user:D}/record/mail-accounts", UriKind.Relative),
+            new Uri("api/admin/mail-accounts", UriKind.Relative),
             content,
             cancellationToken);
 
@@ -70,12 +82,38 @@ internal static class ComposedHostMailbox
                     " ",
                     outcome.RootElement.GetProperty("messages").EnumerateArray().Select(static message => message.GetString()))}].");
         }
+
+        return MailAccountId.Create(outcome.RootElement.GetProperty("accountId").GetGuid().ToString("D"));
     }
 
-    /// <summary>Composes the account exactly as a configuration file once stated it, which is the shape a record keeps.</summary>
+    private static async Task<MailAccountId?> FindAssignedAccountAsync(
+        HttpClient client,
+        Guid user,
+        CancellationToken cancellationToken)
+    {
+        using var response = await client.GetAsync(
+            new Uri("api/admin/mail-accounts", UriKind.Relative),
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        using var listing = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+
+        return listing.RootElement
+            .GetProperty("accounts")
+            .EnumerateArray()
+            .Where(account => account.GetProperty("users").EnumerateArray().Any(assigned => assigned.GetGuid() == user)
+                && string.Equals(
+                    account.GetProperty("emailAddress").GetString(),
+                    OrchestrationContract.ComposedHostSendingAddress,
+                    StringComparison.OrdinalIgnoreCase))
+            .Select(static account => (MailAccountId?)MailAccountId.Create(account.GetProperty("id").GetGuid().ToString("D")))
+            .FirstOrDefault();
+    }
+
+    /// <summary>Composes the account exactly as a configuration file once stated it, with the address that tells it apart.</summary>
     private static JsonObject Declaration() => new()
     {
-        ["AccountId"] = OrchestrationContract.ServedMailAccountId,
+        ["EmailAddress"] = OrchestrationContract.ComposedHostSendingAddress,
         ["DisplayName"] = OrchestrationContract.ServedMailAccountDisplayName,
         ["Host"] = OrchestrationContract.ComposedHostSubmissionHost,
         ["UserName"] = OrchestrationContract.ComposedHostSendingAddress,
@@ -146,20 +184,5 @@ internal static class ComposedHostMailbox
         using var provisioned = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
 
         return provisioned.RootElement.GetProperty("id").GetGuid();
-    }
-
-    private static async Task<long> ReadRecordVersionAsync(
-        HttpClient client,
-        Guid user,
-        CancellationToken cancellationToken)
-    {
-        using var response = await client.GetAsync(
-            new Uri($"api/admin/users/{user:D}/record", UriKind.Relative),
-            cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        using var record = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-
-        return record.RootElement.GetProperty("version").GetInt64();
     }
 }

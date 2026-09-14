@@ -365,9 +365,9 @@ public sealed class RootSettingsWriterTests
     /// <summary>A setting another store owns is refused rather than written into the root document.</summary>
     /// <remarks>
     /// The path is one of those the withdrawn user collection carried, and the refusal names the commands that change
-    /// a user's mailboxes rather than the collection, because no configuration source states them any more. Both
-    /// commands are named because this writer sees a path rather than a user: one handed only <c>user account add</c>
-    /// would be sent to change one mailbox at a time where the change they are making is the whole record.
+    /// a user and their mailboxes rather than the collection, because no configuration source states them any more.
+    /// Both are named because this writer sees a path rather than a user or an account, and a user's record and the
+    /// mail accounts they are served are changed by two different commands.
     /// </remarks>
     [Fact]
     public async Task WriteAsync_ASettingAnotherStoreOwns_IsRefused()
@@ -384,7 +384,7 @@ public sealed class RootSettingsWriterTests
         var refusal = Assert.Single(result.RefusalMessages);
 
         Assert.Contains("user-accounts", refusal, StringComparison.Ordinal);
-        Assert.Contains("mfctl user account add", refusal, StringComparison.Ordinal);
+        Assert.Contains("mfctl account", refusal, StringComparison.Ordinal);
         Assert.Contains("mfctl user edit", refusal, StringComparison.Ordinal);
         Assert.Equal(0, deployment.Row.AcceptedCommits);
     }

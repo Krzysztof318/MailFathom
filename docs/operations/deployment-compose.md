@@ -37,11 +37,12 @@ It provisions no credential to sign in with, because the client reads its own sa
 its closing report says so.
 
 **The mailbox it asked about is not written into the configuration**, because no configuration source declares one:
-the answers become `mailbox.json` beside `compose.yaml`, and a mailbox is declared in the record of a user the
-deployment holds. A fresh database holds nobody, and the script never records a user for you — who the deployment
-serves is yours to say first — so it leaves the file and prints the `mfctl` commands that record the user and then
-declare the mailbox. Only a run that finds exactly one user already recorded declares it itself, through the
-administrative endpoint once the deployment is up. Until then the deployment reads nothing, which is an ordinary
+the answers become `mailbox.json` beside `compose.yaml`, and a mailbox is a mail account created for a user the
+deployment holds. Its address is `--email-address`, which defaults to the login when that is an address. A fresh
+database holds nobody, and the script never records a user for you — who the deployment serves is yours to say first —
+so it leaves the file and prints the `mfctl` commands that record the user and then create the mailbox. Only a run that
+finds exactly one user already recorded creates it itself, through the administrative endpoint once the deployment is
+up. Until then the deployment reads nothing, which is an ordinary
 first-run state rather than a failure.
 
 **It also relaxes the platform's TLS policy for this deployment**, by copying
@@ -259,14 +260,14 @@ once the stack is up — `mfctl login` asks for the key in `secrets/mailfathom/a
 ```bash
 mfctl login --endpoint http://127.0.0.1:8090
 mfctl user add --display-name Alex
-mfctl user account add --from-file mailbox.json
+mfctl account add --from-file mailbox.json
 ```
 
-`mailbox.json` is the JSON object one mail account is declared as — the same shape a configuration source used to carry,
-with the same `file:` reference into `/etc/mailfathom/secrets`. The mailbox is served from the moment that write
-commits, without a restart, and the next synchronization run is its first one. `mfctl user add` records the person
-under the label you tell them apart by, and `mfctl user account add` names no user, because the deployment then holds
-exactly one; once `mfctl user add` records a second person, `--user` says whose record a command writes. [Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes
+`mailbox.json` is the JSON object one mail account is declared as — its `EmailAddress` and `DisplayName` beside the
+settings, with the same `file:` reference into `/etc/mailfathom/secrets`. The mailbox is served from the moment that
+write commits, without a restart, and the next synchronization run is its first one. `mfctl user add` records the person
+under the label you tell them apart by, and `mfctl account add` names no user, because the deployment then holds
+exactly one; once `mfctl user add` records a second person, `--user` says whom the account is created for. [Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes
 in the file, and [administering your deployment](../users/administering.md) the command group around it.
 
 ### What the first `up` of PostgreSQL does

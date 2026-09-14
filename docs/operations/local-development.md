@@ -550,11 +550,12 @@ dotnet user-secrets --project backend/src/Host/Host.csproj set \
 The block shape is identical to production, so moving a working development configuration to a real deployment is one string edit — `plaintext:dev-password` becomes `systemd-credential:postgres-password` — rather than a restructuring.
 
 **A mailbox is not configured this way and cannot be.** No configuration source declares a mail account, so a locally
-started host reads its mailbox from the record of a user it holds: `mfctl user add` records one, and
-`mfctl user account add --from-file mailbox.json` against its administrative endpoint declares the mailbox, carrying
-the same JSON object a configuration source used to. The app model does both for you when the orchestration starts the
-host, because a local launch is a quick start: where the database holds nobody it records a user labelled `user`, then
-declares the mailbox, out of the three mailbox parameters it collects, in that user's record. A deployment does neither
+started host reads its mailbox from a mail account assigned to a user it holds: `mfctl user add` records one, and
+`mfctl account add --from-file mailbox.json` against its administrative endpoint creates the account and assigns it.
+The app model does both for you when the orchestration starts the host, because a local launch is a quick start: where
+the database holds nobody it records a user labelled `user`, then creates the mailbox for them out of the three mailbox
+parameters it collects, unless an account for that address is already assigned to them. The address is the login where
+the login is an address, and the login and the host joined by `@` otherwise. A deployment does neither
 — its first user is the one its administrator records.
 
 Neither file nor user secrets is a production secret store. User secrets are stored unencrypted in the developer's profile directory and exist only to keep credentials out of the repository; `appsettings.Development.json` is committed and must never hold a real credential. [Secret provisioning](secret-provisioning.md) describes the deployment paths.

@@ -118,6 +118,24 @@ public sealed class AdminEndpointRoutesTests
             AdminEndpointRoutes.ContactExportPath(contact));
     }
 
+    /// <summary>The mail-account paths, written out for the reason the contact paths are: an account is served beneath a UUID segment.</summary>
+    [Fact]
+    public void MailAccountPaths_AreTheRoutesTheDeploymentServesItsAccountsAt()
+    {
+        var account = new Guid("11111111-2222-3333-4444-555555555555");
+
+        Assert.Equal("/api/admin/mail-accounts", AdminEndpointRoutes.MailAccountsPath);
+        Assert.Equal(
+            "/api/admin/mail-accounts/11111111-2222-3333-4444-555555555555",
+            AdminEndpointRoutes.MailAccountPath(account));
+        Assert.Equal(
+            "/api/admin/mail-accounts/11111111-2222-3333-4444-555555555555/assignments",
+            AdminEndpointRoutes.MailAccountAssignmentsPath(account));
+        Assert.Equal(
+            "/api/admin/mail-accounts/11111111-2222-3333-4444-555555555555/assignments/removal",
+            AdminEndpointRoutes.MailAccountAssignmentRemovalPath(account));
+    }
+
     /// <summary>
     /// The organization paths and the one moving a user between organizations, pinned for the reason every other path
     /// here is: a rename on either side would compile cleanly and leave the command reaching a 404 that reads exactly

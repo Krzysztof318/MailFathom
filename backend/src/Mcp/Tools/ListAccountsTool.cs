@@ -29,10 +29,10 @@ namespace MailFathom.Mcp.Tools;
 /// account belonging to anybody else.
 /// </para>
 /// <para>
-/// Both names are scoped to the user that gave them, which the advertised description says because a client stores
-/// them. An identifier is unique within its user and nowhere wider, so two users may each call an account
-/// <c>work</c>; a client that read one identifier as the deployment's own name for a mailbox would be holding a value
-/// that names a different mailbox in somebody else's hands.
+/// The two names are unique over different ranges, which the advertised description says because a client stores
+/// them. The identifier is generated and unique across the deployment; the display name is unique only within its
+/// user, so two users may each call an account <c>work</c>, and a client that compared a display name with one from
+/// another user would be holding a value that names a different mailbox in somebody else's hands.
 /// </para>
 /// <para>
 /// It reaches no mail server, because the use case it calls speaks no mail protocol. A protocol request therefore cannot
@@ -70,11 +70,11 @@ internal sealed class ListAccountsTool(
         UseStructuredContent = true)]
     [Description(
         "Lists the mail accounts you may read. Call it to learn which mailboxes exist and what to "
-        + "call them before narrowing a listing, a search, or a question to one: every account carries a configured "
-        + "identifier and a readable display name, and either may be used to name it. Both names are the ones the "
-        + "account's user gave it, and both are unique within that user rather than across the deployment, so the "
-        + "same spelling can name a different mailbox under another user: store either name as this user's name for "
-        + "the mailbox, and never compare it with one that came from another user or another deployment. Also reports "
+        + "call them before narrowing a listing, a search, or a question to one: every account carries an identifier "
+        + "the deployment generated and a readable display name, and either may be used to name it. The identifier is "
+        + "unique across the deployment; the display name is unique only within your own accounts, so the same display "
+        + "name can name a different mailbox under another user: store the identifier to remember a mailbox, and never "
+        + "compare a display name with one that came from another user or another deployment. Also reports "
         + "how current the local copy of each folder is and whether synchronization is running at all, which is what "
         + "tells an empty answer about a mailbox apart from a mailbox nothing has synchronized. Reads the local copy "
         + "only: it never contacts a mail server, and it returns no mail, no mail server address, no user name, and no "
