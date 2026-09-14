@@ -29,10 +29,10 @@ namespace MailFathom.Mcp.Tools;
 /// account belonging to anybody else.
 /// </para>
 /// <para>
-/// Both names are scoped to the user that gave them, which the advertised description says because a client stores
-/// them. An identifier is unique within its user and nowhere wider, so two users may each call an account
-/// <c>work</c>; a client that read one identifier as the deployment's own name for a mailbox would be holding a value
-/// that names a different mailbox in somebody else's hands.
+/// The two names are unique over different ranges, which the advertised description says because a client stores
+/// them. The identifier is generated and unique across the deployment; the display name is unique only within its
+/// user, so two users may each call an account <c>work</c>, and a client that compared a display name with one from
+/// another user would be holding a value that names a different mailbox in somebody else's hands.
 /// </para>
 /// <para>
 /// It reaches no mail server, because the use case it calls speaks no mail protocol. A protocol request therefore cannot
