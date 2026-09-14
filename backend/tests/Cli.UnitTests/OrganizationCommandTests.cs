@@ -18,9 +18,15 @@ public sealed class OrganizationCommandTests : IDisposable
 {
     private const string Endpoint = CliCommandHarness.Endpoint;
 
+    /// <summary>What the deployment answers as the sentence saying what a short name may contain.</summary>
+    private const string Correction =
+        "An organization's short name is 1 to 32 characters of 'A' to 'Z', '0' to '9', or '-', and is stored upper-cased.";
+
     private static readonly Guid User = new("11111111-1111-1111-1111-111111111111");
 
     private static readonly Guid Organization = new("77777777-7777-7777-7777-777777777777");
+
+    private static readonly Guid Unreadable = new("88888888-8888-8888-8888-888888888888");
 
     private readonly CliCommandHarness harness = new(new DateTimeOffset(2026, 8, 27, 12, 0, 0, TimeSpan.Zero));
 
@@ -47,6 +53,56 @@ public sealed class OrganizationCommandTests : IDisposable
         Assert.Equal("ACME", listing.Cell(row, "Short name"));
         Assert.Equal("Acme Corporation", listing.Cell(row, "Display name"));
         Assert.Equal("2", listing.Cell(row, "Members"));
+    }
+
+    /// <summary>
+    /// A row the deployment will not read as an organization is named beneath the listing rather than left out of it,
+    /// because each of them costs only itself and nothing else would tell an operator it exists.
+    /// </summary>
+    [Fact]
+    public async Task List_ADeploymentHoldingARowItWillNotRead_NamesItBeneathTheListing()
+    {
+        // Arrange
+        using var deployment = FakeOrganizationDeployment.Holding(
+            [User],
+            [FakeOrganizationDeployment.Organization(Organization, "ACME", "Acme Corporation", members: 2)],
+            [FakeOrganizationDeployment.UnreadableOrganization(Unreadable, "Legacy Holdings", Correction)]);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "organization", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var reported = Assert.Single(this.harness.Console.Lines, line => line.Contains($"{Unreadable:D}", StringComparison.Ordinal));
+
+        Assert.Contains("Legacy Holdings", reported, StringComparison.Ordinal);
+        Assert.Contains(Correction, reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A display name is whatever an operator recorded and nothing refuses a control character in one, so an escape
+    /// sequence in a row this listing prints would otherwise be acted on by the terminal of whoever ran the command.
+    /// </summary>
+    [Fact]
+    public async Task List_ARowWhoseDisplayNameCarriesAnEscapeSequence_PrintsItWithoutTheSequence()
+    {
+        // Arrange
+        using var deployment = FakeOrganizationDeployment.Holding(
+            [User],
+            [],
+            [FakeOrganizationDeployment.UnreadableOrganization(Unreadable, "\u001B[2JLegacy", Correction)]);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "organization", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var reported = Assert.Single(this.harness.Console.Lines, line => line.Contains($"{Unreadable:D}", StringComparison.Ordinal));
+
+        Assert.DoesNotContain('\u001B', reported);
+        Assert.Contains("[2JLegacy", reported, StringComparison.Ordinal);
     }
 
     /// <summary>The identifier is the deployment's to mint, so the command sends both names and reports what came back.</summary>

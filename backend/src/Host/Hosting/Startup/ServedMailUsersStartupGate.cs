@@ -229,11 +229,8 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// says which accounts belong to whom, and the roster is what this gate establishes.
     /// </para>
     /// <para>
-    /// The whole set is resolved first and is the only pass a deployment whose secrets are in place ever makes. Where
-    /// it reports something, each error is attributed by the position its own path carries: every path this
-    /// composes hangs under the account's index within the set, so the prefix names exactly one account and no message
-    /// has to be parsed further. An account with something against it is left out and reported; the rest of that
-    /// user's mailboxes keep synchronizing.
+    /// The whole set is resolved in one pass, which is the only pass a deployment whose secrets are in place ever
+    /// makes. What to do with what it reported is the method below.
     /// </para>
     /// </remarks>
     private async Task<IReadOnlyList<MailSynchronizationAccountOptions>> MailAccountsWithUsableSecretsAsync(
@@ -249,12 +246,45 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
             .GetRequiredService<SecretConfigurationValidator>()
             .FindUserMailAccountErrorsAsync(RecordConfigurationPath, accounts, cancellationToken);
 
-        if (errors.Count == 0)
-        {
-            return accounts;
-        }
+        return errors.Count == 0
+            ? accounts
+            : MailAccountsTheErrorsLeaveUsable(
+                errors,
+                accounts,
+                document.MailAccounts.ToDictionary(account => account.Id, account => account.Version),
+                heldBack);
+    }
 
-        var versions = document.MailAccounts.ToDictionary(account => account.Id, account => account.Version);
+    /// <summary>Sorts one user's mail accounts into those the secret errors name and those they leave alone.</summary>
+    /// <param name="errors">What the validator said about this user's mailboxes, which is never empty here.</param>
+    /// <param name="accounts">The declarations the record bound, in the order the paths in <paramref name="errors" /> index them by.</param>
+    /// <param name="versions">The version each declaration was recorded at, read by the identifier the composition put on it.</param>
+    /// <param name="heldBack">Collects a record for every account this refuses, in the order the accounts were declared.</param>
+    /// <returns>The accounts to serve, which is empty where an error named none of them.</returns>
+    /// <remarks>
+    /// <para>
+    /// Each error is attributed by the position its own path carries: every path the validator composes for a user's
+    /// mailboxes hangs under the account's index within the set, so the prefix names exactly one account and no message
+    /// has to be parsed further. An account with something against it is left out and reported; the rest of that user's
+    /// mailboxes keep synchronizing.
+    /// </para>
+    /// <para>
+    /// Separated from the resolution above so both endings can be judged without a validator, a secret scheme, or a
+    /// deployment. What this decides is which mailboxes a person's mail keeps flowing through, and the ending that
+    /// matters most is the one no deployment reaches while the validator and this method agree about paths.
+    /// </para>
+    /// </remarks>
+    internal static IReadOnlyList<MailSynchronizationAccountOptions> MailAccountsTheErrorsLeaveUsable(
+        IReadOnlyList<string> errors,
+        IReadOnlyList<MailSynchronizationAccountOptions> accounts,
+        IReadOnlyDictionary<Guid, long> versions,
+        List<HeldBackRecord> heldBack)
+    {
+        ArgumentNullException.ThrowIfNull(errors);
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(versions);
+        ArgumentNullException.ThrowIfNull(heldBack);
+
         var usable = new List<MailSynchronizationAccountOptions>(accounts.Count);
         var attributed = 0;
 

@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using System.Net;
+using System.Text.Json;
 using MailFathom.Cli.Administration;
 using MailFathom.TestSupport;
 
@@ -19,12 +20,32 @@ internal static class FakeOrganizationDeployment
     /// <summary>Gets the identifier this deployment reports for an organization it has just recorded.</summary>
     internal static Guid ProvisionedOrganizationId { get; } = new("66666666-6666-6666-6666-666666666666");
 
-    /// <summary>Builds a deployment holding the users and the organizations stated.</summary>
+    /// <summary>Builds a deployment holding the users and the organizations stated, and no unreadable row.</summary>
     /// <param name="users">The users the roster reports, in the order it serves them.</param>
     /// <param name="organizations">What a listing of the organizations answers with, each written by <see cref="Organization" />.</param>
     /// <returns>The deployment.</returns>
     internal static FakeHttpMessageHandler Holding(IReadOnlyList<Guid> users, params string[] organizations) =>
-        new((request, _) => Task.FromResult(Answer(request, users, organizations)));
+        Holding(users, organizations, []);
+
+    /// <summary>Builds a deployment whose listing also carries rows it will not read as an organization.</summary>
+    /// <param name="users">The users the roster reports, in the order it serves them.</param>
+    /// <param name="organizations">The organizations the listing answers with, each written by <see cref="Organization" />.</param>
+    /// <param name="unreadable">The rows the listing reports apart, each written by <see cref="UnreadableOrganization" />.</param>
+    /// <returns>The deployment.</returns>
+    internal static FakeHttpMessageHandler Holding(
+        IReadOnlyList<Guid> users,
+        IReadOnlyList<string> organizations,
+        IReadOnlyList<string> unreadable) =>
+        new((request, _) => Task.FromResult(Answer(request, users, organizations, unreadable)));
+
+    /// <summary>Writes one row the deployment will not read as an organization, as the listing reports it.</summary>
+    /// <param name="id">The identifier the row is named by, the stored short name never being echoed.</param>
+    /// <param name="displayName">The name an operator recorded it under.</param>
+    /// <param name="correction">The sentence saying what a short name may contain.</param>
+    /// <returns>The row, as an element of the listing's <c>unreadable</c> array.</returns>
+    internal static string UnreadableOrganization(Guid id, string displayName, string correction) => string.Create(
+        CultureInfo.InvariantCulture,
+        $$"""{"id":"{{id:D}}","displayName":{{JsonSerializer.Serialize(displayName)}},"correction":{{JsonSerializer.Serialize(correction)}}}""");
 
     /// <summary>Writes one organization as a listing carries it.</summary>
     /// <param name="id">The identifier the deployment gave the organization.</param>
@@ -39,7 +60,8 @@ internal static class FakeOrganizationDeployment
     private static HttpResponseMessage Answer(
         HttpRequestMessage request,
         IReadOnlyList<Guid> users,
-        IReadOnlyList<string> organizations)
+        IReadOnlyList<string> organizations,
+        IReadOnlyList<string> unreadable)
     {
         var path = request.RequestUri?.AbsolutePath ?? string.Empty;
 
@@ -53,7 +75,11 @@ internal static class FakeOrganizationDeployment
         if (path == AdminEndpointRoutes.OrganizationsPath)
         {
             return request.Method == HttpMethod.Get
-                ? FakeAdminEndpoint.Json(HttpStatusCode.OK, $$"""{"organizations":[{{string.Join(',', organizations)}}]}""")
+                ? FakeAdminEndpoint.Json(
+                    HttpStatusCode.OK,
+                    $$"""
+                      {"organizations":[{{string.Join(',', organizations)}}],"unreadable":[{{string.Join(',', unreadable)}}]}
+                      """)
                 : FakeAdminEndpoint.Json(HttpStatusCode.OK, $$"""{"organizationId":"{{ProvisionedOrganizationId:D}}"}""");
         }
 

@@ -715,8 +715,69 @@ public sealed class ServedMailUsersStartupGateTests
         await directory.Received(1).ReadUsersAsync(Arg.Any<int>(), cancellation.Token);
     }
 
+    /// <summary>
+    /// The ordinary reading: a path naming one account's index refuses that account alone, and the mailboxes nothing
+    /// was said about go on synchronizing.
+    /// </summary>
+    [Fact]
+    public void MailAccountsTheErrorsLeaveUsable_AnErrorNamingOneAccount_LeavesEveryOtherAccountUsable()
+    {
+        // Arrange
+        var heldBack = new List<HeldBackRecord>();
+        var accounts = new[] { Declared(AlexWork.Id, "work"), Declared(SamWork.Id, "spare") };
+
+        // Act
+        var usable = ServedMailUsersStartupGate.MailAccountsTheErrorsLeaveUsable(
+            ["document:MailAccounts:1:Secrets:Password: the reference resolves to nothing."],
+            accounts,
+            new Dictionary<Guid, long> { [AlexWork.Id] = 3, [SamWork.Id] = 4 },
+            heldBack);
+
+        // Assert
+        Assert.Equal([AlexWork.Id.ToString("D")], usable.Select(account => account.AccountId));
+        var refused = Assert.Single(heldBack);
+        Assert.Equal(SamWork.Id, refused.Identity);
+        Assert.Equal(4, refused.RejectedVersion);
+    }
+
+    /// <summary>
+    /// The prefixes are mutually exclusive, so an error under a path naming no account is a validator this gate no
+    /// longer understands. Serving a mailbox on the strength of an error nobody could read would be exactly the
+    /// unproven secret the resolution exists to catch, so every mailbox of that user is held back with everything that
+    /// was said — and the shortfall is what decides it, which is why the error count rather than the wording is
+    /// asserted here.
+    /// </summary>
+    [Fact]
+    public void MailAccountsTheErrorsLeaveUsable_AnErrorNamingNoAccount_HoldsEveryMailboxOfThatUserBack()
+    {
+        // Arrange
+        var heldBack = new List<HeldBackRecord>();
+        var accounts = new[] { Declared(AlexWork.Id, "work"), Declared(SamWork.Id, "spare") };
+        string[] errors =
+        [
+            "document:Elsewhere:TransportSecurity: the trust anchor resolves to nothing.",
+            "document:MailAccounts:1:Secrets:Password: the reference resolves to nothing.",
+        ];
+
+        // Act
+        var usable = ServedMailUsersStartupGate.MailAccountsTheErrorsLeaveUsable(
+            errors,
+            accounts,
+            new Dictionary<Guid, long> { [AlexWork.Id] = 3, [SamWork.Id] = 4 },
+            heldBack);
+
+        // Assert
+        Assert.Empty(usable);
+        Assert.Equal([SamWork.Id, AlexWork.Id], heldBack.Select(record => record.Identity));
+        Assert.Equal(errors, heldBack.Single(record => record.Identity == AlexWork.Id).Corrections);
+    }
+
     private static MailUserRecord Held(MailUserId user, string displayName) =>
         new(user, displayName);
+
+    /// <summary>A mailbox as the composition hands it to the secret resolution, which keys it by the record's identifier.</summary>
+    private static MailSynchronizationAccountOptions Declared(Guid id, string displayName) =>
+        new() { AccountId = id.ToString("D"), DisplayName = displayName };
 
     /// <summary>A mailbox as its own record holds it, which is the shape every one of these tests states a mailbox in.</summary>
     private static MailAccountRecord Mailbox(

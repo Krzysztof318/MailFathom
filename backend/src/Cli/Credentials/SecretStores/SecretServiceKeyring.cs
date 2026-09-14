@@ -262,7 +262,7 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
                     $"the Secret Service did not answer within {ProviderDeadline.TotalSeconds:F0} seconds, so the call was withdrawn");
             }
 
-            var reported = ProviderReportedText.Sanitize(
+            var reported = ConsoleSafeText.Sanitize(
                 Marshal.PtrToStringUTF8(Marshal.ReadIntPtr(failure, FailureMessageOffset)));
 
             throw new SecretStoreUnavailable(

@@ -72,10 +72,18 @@ internal static class ListOrganizationsCommand
 
     /// <summary>Says which rows the deployment will not read as an organization, and what each must become.</summary>
     /// <remarks>
+    /// <para>
     /// Printed after the listing rather than mixed into it, because these rows are not organizations the deployment
     /// serves: their members cannot type the prefix their login begins with, and every other organization is unaffected.
     /// Nothing here is the stored short name — it is the value that failed every rule, so the identifier names the row
     /// and the sentence says what to write with 'organization set-short-name'.
+    /// </para>
+    /// <para>
+    /// Both halves are reduced before they are written, as every other name and sentence a listing prints is: the
+    /// display name is whatever an operator recorded and nothing rejects a control character in one, and the sentence
+    /// arrived over the wire. A terminal acts on an escape sequence rather than printing it, so a name could otherwise
+    /// clear the screen or rewrite the line of the operator reading it.
+    /// </para>
     /// </remarks>
     private static void ReportUnreadable(CliContext context, IReadOnlyList<UnreadableOrganizationEntry>? unreadable)
     {
@@ -93,8 +101,8 @@ internal static class ListOrganizationsCommand
         foreach (var organization in unreadable)
         {
             context.Console.WriteLine(
-                $"  {organization.Id:D} ({organization.DisplayName ?? "unreported"}): "
-                + (organization.Correction ?? "unreported"));
+                $"  {organization.Id:D} ({ConsoleSafeText.Sanitize(organization.DisplayName) ?? "unreported"}): "
+                + (ConsoleSafeText.Sanitize(organization.Correction) ?? "unreported"));
         }
     }
 
@@ -106,8 +114,8 @@ internal static class ListOrganizationsCommand
         {
             listing.AddRow(
                 $"{organization.Id:D}",
-                organization.ShortName ?? "unreported",
-                organization.DisplayName ?? "unreported",
+                ConsoleSafeText.Sanitize(organization.ShortName) ?? "unreported",
+                ConsoleSafeText.Sanitize(organization.DisplayName) ?? "unreported",
                 organization.Members.ToString(CultureInfo.InvariantCulture),
                 $"{organization.CreatedAt:u}");
         }
