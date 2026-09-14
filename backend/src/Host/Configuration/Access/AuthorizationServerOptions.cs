@@ -28,9 +28,53 @@ namespace MailFathom.Host.Configuration.Access;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class AuthorizationServerOptions
 {
-    /// <summary>Gets or sets the operator's own name for this profile, which diagnostics correlate on.</summary>
-    /// <remarks>It never reaches a client and is never compared against anything a token carries; it exists so a startup message and a log line can say which profile they mean without printing an issuer URL.</remarks>
+    /// <summary>The one name a client draws as its own primary sign-in button rather than as a third party's.</summary>
+    /// <remarks>
+    /// It says only <em>draw this as the deployment's own way in</em>. MailFathom issues no token and serves no login
+    /// page whatever this is set to: the profile carrying it is an ordinary authorization server, the operator's own
+    /// identity provider, and every rule below applies to it unchanged. At most one profile across a surface may carry
+    /// it, which <see cref="UserFacingAuthenticationConfiguration" />'s rule against a repeated name is already what
+    /// enforces.
+    /// </remarks>
+    internal const string SelfName = "self";
+
+    /// <summary>Gets or sets the operator's own name for this profile, which diagnostics correlate on and a client draws a sign-in control by.</summary>
+    /// <remarks>
+    /// <para>
+    /// It is never compared against anything a token carries, and it decides two things. A startup message and a log
+    /// line identify a profile by it rather than by an issuer URL; and where <see cref="ClientId" /> is written, it is
+    /// published to a browser as the name of one sign-in method — <see cref="SelfName" /> meaning the deployment's own
+    /// primary button, and anything else a name the client matches against the provider marks it ships.
+    /// </para>
+    /// <para>
+    /// So write the provider's ordinary short name — <c>github</c>, <c>gmail</c>, <c>keycloak</c> — where a client
+    /// should draw its mark, and <see cref="DisplayName" /> beside it where the words under that mark should be
+    /// something else. A profile publishing no client identifier is not published at all, and the name stays what it
+    /// has always been.
+    /// </para>
+    /// </remarks>
     public string? Name { get; set; }
+
+    /// <summary>Gets or sets the words a client writes on this server's sign-in control, where they are not <see cref="Name" />.</summary>
+    /// <remarks>Optional, and it defaults to <see cref="Name" />. It exists because the name is also an identifier a client matches a provider mark against, so a deployment wanting <c>Nordwind staff directory</c> under the Keycloak mark writes <c>keycloak</c> as the name and that sentence here.</remarks>
+    public string? DisplayName { get; set; }
+
+    /// <summary>Gets or sets the identifier a browser starts an authorization code flow with, where this deployment offers one.</summary>
+    /// <remarks>
+    /// <para>
+    /// Written, this server becomes a sign-in method the client endpoint publishes to a browser holding nothing, and a
+    /// person is offered a control for it. Left unset, the server validates tokens exactly as it does now and is
+    /// published to no browser — which is what a deployment serving agents alone stays, rather than something it has to
+    /// turn off.
+    /// </para>
+    /// <para>
+    /// It is the client the operator registered at their own authorization server for the MailFathom client, with the
+    /// redirect URI that client actually arrives at. Nothing here registers one: the identifier is public by
+    /// construction — it travels in the address bar of every authorization request — and the flow carries PKCE rather
+    /// than a secret, so there is no confidential credential for a page to hold.
+    /// </para>
+    /// </remarks>
+    public string? ClientId { get; set; }
 
     /// <summary>Gets or sets the authorization server's issuer identifier, for example <c>https://sso.example.test/realms/mailfathom</c>.</summary>
     /// <remarks>
@@ -84,7 +128,37 @@ internal sealed class AuthorizationServerOptions
         !string.IsNullOrWhiteSpace(this.Name)
         || !string.IsNullOrWhiteSpace(this.Issuer)
         || !string.IsNullOrWhiteSpace(this.MetadataAddress)
+        || this.ClientId is not null
+        || this.DisplayName is not null
         || this.AuthorizedSubjects.Count > 0;
+
+    /// <summary>Gets whether this profile is offered to a browser as a way of signing in.</summary>
+    /// <remarks>A profile naming no client identifier goes on validating tokens and is published to nobody, which is what keeps a deployment serving agents alone from offering a browser a button it could not follow.</remarks>
+    public bool IsOfferedToABrowser => !string.IsNullOrWhiteSpace(this.ClientId);
+
+    /// <summary>Reports the words a client writes on this server's sign-in control.</summary>
+    /// <returns><see cref="DisplayName" /> where one was written, and <see cref="Name" /> otherwise.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the profile has not passed <see cref="FindConfigurationErrors" />.</exception>
+    public string PublishedDisplayName() =>
+        string.IsNullOrWhiteSpace(this.DisplayName) ? this.PublishedName() : this.DisplayName.Trim();
+
+    /// <summary>Reports the name a client matches its provider marks against, and draws the deployment's own button by.</summary>
+    /// <returns>The configured name, trimmed.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the profile has not passed <see cref="FindConfigurationErrors" />.</exception>
+    public string PublishedName() =>
+        string.IsNullOrWhiteSpace(this.Name)
+            ? throw new InvalidOperationException(
+                "The profile's name was read before it was validated, so there is nothing to publish it by.")
+            : this.Name.Trim();
+
+    /// <summary>Reports the identifier a browser starts this server's authorization code flow with.</summary>
+    /// <returns>The configured client identifier, trimmed.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the profile offers a browser nothing, which <see cref="IsOfferedToABrowser" /> is what says.</exception>
+    public string PublishedClientId() =>
+        this.IsOfferedToABrowser
+            ? this.ClientId!.Trim()
+            : throw new InvalidOperationException(
+                "The profile's client identifier was read for a profile that offers a browser no sign-in method.");
 
     /// <summary>Finds everything an operator must fix before this profile can validate a token.</summary>
     /// <param name="admission">What a subject decides on the endpoint this profile was configured for.</param>
@@ -101,7 +175,21 @@ internal sealed class AuthorizationServerOptions
 
         if (string.IsNullOrWhiteSpace(this.Name))
         {
-            errors.Add($"{nameof(this.Name)} — every authorization server needs a name, because a startup message and a log line identify a profile by it rather than by its issuer.");
+            errors.Add($"{nameof(this.Name)} — every authorization server needs a name, because a startup message and a log line identify a profile by it rather than by its issuer, and a client draws this server's sign-in control by it.");
+        }
+
+        // Each is refused only where it was written and left blank, because absent is the ordinary posture rather than
+        // a fault: a profile naming no client identifier validates tokens and offers a browser nothing, and one naming
+        // no display name is drawn by its name. A key written empty is neither of those — it is a setting an operator
+        // meant to fill in, and reading it as absence would leave a button they configured quietly undrawn.
+        if (this.ClientId is not null && string.IsNullOrWhiteSpace(this.ClientId))
+        {
+            errors.Add($"{nameof(this.ClientId)} — the setting is there and empty; write the identifier this deployment's client is registered under at the authorization server, or remove the setting so this server offers a browser no sign-in method.");
+        }
+
+        if (this.DisplayName is not null && string.IsNullOrWhiteSpace(this.DisplayName))
+        {
+            errors.Add($"{nameof(this.DisplayName)} — the setting is there and empty; write the words a sign-in control should carry, or remove the setting so {nameof(this.Name)} is what a client draws.");
         }
 
         // The faulty value is described rather than quoted, unlike a name or an origin elsewhere in this section. A URL

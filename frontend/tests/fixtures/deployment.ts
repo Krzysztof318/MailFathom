@@ -175,3 +175,83 @@ export const troubledFolders = {
         { account: accountBehind, folders: [{ ...inbox, storedEmailCount: 812, unreadEmailCount: 0, behind: true }] },
     ],
 };
+
+/** What a deployment offers somebody signing in at rest: a password and nothing else, which is what every other check reads. */
+export const signInMethods = {
+    acceptsPassword: true,
+    authorizationServers: [],
+};
+
+/** The issuer of the authorization server this corpus's operator runs, on a host reserved so nothing can reach it. */
+export const authorizationServerIssuer = 'https://sso.example.test/realms/nordwind';
+
+/**
+ * The same deployment with every way in published, which is the screen a person actually meets on a configured one.
+ *
+ * It is four servers beside the password because that is what the design draws the screen from: the deployment's own
+ * identity provider above everything, three third parties in the grid under it, and the form below that. `self` is the
+ * first one's name and is a drawing instruction rather than a role — MailFathom issues no token whatever it is set to.
+ * Every other name is the provider's own short one, which is what a client matches the marks it ships against, and the
+ * words under each are the deployment's, which is the whole reason a display name exists beside that name.
+ */
+export const signInMethodsOffered = {
+    acceptsPassword: true,
+    authorizationServers: [
+        {
+            issuer: 'https://id.nordwind.example/realms/staff',
+            name: 'self',
+            displayName: 'Nordwind SSO',
+            clientId: 'mailfathom-client',
+        },
+        {
+            issuer: 'https://github.example.invalid',
+            name: 'github',
+            displayName: 'GitHub',
+            clientId: 'mailfathom-client',
+        },
+        {
+            issuer: 'https://accounts.gmail.example.invalid',
+            name: 'gmail',
+            displayName: 'Gmail',
+            clientId: 'mailfathom-client',
+        },
+        {
+            issuer: authorizationServerIssuer,
+            name: 'keycloak',
+            displayName: 'Keycloak',
+            clientId: 'mailfathom-client',
+        },
+    ],
+};
+
+/** What the deployment's own RFC 9728 document says a token has to be issued for, and which scopes to ask for. */
+export const protectedResource = {
+    resource: 'https://mail.example.test/api/client',
+    scopes_supported: ['mailfathom.mail.read', 'offline_access'],
+};
+
+/**
+ * What {@link authorizationServerIssuer} publishes about itself, which is all a client is ever given its addresses by.
+ *
+ * It is the one value here that belongs to somebody other than the deployment, and it is in this corpus for the reason
+ * everything else is: a screen a person signs in through cannot be reached without it, and a second copy written in a
+ * spec would be a second place to be wrong about a document RFC 8414 fixes the shape of.
+ */
+export const authorizationServerMetadata = {
+    issuer: authorizationServerIssuer,
+    authorization_endpoint: `${authorizationServerIssuer}/protocol/openid-connect/auth`,
+    token_endpoint: `${authorizationServerIssuer}/protocol/openid-connect/token`,
+    revocation_endpoint: `${authorizationServerIssuer}/protocol/openid-connect/revoke`,
+    userinfo_endpoint: `${authorizationServerIssuer}/protocol/openid-connect/userinfo`,
+};
+
+/** What that server answers a redeemed code with. It is issued by nothing and belongs to nobody. */
+export const issuedToken = {
+    access_token: 'browser-suite-access-token',
+    token_type: 'Bearer',
+    expires_in: 3600,
+    refresh_token: 'browser-suite-refresh-token',
+};
+
+/** @see issuedToken */
+export const expectedGrantAuthorization = `Bearer ${issuedToken.access_token}`;

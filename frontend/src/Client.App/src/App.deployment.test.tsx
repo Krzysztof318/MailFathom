@@ -327,6 +327,12 @@ describe('App deployment', () => {
                 'https://first.example.invalid/api/client/signals/ticket',
                 'https://first.example.invalid/api/client/notifications/unread-count',
                 'https://first.example.invalid/api/client/session/token/revocation',
+
+                // The sign-in screen the sign-out returned to asks what that deployment offers, which is the last
+                // thing read at the address being left rather than the first thing read at the next one.
+                'https://first.example.invalid/api/client/sign-in-methods',
+                'https://first.example.invalid/.well-known/oauth-protected-resource/api/client',
+
                 'https://second.example.invalid/api/client/session',
                 'https://second.example.invalid/api/client/session/token',
                 'https://second.example.invalid/api/client/accounts',

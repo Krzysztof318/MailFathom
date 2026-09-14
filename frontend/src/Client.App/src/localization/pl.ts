@@ -83,8 +83,23 @@ export const pl: Catalogue = {
     'signIn.revealPasswordControl': 'Pokaż hasło',
     'signIn.hidePasswordControl': 'Ukryj hasło',
 
-    'signIn.viaProvider': 'Logowanie przez dostawcę',
+    'signIn.viaProvider': 'Logowanie u dostawcy',
+    'signIn.orAnotherMethod': 'lub inną metodą',
     'signIn.orWithPassword': 'lub hasłem',
+    'signIn.signInWithProvider': 'Zaloguj się',
+    'signIn.providerOpensInBrowser': '{provider} otworzy się w Twojej przeglądarce.',
+    'signIn.openingProvider': 'Otwieram {provider}…',
+    'signIn.finishInBrowser': 'Dokończ logowanie w oknie przeglądarki — ten ekran podejmie sesję, gdy wrócisz.',
+    'signIn.continueToProvider': 'Przejdź do {provider}',
+    'signIn.noMethods':
+        'To wdrożenie nie udostępnia żadnej metody logowania. Sprawdź adres albo poproś osobę, która je prowadzi, o skonfigurowanie jednej.',
+    'signIn.notAuthorized':
+        'Dostawca nie dokończył logowania, więc nikt nie został zalogowany. Zacznij je jeszcze raz.',
+    'signIn.unexpectedAnswer':
+        'Ta odpowiedź nie należy do żadnego logowania rozpoczętego przez tego klienta. Zacznij je z tego ekranu, a nie z odnośnika.',
+    'signIn.providerRefused': 'Dostawca odmówił temu logowaniu. Zacznij je jeszcze raz.',
+    'signIn.notAUser':
+        'Dostawca Cię zalogował, ale to wdrożenie nie zna użytkownika dla tego konta. Poproś osobę, która je prowadzi, o dodanie go.',
     'signIn.forgotPassword': 'Nie pamiętasz hasła?',
     'signIn.itHelp': 'Pomoc IT',
     'signIn.title': 'Połącz skrzynkę',

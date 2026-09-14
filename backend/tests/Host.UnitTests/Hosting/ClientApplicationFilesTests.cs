@@ -34,6 +34,10 @@ public sealed class ClientApplicationFilesTests
 
     private const string ContentSecurityPolicy = "default-src 'self'; frame-ancestors 'none'";
 
+    /// <summary>What the client's build actually writes, which names the directive a published origin joins.</summary>
+    private const string ContentSecurityPolicyAdmittingTheDeployment =
+        "default-src 'self'; connect-src 'self'; frame-ancestors 'none'";
+
     [Fact]
     public void BundleIsPresent_AnEnvironmentWhoseWebRootCarriesTheEntryDocumentAndItsPolicy_ReportsTheBundle()
     {
@@ -153,6 +157,63 @@ public sealed class ClientApplicationFilesTests
         Assert.False(context.Response.Headers.ContainsKey("Content-Security-Policy"));
     }
 
+    /// <summary>The ordinary deployment's page stays under exactly the policy its build proved.</summary>
+    [Fact]
+    public async Task UseClientApplication_ADeploymentPublishingNoSignInMethod_ServesTheBundlesPolicyByteForByte()
+    {
+        // Arrange
+        var context = RequestOnTheClientListener("/app/");
+
+        // Act
+        await ServeAsync(context, ContentSecurityPolicyAdmittingTheDeployment);
+
+        // Assert
+        Assert.Equal(ContentSecurityPolicyAdmittingTheDeployment, context.Response.Headers.ContentSecurityPolicy.ToString());
+    }
+
+    /// <summary>
+    /// The bundle's own <c>connect-src</c> is <c>'self'</c>, which refuses the discovery read and the token request on
+    /// every deployment that publishes a server — and which servers those are is an operator's configuration rather
+    /// than anything a build could know. The origins join the directive so the deployment the page talks to survives.
+    /// </summary>
+    [Fact]
+    public async Task UseClientApplication_ADeploymentPublishingServers_AdmitsEachOriginBesideTheDeploymentItself()
+    {
+        // Arrange
+        var context = RequestOnTheClientListener("/app/");
+
+        // Act
+        await ServeAsync(
+            context,
+            ContentSecurityPolicyAdmittingTheDeployment,
+            "https://sso.example.test",
+            "https://id.partner.example.test");
+
+        // Assert
+        Assert.Equal(
+            "default-src 'self'; connect-src 'self' https://sso.example.test https://id.partner.example.test; frame-ancestors 'none'",
+            context.Response.Headers.ContentSecurityPolicy.ToString());
+    }
+
+    /// <summary>
+    /// Appending the origins alone would leave the page under a directive that no longer falls back to
+    /// <c>default-src</c>, and the client would stop being able to call its own deployment.
+    /// </summary>
+    [Fact]
+    public async Task UseClientApplication_ABundleNamingNoConnectSource_AdmitsTheDeploymentBesideThePublishedOrigins()
+    {
+        // Arrange
+        var context = RequestOnTheClientListener("/app/");
+
+        // Act
+        await ServeAsync(context, ContentSecurityPolicy, "https://sso.example.test");
+
+        // Assert
+        Assert.Equal(
+            "default-src 'self'; frame-ancestors 'none'; connect-src 'self' https://sso.example.test",
+            context.Response.Headers.ContentSecurityPolicy.ToString());
+    }
+
     /// <summary>An empty file passes a check for its existence, and serving under it would drop the header on every response.</summary>
     [Theory]
     [InlineData("")]
@@ -167,7 +228,8 @@ public sealed class ClientApplicationFilesTests
         // Act
         var refusal = Record.Exception(() => application.UseClientApplication(
             WebRootCarryingTheBundle(policyDocument),
-            new HashSet<int> { ClientListenerPort }));
+            new HashSet<int> { ClientListenerPort },
+            []));
 
         // Assert
         var refused = Assert.IsType<InvalidOperationException>(refusal);
@@ -189,10 +251,12 @@ public sealed class ClientApplicationFilesTests
         return context;
     }
 
-    private static async Task ServeAsync(DefaultHttpContext context)
+    private static Task ServeAsync(DefaultHttpContext context) => ServeAsync(context, ContentSecurityPolicy);
+
+    private static async Task ServeAsync(DefaultHttpContext context, string policy, params string[] signInOrigins)
     {
         // Written the way the client's build writes it, one line with a trailing newline the service must not attach.
-        var environment = WebRootCarryingTheBundle($"{ContentSecurityPolicy}\n");
+        var environment = WebRootCarryingTheBundle($"{policy}\n");
 
         await using var services = new ServiceCollection()
             .AddSingleton(environment)
@@ -201,7 +265,7 @@ public sealed class ClientApplicationFilesTests
 
         var application = new ApplicationBuilder(services);
 
-        application.UseClientApplication(environment, new HashSet<int> { ClientListenerPort });
+        application.UseClientApplication(environment, new HashSet<int> { ClientListenerPort }, signInOrigins);
         application.Run(unmatched =>
         {
             unmatched.Response.StatusCode = StatusCodes.Status404NotFound;

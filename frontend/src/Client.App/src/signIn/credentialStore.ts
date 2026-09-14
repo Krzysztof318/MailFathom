@@ -86,9 +86,30 @@ export interface CredentialStore {
      * to read back while the person believes they signed out.
      */
     forget(deployment: DeploymentAddress): Promise<boolean>;
+
+    /**
+     * The OAuth grant kept for this deployment, or `null` where none was kept for it.
+     *
+     * A grant is the third value ADR 0023 records and it is kept apart from the session above, in the durable half
+     * alone, whatever the checkbox holds. That is not an exemption from the rule the checkbox states: what the checkbox
+     * decides is how long a *password* sign-in lasts, and an OAuth sign-in's life is the authorization server's — it
+     * ends when that server stops renewing it, when somebody signs out, or when an administrator withdraws it. A
+     * client that dropped it with the tab would be overruling the server about a decision the deployment does not own.
+     */
+    readGrant(deployment: DeploymentAddress): Promise<string | null>;
+
+    /** Keeps the grant for that deployment, answering whether it is stored, on the same terms {@link keep} answers on. */
+    keepGrant(deployment: DeploymentAddress, grant: string): Promise<boolean>;
 }
 
-/** The durable half of a store — the place a session goes when somebody asked for it to outlive the tab. */
+/**
+ * The durable half of a store — the place a session goes when somebody asked for it to outlive the tab, and the only
+ * place an OAuth grant ever goes.
+ *
+ * Every operation names the entry rather than the deployment, because two values are now kept per deployment and the
+ * name is what separates them. Which names exist is `storeOver`'s, so a half that reaches a keychain or a page's
+ * storage holds no opinion about what is being kept in it.
+ */
 interface DeviceStore {
     readonly beyondTheTab: KeptBeyondTheTab;
 
@@ -103,11 +124,11 @@ interface DeviceStore {
      */
     readonly theTabMayKeepIt: boolean;
 
-    read(deployment: DeploymentAddress): Promise<string | null>;
+    read(entry: string): Promise<string | null>;
 
-    keep(deployment: DeploymentAddress, credential: string): Promise<boolean>;
+    keep(entry: string, credential: string): Promise<boolean>;
 
-    forget(deployment: DeploymentAddress): Promise<boolean>;
+    forget(entry: string): Promise<boolean>;
 }
 
 /**
@@ -163,25 +184,30 @@ function storeOver(device: DeviceStore): CredentialStore {
         // person who did not ask for one has. Only one of the two ever holds an entry for a deployment, so the order
         // decides nothing about correctness; it decides which read is made in the case that has one.
         read: async (deployment) =>
-            (await device.read(deployment)) ?? (device.theTabMayKeepIt ? readStorage(entryFor(deployment)) : null),
+            (await device.read(entryFor(deployment))) ??
+            (device.theTabMayKeepIt ? readStorage(entryFor(deployment)) : null),
+
+        readGrant: (deployment) => device.read(grantEntryFor(deployment)),
+
+        keepGrant: (deployment, grant) => device.keep(grantEntryFor(deployment), grant),
 
         keep: async (deployment, credential, beyondTheTab) => {
             // What the device is holding already, which answers two questions in one read: whether a renewal that was
             // told nothing is replacing a kept session or a tab's own, and whether declining to keep one has anything
             // to remove. Asking a store to forget what it never held is a shell command per sign-in on the head that
             // has a shell, which is why the second question is asked rather than assumed.
-            const held = await device.read(deployment);
+            const held = await device.read(entryFor(deployment));
             const keepOnTheDevice = beyondTheTab ?? held !== null;
 
             if (!keepOnTheDevice) {
                 if (held !== null) {
-                    await device.forget(deployment);
+                    await device.forget(entryFor(deployment));
                 }
 
                 return keptInTheTab(device, deployment, credential);
             }
 
-            const stored = await device.keep(deployment, credential);
+            const stored = await device.keep(entryFor(deployment), credential);
 
             // A device that refused the write leaves the session in the tab rather than nowhere, because somebody who
             // ticked the box is still signed in for this tab and the alternative is losing a session that works. What
@@ -199,10 +225,12 @@ function storeOver(device: DeviceStore): CredentialStore {
 
         forget: async (deployment) => {
             // Both, and the device's answer is what is reported: a tab copy removed while a durable one survives is a
-            // sign-out that removed the half nobody was worried about.
-            const deviceForgot = await device.forget(deployment);
+            // sign-out that removed the half nobody was worried about. The grant goes with it, because signing out is
+            // one act however somebody signed in and a grant left behind would sign the next start back in.
+            const deviceForgot = await device.forget(entryFor(deployment));
+            const grantForgot = await device.forget(grantEntryFor(deployment));
 
-            return removeStorage(entryFor(deployment)) && deviceForgot;
+            return removeStorage(entryFor(deployment)) && deviceForgot && grantForgot;
         },
     };
 }
@@ -215,6 +243,11 @@ function keptInTheTab(device: DeviceStore, deployment: DeploymentAddress, creden
 /** What the credential is written under, which names the deployment so a credential is never read back for another. */
 function entryFor(deployment: DeploymentAddress): string {
     return `mailfathom.credential.${deployment.baseAddress}`;
+}
+
+/** What an OAuth grant is written under, named apart from the session so neither read can ever answer with the other. */
+function grantEntryFor(deployment: DeploymentAddress): string {
+    return `mailfathom.grant.${deployment.baseAddress}`;
 }
 
 /**
@@ -231,11 +264,11 @@ function keptInThisBrowser(): DeviceStore {
         beyondTheTab: 'inThisBrowser',
         theTabMayKeepIt: true,
 
-        read: (deployment) => Promise.resolve(readDeviceStorage(entryFor(deployment))),
+        read: (entry) => Promise.resolve(readDeviceStorage(entry)),
 
-        keep: (deployment, credential) => Promise.resolve(writeDeviceStorage(entryFor(deployment), credential)),
+        keep: (entry, credential) => Promise.resolve(writeDeviceStorage(entry, credential)),
 
-        forget: (deployment) => Promise.resolve(removeDeviceStorage(entryFor(deployment))),
+        forget: (entry) => Promise.resolve(removeDeviceStorage(entry)),
     };
 }
 
@@ -266,8 +299,7 @@ function keptNowhere(
 
         keep: () => Promise.resolve(false),
 
-        forget: async (deployment) =>
-            (await shellAnswers('forget_credential', { deployment: deployment.baseAddress })) === true,
+        forget: async (entry) => (await shellAnswers('forget_credential', { entry })) === true,
     };
 }
 
@@ -277,25 +309,18 @@ function keptInTheProtectedStore(): DeviceStore {
         beyondTheTab: 'inTheDeviceStore',
         theTabMayKeepIt: true,
 
-        read: async (deployment) => {
-            const kept = await shellAnswers('read_credential', { deployment: deployment.baseAddress });
+        read: async (entry) => {
+            const kept = await shellAnswers('read_credential', { entry });
 
             return typeof kept === 'string' ? kept : null;
         },
 
-        keep: async (deployment, credential) => {
-            return (
-                (await shellAnswers('keep_credential', {
-                    deployment: deployment.baseAddress,
-                    credential,
-                })) === true
-            );
-        },
+        keep: async (entry, credential) => (await shellAnswers('keep_credential', { entry, credential })) === true,
 
-        forget: async (deployment) => {
+        forget: async (entry) => {
             // The shell's own answer, because a deletion nobody performed is a credential left on the device: the entry
             // outlives uninstalling the application.
-            return (await shellAnswers('forget_credential', { deployment: deployment.baseAddress })) === true;
+            return (await shellAnswers('forget_credential', { entry })) === true;
         },
     };
 }

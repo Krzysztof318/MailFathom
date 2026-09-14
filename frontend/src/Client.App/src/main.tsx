@@ -16,9 +16,11 @@ import { transportForThisRun } from './deployment/transportForThisRun';
 import { LocalizationProvider } from './localization/Localization';
 import { configuredConnection } from './shellOperations/configuredConnection';
 import { LinkOpenerContext, linkOpenerForThisApplication } from './shellOperations/linkOpener';
+import { signInRedirectForThisApplication } from './shellOperations/signInRedirect';
 import { SystemNotifierContext, systemNotifierForThisApplication } from './shellOperations/systemNotifier';
 import { credentialStore } from './signIn/credentialStore';
 import { readKeptSession } from './signIn/keptSession';
+import { readOAuthGrant } from './signIn/oauthGrant';
 import { browserSchedule, openSignalChannel } from './signals/signalChannel';
 import { clientTelemetryForThisApplication, TelemetryContext } from './telemetry/clientTelemetry';
 import { ThemeProvider } from './theme/Theme';
@@ -74,7 +76,15 @@ async function open(root: HTMLElement): Promise<void> {
     const adopted = deployment.outcome === 'resolved' ? deployment.adopted : null;
     const credentials = await credentialStore();
     const signedInWith = adopted === null ? null : readKeptSession(await credentials.read(adopted.deployment));
+    const signedInWithGrant = adopted === null ? null : readOAuthGrant(await credentials.readGrant(adopted.deployment));
     const send = await transportForThisRun();
+
+    // The third head question, and the one answered twice here: which redirect arrangement this head has, and what one
+    // was already carrying when this run started. The second is read before anything renders because reading it is
+    // what takes the authorization code out of the address bar — left there it would travel into every later referrer,
+    // into the history somebody can scroll back through, and into whatever a reload would replay it with.
+    const redirect = await signInRedirectForThisApplication();
+    const redirectAnswer = redirect.answerWaiting();
 
     // The root is where what the deployment is told about a failed render is composed, which is why the boundaries
     // below report nothing themselves: one more region is one more boundary rather than one more reporter. React
@@ -116,8 +126,11 @@ async function open(root: HTMLElement): Promise<void> {
                                                         openSignals={openSignalChannel}
                                                         portraits={portraitExchange}
                                                         send={send}
+                                                        redirect={redirect}
+                                                        redirectAnswer={redirectAnswer}
                                                         signalSchedule={browserSchedule}
                                                         signedInWith={signedInWith}
+                                                        signedInWithGrant={signedInWithGrant}
                                                     />
                                                 </Containment>
                                             </TelemetryContext>

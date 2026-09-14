@@ -9746,6 +9746,11 @@ changes.ts signalTicket POST /api/client/signals/ticket
 changes.ts signals - -
 deployment.ts sessionAnswer GET /api/client/session
 deployment.ts mintedSession POST /api/client/session/token
+deployment.ts signInMethods GET /api/client/sign-in-methods
+deployment.ts signInMethodsOffered GET /api/client/sign-in-methods
+deployment.ts protectedResource - -
+deployment.ts authorizationServerMetadata - -
+deployment.ts issuedToken - -
 deployment.ts ownDisplayName GET /api/client/display-name
 deployment.ts clientPreferences GET /api/client/preferences
 deployment.ts workAccount GET /api/client/accounts
@@ -9794,7 +9799,7 @@ notifications.ts everyNotificationMarkedRead POST /api/client/notifications/read
 BINDINGS
 }
 
-# The four values above that answer for no route, and the reason each one does:
+# The seven values above that answer for no route, and the reason each one does:
 #
 # - `changes.ts signals` carries the payloads a deployment pushes down the signal channel. The
 #   channel is a stream rather than a route with a body, and `http-api-contract.json` records the
@@ -9809,6 +9814,12 @@ BINDINGS
 #   down. That is a gap in what the service declares rather than a defect in the fixture.
 # - `mail.ts conversationRows` is the table the conversation is assembled from, and `answersRow` in
 #   it is a position in that list rather than anything the service answers with.
+# - `deployment.ts protectedResource` is the RFC 9728 document the client surface publishes at the
+#   root rather than beneath its own prefix, so it is outside the paths this comparison reads, and
+#   its field names are that specification's rather than anything this project chose.
+# - `deployment.ts authorizationServerMetadata` and `deployment.ts issuedToken` belong to the
+#   authorization server rather than to MailFathom. Their shapes are fixed by RFC 8414 and RFC 6749,
+#   this service publishes neither, and the contract records no route that could answer with one.
 
 # Every property name and every enumeration spelling reachable from what a route answers with, as one
 # JSON object, or nothing at all where the contract records no JSON body there.

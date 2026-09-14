@@ -84,8 +84,23 @@ export const en = {
     'signIn.revealPasswordControl': 'Show the password',
     'signIn.hidePasswordControl': 'Hide the password',
 
-    'signIn.viaProvider': 'Sign in through a provider',
+    'signIn.viaProvider': 'Sign in with a provider',
+    'signIn.orAnotherMethod': 'or another method',
     'signIn.orWithPassword': 'or with a password',
+    'signIn.signInWithProvider': 'Sign in',
+    'signIn.providerOpensInBrowser': '{provider} opens in your browser.',
+    'signIn.openingProvider': 'Opening {provider}…',
+    'signIn.finishInBrowser':
+        'Finish signing in in the browser window — this screen picks up the session when it returns.',
+    'signIn.continueToProvider': 'Continue to {provider}',
+    'signIn.noMethods':
+        'This deployment offers no sign-in method. Check the address, or ask whoever runs it to configure one.',
+    'signIn.notAuthorized': 'The provider did not finish the sign-in, so nothing was signed in. Start it again.',
+    'signIn.unexpectedAnswer':
+        'That answer belongs to no sign-in this client started. Start one from this screen rather than from a link.',
+    'signIn.providerRefused': 'The provider refused this sign-in. Start it again.',
+    'signIn.notAUser':
+        'The provider signed you in, but this deployment knows no user for that account. Ask whoever runs it to add one.',
     'signIn.forgotPassword': 'Forgot your password?',
     'signIn.itHelp': 'IT help',
     'signIn.title': 'Connect your mailbox',

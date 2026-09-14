@@ -31,6 +31,7 @@ import { noTelemetry, TelemetryContext, type ClientEvent, type ClientTelemetry }
 import { ThemeProvider } from './theme/Theme';
 import { ToastsProvider } from './toasts/Toasts';
 import { LinkOpenerContext } from './shellOperations/linkOpener';
+import { receivesNoRedirect } from './shellOperations/signInRedirect';
 import { SystemNotifierContext, type SystemNotifier } from './shellOperations/systemNotifier';
 import { WorkspaceProvider } from './workspace/Workspace';
 
@@ -513,16 +514,27 @@ interface RecordingStore extends CredentialStore {
 
     /** Whether what it holds was asked to outlive the tab, which is the choice the sign-in screen carries down. */
     readonly keptBeyondTheTab: Map<string, boolean>;
+
+    /** The OAuth grants it holds, by deployment, kept apart from the sessions exactly as the real store keeps them. */
+    readonly keptGrants: Map<string, string>;
 }
 
 export function storeKeeping(beyondTheTab: KeptBeyondTheTab = 'inThisBrowser'): RecordingStore {
     const kept = new Map<string, string>();
     const keptBeyondTheTab = new Map<string, boolean>();
+    const keptGrants = new Map<string, string>();
 
     return {
         kept,
         keptBeyondTheTab,
+        keptGrants,
         beyondTheTab,
+        readGrant: (deployment) => Promise.resolve(keptGrants.get(deployment.baseAddress) ?? null),
+        keepGrant: (deployment, grant) => {
+            keptGrants.set(deployment.baseAddress, grant);
+
+            return Promise.resolve(true);
+        },
         read: (deployment) => Promise.resolve(kept.get(deployment.baseAddress) ?? null),
         keep: (deployment, authorization, asked) => {
             kept.set(deployment.baseAddress, authorization);
@@ -540,6 +552,7 @@ export function storeKeeping(beyondTheTab: KeptBeyondTheTab = 'inThisBrowser'): 
         forget: (deployment) => {
             kept.delete(deployment.baseAddress);
             keptBeyondTheTab.delete(deployment.baseAddress);
+            keptGrants.delete(deployment.baseAddress);
 
             return Promise.resolve(true);
         },
@@ -643,9 +656,12 @@ export function renderApp(
                                                         deployment={deployment}
                                                         openSignals={noSignalChannel}
                                                         portraits={drawsNobody}
+                                                        redirect={receivesNoRedirect}
+                                                        redirectAnswer={null}
                                                         send={send}
                                                         signalSchedule={neverReopens}
                                                         signedInWith={signedInWith}
+                                                        signedInWithGrant={null}
                                                     />
                                                 </Containment>
                                             </TelemetryContext>

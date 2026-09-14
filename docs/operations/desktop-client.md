@@ -75,6 +75,14 @@ head is, in full, is that record; how one is built is
   and the client keeps no copy of it beside that. A machine offering no such store — a Linux session running no keyring
   daemon is the usual case — is told so on the sign-in screen and asked for the password again the next time the
   application opens, rather than having it written somewhere less safe instead.
+- **Signing in with a provider happens in your own browser too**, and never in this window: a sign-in screen painted
+  by the application is one nobody can tell from a counterfeit. Where the deployment publishes an authorization server,
+  the shell listens on `http://127.0.0.1:8766/` — this machine only, for as long as one sign-in is in flight and at
+  most five minutes — opens the provider's own page in the browser the desktop uses, and serves that address one page
+  saying the tab can be closed. That loopback address is what an operator registers at the authorization server for
+  this head; [what a sign-in screen is offered](client-endpoint.md#what-a-sign-in-screen-is-offered) is the rest of it.
+  A second window already signing in finds the port taken and says so instead of opening a browser whose answer would
+  arrive somewhere else, and what comes back is kept in the same credential store the password goes to.
 - **A link in a message opens in your own browser**, not in the application's window. The shell asks the desktop for
   `http`, `https`, and `mailto` addresses and for nothing else, which is the whole of what the window may ask the
   opener for; a window that navigated to a sender's page would have replaced the client with it.

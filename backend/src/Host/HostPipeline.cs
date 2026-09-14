@@ -233,7 +233,10 @@ internal static class HostPipeline
                 ]);
         }
 
-        app.UseClientApplication(app.Environment, composition.Client.ListenerPorts);
+        app.UseClientApplication(
+            app.Environment,
+            composition.Client.ListenerPorts,
+            composition.ClientSignInMethods.IssuerOrigins());
     }
 
     /// <summary>Maps the liveness and readiness routes, having proved each configured probe is answered by something.</summary>
@@ -409,6 +412,13 @@ internal static class HostPipeline
     {
         var clientApi = app
             .MapClientApi()
+            .RequireCors(ClientTransportSecurityExtensions.CorsPolicyName);
+
+        // Outside the group the requirement is attached to, for the reason the protected resource metadata document
+        // below is: its reader is a browser that has drawn nothing yet and is asking what it may draw. It is mapped
+        // whatever the endpoint accepts, because the answer a deployment requiring no credential gives — a password may
+        // be presented, no server is offered — is exactly as much a sign-in screen's business as any other.
+        app.MapClientSignInMethods(composition.ClientSignInMethods)
             .RequireCors(ClientTransportSecurityExtensions.CorsPolicyName);
 
         if (composition.ClientRateLimits is not null)

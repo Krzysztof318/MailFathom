@@ -24,6 +24,12 @@
 // that is told nothing simply asks for it again — which is the same outcome a browser refusing storage produces on the
 // other head.
 //
+// Two more stand beside them and belong to one operation: `sign_in_redirect_uri` and `follow_sign_in_redirect`, which
+// are how an OAuth sign-in comes back to a head that has no browser origin for a server to redirect to.
+// `redirects.rs` holds the arrangement and why the listener and the browser are one command rather than two. Neither
+// is a plugin's command either, so neither is named in a `capabilities/` file; what the *page* may ask the opener for
+// is already narrowed there, and the authorization address is opened from Rust rather than from the page.
+//
 // The fifth is `client_configuration`, and it is the one place this shell reads anything an operator wrote. It resolves
 // nothing: it reads the three places a deployment states a setting and hands back what each of them said, as text.
 // Which of the three wins, what a value has to be to be one, and what a contradiction between two of them costs are all
@@ -60,6 +66,7 @@
 
 mod credentials;
 mod notifications;
+mod redirects;
 
 use std::collections::HashMap;
 use tauri::Manager;
@@ -83,22 +90,22 @@ async fn credential_arrangement() -> &'static str {
     credentials::arrangement().await
 }
 
-/// Keeps the session document for one deployment, answering whether it was kept.
+/// Keeps one value under the entry the application named, answering whether it was kept.
 #[tauri::command]
-async fn keep_credential(deployment: String, credential: String) -> bool {
-    credentials::keep(deployment, credential).await
+async fn keep_credential(entry: String, credential: String) -> bool {
+    credentials::keep(entry, credential).await
 }
 
-/// The session document kept for one deployment, or nothing where none was kept or the store would not answer.
+/// What was kept under one entry, or nothing where nothing was kept there or the store would not answer.
 #[tauri::command]
-async fn read_credential(deployment: String) -> Option<String> {
-    credentials::read(deployment).await
+async fn read_credential(entry: String) -> Option<String> {
+    credentials::read(entry).await
 }
 
-/// Deletes what was kept for one deployment, which is what sign-out does and the only thing that removes it.
+/// Deletes what was kept under one entry, which is what sign-out does and the only thing that removes it.
 #[tauri::command]
-async fn forget_credential(deployment: String) -> bool {
-    credentials::forget(deployment).await
+async fn forget_credential(entry: String) -> bool {
+    credentials::forget(entry).await
 }
 
 /// What each of the three places an operator configures this client from said, whether or not any of it is usable.
@@ -195,6 +202,21 @@ fn from_configuration_file(app: &tauri::AppHandle) -> HashMap<&'static str, Stri
     stated
 }
 
+/// Where an OAuth sign-in comes back to on this head, or nothing where this head receives no redirect at all.
+#[tauri::command]
+fn sign_in_redirect_uri() -> Option<&'static str> {
+    redirects::redirect_uri()
+}
+
+/// Hands the person to the authorization server in their own browser and answers the query its redirect came back with.
+///
+/// `async` for the reason the credential commands are, and more so: it waits for somebody to type a password into a
+/// browser window. `redirects.rs` holds why it is one operation rather than a listener and a link opened separately.
+#[tauri::command]
+async fn follow_sign_in_redirect(address: String) -> Option<String> {
+    redirects::follow(address).await
+}
+
 /// Raises one system notification saying the sentence given, and answers a click on it by bringing the window forward.
 ///
 /// It answers nothing, because raising one answers nothing a caller could act on: whether anything appeared is the
@@ -229,6 +251,8 @@ pub fn run() {
             read_credential,
             forget_credential,
             client_configuration,
+            sign_in_redirect_uri,
+            follow_sign_in_redirect,
             raise_notification
         ])
         .run(tauri::generate_context!())
