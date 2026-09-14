@@ -21,6 +21,8 @@ public sealed class FixedSensitiveContentPosturesTests
 {
     private static readonly MailAccountId Archive = MailAccountId.Create("archive");
 
+    private static readonly MailAccountId SomebodyElses = MailAccountId.Create("somebody-elses");
+
     private readonly FakeTimeProvider timeProvider = new(new DateTimeOffset(2026, 8, 12, 9, 0, 0, TimeSpan.Zero));
 
     [Fact]
@@ -67,6 +69,32 @@ public sealed class FixedSensitiveContentPosturesTests
 
         // Assert
         Assert.Contains("this double cannot build", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The union spans one user's own mailboxes and stops there. A scanned mailbox belonging to somebody else is not a
+    /// candidate for this user's read at all, so the user holding only an unscanned mailbox reads the deployment's own
+    /// posture — dropping the assignee narrowing would hand them a redacting posture nothing of theirs asked for.
+    /// </summary>
+    [Fact]
+    public void AcrossAccountsOf_AScannedAccountHeldByAnotherUser_IsNoCandidateForThisUsersRead()
+    {
+        // Arrange
+        using var secrets = ScanningSensitiveContentEgress.Finding("AKIAEXAMPLEKEY", this.timeProvider);
+        var scanning = secrets.Postures.ForAccount(FixedSensitiveContentPostures.SoleAccount);
+
+        var postures = FixedSensitiveContentPostures.Of(
+            SensitiveContentPosture.ScanningNothing,
+            (SomebodyElses, scanning, SyntheticMailUser.Another),
+            (Archive, SensitiveContentPosture.ScanningNothing, SyntheticMailUser.Deployment));
+
+        // Act
+        var strictest = postures.AcrossAccountsOf(SyntheticMailUser.Deployment);
+        var theirs = postures.AcrossAccountsOf(SyntheticMailUser.Another);
+
+        // Assert
+        Assert.Same(SensitiveContentPosture.ScanningNothing, strictest);
+        Assert.Same(scanning, theirs);
     }
 
     /// <summary>

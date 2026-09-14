@@ -1200,7 +1200,10 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// a message into a folder that does not exist here is an act this account could not perform, while a scanned
     /// folder naming one reaches no mail at all — the same answer a folder this deployment does not serve gets. An
     /// account whose identifier is unusable is passed over here, because the declaration it would be judged as cannot
-    /// be read and the identifier is already reported above.
+    /// be read and the identifier is already reported above. Every refusal is prefixed with the account, as the
+    /// missing-block branch below already writes it: the block is one per mailbox rather than one per user record and a
+    /// record is judged over every account assigned to that user, so an operator holding three mailboxes who mistypes
+    /// one folder alias would otherwise be told an alias is unusable without being told which mailbox to correct it on.
     /// </remarks>
     private IEnumerable<ValidationResult> ValidateSpamClassification()
     {
@@ -1215,7 +1218,11 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
         }
 
         return DeclaredMailAccounts.ReadFrom([this]).FirstOrDefault() is { } declared
-            ? this.SpamClassification.FindRefusals(declared)
+            ? this.SpamClassification
+                .FindRefusals(declared)
+                .Select(refusal => new ValidationResult(
+                    $"Account '{this.AccountId}': {refusal.ErrorMessage}",
+                    refusal.MemberNames))
             : [];
     }
 

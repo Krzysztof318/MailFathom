@@ -500,6 +500,26 @@ public sealed class MailSynchronizationOptionsTests
             && message.Contains("answering audit trail configuration must be a block", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// One record is judged over every mailbox assigned to the user, so a refusal about a classification block says
+    /// which of them carries it rather than leaving an operator to find the typo across three accounts.
+    /// </summary>
+    [Fact]
+    public void ValidateForSynchronization_AnAccountNamingAnUnusableScannedFolder_ReportsItAgainstThatAccount()
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.SpamClassification.ScannedFolders = ["  "];
+        var options = new MailSynchronizationOptions { Enabled = true }.Serving(account);
+
+        // Act
+        var messages = ConfiguredMailAccounts.Validate(options).Select(result => result.ErrorMessage).ToArray();
+
+        // Assert
+        Assert.Contains(messages, message => message!.Contains("Account 'primary'", StringComparison.Ordinal)
+            && message.Contains("names scanned folder", StringComparison.Ordinal));
+    }
+
     /// <summary>A missing block would read as an account permitting nothing, which refuses rules while naming the wrong cause.</summary>
     [Fact]
     public void ValidateForSynchronization_AccountWithNoRuleActionBlock_ReportsIt()
