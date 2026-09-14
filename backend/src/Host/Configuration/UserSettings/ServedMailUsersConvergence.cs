@@ -150,10 +150,13 @@ internal sealed partial class ServedMailUsersConvergence(
     /// The identifier and the label together, because the label is what an operator recognizes a record by and the
     /// identifier is what the command repairing it names. The corrections are carried rather than counted for the reason
     /// the startup gate's own line gives: they are MailFathom's own sentences about settings and repeat no value.
+    /// The wording is that gate's word for word, because this is the same event read on a different occasion: an
+    /// operator greps one sentence rather than learning which of two paths refused the record before they can search
+    /// for it, and the documentation quotes that one sentence.
     /// </remarks>
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "A {HeldBackRecordKind} record is held back on this replica by a document it will not bind: {HeldBackRecordIdentity} labelled {HeldBackRecordLabel}, at version {RejectedVersion}. The version it last bound stays in force and every other record is unaffected. Correct it: {Corrections}")]
+        Message = "A {HeldBackRecordKind} record is held back by a document this build will not bind: {HeldBackRecordIdentity} labelled {HeldBackRecordLabel}, at version {RejectedVersion}. It is served from the last version that bound, where there is one, and every other record is unaffected. Correct it: {Corrections}")]
     private partial void LogRecordHeldBack(
         HeldBackRecordKind heldBackRecordKind,
         Guid heldBackRecordIdentity,

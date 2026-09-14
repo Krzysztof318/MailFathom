@@ -309,7 +309,7 @@ Every record is judged before it is committed, so a stored one that no longer re
 
 **A conflict rejects the declaration that introduced it rather than both.** Two of one user's mail accounts cannot share a display name, so where a row holds two that do, the one recorded first is served and the second is what an operator is told to correct.
 
-A refused user record and a refused mail account declaration are each recorded at `Error` by the replica that read them, naming the kind of record, its identifier, the label it carries, the version refused, and the settings to correct:
+A refused user record and a refused mail account declaration are each recorded at `Error` by the replica that read them, naming the kind of record, its identifier, the label it carries, the version refused, and the settings to correct. A start and a convergence write the same sentence, so one search finds both:
 
 ```
 A MailAccount record is held back by a document this build will not bind: 0197a3c0-0000-7000-8000-000000000001 labelled work, at version 2. It is served from the last version that bound, where there is one, and every other record is unaffected. Correct it: The user record names 'Nonsense', which is not a setting a user's record carries. Remove it, or correct the spelling of the setting it was meant to be.
