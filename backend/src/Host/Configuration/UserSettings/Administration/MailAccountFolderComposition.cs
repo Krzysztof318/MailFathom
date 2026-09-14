@@ -261,6 +261,14 @@ internal static class MailAccountFolderComposition
             ? $"Folder alias '{alias}' states '{property}' as {stated.ToJsonString()}, and a folder declared here {rule}. State it as true, or leave it out."
             : null;
 
+    /// <summary>Reports whether a stated value is the one the switch is set to, read as the configuration layer reads it.</summary>
+    /// <remarks>
+    /// By value rather than by JSON type, so the string <c>"true"</c> is the same answer as the boolean <c>true</c> and
+    /// is declared rather than refused. A declaration is the object a configuration file would have written, and every
+    /// provider in the pipeline flattens a file's values to strings before anything binds them — so the two spellings
+    /// reach the binder identically, and refusing one of them would refuse a request asking for exactly what this
+    /// surface sets. Anything that is not that value, in either spelling, is still refused.
+    /// </remarks>
     private static bool IsTrue(JsonNode stated) =>
         stated is JsonValue value && string.Equals(value.ToString(), "true", StringComparison.OrdinalIgnoreCase);
 

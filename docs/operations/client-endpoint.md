@@ -1872,7 +1872,10 @@ removal naming an alias the account does not declare.
 
 **Part of a folder declaration is the service's rather than the person's, and stating it otherwise is refused rather
 than quietly overwritten.** A folder declared on this surface is always synchronized, so `Synchronize` is written as
-`true` whatever the request left out, and a request stating it as anything else is refused naming the switch. A folder
+`true` whatever the request left out, and a request stating it as anything but that value is refused naming the switch.
+A declaration is the object a configuration file would state the folder in, so the value is read the way a
+configuration file's is: the JSON boolean `true` and the string `"true"` are one answer, and anything else in either
+spelling is the refusal. A folder
 naming a `RemotePath` also carries `CreateIfMissing` as `true`, so a folder a dialog declares is created where the
 server advertises none at that path; a folder found instead by the role it plays carries no such switch, because a
 folder that does not exist advertises no role, and a request stating one on such a folder is refused naming

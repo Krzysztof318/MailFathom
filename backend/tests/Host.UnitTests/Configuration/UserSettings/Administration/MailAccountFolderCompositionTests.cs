@@ -309,6 +309,25 @@ public sealed class MailAccountFolderCompositionTests
         Assert.True(ReadFolderSwitch(candidate, "0", "Synchronize"));
     }
 
+    /// <summary>
+    /// A declaration is the object a configuration file would have written, and every provider flattens a file's values
+    /// to strings before anything binds them — so the two spellings of the value this surface sets are one answer, and
+    /// refusing the quoted one would refuse a request asking for exactly what it sets.
+    /// </summary>
+    [Theory]
+    [InlineData("\"true\"")]
+    [InlineData("\"True\"")]
+    public void WithFolderAdded_ASwitchStatedAsTheValueTheServiceSetsSpelledAsAString_IsDeclared(string stated)
+    {
+        // Act
+        var candidate = MailAccountFolderComposition
+            .WithFolderAdded("{}", $$"""{"Alias":"INBOX","RemotePath":"INBOX","Synchronize":{{stated}}}""")
+            .Candidate;
+
+        // Assert
+        Assert.True(ReadFolderSwitch(candidate, "0", "Synchronize"));
+    }
+
     /// <summary>A property spelled differently is the same setting to every provider in the pipeline, so a switch must not acquire a second spelling.</summary>
     [Fact]
     public void WithFolderAdded_AFolderSpellingASwitchItsOwnWay_LeavesItStatedOnce()
