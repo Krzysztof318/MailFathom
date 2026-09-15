@@ -194,7 +194,7 @@ function parseFolder(value: unknown): MailFolder | null {
         return null;
     }
 
-    if (role !== null && !isFolderRole(role)) {
+    if (role !== null && !isMailFolderRole(role)) {
         return null;
     }
 
@@ -244,7 +244,8 @@ function parsePath(value: unknown): readonly string[] | null {
     return levels;
 }
 
-function isFolderRole(value: unknown): value is MailFolderRole {
+/** Whether the value is one of the roles a folder may play, which the managed-folder surface reads as well. */
+export function isMailFolderRole(value: unknown): value is MailFolderRole {
     return typeof value === 'string' && roles.includes(value as MailFolderRole);
 }
 

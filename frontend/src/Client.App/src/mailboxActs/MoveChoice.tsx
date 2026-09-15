@@ -130,11 +130,18 @@ export function MoveChoice({
                                 className="flex w-full items-center gap-2.5 px-4 py-2.25 text-start text-base text-accent-strong transition hover:bg-hover"
                                 onClick={() => {
                                     asked.current?.close();
+                                    // ponytail: the sheet knows this mailbox's folders as destinations for mail rather
+                                    // than as folders somebody may act on, so the dialog opens on a mailbox with no
+                                    // hierarchy to offer — a folder made from here goes to the top and the deployment
+                                    // is what refuses a name a sibling already carries. Handing the managed report
+                                    // down to `useMailboxActs.ts` is the upgrade, and the moment to take it is when a
+                                    // second surface needs it.
                                     maintenance.declare(
                                         {
                                             accountId: group.accountId,
                                             accountName: group.accountName,
-                                            declaredAliases: group.destinations.map((destination) => destination.alias),
+                                            folders: [],
+                                            creatableRoles: [],
                                         },
                                         null,
                                     );

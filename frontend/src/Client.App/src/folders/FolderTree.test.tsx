@@ -5,7 +5,13 @@
 import type { ReactElement } from 'react';
 import { act, fireEvent, render, screen, waitFor, within, type RenderResult } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
+import type {
+    ClientResponse,
+    ClientSession,
+    MailFathomTransport,
+    ManagedMailFolder,
+    ManagedMailFolders,
+} from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { ReadMarkingContext, nothingMarkedRead, type MarkedIn, type ReadMarking } from '../readMarking/useReadMarking';
 import {
@@ -103,8 +109,94 @@ const tree = {
     ],
 };
 
+// What the service says may be done in each mailbox, which the column reads beside the tree and which is what draws an
+// act on a row at all. Each folder is named by the identity the tree above draws as an alias, that being the one join
+// the client is given between the two routes.
+//
+// It is stated as the client reads it back, and the answer the deployment gives is composed from it below rather than
+// written a second time in the service's own casing: what that casing comes to is `Client.Backend`'s to prove, and a
+// second copy of it here would be this suite asserting the same reading twice.
+const workFolders: readonly ManagedMailFolder[] = [
+    { id: 'INBOX', parentId: null, name: 'Odebrane', role: 'Inbox', allowedActs: [] },
+    { id: 'ARCHIVE', parentId: null, name: 'Archive', role: 'Archive', allowedActs: [] },
+    { id: 'ARCHIWUM', parentId: null, name: 'Archiwum', role: null, allowedActs: ['rename', 'move', 'delete'] },
+    {
+        id: 'ARCHIWUM/2024',
+        parentId: 'ARCHIWUM',
+        name: '2024',
+        role: null,
+        allowedActs: ['rename', 'move', 'delete'],
+    },
+];
+
+const workMailbox: ManagedMailFolders = { allowedActs: ['create'], creatableRoles: ['Trash'], folders: workFolders };
+
+const personalMailbox: ManagedMailFolders = {
+    allowedActs: [],
+    creatableRoles: [],
+    folders: [{ id: 'INBOX', parentId: null, name: 'INBOX', role: 'Inbox', allowedActs: [] }],
+};
+
+const managesNothing: ManagedMailFolders = { allowedActs: [], creatableRoles: [], folders: [] };
+
+/** What the service reports for one mailbox, and what it reports for a mailbox this suite has said nothing about. */
+function reportFor(account: string): ManagedMailFolders {
+    switch (account) {
+        case 'work':
+            return workMailbox;
+        case 'personal':
+            return personalMailbox;
+        default:
+            return managesNothing;
+    }
+}
+
+/** One report in the service's own spelling, which names an act and a role as it names every closed set. */
+function answeredAs(report: ManagedMailFolders): string {
+    const named = (act: string) => act.charAt(0).toUpperCase() + act.slice(1);
+
+    return JSON.stringify({
+        allowedActs: report.allowedActs.map(named),
+        creatableRoles: report.creatableRoles,
+        folders: report.folders.map((folder) => ({ ...folder, allowedActs: folder.allowedActs.map(named) })),
+    });
+}
+
+// The tree from whatever the test states, and the report of what may be done from the mailbox it was asked about —
+// two routes, because the column reads two. A status a test states is the tree's: a report is asked for at all only
+// where the tree answered.
 function answering(body: string, status = 200): MailFathomTransport {
-    return () => Promise.resolve({ status, body, headers: {} });
+    return ({ path }) => {
+        const account = /\/managed-folders\?account=([^&]+)$/u.exec(path)?.[1];
+
+        return Promise.resolve(
+            account === undefined
+                ? { status, body, headers: {} }
+                : { status: 200, body: answeredAs(reportFor(account)), headers: {} },
+        );
+    };
+}
+
+// The tree and the report are two routes, so a test asking how often the *tree* was read counts what the report was
+// not: a menu drawn on a row is not a second reading of the column.
+function countingTreeReads(answer: (reads: number) => ClientResponse): {
+    readonly transport: MailFathomTransport;
+    readonly reads: () => number;
+} {
+    let reads = 0;
+
+    return {
+        reads: () => reads,
+        transport: ({ path }) => {
+            if (path.includes('/managed-folders')) {
+                return Promise.resolve({ status: 200, body: answeredAs(managesNothing), headers: {} });
+            }
+
+            reads += 1;
+
+            return Promise.resolve(answer(reads));
+        },
+    };
 }
 
 // What the tree wrote, read back the way every other screen will read it: out of the workspace rather than out of the
@@ -201,10 +293,18 @@ function offering(): { maintenance: FolderMaintenance; asked: unknown[] } {
             offered: true,
             marksRead: true,
             changed: 0,
-            declare: (mailbox, parent) => asked.push({ act: 'declare', mailbox, parent }),
-            revise: (mailbox, folder, parent) => asked.push({ act: 'revise', mailbox, folder, parent }),
-            withdraw: (mailbox, folder) => asked.push({ act: 'withdraw', mailbox, folder }),
-            markAllRead: (accountId, folder, said) => asked.push({ act: 'markAllRead', accountId, folder, said }),
+            declare: (mailbox, parent) => {
+                asked.push({ act: 'declare', mailbox, parent });
+            },
+            revise: (mailbox, folder) => {
+                asked.push({ act: 'revise', mailbox, folder });
+            },
+            remove: (mailbox, folder) => {
+                asked.push({ act: 'remove', mailbox, folder });
+            },
+            markAllRead: (accountId, folder, said) => {
+                asked.push({ act: 'markAllRead', accountId, folder, said });
+            },
         },
     };
 }
@@ -214,6 +314,19 @@ function pressed(on: HTMLElement): readonly (string | null)[] {
     fireEvent.contextMenu(on, { clientX: 40, clientY: 80 });
 
     return screen.queryAllByRole('menuitem').map((item) => item.textContent);
+}
+
+// The report of what may be done arrives after the tree and draws nothing of its own, so a menu asked for the moment
+// the tree appeared would be a menu asked before the service had said anything. What says it has arrived is a row
+// offering an act that only the report can have offered.
+async function reported(): Promise<void> {
+    await waitFor(() => {
+        expect(pressed(row(/^Work/))).toContain('New folder');
+    });
+
+    // Closed again, because a row offering nothing opens no menu of its own and would otherwise be read through the
+    // one still standing over it.
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: 'New folder' }), { key: 'Escape' });
 }
 
 /** A deployment a test speaks for, so what a signal does to the tree is asserted rather than waited for. */
@@ -636,7 +749,19 @@ describe('FolderTree', () => {
         renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
         await drawn();
 
-        expect(pressed(row(/^Work/))).toEqual(['New folder', 'Mark all as read']);
+        await waitFor(() => {
+            expect(pressed(row(/^Work/))).toEqual(['New folder', 'Mark all as read']);
+        });
+    });
+
+    it('offers a mailbox the service reports as taking no new folder only marking everything in it read', async () => {
+        const { maintenance } = offering();
+
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
+        await drawn();
+        await reported();
+
+        expect(pressed(row(/^Personal/))).toEqual(['Mark all as read']);
     });
 
     it('answers a press on a folder with the whole set, and on one playing a role without the two that change it', async () => {
@@ -644,6 +769,7 @@ describe('FolderTree', () => {
 
         renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
         await drawn();
+        await reported();
 
         expect(pressed(row(/^Archiwum/))).toEqual([
             'New folder inside',
@@ -662,6 +788,7 @@ describe('FolderTree', () => {
 
         renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
         await drawn();
+        await reported();
 
         fireEvent.keyDown(row(/^Archiwum/), { key: 'ArrowRight' });
 
@@ -687,6 +814,7 @@ describe('FolderTree', () => {
 
         renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
         await drawn();
+        await reported();
 
         expect(pressed(row(/^All mailboxes/))).toEqual([]);
     });
@@ -700,7 +828,9 @@ describe('FolderTree', () => {
         });
         await drawn();
 
-        expect(pressed(row(/^Archiwum/))).toEqual(['Mark all as read']);
+        await waitFor(() => {
+            expect(pressed(row(/^Archiwum/))).toEqual(['Mark all as read']);
+        });
     });
 
     it('makes a folder inside the row that was pressed, named by the mailbox it belongs to', async () => {
@@ -708,37 +838,81 @@ describe('FolderTree', () => {
 
         renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
         await drawn();
+        await reported();
         pressed(row(/^Archiwum/));
         fireEvent.click(screen.getByRole('menuitem', { name: 'New folder inside' }));
 
         expect(asked).toEqual([
             {
                 act: 'declare',
-                mailbox: {
-                    accountId: 'work',
-                    accountName: 'Work',
-                    declaredAliases: ['INBOX', 'ARCHIVE', 'ARCHIWUM', 'ARCHIWUM/2024'],
-                },
-                parent: { alias: 'ARCHIWUM', remotePath: ['Archiwum'] },
+                mailbox: { accountId: 'work', accountName: 'Work', folders: workFolders, creatableRoles: ['Trash'] },
+                parent: { id: 'ARCHIWUM', name: 'Archiwum' },
             },
         ]);
     });
 
-    it('asks to stop reading the folder that was pressed, saying whether anything nests inside it', async () => {
+    it('opens the folder that was pressed for editing, as the service itself reported it', async () => {
         const { maintenance, asked } = offering();
 
         renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
         await drawn();
+        await reported();
+        pressed(row(/^Archiwum/));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Edit folder' }));
+
+        expect(asked).toEqual([
+            {
+                act: 'revise',
+                mailbox: expect.objectContaining({ accountId: 'work' }) as unknown,
+                folder: {
+                    id: 'ARCHIWUM',
+                    parentId: null,
+                    name: 'Archiwum',
+                    role: null,
+                    allowedActs: ['rename', 'move', 'delete'],
+                },
+            },
+        ]);
+    });
+
+    it('asks to remove the folder that was pressed, saying whether anything nests inside it', async () => {
+        const { maintenance, asked } = offering();
+
+        renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
+        await drawn();
+        await reported();
         pressed(row(/^Archiwum/));
         fireEvent.click(screen.getByRole('menuitem', { name: 'Delete folder' }));
 
         expect(asked).toEqual([
             {
-                act: 'withdraw',
+                act: 'remove',
                 mailbox: expect.objectContaining({ accountId: 'work' }) as unknown,
-                folder: { alias: 'ARCHIWUM', remotePath: ['Archiwum'], name: 'Archiwum', holdsNested: true },
+                folder: { id: 'ARCHIWUM', name: 'Archiwum', holdsNested: true },
             },
         ]);
+    });
+
+    it('offers no act naming a folder on a row the report does not name, there being no folder to name', async () => {
+        const { maintenance } = offering();
+        const withoutArchiwum: ManagedMailFolders = { ...workMailbox, folders: workFolders.slice(0, 2) };
+
+        renderTree(
+            ({ path }) =>
+                Promise.resolve({
+                    status: 200,
+                    body: path.includes('/managed-folders') ? answeredAs(withoutArchiwum) : JSON.stringify(tree),
+                    headers: {},
+                }),
+            true,
+            undefined,
+            undefined,
+            maintenance,
+        );
+        await drawn();
+        await reported();
+
+        expect(pressed(row(/^Archiwum/))).toEqual(['Mark all as read']);
     });
 
     it('marks everything read in the folder that was pressed, and in the whole mailbox from its heading', async () => {
@@ -746,6 +920,7 @@ describe('FolderTree', () => {
 
         renderTree(answering(JSON.stringify(tree)), true, undefined, undefined, maintenance);
         await drawn();
+        await reported();
         pressed(row(/^Archiwum/));
         fireEvent.click(screen.getByRole('menuitem', { name: 'Mark all as read' }));
         pressed(row(/^Work/));
@@ -876,21 +1051,16 @@ describe('FolderTree, in a folded column', () => {
     });
     it('reads the tree again when the deployment says a count moved, without taking the tree off the screen', async () => {
         const deployment = deploymentSaying();
-        let reads = 0;
+        const { transport, reads } = countingTreeReads(() => ({
+            status: 200,
+            headers: {},
+            body: JSON.stringify(tree),
+        }));
 
-        renderTree(
-            () => {
-                reads += 1;
-
-                return Promise.resolve({ status: 200, headers: {}, body: JSON.stringify(tree) });
-            },
-            true,
-            undefined,
-            deployment.changes,
-        );
+        renderTree(transport, true, undefined, deployment.changes);
 
         await drawn();
-        expect(reads).toBe(1);
+        expect(reads()).toBe(1);
 
         act(() => {
             deployment.say({ kind: 'mail.arrived', account: 'work', folder: 'INBOX', count: 2 });
@@ -902,7 +1072,7 @@ describe('FolderTree, in a folded column', () => {
         expect(row(/^Work/)).toBeDefined();
 
         await drawn();
-        expect(reads).toBe(2);
+        expect(reads()).toBe(2);
     });
 
     it.each<{ signal: SignalledChange; named: string }>([
@@ -920,18 +1090,13 @@ describe('FolderTree, in a folded column', () => {
         },
     ])('reads the tree again on $named', async ({ signal }) => {
         const deployment = deploymentSaying();
-        let reads = 0;
+        const { transport, reads } = countingTreeReads(() => ({
+            status: 200,
+            headers: {},
+            body: JSON.stringify(tree),
+        }));
 
-        renderTree(
-            () => {
-                reads += 1;
-
-                return Promise.resolve({ status: 200, headers: {}, body: JSON.stringify(tree) });
-            },
-            true,
-            undefined,
-            deployment.changes,
-        );
+        renderTree(transport, true, undefined, deployment.changes);
 
         await drawn();
 
@@ -940,27 +1105,18 @@ describe('FolderTree, in a folded column', () => {
         });
 
         await drawn();
-        expect(reads).toBe(2);
+        expect(reads()).toBe(2);
     });
 
     it('keeps the tree on the screen when a refresh is not answered', async () => {
         const deployment = deploymentSaying();
-        let reads = 0;
-
-        renderTree(
-            () => {
-                reads += 1;
-
-                return Promise.resolve(
-                    reads === 1
-                        ? { status: 200, headers: {}, body: JSON.stringify(tree) }
-                        : { status: 503, headers: {}, body: '' },
-                );
-            },
-            true,
-            undefined,
-            deployment.changes,
+        const { transport, reads } = countingTreeReads((read) =>
+            read === 1
+                ? { status: 200, headers: {}, body: JSON.stringify(tree) }
+                : { status: 503, headers: {}, body: '' },
         );
+
+        renderTree(transport, true, undefined, deployment.changes);
 
         await drawn();
 
@@ -969,7 +1125,7 @@ describe('FolderTree, in a folded column', () => {
         });
 
         await waitFor(() => {
-            expect(reads).toBe(2);
+            expect(reads()).toBe(2);
         });
         await act(async () => {
             await Promise.resolve();
@@ -980,18 +1136,13 @@ describe('FolderTree, in a folded column', () => {
 
     it('reads nothing again for a star, which moves no count this tree draws', async () => {
         const deployment = deploymentSaying();
-        let reads = 0;
+        const { transport, reads } = countingTreeReads(() => ({
+            status: 200,
+            headers: {},
+            body: JSON.stringify(tree),
+        }));
 
-        renderTree(
-            () => {
-                reads += 1;
-
-                return Promise.resolve({ status: 200, headers: {}, body: JSON.stringify(tree) });
-            },
-            true,
-            undefined,
-            deployment.changes,
-        );
+        renderTree(transport, true, undefined, deployment.changes);
 
         await drawn();
 
@@ -1005,23 +1156,18 @@ describe('FolderTree, in a folded column', () => {
         });
 
         await drawn();
-        expect(reads).toBe(1);
+        expect(reads()).toBe(1);
     });
 
     it('reads nothing again for a signal about something the tree does not draw', async () => {
         const deployment = deploymentSaying();
-        let reads = 0;
+        const { transport, reads } = countingTreeReads(() => ({
+            status: 200,
+            headers: {},
+            body: JSON.stringify(tree),
+        }));
 
-        renderTree(
-            () => {
-                reads += 1;
-
-                return Promise.resolve({ status: 200, headers: {}, body: JSON.stringify(tree) });
-            },
-            true,
-            undefined,
-            deployment.changes,
-        );
+        renderTree(transport, true, undefined, deployment.changes);
 
         await drawn();
 
@@ -1030,6 +1176,6 @@ describe('FolderTree, in a folded column', () => {
         });
 
         await drawn();
-        expect(reads).toBe(1);
+        expect(reads()).toBe(1);
     });
 });

@@ -133,11 +133,9 @@ describe('MoveChoice, making a folder', () => {
 
         expect(asked).toEqual([
             {
-                mailbox: {
-                    accountId: 'work',
-                    accountName: work.accountName,
-                    declaredAliases: ['work-archive', 'work-clients'],
-                },
+                // The sheet knows which mailbox the folder is being made in and nothing else about it, so the dialog
+                // opens on a mailbox with no folders reported: what it offers there is a name at the top of it.
+                mailbox: { accountId: 'work', accountName: work.accountName, folders: [], creatableRoles: [] },
                 parent: null,
             },
         ]);

@@ -2,39 +2,35 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { aliasSeparator, aliasSegments, deepestAlias } from './folderTreeRows';
+import type { MailFolderRole, ManagedMailFolder } from '@mailfathom/client-backend';
+import { deepestAlias } from './folderTreeRows';
 
 // What the folder dialog is holding while somebody types in it, and the arithmetic over it. It is a module rather than
-// state inside the dialog because every interesting decision here is a function of two strings — and a decision that
-// can be read as a value can be tested as one, which is what the two fields following each other until they stop
-// needs most.
+// state inside the dialog because every interesting decision here is a function of a few values — and a decision that
+// can be read as a value can be tested as one.
 //
-// **The two fields are two different things, and the design project says so by drawing both.** The name is what the
-// folder is called here, and the whole of it — the parent's name and this one, joined — is the alias every route on
-// the client surface names the folder by. The remote path is where the folder sits on somebody's mail server, which
-// is a second hierarchy a provider, a delimiter and a language each get a say in. A client that published one as the
-// other would be deciding a mailbox's layout from a label.
+// **The dialog has two fields, and the second one is where the folder sits rather than where its mail server keeps
+// it.** A folder used to be a mapping this client composed, so the design drew a remote path beside the name and the
+// client published both. It is not one any more: the service owns where a folder lives on a mail server and never
+// tells a client, so what is left to state is the name and the parent — which is also what the two acts behind the
+// dialog are, a rename and a move. Publishing a server path from here would be this client deciding a mailbox's layout
+// from a label, which is the one thing the managed surface exists to stop.
 //
-// **The path follows the name until it is typed in, and then stops.** That is the design's own rule and it is the
-// whole of why the draft carries a third value: without it, either the path never fills itself in, or a path somebody
-// wrote by hand is overwritten by the next letter they add to the name.
-
-/** How a remote path is spelled in the one field that shows one, which is not necessarily the server's own delimiter. */
-export const remotePathSeparator = '/';
-
-/** Where the dialog starts a path from when the folder it is making has no parent to take one from. */
-export const rootRemotePath = 'INBOX';
+// **A folder playing a role is never named here.** Creating a missing one is choosing the role and nothing else: the
+// service gives it the standard name, so the dialog hides the name field rather than proposing a name nobody may
+// change afterwards — and editing one hides it for the same reason, the name on the screen being the service's rather
+// than anybody's to retype. Where it sits stays its own question, which is why the role is carried on an edit too.
 
 /** Which of the dialog's two acts is being performed, which decides its title, its button, and what a save composes. */
 export type FolderDraftMode = 'create' | 'edit';
 
-/** The folder a draft is being composed inside or over, or `null` for one being made at the top of a mailbox. */
+/** A folder a draft may sit beneath, named by the identity every act names it by rather than by any path. */
 export interface FolderDraftParent {
-    /** The alias the parent is named by, whole. */
-    readonly alias: string;
+    /** What the act names the folder by, opaque to this client. */
+    readonly id: string;
 
-    /** Where the parent sits on its mail server, which is what a child's path is proposed from. */
-    readonly remotePath: readonly string[];
+    /** What the folder is called, which is what the field shows. */
+    readonly name: string;
 }
 
 /** Everything the folder dialog is holding, which is what a save is composed from. */
@@ -47,20 +43,23 @@ export interface FolderDraft {
     /** The mailbox's own name, which the dialog says the folder is being made in. */
     readonly accountName: string;
 
-    /** The folder this one is being made inside, or `null` at the top of the mailbox. */
-    readonly parent: FolderDraftParent | null;
+    /** The folder being edited, or `null` for one that does not exist yet. */
+    readonly standingId: string | null;
 
-    /** The alias the folder is declared under now, or `null` for one that does not exist yet. */
-    readonly standingAlias: string | null;
+    /** Where the folder would go, or `null` for the top of the mailbox. */
+    readonly parentId: string | null;
+
+    /** Where it sat when the dialog opened, which is what says whether saving has to move it. */
+    readonly standingParentId: string | null;
 
     /** What is typed in the folder's name. */
     readonly name: string;
 
-    /** What is typed in the folder's remote path. */
-    readonly remotePath: string;
+    /** What it was called when the dialog opened, which is what says whether saving has to rename it. */
+    readonly standingName: string;
 
-    /** Whether the path has been typed in by hand, after which it stops following the name. */
-    readonly pathWritten: boolean;
+    /** The role the folder plays — asked for instead of a name on a creation, and read off the folder on an edit. */
+    readonly role: MailFolderRole | null;
 }
 
 /** The draft a *New folder* on a mailbox or inside a folder opens with. */
@@ -73,146 +72,204 @@ export function draftForNewFolder(
         mode: 'create',
         accountId,
         accountName,
-        parent,
-        standingAlias: null,
+        standingId: null,
+        parentId: parent?.id ?? null,
+        standingParentId: parent?.id ?? null,
         name: '',
-        remotePath: '',
-        pathWritten: false,
+        standingName: '',
+        role: null,
     };
 }
 
-/** A folder as it is declared today, which is what an edit opens on and what a removal names. */
-export interface DeclaredFolder {
-    /** The alias the folder is declared under, whole. */
-    readonly alias: string;
-
-    /** Where it sits on its mail server, outermost level first. */
-    readonly remotePath: readonly string[];
-}
-
 /** The draft *Edit folder* opens with, which is the folder as it stands. */
-export function draftForEditedFolder(
-    accountId: string,
-    accountName: string,
-    folder: DeclaredFolder,
-    parent: FolderDraftParent | null,
-): FolderDraft {
+export function draftForEditedFolder(accountId: string, accountName: string, folder: ManagedMailFolder): FolderDraft {
     return {
         mode: 'edit',
         accountId,
         accountName,
-        parent,
-        standingAlias: folder.alias,
-        name: aliasSegments(folder.alias).at(-1) ?? folder.alias,
-        // Already written, because it is a path this folder actually has: letting it follow the name would rewrite
-        // where somebody's mail lives the moment they corrected a spelling.
-        remotePath: folder.remotePath.join(remotePathSeparator),
-        pathWritten: true,
+        standingId: folder.id,
+        parentId: folder.parentId,
+        standingParentId: folder.parentId,
+        name: folder.name,
+        standingName: folder.name,
+        role: folder.role,
     };
 }
 
-/** The draft one keystroke in the name leaves, with the path following it where it is still following. */
+/** The draft one keystroke in the name leaves. */
 export function withName(draft: FolderDraft, name: string): FolderDraft {
-    return {
-        ...draft,
-        name,
-        remotePath: draft.pathWritten ? draft.remotePath : proposedRemotePath(draft, name),
-    };
+    return { ...draft, name };
 }
 
-/** The draft one keystroke in the path leaves, after which the path is the person's rather than the name's. */
-export function withRemotePath(draft: FolderDraft, remotePath: string): FolderDraft {
-    return { ...draft, remotePath, pathWritten: true };
+/** The draft choosing another place in the hierarchy leaves, `null` being the top of the mailbox. */
+export function withParent(draft: FolderDraft, parentId: string | null): FolderDraft {
+    return { ...draft, parentId };
 }
 
 /**
- * Where on the server the folder would go, which is what the path field's own example is written under.
+ * The draft choosing to create a folder for a role leaves, or going back to an ordinary one.
  *
- * It ends in a separator because what follows it is an example name the catalogue holds: the field shows a whole
- * path a person could have typed rather than a stem trailing off, which is the only way the example says anything
- * about the shape of the value.
+ * The name goes with the choice rather than being kept beside it: a role folder is named by the service, so a name
+ * left over from before would be a value the dialog is holding and the request will not carry.
  */
-export function remotePathBase(draft: FolderDraft): string {
-    return `${remoteBaseOf(draft)}${remotePathSeparator}`;
-}
-
-/** The alias the draft would leave, which is the parent's and this folder's name joined. */
-export function draftAlias(draft: FolderDraft): string {
-    const own = folderNameOf(draft);
-
-    return draft.parent === null ? own : `${draft.parent.alias}${aliasSeparator}${own}`;
-}
-
-/** Where the draft would put the folder on its mail server, outermost level first. */
-export function draftRemotePath(draft: FolderDraft): readonly string[] {
-    const written = draft.pathWritten ? draft.remotePath : proposedRemotePath(draft, draft.name);
-
-    return written
-        .split(remotePathSeparator)
-        .map((level) => level.trim())
-        .filter((level) => level.length > 0);
+export function withRole(draft: FolderDraft, role: MailFolderRole | null): FolderDraft {
+    return { ...draft, role, name: role === null ? draft.name : '' };
 }
 
 /**
  * Why the draft cannot be saved yet, or `null` where it can.
  *
- * A reason rather than a boolean, because each of the three is a different sentence the dialog owes somebody: an
- * empty name is the state the design draws the button flat for, a name that would nest past the ceiling is the rule
- * the tree is built on, and an alias the mailbox already declares is a collision the deployment would refuse — said
- * here so that it is said before the request rather than as a failure afterwards.
+ * A reason rather than a boolean, because each is a different sentence the dialog owes somebody: an empty name is the
+ * state the design draws the button flat for, a folder that would nest past the ceiling is the rule the tree is built
+ * on, a name a sibling already carries is what the service refuses as `NameTaken`, and a folder moved inside itself
+ * is the one shape of move that cannot mean anything. Each is said here so it is said before the request rather than
+ * as a failure after it.
  */
-export type FolderDraftRefusal = 'nameEmpty' | 'tooDeep' | 'aliasTaken' | 'remotePathEmpty';
+export type FolderDraftRefusal = 'nameEmpty' | 'tooDeep' | 'nameTaken' | 'nestedInItself';
 
 /**
- * Whether the draft may be saved, given the aliases the mailbox already declares.
+ * Whether the draft may be saved, given the account's folders as the service last reported them.
  *
  * @param draft The draft.
- * @param declared Every alias the account holds, which is what a collision is judged against.
+ * @param folders Every folder the account has, which is what a collision and a depth are judged against.
  */
-export function refusalOf(draft: FolderDraft, declared: Iterable<string>): FolderDraftRefusal | null {
-    if (folderNameOf(draft).length === 0) {
+export function refusalOf(draft: FolderDraft, folders: readonly ManagedMailFolder[]): FolderDraftRefusal | null {
+    // A folder *asked for* by role carries no name and no parent, so none of the three rules below has anything to say
+    // about it: the service names it and puts it at the top of the hierarchy. One that already plays a role is a
+    // different case — its name is fixed, but where it sits is being asked, and every rule about that still holds.
+    if (draft.standingId === null && draft.role !== null) {
+        return null;
+    }
+
+    const name = folderNameOf(draft);
+
+    if (name.length === 0) {
         return 'nameEmpty';
     }
 
-    const alias = draftAlias(draft);
+    if (draft.standingId !== null && beneath(draft.standingId, draft.parentId, folders)) {
+        return 'nestedInItself';
+    }
 
-    // The ceiling is the tree's rather than a second decision: a draft that may be saved is one it can draw.
-    if (aliasSegments(alias).length > deepestAlias) {
+    // The ceiling is the tree's rather than a second decision: a draft that may be saved is one the column can draw.
+    // Counted over what the folder brings with it, because a move takes everything beneath it along.
+    if (depthOf(draft.parentId, folders) + 1 + heightOf(draft.standingId, folders) > deepestAlias) {
         return 'tooDeep';
     }
 
-    if (draftRemotePath(draft).length === 0) {
-        return 'remotePathEmpty';
-    }
-
-    const taken = [...declared].some(
-        (existing) =>
-            existing.localeCompare(alias, undefined, { sensitivity: 'accent' }) === 0 &&
-            existing.localeCompare(draft.standingAlias ?? '', undefined, { sensitivity: 'accent' }) !== 0,
+    const taken = folders.some(
+        (folder) =>
+            folder.parentId === draft.parentId &&
+            folder.id !== draft.standingId &&
+            folder.name.localeCompare(name, undefined, { sensitivity: 'accent' }) === 0,
     );
 
-    return taken ? 'aliasTaken' : null;
+    return taken ? 'nameTaken' : null;
 }
 
-// The name a folder actually takes, which is what is typed with the separator taken out of it. A slash there would
-// make one folder read as two levels of the tree, so it becomes a space rather than being refused — somebody typing
-// `Q1/Q2` meant one name, and a dialog that stopped them mid-word to say so would be answering a question they did
-// not ask.
-function folderNameOf(draft: FolderDraft): string {
-    return draft.name.split(aliasSeparator).join(' ').trim();
+/** Whether saving the draft would leave the folder exactly as it stands, which is a save with nothing to ask for. */
+export function unchanged(draft: FolderDraft): boolean {
+    return (
+        draft.standingId !== null &&
+        draft.parentId === draft.standingParentId &&
+        folderNameOf(draft) === draft.standingName
+    );
 }
 
-// Where a folder made here would sit, before anybody types a path: under the parent's own place on the server, or at
-// the root of the mailbox where there is no parent. The parent's real path rather than its alias, because the alias
-// is MailFathom's name for the folder and the server's hierarchy is what a path has to be composed against.
-function remoteBaseOf(draft: FolderDraft): string {
-    const above = draft.parent?.remotePath ?? [];
-
-    return above.length > 0 ? above.join(remotePathSeparator) : rootRemotePath;
+/** The name a folder actually takes, which is what is typed with the surrounding space taken off. */
+export function folderNameOf(draft: FolderDraft): string {
+    return draft.name.trim();
 }
 
-function proposedRemotePath(draft: FolderDraft, name: string): string {
-    const own = name.split(aliasSeparator).join(' ').trim();
+/**
+ * Where a folder sits, named level by level from the top of the mailbox.
+ *
+ * It is what the parent field shows, because a name alone does not say which of two folders called *2026* is meant —
+ * and the account's hierarchy is the only thing this client may say about where a folder lives.
+ */
+export function namePathOf(folderId: string, folders: readonly ManagedMailFolder[]): string {
+    const levels: string[] = [];
+    let walking: string | null = folderId;
 
-    return own.length === 0 ? '' : `${remoteBaseOf(draft)}${remotePathSeparator}${own}`;
+    while (walking !== null && levels.length <= folders.length) {
+        const folder: ManagedMailFolder | undefined = folders.find((entry) => entry.id === walking);
+
+        if (folder === undefined) {
+            break;
+        }
+
+        levels.unshift(folder.name);
+        walking = folder.parentId;
+    }
+
+    return levels.join(' / ');
+}
+
+/**
+ * The folders the draft may be placed beneath, which is what the parent field offers beside the top of the mailbox.
+ *
+ * Three are left out, and each of them is a refusal that would otherwise be spent on a round trip: the folder itself
+ * and everything under it, which is a hierarchy eating itself; anything that would leave the folder and its own
+ * subfolders past the column's ceiling; and anything the service reported as taking no new folder inside it.
+ */
+export function admissibleParents(
+    draft: FolderDraft,
+    folders: readonly ManagedMailFolder[],
+): readonly ManagedMailFolder[] {
+    const height = heightOf(draft.standingId, folders);
+
+    return folders.filter(
+        (folder) =>
+            folder.id !== draft.standingId &&
+            (draft.standingId === null || !beneath(draft.standingId, folder.id, folders)) &&
+            depthOf(folder.id, folders) + 1 + height <= deepestAlias,
+    );
+}
+
+/** How deep a folder sits, counted from one, and nought for the top of the mailbox. */
+export function depthOf(folderId: string | null, folders: readonly ManagedMailFolder[]): number {
+    let depth = 0;
+    let walking = folderId;
+
+    // Bounded by the list rather than by the hierarchy's own shape: a report whose parents formed a cycle would
+    // otherwise be an answer this client walks forever, and a hierarchy is never deeper than it has folders.
+    while (walking !== null && depth <= folders.length) {
+        const parent: ManagedMailFolder | undefined = folders.find((folder) => folder.id === walking);
+
+        if (parent === undefined) {
+            return depth;
+        }
+
+        depth += 1;
+        walking = parent.parentId;
+    }
+
+    return depth;
+}
+
+// How many levels hang below a folder, nought for one with nothing beneath it. It is what a move has to count: the
+// folder travels with everything under it, so a branch two deep cannot go anywhere that leaves it past the ceiling.
+function heightOf(folderId: string | null, folders: readonly ManagedMailFolder[]): number {
+    if (folderId === null) {
+        return 0;
+    }
+
+    const children = folders.filter((folder) => folder.parentId === folderId);
+
+    return children.length === 0 ? 0 : 1 + Math.max(...children.map((child) => heightOf(child.id, folders)));
+}
+
+// Whether one folder sits under another, itself included, which is the move a hierarchy cannot take.
+function beneath(folderId: string, parentId: string | null, folders: readonly ManagedMailFolder[]): boolean {
+    let walking = parentId;
+
+    for (let step = 0; walking !== null && step <= folders.length; step += 1) {
+        if (walking === folderId) {
+            return true;
+        }
+
+        walking = folders.find((folder) => folder.id === walking)?.parentId ?? null;
+    }
+
+    return false;
 }

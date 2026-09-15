@@ -106,6 +106,7 @@ export {
 } from './mailDrafts';
 export { mailOutboxCancellationRoute, withdrawOutgoingMail, type MailSendWithdrawal } from './mailOutbox';
 export {
+    isMailFolderRole,
     mailFoldersRoute,
     readMailFolders,
     type MailAccountFolders,
@@ -113,6 +114,23 @@ export {
     type MailFolderDirectory,
     type MailFolderRole,
 } from './mailFolders';
+export {
+    createManagedMailFolder,
+    deleteManagedMailFolder,
+    managedMailFolderDeletionsRoute,
+    managedMailFolderMovesRoute,
+    managedMailFolderRenamesRoute,
+    managedMailFoldersRoute,
+    moveManagedMailFolder,
+    readManagedMailFolders,
+    renameManagedMailFolder,
+    type ManagedMailFolder,
+    type ManagedMailFolderAct,
+    type ManagedMailFolderChange,
+    type ManagedMailFolderOutcome,
+    type ManagedMailFolderRefusal,
+    type ManagedMailFolders,
+} from './managedMailFolders';
 export {
     declareMailFolder,
     folderDeclarationRoute,

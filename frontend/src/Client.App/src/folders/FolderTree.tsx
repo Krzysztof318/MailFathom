@@ -5,11 +5,14 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import {
     readMailFolders,
+    readManagedMailFolders,
     type ClientFailureReason,
     type ClientResult,
     type ClientSession,
     type MailFathomTransport,
     type MailFolderDirectory,
+    type ManagedMailFolder,
+    type ManagedMailFolders,
 } from '@mailfathom/client-backend';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { SecondaryButton } from '../controls/SecondaryButton';
@@ -21,8 +24,7 @@ import { scopeKey } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { FolderRow } from './FolderRow';
 import { FolderRowMenu } from './FolderRowMenu';
-import { actsOffered, type FolderAct } from './folderActs';
-import { aliasSegments } from './folderTreeRows';
+import { actsOffered, nothingReported, type FolderAct, type ReportedFolderActs } from './folderActs';
 import { folderRowName } from './folderRowNames';
 import {
     folderTreeOf,
@@ -53,9 +55,17 @@ import { useFolderMaintenance, type FolderMailbox } from './useFolderMaintenance
 // handed in because the composition that owns it renders this tree as a region it was given rather than as a child it
 // built. Neither touches the other: a rail draws the same rows a column would, each as a symbol.
 //
-// **What a row answers a press with is not this tree's decision either.** `folderActs.ts` says which acts a row
-// offers, `folders/FolderMaintenance.tsx` performs them, and what this component does is name the mailbox each act
-// happens inside — because the tree is where the account, its name, and the aliases it already declares are held.
+// **What a row answers a press with is not this tree's decision either, and it is not this client's at all.** The
+// service reports which acts each account and each of its folders allow, so this component reads that report beside
+// the tree and hands it to `folderActs.ts`, `folders/FolderMaintenance.tsx` performs what somebody chose, and what is
+// left here is naming the mailbox each act happens inside.
+//
+// **The two reads are two routes and are joined by the folder's own identity.** The tree is drawn from the folders
+// route, which carries what a column shows — the hierarchy, the counts, how current each folder is — and the acts come
+// from the managed-folders route, which carries what may be done to each. A row is paired with the folder the report
+// names by that identity and with nothing else: a row the report does not name carries no act, which is the only safe
+// answer, since an act that reached the wrong folder would delete somebody's mail from a folder they were not
+// pointing at.
 
 const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthenticated: 'failure.unauthenticated',
@@ -98,6 +108,10 @@ export function FolderTree({
     // over the first is a reader choosing which of them their next press belongs to.
     const [menu, setMenu] = useState<{ readonly key: string; readonly at: MenuPoint } | null>(null);
     const [connected, setConnected] = useState(online);
+
+    // What the service says may be done to each account's folders, by account. Absent for an account whose report has
+    // not arrived or did not answer, which draws a column with no acts on it rather than acts drawn on a guess.
+    const [managed, setManaged] = useState<ReadonlyMap<string, ManagedMailFolders>>(new Map());
     const elements = useRef(new Map<string, HTMLLIElement>());
 
     // A network gap ends the answer it interrupted rather than outliving it. Coming back re-reads with the attempt
@@ -140,6 +154,47 @@ export function FolderTree({
             listening = false;
         };
     }, [session, transport, attempt, refreshed, online, maintenance.changed]);
+
+    // Which accounts the report is wanted for, as one value rather than a list, because a list built during render is
+    // a new array every time and an effect keyed on one would read the folders of every mailbox on every render.
+    const accountsAsked =
+        answered?.result.outcome === 'read'
+            ? answered.result.value.accounts.map(({ account }) => account.id).join(' ')
+            : '';
+
+    // The acts, read per account beside the tree. It is a second route rather than a field on the first because the
+    // two answer different questions — what the folders are, and what may be done to them — and the service publishes
+    // them apart for that reason. An account whose report fails is left out of the map rather than defaulted to
+    // anything: the column then offers nothing on it, which is what an unknown answer must draw.
+    useEffect(() => {
+        const accounts = accountsAsked.length === 0 ? [] : accountsAsked.split(' ');
+
+        if (!online || accounts.length === 0) {
+            return;
+        }
+
+        let listening = true;
+
+        void Promise.all(
+            accounts.map((account) =>
+                readManagedMailFolders(session, transport, account).then((result) => ({ account, result })),
+            ),
+        ).then((answers) => {
+            if (listening) {
+                setManaged(
+                    new Map(
+                        answers.flatMap(({ account, result }) =>
+                            result.outcome === 'read' ? [[account, result.value] as const] : [],
+                        ),
+                    ),
+                );
+            }
+        });
+
+        return () => {
+            listening = false;
+        };
+    }, [session, transport, accountsAsked, online, maintenance.changed]);
 
     // A scope outlives the tree it was chosen from, so the answer that arrives is also what says whether it still
     // names anything: the session's store carries a folder across a reload, and a folder deleted on the mail server in
@@ -262,23 +317,46 @@ export function FolderTree({
             .map((visibleRow, ordinal) => [visibleRow.row.key, ordinal] as const),
     );
 
-    // What each row offers, less what this credential may not do. The grant narrows the list rather than the row
-    // being absent from it: `folderActs.ts` answers what the *row* is, and what the *credential* is comes from the
-    // acts themselves, which is the one place either question is asked.
-    function actsFor(row: FolderTreeRow): readonly FolderAct[] {
-        return actsOffered(row).filter((act) => (act === 'markAllRead' ? maintenance.marksRead : maintenance.offered));
+    /** The folder the service's report names for a row, or `null` where it names none — including every row that is no folder. */
+    function managedFolderOf(row: FolderTreeRow): ManagedMailFolder | null {
+        const report = row.accountId === null ? undefined : managed.get(row.accountId);
+
+        if (report === undefined || row.alias === null) {
+            return null;
+        }
+
+        return report.folders.find((folder) => folder.id === row.alias) ?? null;
     }
 
-    /** The mailbox a row belongs to, or `null` for a row spanning every mailbox and for an account nothing answered for. */
+    /** What the service said about a row: what its mailbox allows, and what the row's own folder allows. */
+    function reportedFor(row: FolderTreeRow): ReportedFolderActs {
+        const report = row.accountId === null ? undefined : managed.get(row.accountId);
+
+        return report === undefined
+            ? nothingReported
+            : { account: report.allowedActs, folder: managedFolderOf(row)?.allowedActs ?? null };
+    }
+
+    // What each row offers, less what this credential may not do. Two narrowings rather than one: the service says
+    // what the *mailbox* allows, and the grant says what this *credential* may ask for, and neither answers the other.
+    function actsFor(row: FolderTreeRow): readonly FolderAct[] {
+        return actsOffered(row, reportedFor(row)).filter((act) =>
+            act === 'markAllRead' ? maintenance.marksRead : maintenance.offered,
+        );
+    }
+
+    /** The mailbox a row belongs to, or `null` for a row spanning every mailbox and for one no report has arrived for. */
     function mailboxOf(row: FolderTreeRow): FolderMailbox | null {
         const entry = directory.accounts.find(({ account }) => account.id === row.accountId);
+        const report = row.accountId === null ? undefined : managed.get(row.accountId);
 
-        return entry === undefined
+        return entry === undefined || report === undefined
             ? null
             : {
                   accountId: entry.account.id,
                   accountName: entry.account.displayName,
-                  declaredAliases: entry.folders.map((folder) => folder.alias),
+                  folders: report.folders,
+                  creatableRoles: report.creatableRoles,
               };
     }
 
@@ -291,32 +369,34 @@ export function FolderTree({
 
         const said = folderRowName(row, translate);
 
+        // Every act but marking read names a folder by the identity the service gave it, so a row the report does not
+        // name reaches none of them. The menu already refused to draw them, and this is the second half of that rule:
+        // an act composed from a row alone would be this client naming a folder it was never given.
+        const folder = managedFolderOf(row);
+
         switch (act) {
             case 'newFolder':
                 maintenance.declare(mailbox, null);
                 break;
             case 'newFolderInside':
-                // The row itself is the parent, and a level of an alias nothing is bound to has no place on a server
-                // to propose a child's path from — so the dialog proposes one from the root of the mailbox instead.
-                maintenance.declare(
-                    mailbox,
-                    row.alias === null ? null : { alias: row.alias, remotePath: row.remotePath ?? [] },
-                );
+                if (folder !== null) {
+                    maintenance.declare(mailbox, { id: folder.id, name: folder.name });
+                }
+
                 break;
             case 'markAllRead':
                 maintenance.markAllRead(mailbox.accountId, row.alias, said);
                 break;
             case 'editFolder':
-                if (row.alias !== null && row.remotePath !== null) {
-                    maintenance.revise(mailbox, { alias: row.alias, remotePath: row.remotePath }, above(row));
+                if (folder !== null) {
+                    maintenance.revise(mailbox, folder);
                 }
 
                 break;
             case 'deleteFolder':
-                if (row.alias !== null && row.remotePath !== null) {
-                    maintenance.withdraw(mailbox, {
-                        alias: row.alias,
-                        remotePath: row.remotePath,
+                if (folder !== null) {
+                    maintenance.remove(mailbox, {
+                        id: folder.id,
                         name: said,
                         holdsNested: row.children.length > 0,
                     });
@@ -347,20 +427,6 @@ export function FolderTree({
         }
 
         revise({ foldsToggled: [...moved] });
-    }
-
-    // The folder a row sits inside, which an edit needs so that the path it proposes is composed under the same
-    // parent the folder already has. Read off the row's own alias and path rather than by walking the tree: both nest
-    // on the same levels, and a row that has neither is one nothing is being edited on.
-    function above(row: FolderTreeRow): { readonly alias: string; readonly remotePath: readonly string[] } | null {
-        const segments = row.alias === null ? [] : aliasSegments(row.alias);
-
-        return segments.length < 2
-            ? null
-            : {
-                  alias: segments.slice(0, -1).join('/'),
-                  remotePath: (row.remotePath ?? []).slice(0, -1),
-              };
     }
 
     // The parent of a row is the nearest row above it sitting one level out, which is what a flat list of rows that
