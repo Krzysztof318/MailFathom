@@ -32,7 +32,7 @@ import { noTelemetry, TelemetryContext, type ClientEvent, type ClientTelemetry }
 import { ThemeProvider } from './theme/Theme';
 import { ToastsProvider } from './toasts/Toasts';
 import { LinkOpenerContext } from './shellOperations/linkOpener';
-import { receivesNoRedirect } from './shellOperations/signInRedirect';
+import { receivesNoRedirect, type SignInRedirect, type SignInRedirectAnswer } from './shellOperations/signInRedirect';
 import { SystemNotifierContext, type SystemNotifier } from './shellOperations/systemNotifier';
 import { WorkspaceProvider } from './workspace/Workspace';
 
@@ -567,6 +567,13 @@ export function storeRefusingToKeep(): RecordingStore {
     return { ...store, keep: () => Promise.resolve(false) };
 }
 
+/** The same store from the other way in: a grant an authorization server issued is what it will not write. */
+export function storeRefusingToKeepGrant(): RecordingStore {
+    const store = storeKeeping('inTheDeviceStore');
+
+    return { ...store, keepGrant: () => Promise.resolve(false) };
+}
+
 /** A store that holds the credential and will not give it up, which is a locked keychain from the client's side. */
 export function storeRefusingToForget(): RecordingStore {
     const store = storeKeeping('inTheDeviceStore');
@@ -640,6 +647,8 @@ export function renderApp(
     credentials: CredentialStore = storeKeeping(),
     telemetry: ClientTelemetry = noTelemetry,
     signedInWithGrant: OAuthGrant | null = null,
+    redirect: SignInRedirect = receivesNoRedirect,
+    redirectAnswer: SignInRedirectAnswer | null = null,
 ): void {
     render(
         <StrictMode>
@@ -658,8 +667,8 @@ export function renderApp(
                                                         deployment={deployment}
                                                         openSignals={noSignalChannel}
                                                         portraits={drawsNobody}
-                                                        redirect={receivesNoRedirect}
-                                                        redirectAnswer={null}
+                                                        redirect={redirect}
+                                                        redirectAnswer={redirectAnswer}
                                                         send={send}
                                                         signalSchedule={neverReopens}
                                                         signedInWith={signedInWith}

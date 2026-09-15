@@ -173,6 +173,24 @@ const providersOnly = published({
 const exchangeUnanswered: MailFathomTransport = (request) =>
     request.path.endsWith(sessionExchangeRoute) ? new Promise<ClientResponse>(() => undefined) : bothProviders(request);
 
+/** The deployment and the server answering as they do, with the token endpoint held open until a test lets it go. */
+function tokenHeldOpen(): { transport: MailFathomTransport; answer: () => void } {
+    let release = (): void => undefined;
+    const held = new Promise<void>((settle) => {
+        release = () => {
+            settle();
+        };
+    });
+
+    return {
+        answer: () => {
+            release();
+        },
+        transport: (request) =>
+            request.path.endsWith('/token') ? held.then(() => bothProviders(request)) : bothProviders(request),
+    };
+}
+
 /** A head that receives a redirect, and what it was handed. */
 function redirectTo(handed: string[], answer: SignInRedirectAnswer | null = null): SignInRedirect {
     return {
@@ -1284,6 +1302,96 @@ describe('SignIn', () => {
 
         expect(asked.filter((request) => request.path.endsWith('/token'))).toHaveLength(1);
         expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    // Two spinners at once, and the primary control's own accessible name saying it is opening a provider the person
+    // did not press, is what reading the wait off `handing` alone produced.
+    it('leaves the deployment’s own control saying what it does while another provider is being opened', async () => {
+        const handed: string[] = [];
+        const redirect: SignInRedirect = {
+            offered: true,
+            redirectUri: 'https://mail.example.invalid/',
+            hand: (address) => {
+                handed.push(address);
+
+                return new Promise<SignInRedirectAnswer | null>(() => undefined);
+            },
+            abandon: () => undefined,
+            answerWaiting: () => null,
+        };
+
+        renderScreen(bothProviders, servingDeployment, 'inThisBrowser', [], null, redirect);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue to Keycloak' }));
+
+        await vi.waitFor(() => {
+            expect(handed).toHaveLength(1);
+        });
+
+        expect(screen.getByRole('button', { name: 'Sign in' })).toBeDefined();
+        expect(screen.queryByRole('button', { name: 'Opening Keycloak…' })).toBeNull();
+        expect(screen.getByText('Nordwind SSO opens in your browser.')).toBeDefined();
+    });
+
+    // The redemption is deliberately unabortable, so what giving up on it does is let go of its answer. Without the
+    // control there is nothing on this screen to press at all while it stands: no form, no provider control, and no
+    // way back but reloading the page.
+    it('lets the wait on a redirect answer be given up on, and signs nobody in when it later arrives', async () => {
+        const held = tokenHeldOpen();
+        const state = await attemptWaitingForItsAnswer();
+        const { granted } = renderScreen(held.transport, servingDeployment, 'inThisBrowser', [], null, redirectTo([]), {
+            answered: 'code',
+            code: 'a-code',
+            state,
+        });
+
+        expect(screen.getByText('Finishing the sign-in with your provider…')).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Stop trying' }));
+
+        // The form is back, which is what says the screen can be used again rather than only that the wait went.
+        expect(await screen.findByLabelText('Password')).toBeDefined();
+
+        held.answer();
+        await waitFor(() => {
+            expect(screen.queryByText('Finishing the sign-in with your provider…')).toBeNull();
+        });
+
+        expect(granted).toEqual([]);
+    });
+
+    // An answer belongs to the deployment it was started against. A screen composed for another one — or for none,
+    // which is where *Change the server* leaves it — would otherwise re-adopt the address that was abandoned.
+    it('signs nobody in for an answer whose deployment is not the one this screen is composed for', async () => {
+        const state = await attemptWaitingForItsAnswer();
+        const { granted } = renderScreen(bothProviders, null, 'inThisBrowser', [], null, redirectTo([]), {
+            answered: 'code',
+            code: 'a-code',
+            state,
+        });
+
+        // Waited out by the wait itself going, which is the redemption having answered and been dropped.
+        await waitFor(() => {
+            expect(screen.queryByText('Finishing the sign-in with your provider…')).toBeNull();
+        });
+
+        expect(granted).toEqual([]);
+    });
+
+    // While the wait stands there is no notice, no address field and no form, so the first paint of a run that came
+    // back from a provider leaves focus on the document; the screen replacing the wait is what it belongs on.
+    it('places focus on the screen that replaces the returning wait, rather than leaving it on the document', async () => {
+        renderScreen(bothProviders, servingDeployment, 'inThisBrowser', [], null, redirectTo([]), {
+            answered: 'code',
+            code: 'a-code',
+            state: 'a-state-nobody-here-made',
+        });
+
+        const login = await screen.findByRole('textbox', { name: 'Login' });
+
+        await waitFor(() => {
+            expect(document.activeElement).toBe(login);
+        });
     });
 
     it('redeems nothing for an answer carrying a state this client did not generate', async () => {

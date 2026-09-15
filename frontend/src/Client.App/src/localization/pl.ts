@@ -135,6 +135,8 @@ export const pl: Catalogue = {
         'Wylogowanie nie usunęło zapamiętanego logowania z magazynu poświadczeń tej maszyny, więc nadal jest tam przechowywane. MailFathom został poproszony o zakończenie sesji, a ona i tak przestaje działać sama. Usuń wpis w samym magazynie, jeśli wolisz, żeby zniknął już teraz.',
     'signIn.notKept':
         'Nie udało się zapisać tego logowania na tej maszynie, więc zapytamy o hasło ponownie przy następnym otwarciu MailFathom. Jesteś zalogowany tak czy inaczej.',
+    'signIn.grantNotKept':
+        'Nie udało się zapisać tego logowania na tej maszynie, więc przy następnym otwarciu MailFathom ponownie przekierujemy Cię do Twojego dostawcy. Jesteś zalogowany tak czy inaczej.',
     'signIn.keepMeSignedIn': 'Nie wylogowuj mnie',
     'signIn.keepMeSignedInUnticked':
         'To logowanie jest trzymane do zamknięcia tej karty. Dotyczy wyłącznie logowania hasłem — sesje u dostawców rządzą się własnymi regułami.',

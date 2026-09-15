@@ -9,6 +9,7 @@ import {
     endSession,
     revokeRefreshToken,
     readAuthorizationServer,
+    type ClientEvent,
     type ClientSession,
     type DeploymentAddress,
     type MailFathomSignalChannel,
@@ -81,7 +82,7 @@ import { useCoarsePointer, useDesktopComposition, useTwoPanes, useWideWorkspace 
 import { CredentialNotices, type CredentialNotice } from './signIn/CredentialNotices';
 import type { CredentialStore } from './signIn/credentialStore';
 import { writeKeptSession, type KeptSession } from './signIn/keptSession';
-import { renewalIsDue, writeOAuthGrant, type OAuthGrant } from './signIn/oauthGrant';
+import { accessTokenHasExpired, writeOAuthGrant, type OAuthGrant } from './signIn/oauthGrant';
 import { useGrantRenewal } from './signIn/useGrantRenewal';
 import { useSessionRenewal } from './signIn/useSessionRenewal';
 import { SignIn } from './signIn/SignIn';
@@ -156,12 +157,17 @@ export function App({
     const [grant, setGrant] = useState(signedInWithGrant);
     const authorization = kept?.authorization ?? grant?.authorization ?? null;
 
-    // What is actually presented, which is the credential above unless it is an access token whose renewal is already
-    // due. A cold start against a grant last used yesterday holds an expired token and a refresh token that still
-    // works; presenting the first is an `unauthenticated` from the deployment, which this frame acts on by clearing the
-    // sign-in — the refresh token with it — at exactly the moment the renewal below was about to replace it. The
-    // renewal needs two round trips to the authorization server against the connection read's one, so it loses that
-    // race in the ordinary case rather than in a rare one.
+    // What is actually presented, which is the credential above unless it is an access token that has run out. A cold
+    // start against a grant last used yesterday holds an expired token and a refresh token that still works; presenting
+    // the first is an `unauthenticated` from the deployment, which this frame acts on by clearing the sign-in — the
+    // refresh token with it — at exactly the moment the renewal below was about to replace it. The renewal needs two
+    // round trips to the authorization server against the connection read's one, so it loses that race in the ordinary
+    // case rather than in a rare one.
+    //
+    // Expiry rather than the renewal being due, which are five minutes apart: a token inside that margin is one the
+    // deployment still accepts, and withholding it would empty this frame — the open message unmounted, the spaces and
+    // the accounts gone — for as long as the renewal takes, which is the whole of it where the server is unreachable
+    // or this machine is offline.
     //
     // Withheld from the reads rather than from `authorization`: nobody has been signed out, so the sign-in screen is
     // not what this draws. The frame waits the way it waits for any read that has not answered, and the renewal below
@@ -170,7 +176,7 @@ export function App({
     // A grant the server issued no refresh token for never waits here: nothing could replace its token, so the renewal
     // below reports it as ended on its first tick and this screen becomes the sign-in rather than a frame waiting on a
     // read that will never be made.
-    const presented = kept !== null || grant === null || !renewalIsDue(grant) ? authorization : null;
+    const presented = kept !== null || grant === null || !accessTokenHasExpired(grant) ? authorization : null;
 
     // Who is signed in, taken from what was kept rather than out of the credential. A session token names nobody — the
     // Basic header it replaced carried the name inside it — so the name travels beside it, and it is not a secret.
@@ -237,9 +243,12 @@ export function App({
     //
     // It is held steady across renders because the connection below reads again whenever it changes, and a callback
     // rebuilt every render would be a read started every render.
+    // What is recorded travels with the notice, for the reason the notice itself is split: one occurrence naming the
+    // deployment for something the authorization server did sends whoever reads a collector hours later to the same
+    // wrong system the wrong sentence would have sent the person in front of the screen.
     const signInEnded = useCallback(
-        (notice: CredentialNotice) => {
-            telemetry.happened('credential_no_longer_accepted');
+        (notice: CredentialNotice, occurrence: ClientEvent) => {
+            telemetry.happened(occurrence);
             setNotices([notice]);
             setKept(null);
             setGrant(null);
@@ -261,7 +270,7 @@ export function App({
     );
 
     const credentialRefused = useCallback(() => {
-        signInEnded('credentialNoLongerAccepted');
+        signInEnded('credentialNoLongerAccepted', 'credential_no_longer_accepted');
     }, [signInEnded]);
 
     // The authorization server ended the grant — it refused the refresh token, or it issued none and the access token
@@ -269,7 +278,7 @@ export function App({
     // provider: a failure at one system reported as a failure at the other sends whoever reads it, and whoever they
     // then go and ask, to the wrong place.
     const grantEnded = useCallback(() => {
-        signInEnded('providerEndedTheSignIn');
+        signInEnded('providerEndedTheSignIn', 'grant_ended_by_provider');
     }, [signInEnded]);
 
     // A renewed session replaces what is held and what is kept, in that order and in one place: holding it without
@@ -707,9 +716,11 @@ export function App({
         forgetListings();
         forgetComposition();
 
+        // Its own sentence rather than the password path's: nobody typed a password here, and a deployment that takes
+        // none offers no way back in through one — what the next start actually does is hand them to the provider.
         void credentials.keepGrant(reached, writeOAuthGrant(issued)).then((stored) => {
             if (!stored) {
-                setNotices(['sessionNotKept']);
+                setNotices(['grantNotKept']);
             }
         });
         setGrant(issued);

@@ -135,6 +135,8 @@ export const en = {
         'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. MailFathom was asked to end the session, and it stops working on its own in any case. Remove the entry in the store itself if you would rather it were gone now.',
     'signIn.notKept':
         'This sign-in could not be stored on this machine, so you will be asked for your password again the next time you open MailFathom. You are signed in either way.',
+    'signIn.grantNotKept':
+        'This sign-in could not be stored on this machine, so you will be sent to your provider again the next time you open MailFathom. You are signed in either way.',
     'signIn.keepMeSignedIn': 'Keep me signed in',
     'signIn.keepMeSignedInUnticked':
         'This sign-in is kept until you close this tab. Applies to password sign-in only — provider sessions follow their own rules.',

@@ -191,6 +191,21 @@ export function renewalIsDue(grant: OAuthGrant, at: number = Date.now()): boolea
     return Date.parse(grant.expiresAt) - at <= grantRenewalMargin;
 }
 
+/**
+ * Whether the access token has actually run out, which is a narrower question than the renewal being due.
+ *
+ * What it decides is whether the token may still be presented. A grant inside {@link grantRenewalMargin} is one the
+ * renewal is about to replace and one the deployment would still accept, so withholding it there would empty a frame
+ * over a credential that works.
+ *
+ * @param grant The grant being held.
+ * @param at The instant to judge against, which is this machine's clock unless a caller states one.
+ * @returns Whether the access token's expiry has passed.
+ */
+export function accessTokenHasExpired(grant: OAuthGrant, at: number = Date.now()): boolean {
+    return Date.parse(grant.expiresAt) <= at;
+}
+
 /** What came of asking the authorization server to renew a grant. */
 export type GrantRenewal =
     | { readonly outcome: 'renewed'; readonly grant: OAuthGrant }

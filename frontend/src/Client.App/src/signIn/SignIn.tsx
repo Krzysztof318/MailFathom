@@ -279,6 +279,9 @@ export function SignIn({
     /** How that redemption reports, read when the answer arrives so that no dependency re-enters the redemption. */
     const reporting = useRef<(outcome: OAuthSignInOutcome) => void>(() => undefined);
 
+    /** Whether somebody gave up on that wait, which is what drops the answer rather than cancelling the request. */
+    const letGoOfTheAnswer = useRef(false);
+
     // The view changed, so focus is placed rather than left wherever the previous screen had it: on what this screen
     // has to say about why it is back where there is something, and otherwise on the first thing the form is asking to
     // have filled. Moving focus is an imperative browser API, which is what an effect is for.
@@ -287,9 +290,17 @@ export function SignIn({
     // from a chosen address puts an address field on a form that had none, and this screen is often already standing
     // when that happens — somebody signs out of the frame first and points elsewhere from here. Leaving focus in the
     // login field would leave them typing a password against a deployment they have just abandoned.
+    //
+    // And again when a hand-over ends, which is the third view change: while one runs there is nothing to place focus
+    // on — no notice, no address field, and no form — so the first paint of a run that came back from an authorization
+    // server leaves focus on the document, and the screen replacing the wait is what it is placed on instead.
     useEffect(() => {
+        if (handing !== null) {
+            return;
+        }
+
         (notified.current ?? address.current ?? name.current)?.focus();
-    }, [deployment]);
+    }, [deployment, handing]);
 
     // An attempt is answered for the deployment it was started against, so one whose deployment was abandoned while it
     // ran is called off rather than allowed to answer: the way out of a chosen address sits above this form and stays
@@ -385,6 +396,15 @@ export function SignIn({
         (outcome: OAuthSignInOutcome): void => {
             setHanding(null);
 
+            // An answer is for the deployment it was started against. Pointing the client somewhere else while a code
+            // is in flight is what the password attempt's own cleanup calls off through the slot; a redemption holds
+            // no slot and is deliberately unabortable, so what stands in for that here is dropping what it answers —
+            // signing somebody in would re-adopt the address they abandoned and write a grant into the store they
+            // have just asked to clear.
+            if (outcome.outcome === 'signedIn' && outcome.deployment.baseAddress !== askedAddress) {
+                return;
+            }
+
             if (outcome.outcome === 'refused') {
                 // An authorization server that did not answer is said as that rather than as the deployment's silence,
                 // which is what every other `unavailable` on this screen reads as. A failure at the provider reported
@@ -404,7 +424,7 @@ export function SignIn({
 
             onSignedInWithGrant(outcome.deployment, outcome.grant);
         },
-        [onSignedInWithGrant, telemetry],
+        [askedAddress, onSignedInWithGrant, telemetry],
     );
 
     // A redirect that was waiting when this run started, redeemed exactly once for the answer it carried.
@@ -427,6 +447,10 @@ export function SignIn({
         redeeming.current = redirectAnswer;
 
         void completeOAuthSignIn(redirectAnswer, send(new AbortController().signal)).then((outcome) => {
+            if (letGoOfTheAnswer.current) {
+                return;
+            }
+
             reporting.current(outcome);
         });
     }, [redirectAnswer, send]);
@@ -532,6 +556,10 @@ export function SignIn({
         attempt.current = null;
         settleOAuth(outcome);
     }
+
+    /** Whether one provider control is the one being waited for, which is what says the wait belongs to it. */
+    const opening = (server: SignInAuthorizationServer): boolean =>
+        handing?.stage === 'handingOff' && handing.provider === server.displayName;
 
     // The password form stands down while a hand-over does. Somebody coming back from an authorization server meets
     // this screen while the code is still being redeemed, and a complete form with an enabled control on it is a second
@@ -693,6 +721,16 @@ export function SignIn({
     // It abandons a hand-over on the same terms and through the same slot, which is why the provider block draws it
     // too: a hand-over waits on somebody's browser for minutes, and that is far longer than a deployment's silence.
     function abandon(): void {
+        // A redemption is deliberately unabortable — an aborted one is an authorization code nothing can spend — so
+        // giving up on that half is letting go of its answer rather than calling anything off. A hand-over is
+        // abortable and goes through the slot, whose abort listener gives the redirect back and discards the verifier.
+        if (handing?.stage === 'returning') {
+            letGoOfTheAnswer.current = true;
+            setHanding(null);
+
+            return;
+        }
+
         attempt.current?.abort();
     }
 
@@ -766,29 +804,34 @@ export function SignIn({
                             void handOver(own);
                         }}
                     >
-                        {handing === null ? <Icon name="key" className="size-4.5" /> : <Spinner />}
+                        {/* The wait is this control's only where this control is what is being waited for, which is
+                            what the grid rows already compare: a person who pressed a row would otherwise be told by
+                            this control's own accessible name that it is opening a provider it is not opening. */}
+                        {opening(own) ? <Spinner /> : <Icon name="key" className="size-4.5" />}
                         <span className="min-w-0 truncate">
-                            {handing?.stage === 'handingOff'
-                                ? translate('signIn.openingProvider', { provider: handing.provider })
+                            {opening(own)
+                                ? translate('signIn.openingProvider', { provider: own.displayName })
                                 : translate('signIn.signInWithProvider')}
                         </span>
                         {handing === null ? <Icon name="open_in_new" className="size-4.25 opacity-75" /> : null}
                     </button>
 
                     <p className="text-xs leading-normal text-faint text-pretty">
-                        {handing === null
-                            ? translate('signIn.providerOpensInBrowser', { provider: own.displayName })
-                            : translate('signIn.finishInBrowser')}
+                        {opening(own)
+                            ? translate('signIn.finishInBrowser')
+                            : translate('signIn.providerOpensInBrowser', { provider: own.displayName })}
                     </p>
                 </div>
             )}
 
-            {/* The way out of a hand-over, which is the same control the password attempt draws and is here for the
-                same reason: the shell head holds its redirect port for minutes, and somebody who closed the provider
-                window or pressed the wrong provider would otherwise have nothing on the screen to press. */}
-            {handing?.stage === 'handingOff' ? (
+            {/* The way out of both halves of a hand-over, which is the same control the password attempt draws and is
+                here for the same reason: the shell head holds its redirect port for minutes, a redemption waits on a
+                server that may never answer, and the password form is not on the screen during either — so somebody
+                who closed the provider window, pressed the wrong provider, or came back to a wait that never ends
+                would otherwise have nothing to press but reload. */}
+            {handing === null ? null : (
                 <SecondaryButton label={translate('signIn.abandon')} shape="form" onActivate={abandon} />
-            ) : null}
+            )}
 
             {/* What is under the divider decides what it says: the grid where there is one, and the password form
                 where the deployment's own server is the only one published. */}
@@ -805,7 +848,7 @@ export function SignIn({
                         {providers.map((provider) => (
                             <ProviderButton
                                 key={provider.issuer}
-                                busy={handing?.stage === 'handingOff' && handing.provider === provider.displayName}
+                                busy={opening(provider)}
                                 disabled={handing !== null}
                                 label={translate('signIn.continueToProvider', { provider: provider.displayName })}
                                 provider={provider}

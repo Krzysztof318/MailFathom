@@ -11,16 +11,17 @@ import { useLocalization } from '../localization/useLocalization';
 // a later start, and each is stated in the same shape because they arrive together: being turned away is what asks the
 // store to forget, and a store that refuses is a second sentence about the same moment.
 //
-// It renders on both screens for that reason. Two of the three are read on the way back to the sign-in form, and the
-// third is read inside the frame, because a credential that could not be kept is learned about at the moment somebody
-// successfully signs in.
+// It renders on both screens for that reason. Three of them are read on the way back to the sign-in form, and the two
+// about something that could not be kept are read inside the frame, because a credential that could not be kept is
+// learned about at the moment somebody successfully signs in.
 
 /** What the client has to say about the credential this machine holds, whichever screen is on it when it says so. */
 export type CredentialNotice =
-    'credentialNoLongerAccepted' | 'providerEndedTheSignIn' | 'sessionNotKept' | 'sessionNotRemoved';
+    'credentialNoLongerAccepted' | 'grantNotKept' | 'providerEndedTheSignIn' | 'sessionNotKept' | 'sessionNotRemoved';
 
 const noticeMessages: Readonly<Record<CredentialNotice, MessageKey>> = {
     credentialNoLongerAccepted: 'signIn.noLongerAccepted',
+    grantNotKept: 'signIn.grantNotKept',
     providerEndedTheSignIn: 'signIn.providerEnded',
     sessionNotKept: 'signIn.notKept',
     sessionNotRemoved: 'signIn.notRemoved',

@@ -121,6 +121,7 @@ export type ClientEvent =
     | 'signed_in'
     | 'sign_in_refused'
     | 'credential_no_longer_accepted'
+    | 'grant_ended_by_provider'
     | 'render_failed'
     | 'request_completed'
     | 'request_failed'
@@ -167,6 +168,11 @@ export const severityOf: Readonly<Record<ClientEvent, SeverityNumber>> = {
     // token nobody renewed, and one record per client per weekend is what putting this above the default floor buys.
     credential_no_longer_accepted: SeverityNumber.DEBUG,
 
+    // The authorization server ending a grant, which is the same shape of event one layer out: the deployment said
+    // nothing and still accepts what it minted, so an operator reading this one goes to the provider rather than to
+    // their own logs. At the same level for the same reason — it is the ordinary end of a grant as much as a fault.
+    grant_ended_by_provider: SeverityNumber.DEBUG,
+
     request_failed: SeverityNumber.DEBUG,
     signals_opened: SeverityNumber.DEBUG,
     signals_dropped: SeverityNumber.DEBUG,
@@ -202,6 +208,8 @@ const bodyOf: Readonly<Record<ClientEvent, string>> = {
     signed_in: 'Somebody signed this client in and the deployment issued it a credential.',
     sign_in_refused: 'A sign-in did not produce a credential.',
     credential_no_longer_accepted: 'The deployment stopped accepting the credential this session held.',
+    grant_ended_by_provider:
+        'The authorization server ended the grant this session held, by refusing the refresh token or by issuing none.',
     render_failed: 'A region of the client failed while it was being drawn, and the boundary around it contained it.',
     request_completed: 'The client made a request to the deployment and read what came back.',
     request_failed: 'A request the client made did not produce an answer it could act on.',

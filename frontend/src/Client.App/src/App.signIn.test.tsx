@@ -27,13 +27,16 @@ import {
     storeKeeping,
     storeRefusingToForget,
     storeRefusingToKeep,
+    storeRefusingToKeepGrant,
     typedCredential,
     typedSession,
     workAccount,
     type Answer,
 } from './App.harness';
 import { writeKeptSession } from './signIn/keptSession';
-import type { OAuthGrant } from './signIn/oauthGrant';
+import { startOAuthSignIn } from './signIn/oauthFlow';
+import { grantRenewalMargin, type OAuthGrant } from './signIn/oauthGrant';
+import { receivesNoRedirect, type SignInRedirectAnswer } from './shellOperations/signInRedirect';
 import { noTelemetry } from './telemetry/clientTelemetry';
 
 /** A grant an authorization server issued, which is the other thing a start may already be holding. */
@@ -75,6 +78,90 @@ function alsoAnsweringTheProvider(): DeploymentTransport {
             }),
         );
     };
+}
+
+/**
+ * The deployment and the authorization server together, as the run that comes back from a provider meets them.
+ *
+ * It answers the four things a redemption asks for — the server's discovery document, its token endpoint, who the
+ * deployment says the token belongs to, and everything the frame reads afterwards.
+ */
+function answeringTheWholeGrant(): DeploymentTransport {
+    const deployment = deploymentAnswering();
+
+    return (signal) => (request) => {
+        if (request.path.startsWith(issuedGrant.issuer)) {
+            asked.push(request);
+
+            return Promise.resolve(
+                complete({
+                    status: 200,
+                    body: request.path.endsWith('/token')
+                        ? JSON.stringify({
+                              access_token: 'mfo_returned.cmV0dXJuZWQtcHJvb2Y',
+                              token_type: 'Bearer',
+                              expires_in: 3600,
+                          })
+                        : JSON.stringify({
+                              issuer: issuedGrant.issuer,
+                              authorization_endpoint: `${issuedGrant.issuer}/authorize`,
+                              token_endpoint: `${issuedGrant.issuer}/token`,
+                          }),
+                }),
+            );
+        }
+
+        if (request.path.endsWith('/api/client/display-name')) {
+            asked.push(request);
+
+            return Promise.resolve(
+                complete({ status: 200, body: JSON.stringify({ displayName: 'K. Kowalska', changeable: false }) }),
+            );
+        }
+
+        return deployment(signal)(request);
+    };
+}
+
+/**
+ * An attempt written down by the run the authorization server's page replaced, which is what the return redeems.
+ *
+ * @returns The `state` that run generated, which is what the answer coming back has to carry.
+ */
+async function attemptWaitingForItsAnswer(): Promise<string> {
+    window.sessionStorage.clear();
+
+    const handed: string[] = [];
+
+    void startOAuthSignIn({
+        deployment: servingAddress,
+        server: {
+            name: 'keycloak',
+            displayName: 'Keycloak',
+            issuer: issuedGrant.issuer,
+            clientId: 'mailfathom-client',
+        },
+        resource: { resource: issuedGrant.resource, scopes: ['mailfathom.read'] },
+        redirect: {
+            offered: true,
+            redirectUri: `${servingAddress.baseAddress}/`,
+            hand: (address) => {
+                handed.push(address);
+
+                // Nothing settles, which is what the document being replaced looks like from here.
+                return new Promise<SignInRedirectAnswer | null>(() => undefined);
+            },
+            abandon: () => undefined,
+            answerWaiting: () => null,
+        },
+        transport: answeringTheWholeGrant()(new AbortController().signal),
+    });
+
+    await waitFor(() => {
+        expect(handed).toHaveLength(1);
+    });
+
+    return new URL(handed[0] ?? '').searchParams.get('state') ?? '';
 }
 
 // Signing in, signing out, and everything the credential store does or refuses to do along the way. The arrangement
@@ -344,9 +431,6 @@ describe('App sign-in', () => {
         ).toBeDefined();
     });
 
-    // A start against a grant last used yesterday holds an expired access token beside a refresh token that still
-    // works. Presenting the expired one draws an `unauthenticated` from the deployment, which this frame acts on by
-    // clearing the sign-in — the refresh token with it — at exactly the moment the renewal was about to replace it.
     it('asks the deployment with a grant whose token is still good', async () => {
         renderApp(servedFrom, null, deploymentAnswering(), storeKeeping(), noTelemetry, issuedGrant);
 
@@ -355,7 +439,10 @@ describe('App sign-in', () => {
         });
     });
 
-    it('renews an access token whose renewal is already due rather than presenting it', async () => {
+    // A start against a grant last used yesterday holds an expired access token beside a refresh token that still
+    // works. Presenting the expired one draws an `unauthenticated` from the deployment, which this frame acts on by
+    // clearing the sign-in — the refresh token with it — at exactly the moment the renewal was about to replace it.
+    it('renews an access token that has run out rather than presenting it', async () => {
         const expired: OAuthGrant = { ...issuedGrant, expiresAt: '2000-01-01T00:00:00.000Z' };
 
         renderApp(servedFrom, null, deploymentAnswering(), storeKeeping(), noTelemetry, expired);
@@ -371,6 +458,22 @@ describe('App sign-in', () => {
 
         // Nobody was signed out, so what is on the screen is the frame waiting rather than the sign-in.
         expect(screen.queryByLabelText('Password')).toBeNull();
+    });
+
+    // The other side of that, and the five minutes between them is what separates the two: a token inside the renewal
+    // margin is one the deployment still accepts, so withholding it would empty the frame over a credential that works
+    // — for as long as the renewal takes, which is indefinitely where the authorization server cannot be reached.
+    it('presents an access token the renewal is due for but which has not run out', async () => {
+        const nearly: OAuthGrant = {
+            ...issuedGrant,
+            expiresAt: new Date(Date.now() + grantRenewalMargin / 2).toISOString(),
+        };
+
+        renderApp(servedFrom, null, deploymentAnswering(), storeKeeping(), noTelemetry, nearly);
+
+        await framed();
+
+        expect(asked.map((request) => request.headers['Authorization'])).toContain(nearly.authorization);
     });
 
     // A grant the server issued no refresh token for ends with its access token, and nothing in this client can
@@ -406,6 +509,29 @@ describe('App sign-in', () => {
 
         expect(withdrawal?.body).toContain(`token=${issuedGrant.refreshToken ?? ''}`);
         expect(withdrawal?.body).toContain('token_type_hint=refresh_token');
+    });
+
+    // Nobody typed a password on this path, and a deployment taking none offers no way back in through one — so the
+    // sentence the password flow uses would name a control the next start may not draw.
+    it('says a grant that could not be kept sends somebody back to their provider, not to a password', async () => {
+        const state = await attemptWaitingForItsAnswer();
+
+        renderApp(
+            servedFrom,
+            null,
+            answeringTheWholeGrant(),
+            storeRefusingToKeepGrant(),
+            noTelemetry,
+            null,
+            receivesNoRedirect,
+            { answered: 'code', code: 'a-code', state },
+        );
+
+        expect(
+            await screen.findByText(
+                'This sign-in could not be stored on this machine, so you will be sent to your provider again the next time you open MailFathom. You are signed in either way.',
+            ),
+        ).toBeDefined();
     });
 
     it('places focus on what it has to say about the credential, rather than on the field below it', async () => {
