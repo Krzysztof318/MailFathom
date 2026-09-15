@@ -361,17 +361,29 @@ export function FolderTree({
     }
 
     function takeAct(act: FolderAct, row: FolderTreeRow): void {
+        const said = folderRowName(row, translate);
+
+        // Marking read names no folder of the managed surface — it is the read flag over what the *tree* already says
+        // is in a folder — so it is taken from the row alone and never waits for the report. The menu offers it on
+        // every row of a mailbox, and an act that then did nothing because a second read had not answered yet would
+        // be a control that works or does not by the second.
+        if (act === 'markAllRead') {
+            if (row.accountId !== null) {
+                maintenance.markAllRead(row.accountId, row.alias, said);
+            }
+
+            return;
+        }
+
         const mailbox = mailboxOf(row);
 
         if (mailbox === null) {
             return;
         }
 
-        const said = folderRowName(row, translate);
-
-        // Every act but marking read names a folder by the identity the service gave it, so a row the report does not
-        // name reaches none of them. The menu already refused to draw them, and this is the second half of that rule:
-        // an act composed from a row alone would be this client naming a folder it was never given.
+        // Every act left names a folder by the identity the service gave it, so a row the report does not name reaches
+        // none of them. The menu already refused to draw them, and this is the second half of that rule: an act
+        // composed from a row alone would be this client naming a folder it was never given.
         const folder = managedFolderOf(row);
 
         switch (act) {
@@ -383,9 +395,6 @@ export function FolderTree({
                     maintenance.declare(mailbox, { id: folder.id, name: folder.name });
                 }
 
-                break;
-            case 'markAllRead':
-                maintenance.markAllRead(mailbox.accountId, row.alias, said);
                 break;
             case 'editFolder':
                 if (folder !== null) {

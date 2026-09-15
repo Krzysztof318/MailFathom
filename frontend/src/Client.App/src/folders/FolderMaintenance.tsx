@@ -20,6 +20,7 @@ import { Confirmation } from '../confirmation/Confirmation';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { useToasts, type OperationSettled } from '../toasts/useToasts';
+import { folderRoleLabels } from '../workspace/mailScope';
 import { FolderDialog } from './FolderDialog';
 import { draftForEditedFolder, draftForNewFolder, folderNameOf, type FolderDraft } from './folderDraft';
 import { markEverythingRead } from './markingEverythingRead';
@@ -216,7 +217,13 @@ export function FolderMaintenanceProvider({
         const about = { folder: name, mailbox: mailbox.accountName };
 
         if (draft.standingId === null) {
-            const settle = standing('folders.creating', { folder: name, mailbox: mailbox.accountName });
+            // A creation for a role carries no name, the service giving it one, so the card standing while it runs
+            // says what was asked for — *Creating Trash in Work…* — rather than leaving the subject of the sentence
+            // out. What it settles to is the name the service answered with, which `report` fills in.
+            const settle = standing('folders.creating', {
+                folder: draft.role === null ? name : translate(folderRoleLabels[draft.role]),
+                mailbox: mailbox.accountName,
+            });
 
             report(
                 await createManagedMailFolder(

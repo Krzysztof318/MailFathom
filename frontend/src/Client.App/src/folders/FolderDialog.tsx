@@ -155,8 +155,11 @@ export function FolderDialog({
                                 {translate(editing ? 'folders.editFolderTitle' : 'folders.newFolderTitle')}
                             </h2>
 
+                            {/* A folder asked for by role goes where the service puts it rather than inside whatever
+                                row the dialog was opened on, so it says the mailbox: naming a parent it will not be
+                                made in is the one line here that would be untrue by the time it is read. */}
                             <p className="truncate text-xs text-muted">
-                                {draft.parentId === null
+                                {draft.parentId === null || !placing
                                     ? translate('folders.inMailbox', { mailbox: draft.accountName })
                                     : translate('folders.insideFolder', {
                                           folder: namePathOf(draft.parentId, folders),

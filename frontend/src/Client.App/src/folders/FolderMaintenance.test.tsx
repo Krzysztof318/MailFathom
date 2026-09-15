@@ -177,6 +177,29 @@ describe('FolderMaintenanceProvider', () => {
         });
     });
 
+    it('says what it is creating while a role is being asked for, there being no typed name to say', async () => {
+        // A deployment that never answers, so what is asserted is the card standing while the act runs rather than
+        // whatever it settles to.
+        const { held } = maintaining(() => new Promise(() => undefined));
+
+        act(() => {
+            held().declare(work, { id: 'PROJECTS', name: 'Projects' });
+        });
+
+        expect(screen.getByText('Work — inside “Projects”')).toBeDefined();
+
+        chose(/Kind of folder/, 'Trash');
+
+        // The folder goes where the service puts such a folder rather than inside the row the dialog was opened on,
+        // so the dialog stops naming that row the moment the role is chosen.
+        expect(screen.queryByText('Work — inside “Projects”')).toBeNull();
+        expect(screen.getByText('Work')).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create folder' }));
+
+        expect(await screen.findByText('Creating Trash in Work…')).toBeDefined();
+    });
+
     it('refuses to save a name a sibling already carries, before the deployment has to say so', () => {
         const answering = deployment();
         const { held } = maintaining(answering.transport);

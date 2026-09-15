@@ -932,6 +932,30 @@ describe('FolderTree', () => {
         ]);
     });
 
+    it('marks everything read before the report of what may be done has arrived, that act naming no folder', async () => {
+        const { maintenance, asked } = offering();
+
+        // The tree answers and the report never does, which is the window between the two reads: the menu offers
+        // marking read there, so pressing it has to reach the act rather than doing nothing.
+        renderTree(
+            ({ path }) =>
+                path.includes('/managed-folders')
+                    ? new Promise(() => undefined)
+                    : Promise.resolve({ status: 200, body: JSON.stringify(tree), headers: {} }),
+            true,
+            undefined,
+            undefined,
+            maintenance,
+        );
+        await drawn();
+
+        expect(pressed(row(/^Archiwum/))).toEqual(['Mark all as read']);
+
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Mark all as read' }));
+
+        expect(asked).toEqual([{ act: 'markAllRead', accountId: 'work', folder: 'ARCHIWUM', said: 'Archiwum' }]);
+    });
+
     it('says a user with no mailbox has none, and what would give them one', async () => {
         renderTree(answering(JSON.stringify({ synchronizationEnabled: false, accounts: [] })));
 
