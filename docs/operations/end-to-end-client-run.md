@@ -51,7 +51,7 @@ that never reached the mailbox and a client that cannot draw a list are two diff
 | The database and the mail server | The app model, on the topology `EndToEndClient=true` selects: PostgreSQL and GreenMail under the ephemeral run prefix, and no MailFathom |
 | The schema | The artifact applied with `psql` inside the database container, the route [the schema page](database-schema.md) gives an operator whose database is not reachable from where they stand |
 | MailFathom | `dotnet publish` of `Host`, the bundle copied to `wwwroot/` beside it as the image does, started with the client endpoint on and serving the page |
-| The mailbox | `POST /api/admin/users` recording the user this run serves — the database it created holds nobody — then `POST /api/admin/mail-accounts` creating the mail account and assigning it to that user, because no configuration source declares a mailbox — the mailbox is served from that write, without a restart |
+| The mailbox | `POST /api/admin/users` recording the user this run serves — the database it created holds nobody — then `POST /api/admin/mail-accounts` creating the mail account and assigning it to that user, because no configuration source declares a mailbox — the mailbox is served from that write, without a restart. The record states the account's language and carries an `env:` reference to the mailbox password rather than the password, because MailFathom refuses a secret's material into a persisted record whatever wrote it |
 | The credential | `POST /api/admin/users/{id}/credentials` on [the administrative endpoint](admin-endpoint.md), so the password this run signs in with was made the way an operator makes one |
 | The mail | `SyntheticMail replay` of `backend/tools/SyntheticMail/corpora/office-en.zip` into the mailbox over SMTP |
 | The synchronization | Polling [the folders route](client-endpoint.md) until the account's run reports no failed folder and at least one synchronized one |
@@ -66,7 +66,9 @@ gives about the same thing: what the run exercises has to be the PostgreSQL and 
 repository exercises, at the same pins. `EndToEndClient=true` is an argument rather than a variable, so an ambient value
 cannot divert an ordinary `aspire run` onto it.
 
-**Every wait is on a condition rather than on a duration.** The database is waited for with `pg_isready`, the mail
+**Every wait is on a condition rather than on a duration.** The database is waited for with `pg_isready` over TCP —
+over the socket it would report ready against the temporary server the image runs while it initializes its data
+directory, and that server is stopped, and its socket removed, under the command that follows — the mail
 server on its own readiness route, MailFathom on its `started` probe, and the mailbox on what the account's
 synchronization run reports. A sleep long enough for a slow machine is time every fast run pays, and one short enough
 for a fast machine is a flake — and the last of those four is the one that matters most, because a first synchronization

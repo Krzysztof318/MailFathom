@@ -107,23 +107,43 @@ test('opens a message from the list and draws what the sender wrote', async ({ p
     await signIn(page);
     await openTheMailbox(page);
 
-    const subject = await openTheFirstMessage(page);
+    await openTheFirstMessage(page);
 
-    // The pane names its region by the subject, which is what tells one open message from another; the body under it
-    // is what the deployment derived from the MIME the mail server delivered.
-    await expect(page.getByRole('article', { name: subject })).toBeVisible();
+    // The region the words are drawn in, whichever surface the row opened: a message the deployment threaded with
+    // nothing opens as itself and names its region by the subject, and one it threaded opens as the whole
+    // correspondence, whose regions are named by who wrote each message. The subject stands in the head over both, and
+    // `openTheFirstMessage` has already read it there. What is asserted here is the one thing neither shape changes —
+    // that a region holding the body the deployment derived from the delivered MIME was drawn at all.
+    await expect(page.getByRole('article').first()).toBeVisible();
 });
 
 test('opens the whole conversation a message belongs to', async ({ page }) => {
     await signIn(page);
     await openTheMailbox(page);
-    await openTheFirstMessage(page);
 
-    // The corpus is exchanges rather than a flat batch, and the deployment threaded them, so the control is offered.
-    // Its absence is a real failure rather than a spec to skip: it would mean this deployment threaded nothing.
-    await page.getByRole('button', { name: 'Show the whole conversation' }).click();
+    // The corpus is exchanges rather than a flat batch, so a row the deployment threaded says how long its
+    // correspondence is. Its absence is a real failure rather than a spec to skip: it would mean this deployment
+    // threaded nothing. The first row is not asked for here, because which message a folder sorts first says nothing
+    // about whether it belongs to an exchange.
+    const exchange = page
+        .getByRole('listbox', { name: 'Messages' })
+        .getByRole('option')
+        .filter({ hasText: /messages in this conversation/ })
+        .first();
 
-    await expect(page.getByRole('region', { name: 'Conversation' })).toBeVisible();
+    await expect(exchange).toBeVisible();
+
+    // Opening it is the whole path: a threaded row opens the correspondence rather than the message, so there is no
+    // second control to reach for.
+    await exchange.click();
+
+    const conversation = page.getByRole('region', { name: 'Conversation' });
+
+    await expect(conversation).toBeVisible();
+
+    // A second message drawn beside the one that was clicked is what makes this the conversation rather than the
+    // message, which is the claim the row's own count made.
+    await expect(conversation.getByRole('article').nth(1)).toBeVisible();
 });
 
 test('searches the mailbox and finds the message it was asked about', async ({ page }) => {
