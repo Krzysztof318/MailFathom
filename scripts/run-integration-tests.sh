@@ -122,7 +122,7 @@ dotnet run --project "$integration_test_project" --configuration Release --no-bu
 # not production code under test.
 mapfile -t integration_covered_sources < <(
   grep --recursive --files-with-matches --include='*.cs' --extended-regexp \
-    '^[[:space:]]*\[RequiresIntegrationCoverage\]' src \
+    '^[[:space:]]*\[RequiresIntegrationCoverage\]' backend/src \
     | grep --invert-match 'RequiresIntegrationCoverageAttribute\.cs' \
     | sort
 )
