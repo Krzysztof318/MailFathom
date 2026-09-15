@@ -34,17 +34,22 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 internal sealed class PersistedMailUserErasure(OptimisticConcurrencyRetryPolicy commitPolicy) : IMailUserErasure
 {
     /// <inheritdoc />
-    public async Task<bool> EraseAsync(MailUserId user, CancellationToken cancellationToken)
+    public async Task<MailUserErasureOutcome> EraseAsync(
+        MailUserId user,
+        IReadOnlyList<Guid> quiescedAccounts,
+        CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(quiescedAccounts);
+
         if (!user.IsSpecified)
         {
             throw new ArgumentException("A user record is erased for a named user.", nameof(user));
         }
 
         var erasure = await commitPolicy.CommitAsync(
-            (session, token) => UserAccountErasure.EraseAsync(session, user.Value, token),
+            (session, token) => UserAccountErasure.EraseAsync(session, user.Value, quiescedAccounts, token),
             cancellationToken);
 
-        return erasure.UserErased;
+        return new MailUserErasureOutcome(erasure.UserErased, erasure.UnquiescedAccount);
     }
 }

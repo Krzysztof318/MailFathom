@@ -758,7 +758,10 @@ anybody else could read. Ending the last assignment
 erases the account and everything stored for it, exactly as `mfctl account delete` does, so both show what they are
 about to do and ask. A run already in flight drains against the document version it began with. `mfctl user remove` erases the person and every
 message, folder, attachment, and derived index the deployment holds for them; it shows what it is about to do and asks,
-and nothing puts it back.
+and nothing puts it back. Before it deletes anything it stops the deployment reading the mailboxes that were only
+theirs, and it waits up to half a minute for a run or a job already going to finish — a mailbox still being written to
+after that refuses the whole erasure, naming what is running, and nothing at all is erased. Run it again once that has
+ended.
 
 **A mailbox somebody adds from the client names a credential you provisioned for them.** An account carries a
 reference rather than a password, and a reference is a path into what the deployment can read, so a person adding

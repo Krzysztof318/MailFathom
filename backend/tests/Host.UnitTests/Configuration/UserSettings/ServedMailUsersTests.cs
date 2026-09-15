@@ -209,6 +209,98 @@ public sealed class ServedMailUsersTests
         servedUsers.ReleaseRosterPublication();
     }
 
+    /// <summary>An erasure has to stop this replica serving the user before it deletes anything, which is what this is.</summary>
+    [Fact]
+    public void Withhold_AUserThisDeploymentServes_TakesThemOffTheRosterAndSignalsAReload()
+    {
+        // Arrange
+        var servedUsers = new ServedMailUsers();
+        servedUsers.Resolved([Serving(SyntheticMailUser.Deployment, "user"), Serving(SecondUser, "second")]);
+        var reloaded = false;
+        servedUsers.GetReloadToken().RegisterChangeCallback(_ => reloaded = true, state: null);
+
+        // Act
+        using var withheld = servedUsers.Withhold(SyntheticMailUser.Deployment);
+
+        // Assert
+        Assert.Equal([SecondUser], [.. servedUsers.Users.Select(static served => served.User)]);
+        Assert.True(reloaded);
+    }
+
+    /// <summary>A refused erasure removed nothing, so the person it was refused for goes on being served.</summary>
+    [Fact]
+    public void Withhold_DisposedWithoutTheUserBeingErased_PutsThemBackWhereTheyWere()
+    {
+        // Arrange
+        var servedUsers = new ServedMailUsers();
+        servedUsers.Resolved([Serving(SyntheticMailUser.Deployment, "user"), Serving(SecondUser, "second")]);
+
+        // Act
+        servedUsers.Withhold(SyntheticMailUser.Deployment).Dispose();
+
+        // Assert
+        Assert.Equal(
+            [SyntheticMailUser.Deployment, SecondUser],
+            [.. servedUsers.Users.Select(static served => served.User)]);
+    }
+
+    /// <summary>An erasure that committed leaves nobody to put back, whatever the withholding is disposed of after.</summary>
+    [Fact]
+    public void Withhold_TheUserWasErased_LeavesThemOffTheRoster()
+    {
+        // Arrange
+        var servedUsers = new ServedMailUsers();
+        servedUsers.Resolved([Serving(SyntheticMailUser.Deployment, "user"), Serving(SecondUser, "second")]);
+
+        // Act
+        using (var withheld = servedUsers.Withhold(SyntheticMailUser.Deployment))
+        {
+            withheld.Erased();
+        }
+
+        // Assert
+        Assert.Equal([SecondUser], [.. servedUsers.Users.Select(static served => served.User)]);
+    }
+
+    /// <summary>
+    /// A withholding shrinks the roster before anything is deleted, and an erasure can still be refused. Letting that
+    /// shrink reach the sole-user reading would admit a caller naming nobody as the remaining person — for the whole
+    /// of the wait, the deletion, and the entire length of a refusal — where a moment earlier it had no answer at all.
+    /// </summary>
+    [Fact]
+    public void User_WhileAUserIsWithheldFromARosterOfSeveral_GoesOnRefusingToNameASoleUser()
+    {
+        // Arrange
+        var servedUsers = new ServedMailUsers();
+        servedUsers.Resolved([Serving(SyntheticMailUser.Deployment, "alex"), Serving(SecondUser, "morgan")]);
+
+        // Act
+        using var withheld = servedUsers.Withhold(SyntheticMailUser.Deployment);
+
+        // Assert
+        var refusal = Assert.Throws<DeploymentMailUserUnresolvedException>(() => servedUsers.User);
+
+        Assert.Equal(MailFathomErrorCode.DeploymentMailUserUnresolved, refusal.ErrorCode);
+    }
+
+    /// <summary>Once the deletion has committed the deployment really does serve one user, and names them.</summary>
+    [Fact]
+    public void User_AfterAWithheldUserWasErased_NamesTheOneTheDeploymentIsLeftServing()
+    {
+        // Arrange
+        var servedUsers = new ServedMailUsers();
+        servedUsers.Resolved([Serving(SyntheticMailUser.Deployment, "alex"), Serving(SecondUser, "morgan")]);
+
+        // Act
+        using (var withheld = servedUsers.Withhold(SyntheticMailUser.Deployment))
+        {
+            withheld.Erased();
+        }
+
+        // Assert
+        Assert.Equal(SecondUser, servedUsers.User);
+    }
+
     private static ServedMailUser Serving(
         MailUserId user,
         string displayName,

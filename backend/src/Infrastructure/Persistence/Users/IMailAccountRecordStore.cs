@@ -70,6 +70,30 @@ public interface IMailAccountRecordStore
     /// <param name="cancellationToken">Cancels the erasure before it commits.</param>
     /// <returns>Whether an account was there to erase.</returns>
     Task<bool> EraseAsync(Guid accountId, CancellationToken cancellationToken);
+
+    /// <summary>Reads the accounts one user is assigned and nobody else is.</summary>
+    /// <param name="user">The user asked about.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The accounts that would be left serving nobody if this user's assignments ended, in ordinal order.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
+    /// <remarks>
+    /// <para>
+    /// It is what an erasure has to know before it begins rather than after: the accounts whose work has to be stopped
+    /// are exactly these. An account somebody else still reads is left running and unheld, because the mailbox and its
+    /// mail are that person's — the erasure still takes what the departing user authored in it, their drafts and their
+    /// recurring sends, and those rows key onto the user rather than needing the mailbox to be still. The set is read
+    /// from the assignment relation rather than from a runtime roster, so an account assigned to a user whose record
+    /// this build will not read still counts as shared.
+    /// </para>
+    /// <para>
+    /// It is the one read here that takes no ceiling, and deliberately: a truncated answer would leave an account of
+    /// the user's running while the erasure deleted its mail, which is the failure the caller asks this question to
+    /// avoid. What bounds it instead is the deployment — these are the assignments of one user, the same set the
+    /// erasure's own transaction narrows on — so the alternative to reading all of them is not a smaller read but a
+    /// wrong one.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<Guid>> ReadSolelyAssignedAsync(MailUserId user, CancellationToken cancellationToken);
 }
 
 /// <summary>One account and the users it is assigned to.</summary>

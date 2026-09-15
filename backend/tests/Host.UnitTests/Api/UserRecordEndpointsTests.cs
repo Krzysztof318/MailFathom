@@ -115,7 +115,8 @@ public sealed class UserRecordEndpointsTests
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
         deployment.Serving(new ServedMailUser(SyntheticMailUser.Deployment, "alex", []));
-        deployment.Erasure.EraseAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>()).Returns(true);
+        deployment.Erasure.EraseAsync(SyntheticMailUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new MailUserErasureOutcome(true, null));
 
         // Act
         var result = await UserRecordEndpoints.EraseAsync(
@@ -128,6 +129,34 @@ public sealed class UserRecordEndpointsTests
 
         Assert.True(erasure.Erased);
         Assert.True(erasure.WasServed);
+    }
+
+    /// <summary>
+    /// Work still running against the user's own mailboxes is the deployment being in the wrong state for the request
+    /// rather than anything wrong with the request, so it is a conflict and it names what is running.
+    /// </summary>
+    [Fact]
+    public async Task EraseAsync_WorkBoundToTheUsersAccountsWillNotStop_AnswersAConflictNamingIt()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
+        deployment.Serving(new ServedMailUser(SyntheticMailUser.Deployment, "alex", []));
+        deployment.Erasure.EraseAsync(SyntheticMailUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new MailUserErasureOutcome(true, null));
+        deployment.Quiescing.Refusal = "Mail account 41d7b2e0 is still being synchronized.";
+
+        // Act
+        var result = await UserRecordEndpoints.EraseAsync(
+            SyntheticMailUser.Deployment.Value,
+            deployment.Roster,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status409Conflict, refusal.StatusCode);
+        Assert.Equal(deployment.Quiescing.Refusal, refusal.ProblemDetails.Detail);
+        Assert.False(deployment.Quiescing.WorkRan);
     }
 
     [Fact]
@@ -145,7 +174,7 @@ public sealed class UserRecordEndpointsTests
         // Assert
         AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
         await deployment.Erasure.DidNotReceiveWithAnyArgs()
-            .EraseAsync(default, TestContext.Current.CancellationToken);
+            .EraseAsync(default, [], TestContext.Current.CancellationToken);
     }
 
     /// <summary>The answer carries both switches as the record now states them, including the one the request left out.</summary>

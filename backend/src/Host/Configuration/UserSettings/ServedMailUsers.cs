@@ -56,6 +56,15 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
     /// </remarks>
     private IReadOnlyList<ServedMailUser>? resolvedUsers;
 
+    /// <summary>The user held off the roster while their erasure is decided, or nothing while none is being decided.</summary>
+    /// <remarks>
+    /// A withholding shrinks <see cref="resolvedUsers" /> before anything is deleted, so this is what keeps the count
+    /// of users this deployment serves honest for as long as the deletion has not committed. Only one erasure decides
+    /// at a time, because each holds the roster publication for the whole of its decision. Read and written under
+    /// <see cref="mutex" /> like the roster itself.
+    /// </remarks>
+    private MailUserId? withheldUser;
+
     /// <summary>Gets every user this deployment serves, in the order the roster was established in.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the startup gate that establishes the roster has not yet run.</exception>
     public IReadOnlyList<ServedMailUser> Users
@@ -64,11 +73,7 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
         {
             lock (this.mutex)
             {
-                return this.resolvedUsers
-                    ?? throw new InvalidOperationException(
-                        "The users this deployment serves are read before the startup gate that establishes them has "
-                        + "run. Either the process is still starting, which the startup probe reports until every gate "
-                        + "has completed, or the caller is composed outside the host's own startup ordering.");
+                return this.EstablishedRoster();
             }
         }
     }
@@ -109,14 +114,29 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
     /// somebody where there is nobody and a credential naming the user where there are several, rather than arriving at
     /// a caller as an unclassified fault.
     /// </para>
+    /// <para>
+    /// A user withheld while their erasure is decided counts here, because nothing has been deleted yet and the
+    /// deployment still serves them. Reading the shrunk roster instead would answer a roster of several as a roster of
+    /// one for the whole of an erasure — including a refused one, after which they are put back — and hand a caller
+    /// that names no user the remaining person's mail.
+    /// </para>
     /// </remarks>
-    public MailUserId User =>
-        this.Users switch
+    public MailUserId User
+    {
+        get
         {
-            [var soleUser] => soleUser.User,
-            [] => throw DeploymentMailUserUnresolvedException.NoUserToActFor(),
-            _ => throw DeploymentMailUserUnresolvedException.NoSoleUserToActFor(),
-        };
+            lock (this.mutex)
+            {
+                return (this.EstablishedRoster(), this.withheldUser) switch
+                {
+                    ([var soleUser], null) => soleUser.User,
+                    ([], { } withheld) => withheld,
+                    ([], null) => throw DeploymentMailUserUnresolvedException.NoUserToActFor(),
+                    _ => throw DeploymentMailUserUnresolvedException.NoSoleUserToActFor(),
+                };
+            }
+        }
+    }
 
     /// <summary>Finds the user a mail account belongs to and the declaration this roster holds for it.</summary>
     /// <param name="accountId">The identifier the account is named by.</param>
@@ -263,9 +283,147 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
         }
     }
 
+    /// <summary>Takes a user off the runtime roster while something decides whether to erase them, and puts them back unless it did.</summary>
+    /// <param name="user">The user whose erasure is being decided.</param>
+    /// <returns>The withholding, which restores the user when it is disposed without <see cref="Withholding.Erased" /> having been called.</returns>
+    /// <exception cref="ArgumentException">Thrown when the user is unspecified.</exception>
+    /// <remarks>
+    /// <para>
+    /// An erasure has to stop this process serving the user <em>before</em> it deletes anything: the accounts only they
+    /// are assigned leave the set this replica serves, which is what has the synchronization coordinator give their
+    /// supervision back so nothing is mid-write when the deletion runs. But an erasure can still be refused, and a
+    /// person nothing erased must go on being served rather than disappear until the next convergence reading.
+    /// </para>
+    /// <para>
+    /// Restoring is exact rather than re-read: the entry and the record version it was published at are the ones taken
+    /// off, so putting them back changes nothing about what this replica had bound. It is the same publication as any
+    /// other, so it signals a reload and the coordinator picks the accounts up again.
+    /// </para>
+    /// <para>
+    /// What the shrunk roster must not change is <see cref="User" />, which is why the withholding is recorded rather
+    /// than only performed: a withheld user counts there until the deletion commits, so a deployment serving two goes
+    /// on having no sole user to name for the whole of an erasure rather than answering the other one.
+    /// </para>
+    /// </remarks>
+    internal Withholding Withhold(MailUserId user)
+    {
+        if (!user.IsSpecified)
+        {
+            throw new ArgumentException("A withheld user is named.", nameof(user));
+        }
+
+        IReadOnlyList<ServedMailUser> withheldRoster;
+        long? withheldVersion;
+
+        lock (this.mutex)
+        {
+            var users = this.resolvedUsers
+                ?? throw new InvalidOperationException(
+                    "A user cannot be withheld from the runtime roster before the startup gate has established it.");
+
+            if (users.All(candidate => candidate.User != user))
+            {
+                return new Withholding(this, user, withheldRoster: null, withheldVersion: null);
+            }
+
+            withheldRoster = users;
+            withheldVersion = this.publishedDocumentVersions.TryGetValue(user, out var version) ? version : null;
+            this.resolvedUsers = [.. users.Where(candidate => candidate.User != user)];
+            this.publishedDocumentVersions.Remove(user);
+            this.withheldUser = user;
+        }
+
+        this.SignalReload();
+
+        return new Withholding(this, user, withheldRoster, withheldVersion);
+    }
+
+    /// <summary>Puts a withheld user back exactly as they were published, in the place they were read in.</summary>
+    /// <remarks>
+    /// The whole roster is restored rather than the one entry appended, because its order is the order it was
+    /// established in and a caller reads it as that. Nothing else can have published in between: the caller holds the
+    /// roster publication for the whole of the decision this reverses.
+    /// </remarks>
+    private void Restore(MailUserId user, IReadOnlyList<ServedMailUser> withheldRoster, long? withheldVersion)
+    {
+        lock (this.mutex)
+        {
+            this.withheldUser = null;
+
+            if (this.resolvedUsers is null)
+            {
+                return;
+            }
+
+            this.resolvedUsers = withheldRoster;
+
+            if (withheldVersion is { } version)
+            {
+                this.publishedDocumentVersions[user] = version;
+            }
+        }
+
+        this.SignalReload();
+    }
+
+    /// <summary>Stops counting a withheld user, the deletion that took them off having committed.</summary>
+    private void WithholdingErased()
+    {
+        lock (this.mutex)
+        {
+            this.withheldUser = null;
+        }
+    }
+
+    /// <summary>Gets the roster the startup gate established, taken under <see cref="mutex" /> by every caller.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the startup gate that establishes the roster has not yet run.</exception>
+    private IReadOnlyList<ServedMailUser> EstablishedRoster() =>
+        this.resolvedUsers
+            ?? throw new InvalidOperationException(
+                "The users this deployment serves are read before the startup gate that establishes them has run. "
+                + "Either the process is still starting, which the startup probe reports until every gate has "
+                + "completed, or the caller is composed outside the host's own startup ordering.");
+
     private void SignalReload()
     {
         var changed = Interlocked.Exchange(ref this.reloadToken, new ConfigurationReloadToken());
         changed.OnReload();
+    }
+
+    /// <summary>One user held off the runtime roster while their erasure is decided.</summary>
+    /// <remarks>
+    /// Nested because what it holds is one entry of this roster and the decision to put it back, neither of which
+    /// another type has business naming. A withholding of a user this roster did not serve restores nothing, which is
+    /// the same no-op erasing them would have been.
+    /// </remarks>
+    internal sealed class Withholding(
+        ServedMailUsers roster,
+        MailUserId user,
+        IReadOnlyList<ServedMailUser>? withheldRoster,
+        long? withheldVersion) : IDisposable
+    {
+        private bool erased;
+
+        /// <summary>Says the user was erased, so nothing is put back and the sole-user reading stops counting them.</summary>
+        internal void Erased()
+        {
+            this.erased = true;
+
+            if (withheldRoster is not null)
+            {
+                roster.WithholdingErased();
+            }
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            if (this.erased || withheldRoster is null)
+            {
+                return;
+            }
+
+            roster.Restore(user, withheldRoster, withheldVersion);
+        }
     }
 }

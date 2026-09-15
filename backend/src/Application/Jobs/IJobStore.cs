@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Accounts;
+
 namespace MailFathom.Application.Jobs;
 
 /// <summary>Keeps durable background work, and hands each job to one worker at a time.</summary>
@@ -160,4 +162,29 @@ public interface IJobStore
     /// a rolling restart would otherwise reach the attempt bound and be dead-lettered without ever having failed.
     /// </remarks>
     Task<bool> ReleaseAsync(JobId jobId, JobLeaseOwner user, CancellationToken cancellationToken);
+
+    /// <summary>Names which of a set of mail accounts a worker is holding a job for right now.</summary>
+    /// <param name="accounts">The accounts asked about.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The accounts among them a claim still holds a job for, in ordinal order, and an empty answer when none does.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="accounts" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// A claim rather than a queue depth, because what makes an account's work unfinished is a handler running against
+    /// it and a pending row writes nothing until somebody takes it. The claim is also the whole of the test: an
+    /// attempt waits on the concurrency gate after the claim stamped it and before its renewals begin, so a handler
+    /// can be running with an expiry already behind it, and a predicate that asked for a live lease would report that
+    /// account quiet. An account this answers for is therefore one that may be being written to rather than one that
+    /// certainly is, which is the direction a caller about to delete its rows wants to be wrong in.
+    /// </para>
+    /// <para>
+    /// It answers one question and belongs to whoever has to stop an account being written to — an erasure, above
+    /// all. It says nothing about whether a job <em>will</em> be claimed next, so a caller that needs the account to
+    /// stay quiet has to have stopped whatever enqueues for it and to have taken the rows themselves out of reach of
+    /// the next claim.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<MailAccountId>> ReadAccountsWithWorkInFlightAsync(
+        IReadOnlyList<MailAccountId> accounts,
+        CancellationToken cancellationToken);
 }

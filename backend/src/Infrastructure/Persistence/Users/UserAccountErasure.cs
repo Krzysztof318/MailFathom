@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Jobs;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Persistence.Emails;
@@ -37,11 +38,22 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// the account it was written for and is reached by the same statement.
 /// </para>
 /// <para>
-/// The walk runs twice, once before the user row is deleted and once after. Deleting that row is what stops any
+/// Nothing is deleted until the transaction has established, from its own reads, that every account it is about to
+/// take is one nothing can be writing to. Two writers are outside the user-row lock, and each is answered here rather
+/// than assumed away. A synchronization run is stopped by the caller, which takes the accounts off the set this
+/// deployment serves and holds each one's supervision scope before it opens this transaction — a lease, and therefore
+/// the deployment's rather than one replica's. A job is not stopped by any of that, because the queue claims by type
+/// and reads no lease of the caller's, so this transaction locks the accounts' job rows itself: a claim selects under
+/// <c>FOR UPDATE SKIP LOCKED</c> and passes them by, and a claim that landed just before the lock is read back under
+/// it and refuses the erasure. The set of accounts is recomputed here for the same reason, since an assignment ending
+/// elsewhere can make an account solely this user's after the caller took its holds.
+/// </para>
+/// <para>
+/// The walk then runs twice, once before the user row is deleted and once after. Deleting that row is what stops any
 /// further write keyed onto it, and nothing stops a writer that only names a mail account — so the second pass is what
-/// reaches the rows such a writer committed while the first was running. What it does not reach is one committed after
-/// it, which no statement here can bound: that is quiescing the account's synchronization and job work, and it belongs
-/// with whatever comes to own the running deployment's reconfiguration.
+/// reaches the rows such a writer committed while the first was running. It is one repeat rather than a loop because
+/// of the paragraph above: the writers that could still be committing have been stopped, so the second pass is a belt
+/// over braces instead of the only thing standing between an erasure and a writer it never saw.
 /// </para>
 /// <para>
 /// The contact book is reached by the cascade rather than by the walk. <c>contacts</c> and <c>contact_addresses</c>
@@ -61,24 +73,21 @@ internal static class UserAccountErasure
     /// <summary>Erases one user, the accounts they were the last assigned user of, and everything recorded about either.</summary>
     /// <param name="session">The transaction the whole erasure runs in, so a partial one is never committed.</param>
     /// <param name="userId">The user to remove.</param>
+    /// <param name="quiescedAccounts">The accounts the caller is holding every writer off, which is what an account this walk deletes has to be among.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>
-    /// <returns>What was removed, and whether a user record was there to remove at all.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <returns>What was removed, or the account that stopped anything being removed at all.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="quiescedAccounts" /> is <see langword="null" />.</exception>
     [RequiresIntegrationCoverage]
     public static async Task<UserErasure> EraseAsync(
         IPersistenceSession session,
         Guid userId,
+        IReadOnlyList<Guid> quiescedAccounts,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(quiescedAccounts);
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-
-        // Read before anything is deleted, because everything below reaches the payload rows by cascade and a cascade
-        // removes the only pointer to an object without any application code seeing it. An erasure answered to a data
-        // subject has to be true of the bucket as well as of the database, so this is the one deletion path that may
-        // not leave its objects to the sweep.
-        await ReleasedContentObjects.ReleaseForUserAsync(session, userId, cancellationToken);
 
         // The user row is held for the rest of the transaction, so two erasures of one user are serialized, and a
         // write that keys onto that row — an assignment naming it — waits on the foreign-key check until this
@@ -101,6 +110,60 @@ internal static class UserAccountErasure
                 .Any(other => other.MailAccountId == assignment.MailAccountId && other.UserId != userId))
             .Select(assignment => assignment.MailAccountId)
             .ToListAsync(cancellationToken);
+
+        // The caller read this set before it took its holds, and an assignment ending in between narrows rather than
+        // widens it: somebody else leaving a shared account makes that account solely this user's, and the row that
+        // write touches is keyed to the other user, so the lock above never saw it. Deleting such an account would be
+        // the one thing this whole path exists to prevent — mail removed while a replica is still synchronizing it —
+        // so the recompute is the authority and an account the caller is not holding ends the erasure here, before a
+        // single row has been written.
+        var unheld = orphanedAccounts
+            .Where(account => !quiescedAccounts.Contains(account))
+            .Select(static account => (Guid?)account)
+            .FirstOrDefault();
+
+        if (unheld is { } accountNobodyHolds)
+        {
+            return UserErasure.Refused(accountNobodyHolds);
+        }
+
+        // Holding the supervision scope stops synchronization and nothing else: a job is claimed by type rather than
+        // by account, so a row already queued for one of these accounts is claimable by any replica right up to the
+        // instant the cascade takes it. Locking the claimable rows closes that, because a claim selects under
+        // `FOR UPDATE SKIP LOCKED` and therefore passes a locked row by. What the lock cannot undo is a claim that
+        // landed a moment before it, which is what the read after it is for.
+        if (orphanedAccounts.Count > 0)
+        {
+            var accountTexts = orphanedAccounts.Select(static account => account.ToString("D")).ToArray();
+
+            await writeContext.Database
+                .SqlQueryRaw<Guid>(
+                    AccountJobRowLockStatement(writeContext.Model),
+                    [accountTexts, nameof(JobState.Pending), nameof(JobState.Claimed)])
+                .ToListAsync(cancellationToken);
+
+            var claimed = await writeContext.Database
+                .SqlQueryRaw<string>(
+                    ClaimedAccountJobStatement(writeContext.Model),
+                    [accountTexts, nameof(JobState.Claimed)])
+                .ToListAsync(cancellationToken);
+
+            var busy = orphanedAccounts
+                .Where(account => claimed.Contains(account.ToString("D"), StringComparer.Ordinal))
+                .Select(static account => (Guid?)account)
+                .FirstOrDefault();
+
+            if (busy is { } accountBeingWrittenTo)
+            {
+                return UserErasure.Refused(accountBeingWrittenTo);
+            }
+        }
+
+        // Read before anything is deleted, because everything below reaches the payload rows by cascade and a cascade
+        // removes the only pointer to an object without any application code seeing it. An erasure answered to a data
+        // subject has to be true of the bucket as well as of the database, so this is the one deletion path that may
+        // not leave its objects to the sweep.
+        await ReleasedContentObjects.ReleaseForUserAsync(session, userId, cancellationToken);
 
         var rowsErasedBesideTheCascade = await EraseOrphanedAccountsAsync(
             session,
@@ -125,8 +188,8 @@ internal static class UserAccountErasure
         // user, and a row naming one of the accounts that went with them, which no lock taken here could have
         // stopped because such a writer touches neither the user row nor the account record. Rows the transaction
         // would otherwise leave behind for a user and a mailbox it reports as erased. It is one repeat rather than a
-        // loop: what remains after it is a writer that committed later still, and stopping that is quiescing the
-        // user's and the account's own work rather than deleting harder.
+        // loop: a writer that committed later still is one the supervision hold and the job-row lock above have
+        // already stopped, which is stopping the work rather than deleting harder.
         rowsErasedBesideTheCascade += await EraseOrphanedAccountsAsync(
             session,
             orphanedAccounts,
@@ -134,7 +197,7 @@ internal static class UserAccountErasure
 
         rowsErasedBesideTheCascade += await EraseAuthoredRowsAsync(writeContext, userId, cancellationToken);
 
-        return new UserErasure(erasedUsers > 0, rowsErasedBesideTheCascade);
+        return new UserErasure(erasedUsers > 0, rowsErasedBesideTheCascade, UnquiescedAccount: null);
     }
 
     /// <summary>Erases everything stored for one mail account.</summary>
@@ -369,6 +432,47 @@ internal static class UserAccountErasure
             SELECT {{userKeyColumn}} AS "Value" FROM {{QuotedTable(userEntityType)}}
             WHERE {{userKeyColumn}} = {0}
             FOR UPDATE
+            """;
+    }
+
+    /// <summary>The statement that takes these accounts' claimable job rows out of reach of the next claim.</summary>
+    /// <remarks>
+    /// <para>
+    /// Narrowed to the two states a claim can take, because those are the whole of what the lock is for and the table
+    /// keeps every terminal row it has ever held — an account whose mail has been synchronized for a year would
+    /// otherwise have its entire job history read, locked, and materialized inside the erasure's own transaction. The
+    /// partial index the claim already reads is filtered to exactly these two, so the narrower statement is also the
+    /// one the database can answer from an index.
+    /// </para>
+    /// <para>
+    /// It waits rather than skipping, which is what makes it correct: a row another transaction is claiming right now
+    /// is one this erasure has to see the outcome of, and a claim is a single short statement, so the wait is bounded
+    /// by that statement.
+    /// </para>
+    /// </remarks>
+    private static string AccountJobRowLockStatement(IModel model)
+    {
+        var jobs = PersistedSchemaNames.EntityTypeOf<JobEntity>(model);
+
+        return $$"""
+            SELECT {{QuotedColumn(jobs, nameof(JobEntity.Id))}} AS "Value" FROM {{QuotedTable(jobs)}}
+            WHERE {{QuotedColumn(jobs, AccountIdentifierPropertyName)}} = ANY({0})
+              AND {{QuotedColumn(jobs, nameof(JobEntity.State))}} IN ({1}, {2})
+            FOR UPDATE
+            """;
+    }
+
+    /// <summary>The statement that names which of these accounts a claim still holds a job for, read under that lock.</summary>
+    private static string ClaimedAccountJobStatement(IModel model)
+    {
+        var jobs = PersistedSchemaNames.EntityTypeOf<JobEntity>(model);
+
+        var accountColumn = QuotedColumn(jobs, AccountIdentifierPropertyName);
+
+        return $$"""
+            SELECT DISTINCT {{accountColumn}} AS "Value" FROM {{QuotedTable(jobs)}}
+            WHERE {{accountColumn}} = ANY({0})
+              AND {{QuotedColumn(jobs, nameof(JobEntity.State))}} = {1}
             """;
     }
 

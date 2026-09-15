@@ -87,7 +87,8 @@ internal sealed class UserRecordDeployment
             .Returns(true);
 
         this.Erasure = Substitute.For<IMailUserErasure>();
-        this.Erasure.EraseAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns(false);
+        this.Erasure.EraseAsync(Arg.Any<MailUserId>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new MailUserErasureOutcome(false, null));
 
         // A roster naming somebody no test acts on, so every user a test writes for reads as one nothing declares —
         // which is the ordinary case — until the test says otherwise.
@@ -110,6 +111,8 @@ internal sealed class UserRecordDeployment
             this.Directory,
             this.Provisioning,
             this.Erasure,
+            this.MailAccountRecords,
+            this.Quiescing,
             this.Store,
             this.ServedUsers,
             admission,
@@ -181,6 +184,9 @@ internal sealed class UserRecordDeployment
 
     /// <summary>Gets the accounts the deployment holds and the user records they are assigned to.</summary>
     internal InMemoryMailAccountRecordStore MailAccountRecords { get; } = new();
+
+    /// <summary>Gets the quiescing an erasure runs under, which lets the work through unless a test refuses it.</summary>
+    internal RecordedMailAccountWorkQuiescing Quiescing { get; } = new();
 
     /// <summary>Gets the roster this process serves, which an account write converges before announcing.</summary>
     internal ServedMailUsers ServedUsers { get; } = new();

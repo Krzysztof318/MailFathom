@@ -5,6 +5,8 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
+using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.Signals;
 using MailFathom.Infrastructure.Persistence.Users;
 
@@ -39,6 +41,8 @@ internal sealed partial class UserRosterAdministration(
     IMailUserDirectory directory,
     IMailUserProvisioning provisioning,
     IMailUserErasure erasure,
+    IMailAccountRecordStore accounts,
+    IMailAccountWorkQuiescing quiescing,
     IUserSettingsDocumentWriter documents,
     ServedMailUsers servedUsers,
     SeveralUserAdmission admission,
@@ -234,15 +238,35 @@ internal sealed partial class UserRosterAdministration(
         return UserRelabelOutcome.Relabelled;
     }
 
-    /// <summary>Erases one user and everything this deployment recorded for them.</summary>
+    /// <summary>Erases one user and everything this deployment recorded for them, once their own work has stopped.</summary>
     /// <param name="user">The user to remove.</param>
     /// <param name="cancellationToken">Cancels the erasure before it commits.</param>
-    /// <returns>What was removed, and whether this process was serving the person it removed.</returns>
+    /// <returns>What was removed and whether this process was serving the person it removed, or the sentence naming the work that would not stop.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminErase" />.</exception>
     /// <remarks>
-    /// Whether the user was served is read before the erasure rather than after, because the answer must describe the
-    /// deployment the caller asked about rather than the roster the erasure left.
+    /// <para>
+    /// The order here is the whole of what makes an erasure true afterwards, and none of it is bookkeeping. The user
+    /// leaves the runtime roster <em>first</em>, so the accounts they alone were assigned leave the set this replica
+    /// serves and its synchronization coordinator gives their supervision back. No other replica is told before the
+    /// deletion commits — the announcement follows a committed erasure and is not made on a refusal — so an account
+    /// one of them still supervises refuses this erasure rather than being deleted under it. Only then are those
+    /// accounts held stopped, and only under that hold is anything deleted —
+    /// because a synchronization run or a job handler writes rows keyed to a mail account rather than to the user, and
+    /// no lock the erasure's own transaction could take reaches such a writer.
+    /// </para>
+    /// <para>
+    /// Work that will not stop within its bound refuses the erasure and deletes nothing. So does the transaction
+    /// itself, on what only it can see: an account that became solely this user's after the set below was read, and a
+    /// job claimed between the wait and the lock the transaction takes over those accounts' job rows. All three answer
+    /// the caller identically, because all three leave the deployment exactly as it was. The user is therefore
+    /// <em>withheld</em> rather than erased from the roster until the deletion has actually committed: refusing to
+    /// erase somebody is not a reason to stop serving them, and putting them back is what a refusal does.
+    /// </para>
+    /// <para>
+    /// Whether the user was served is read before any of that, because the answer must describe the deployment the
+    /// caller asked about rather than the roster the erasure left.
+    /// </para>
     /// </remarks>
     internal async Task<UserErasureOutcome> EraseAsync(MailUserId user, CancellationToken cancellationToken)
     {
@@ -253,24 +277,57 @@ internal sealed partial class UserRosterAdministration(
 
         authorization.RequirePermission(MailFathomPermission.AdminErase);
 
+        var solelyAssigned = await accounts.ReadSolelyAssignedAsync(user, cancellationToken);
         bool served;
-        bool erased;
+        var erased = false;
+        Guid? unquiesced = null;
+        string? refusal;
         await servedUsers.WaitForRosterPublicationAsync(cancellationToken);
 
         try
         {
             served = servedUsers.Users.Any(candidate => candidate.User == user);
-            erased = await erasure.EraseAsync(user, cancellationToken);
+
+            using var withheld = servedUsers.Withhold(user);
+
+            refusal = await quiescing.RunQuiescedAsync(
+                [.. solelyAssigned.Select(static account => MailAccountId.Create(account.ToString("D")))],
+                async token =>
+                {
+                    var outcome = await erasure.EraseAsync(user, solelyAssigned, token);
+
+                    erased = outcome.UserErased;
+                    unquiesced = outcome.UnquiescedAccount;
+                },
+                cancellationToken);
 
             if (erased)
             {
-                servedUsers.UserErased(user);
+                withheld.Erased();
                 this.LogUserErased(served);
             }
         }
         finally
         {
             servedUsers.ReleaseRosterPublication();
+        }
+
+        if (refusal is { } stillRunning)
+        {
+            this.LogUserErasureRefused();
+
+            return UserErasureOutcome.Refused(stillRunning);
+        }
+
+        // The transaction refused on what only it could see: an account that became solely this user's after the set
+        // above was read, or a job claimed between the wait and the lock the transaction takes. Nothing was written,
+        // so it is the same answer to the caller as a wait that ran out.
+        if (unquiesced is { } accountStillBusy)
+        {
+            this.LogUserErasureRefused();
+
+            return UserErasureOutcome.Refused(
+                $"Mail account {accountStillBusy:D} was still being worked on when the erasure reached it, so nothing was erased. Ask again once that has ended.");
         }
 
         if (erased)
@@ -321,4 +378,16 @@ internal sealed partial class UserRosterAdministration(
         Level = LogLevel.Warning,
         Message = "A user and everything recorded for them were erased. This process was serving them: {WasServed}. The runtime roster now excludes them.")]
     private partial void LogUserErased(bool wasServed);
+
+    /// <remarks>
+    /// Named neither by user nor by account, for the reason the line above is: what an operator acts on came back in
+    /// the refusal itself, and this records that the deployment declined to erase rather than failing to. It names no
+    /// cause either, because every refusal reaches it — a wait that ran out of its bound, an account whose assignments
+    /// changed under the request, a job claimed between the wait and the lock, and a supervision hold lost part-way —
+    /// and the sentence the caller was answered with is what says which.
+    /// </remarks>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "An erasure was refused because work bound to the user's own mail accounts was still in flight. Nothing was erased, and the runtime roster goes on serving them.")]
+    private partial void LogUserErasureRefused();
 }

@@ -151,6 +151,15 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// </remarks>
     internal ReplicaIdentity Replica => this.host.Services.GetRequiredService<ReplicaIdentity>();
 
+    /// <summary>Gets the factory a service composed outside this graph creates its own scopes from.</summary>
+    /// <remarks>
+    /// For the few host services a test constructs itself because the composition root would not hand them the bound
+    /// or the snapshot the test is stating. They take a scope factory exactly as the host's own workers do, so this is
+    /// the one thing they need that <see cref="InScopeAsync{TResult}" /> cannot give: a scope of their own, taken when
+    /// their own work reaches for it rather than when the test called them.
+    /// </remarks>
+    internal IServiceScopeFactory ScopeFactory => this.host.Services.GetRequiredService<IServiceScopeFactory>();
+
     /// <summary>Starts the composed services against the orchestrated infrastructure.</summary>
     /// <param name="orchestration">The running orchestration whose database and mail server are used.</param>
     /// <param name="cancellationToken">Cancels the startup.</param>

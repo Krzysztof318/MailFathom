@@ -155,13 +155,20 @@ internal static class UserRecordEndpoints
     /// <param name="userId">The user to remove.</param>
     /// <param name="roster">The roster administration.</param>
     /// <param name="cancellationToken">Cancels the erasure before it commits.</param>
-    /// <returns><c>200</c> with what was removed, or <c>400</c> when the request names nobody.</returns>
+    /// <returns><c>200</c> with what was removed, <c>409</c> naming the work that would not stop, or <c>400</c> when the request names nobody.</returns>
     /// <remarks>
+    /// <para>
     /// A user this deployment does not hold is reported as nothing erased rather than as a refusal, because the
     /// caller asked for a state and the deployment is in it. That is a claim about the status code and not about the
     /// body: the answer carries whether a row was there, so a caller granted the erasure learns which identifiers this
     /// deployment holds. Nothing here withholds that — the sibling relabel reports the same fact through its own status
     /// code — and nothing needs to, the erasure being the one permission that could act on the answer anyway.
+    /// </para>
+    /// <para>
+    /// Work still running against the user's own mail accounts is <c>409</c> rather than <c>400</c>, because nothing
+    /// about the request has to change: it is the deployment that is in the wrong state for it, and the same request
+    /// succeeds once the run or the job it names has ended. Nothing was erased when it is answered.
+    /// </para>
     /// </remarks>
     internal static async Task<Results<Ok<UserErasureResponse>, ProblemHttpResult>> EraseAsync(
         Guid userId,
@@ -181,7 +188,9 @@ internal static class UserRecordEndpoints
         // later reader of this method could drop.
         var outcome = await roster.EraseAsync(user, cancellationToken);
 
-        return TypedResults.Ok(new UserErasureResponse(outcome.UserErased, outcome.WasServed));
+        return outcome.RefusalMessage is { } stillRunning
+            ? TypedResults.Problem(stillRunning, statusCode: StatusCodes.Status409Conflict)
+            : TypedResults.Ok(new UserErasureResponse(outcome.UserErased, outcome.WasServed));
     }
 
     /// <summary>Replaces the label one user is told apart by.</summary>

@@ -5,6 +5,7 @@
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Observability;
 using Microsoft.EntityFrameworkCore;
 
@@ -334,6 +335,44 @@ internal sealed class JobStore(
             cancellationToken);
 
         return releasedRows == 1;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The claim is the whole of the test and the expiry is deliberately not part of it. A claimed row whose lease has
+    /// run out is not a row nobody holds: an attempt waits on the concurrency gate after it is claimed and before it
+    /// starts renewing, so with a batch wide enough and a gate narrow enough a handler runs for a stretch with its
+    /// expiry already behind it — and reading that as quiet would let an erasure commit against an account a handler
+    /// is writing to. Counting it instead refuses the erasure for as long as the row stays claimed, which is the
+    /// direction this caller already prefers everywhere else.
+    /// </remarks>
+    public async Task<IReadOnlyList<MailAccountId>> ReadAccountsWithWorkInFlightAsync(
+        IReadOnlyList<MailAccountId> accounts,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+
+        if (accounts.Count == 0)
+        {
+            return [];
+        }
+
+        // The column holds the account as text, and that spelling stops here: what the caller asked with and what it
+        // is answered with are the domain's own type.
+        var asked = accounts.Select(static account => account.Value).ToArray();
+        var claimed = nameof(JobState.Claimed);
+
+        var running = await dbContext.Database
+            .SqlQuery<string>(
+                $"""
+                 SELECT DISTINCT "MailboxAccountId" AS "Value" FROM jobs
+                 WHERE "MailboxAccountId" = ANY({asked})
+                   AND "State" = {claimed}
+                 ORDER BY "Value"
+                 """)
+            .ToListAsync(cancellationToken);
+
+        return [.. running.Select(MailAccountId.Create)];
     }
 
     /// <summary>Answers whether this job type already has as much waiting as the configured depth allows.</summary>

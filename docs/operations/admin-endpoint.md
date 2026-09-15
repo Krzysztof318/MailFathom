@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Configuration/UserSettings/Administration/StoredSecretAdministration.cs, backend/src/Host/Configuration/UserSettings/Administration/MailAccount*.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Configuration*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/User*.cs, backend/src/Host/Api/Organization*.cs, backend/src/Application/Access/Organizations/**, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/AdminTransportSecurityExtensions.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Configuration/UserSettings/Administration/StoredSecretAdministration.cs, backend/src/Host/Configuration/UserSettings/Administration/MailAccount*.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Configuration*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/User*.cs, backend/src/Host/Api/Organization*.cs, backend/src/Application/Access/Organizations/**, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Workers/MailAccountWork*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/AdminTransportSecurityExtensions.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -219,7 +219,7 @@ what it was never granted is what the record exists to make visible.
 | `POST /api/admin/users` | `mailfathom.admin.configuration.write` | Records a user this deployment did not hold, from the display name the body carries, and answers with the identifier they were minted under. It refuses, naming what to change, a second user while a user-facing endpoint admits a caller who names nobody, a label another user already carries, and a roster already at its bound. |
 | `PUT /api/admin/users/{userId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the label the user is told apart by. It answers with no body — the label the request carried is the whole of what changed — refuses a label another user carries, naming what to change, and answers `404` for a user this deployment holds no record for, as every other user-scoped route does. |
 | `PUT /api/admin/users/{userId}/endpoint-access` | `mailfathom.admin.configuration.write` | Keeps the user off [the MCP endpoint, the client endpoint, or both](#users-and-their-records), or lets them back on, from `mcpEndpoint` and `clientEndpoint` in the body; a switch the body leaves out stays where it is and a body naming neither is refused. It writes them into the user's record, answers both switches as the record now states them, and answers `404` for a user this deployment holds no record for and `409` where another write moved the record first. |
-| `DELETE /api/admin/users/{userId}` | `mailfathom.admin.erase` | Erases the user and every message, folder, attachment, and derived index this deployment holds for them. **This is the one route here that destroys mail, and it cannot be undone.** A user this deployment does not hold is reported as nothing erased rather than as a refusal. |
+| `DELETE /api/admin/users/{userId}` | `mailfathom.admin.erase` | Erases the user and every message, folder, attachment, and derived index this deployment holds for them, once [the work bound to their own mailboxes has stopped](#users-and-their-records). **This is the one route here that destroys mail, and it cannot be undone.** A user this deployment does not hold is reported as nothing erased rather than as a refusal, and work that will not stop within its bound is answered `409` naming it, with nothing erased. |
 | `GET /api/admin/users/{userId}/record` | `mailfathom.admin.read` | Hands over one user's record as the redacted JSON an editing session opens, with the version it was read at. The record carries no mail accounts: [those are read on their own routes](#mail-accounts-and-who-they-are-assigned-to), under `/api/admin/mail-accounts`. |
 | `POST /api/admin/users/{userId}/record` | `mailfathom.admin.configuration.write` | Takes that record back edited and commits it as one change against the version it was opened over. It is what `mfctl user edit` sends when the editor exits, and a record another writer moved past is refused as superseded rather than merged. |
 | `GET /api/admin/mail-accounts` | `mailfathom.admin.read` | Reads [the mail accounts this deployment holds](#mail-accounts-and-who-they-are-assigned-to), at most 1024 in the order they were created in, each with its identifier, its version, the users it is assigned to, its address, and its display name, and `truncated` saying whether more were held than the answer carries. The declaration itself is read one account at a time. |
@@ -1241,12 +1241,61 @@ such user exists rather than editing somebody else's mailboxes.
 | `mfctl user rename --display-name <name>` | Replaces the label that user is told apart by |
 | `mfctl user endpoints [--mcp true\|false] [--client true\|false]` | Keeps that user off the MCP endpoint, the client endpoint, or both, or lets them back on |
 | `mfctl user set-organization (--organization <id> \| --none)` | Moves that user into an [organization](#organizations), or out of every one, which changes the login their passwords are typed as |
-| `mfctl user remove` | Erases the user and every message this deployment holds for them, which cannot be undone |
+| `mfctl user remove` | Erases the user and every message this deployment holds for them, which cannot be undone, and which is refused while their own mailboxes are still being written to |
 
 Every command but `list` and `add` takes `--user`, and none of them needs it on a deployment holding one user,
 exactly as the credential commands below: the command reads the roster, acts on the single user there is, and refuses
 rather than guessing where there are several — naming the identifiers to choose from, so the refusal is where an
 operator reads the one to pass.
+
+**An erasure stops that user's own mail work before it deletes anything, and refuses rather than erasing half.** Most
+of what a user's erasure removes is reached from the rows it deletes, but a synchronization run and a job handler write
+rows keyed to a *mail account* rather than to the person — so a deletion racing one of them would answer that this
+deployment holds nothing while it was still being written to. What the request does first is therefore take the user off
+the roster this replica serves and hold the supervision of every mailbox they were the last one assigned, which is the
+same lease a replica takes before it synchronizes that mailbox: holding it means no replica is running that account, and
+none starts one until the erasure has committed. A mailbox somebody else is also assigned is left running and is not
+held: the mailbox, its mail, and the work going on in it are untouched, because that mail is the other person's. What
+does go from it is what the erased user themselves authored there — their drafts and their standing recurring sends —
+since those are the departing person's rather than the mailbox's, and an erasure that left them would leave that person
+still present in a colleague's mailbox.
+
+**One deadline of 30 seconds covers both waits** — the supervision of every mailbox and then the jobs held for them —
+rather than one each, so a request that spent most of it waiting for a mailbox has that much less left for the queue.
+Four different refusals come back as a `409`, each naming the mailbox it is about, and **nothing at all is erased when
+one answers**: the user goes on being served exactly as before, and the same request is worth repeating.
+
+- **The mailbox is still being synchronized.** The deadline ran out with a run holding it, here or on another replica.
+  Ask again once the run has ended.
+- **A job is still running for the mailbox.** The deadline ran out with a handler holding a job keyed to it. Ask again
+  once it has finished.
+- **The mailbox was still being worked on when the erasure reached it.** Both waits succeeded, and the transaction then
+  found the mailbox in a state neither had covered — an assignment that ended after the request read who holds what,
+  leaving a mailbox solely this user's that nothing was holding, or a job claimed in the moment between the wait and the
+  deletion. Ask again.
+- **The mailbox stopped being held part-way through the erasure.** A supervision hold could not be renewed while the
+  deletion ran, so it was rolled back rather than committed while another replica could take the mailbox back. Ask
+  again.
+
+The first of them reads:
+
+```console
+$ mfctl user remove --user 3f1d...
+Erasing 3f1d... (alex) takes their record, their mail accounts, and every message, folder, attachment, and index
+this deployment holds for them. Nothing here undoes it.
+Erase 3f1d... (alex) and everything this deployment holds for them? [y/N] y
+Mail account 1b8e2a40-5c31-4f7a-9d02-6ac41e5b7d10 is still being synchronized, so erasing it now would leave rows
+behind that no deletion here could reach. Nothing was erased; ask again once the run has ended.
+```
+
+The confirmation is asked before any request is sent, so an answer of anything but `y` reaches the deployment not at
+all. `--yes` states the agreement in the command for a scripted erasure, exactly as it does for the rewind above.
+
+On a deployment of several replicas the mailbox may be held by a replica other than the one the request reached, and
+that replica goes on supervising it — it reads the same roster from the database, which still holds the user. Such an
+erasure is refused for as long as that lasts, and the way through it is to send the request again after that replica has
+moved on, or to reach the replica holding the account. A refusal is the deliberate answer here: an erasure answered as
+done while a run was still writing is the failure this exists to prevent.
 
 **A user is minted with an identifier that says nothing about them.** It is a version 4 UUID, drawn at random rather
 than derived from a name, an address, or the moment it was recorded, so an identifier appearing in a URL, a log line, or

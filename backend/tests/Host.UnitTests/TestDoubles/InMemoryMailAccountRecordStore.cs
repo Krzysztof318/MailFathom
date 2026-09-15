@@ -205,6 +205,16 @@ internal sealed class InMemoryMailAccountRecordStore : IMailAccountRecordStore
         return Task.FromResult(true);
     }
 
+    /// <inheritdoc />
+    public Task<IReadOnlyList<Guid>> ReadSolelyAssignedAsync(MailUserId user, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Guid>>(
+        [
+            .. this.assignments
+                .Where(assignment => assignment.Value is [var only] && only == user)
+                .Select(static assignment => assignment.Key)
+                .Order(),
+        ]);
+
     private static Task<MailAccountWrite> Written(MailAccountWriteResult result, long version) =>
         Task.FromResult(new MailAccountWrite(result, version));
 
