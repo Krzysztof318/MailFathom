@@ -104,6 +104,39 @@ public sealed class MailboxExportsTests
         Assert.Contains(auditor.Acts, act => act.Kind == MailboxExportActKind.Started);
     }
 
+    /// <summary>
+    /// The refusal leaves a failed export behind on purpose, and an export row carries no caller — so the act saying
+    /// who asked for it has to exist by the time the queue is asked, or an operator reading that failure can never
+    /// learn whose export it was.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_AQueueAtCapacity_LeavesTheFailedExportWithTheActSayingWhoAskedForIt()
+    {
+        // Arrange
+        var store = new InMemoryMailboxExportStore();
+        var auditor = new RecordingMailboxExportAuditor();
+        var exports = ExportsOver(
+            store: store,
+            reader: new StatedMailboxExportReader().Holding(MessageOf(1, byteLength: 400)),
+            auditor: auditor,
+            jobs: RefusingJobsAtCapacity());
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<JobHandOnRefusedAtCapacityException>(
+            () => exports.StartAsync(Account, folderPath: null, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.JobHandOnRefusedAtCapacity, refusal.ErrorCode);
+
+        var started = Assert.Single(auditor.Acts, recorded => recorded.Kind == MailboxExportActKind.Started);
+        Assert.NotNull(started.Export);
+
+        var failed = store.Find(started.Export.Value);
+        Assert.NotNull(failed);
+        Assert.Equal(MailboxExportState.Failed, failed.State);
+        Assert.Equal(MailFathomErrorCode.JobHandOnRefusedAtCapacity, failed.FailureCode);
+    }
+
     [Fact]
     public async Task StartAsync_TheSameScopeAlreadyBeingWritten_AnswersWithThatExportRatherThanStartingItOver()
     {
@@ -349,6 +382,16 @@ public sealed class MailboxExportsTests
 
         jobs.EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(JobEnqueueResult.Created(JobId.Create(Guid.CreateVersion7()))));
+
+        return jobs;
+    }
+
+    private static IJobStore RefusingJobsAtCapacity()
+    {
+        var jobs = Substitute.For<IJobStore>();
+
+        jobs.EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(JobEnqueueResult.RefusedAtCapacity()));
 
         return jobs;
     }

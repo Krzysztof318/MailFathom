@@ -312,12 +312,35 @@ public sealed class ExportCommandTests : IDisposable
     }
 
     /// <summary>
-    /// A download that fails before it has created anything removes nothing. The cleanup exists for a half-written
-    /// archive this attempt produced, and a body that could not be read leaves no such thing — while the file at that
-    /// path is very likely an earlier export of the same mailbox, which for a drained account is its only copy.
+    /// A body that cannot be read leaves no half-written archive at the path the operator named. The cleanup runs only
+    /// over a file this attempt created itself, so it has to create one before it can be reached — which is why the
+    /// destination here is a path nothing occupies.
     /// </summary>
     [Fact]
-    public async Task Download_AResponseWhoseBodyCannotBeRead_LeavesTheFileAlreadyAtThatPathWhereItIs()
+    public async Task Download_AResponseWhoseBodyCannotBeRead_LeavesNothingAtThePathItHadAlreadyCreated()
+    {
+        // Arrange
+        using var deployment = FakeExportDeployment.FailingWhileTheArchiveIsRead();
+        var destination = this.DownloadPath("half-written.zip");
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "export", "download", "--account", "work", "--export", ExportArgument, "--output", destination,
+            "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.False(File.Exists(destination));
+    }
+
+    /// <summary>
+    /// The file already at the path is not this attempt's to remove, however the attempt ends. For a drained account
+    /// an earlier archive there is the mailbox's only copy, so a download that refuses the path leaves it byte for
+    /// byte — which is what the creation happening before the response is read is for.
+    /// </summary>
+    [Fact]
+    public async Task Download_AFailingResponseOverAFileThatAlreadyExists_LeavesTheEarlierArchiveWhereItIs()
     {
         // Arrange
         using var deployment = FakeExportDeployment.FailingWhileTheArchiveIsRead();
@@ -332,7 +355,6 @@ public sealed class ExportCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.True(File.Exists(destination));
         Assert.Equal(
             "an earlier archive",
             await File.ReadAllTextAsync(destination, TestContext.Current.CancellationToken));

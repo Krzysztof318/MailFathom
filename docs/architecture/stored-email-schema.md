@@ -1,6 +1,6 @@
 # Stored email schema
 
-<!-- describes: backend/src/Infrastructure/Persistence/**, backend/src/Domain/Emails/**, backend/src/Domain/Delivery/**, backend/src/Application/Emails/Embeddings/** -->
+<!-- describes: backend/src/Infrastructure/Persistence/**, backend/src/Domain/Emails/**, backend/src/Domain/Delivery/**, backend/src/Domain/Exports/**, backend/src/Application/Emails/Embeddings/** -->
 
 `stored_emails` holds the normalized metadata a mailbox timeline is read from. Its raw MIME lives in a separate one-to-one table, `email_message_contents`, and the text derived from that MIME lives in a third, `email_search_documents`, so nothing that lists or filters mail ever loads a `bytea` value, a body's worth of text, or a search vector — let alone tracks one in the change tracker.
 

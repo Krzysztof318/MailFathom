@@ -166,6 +166,19 @@ public sealed class MailboxExports
 
         await this.exports.RecordAsync(export, cancellationToken);
 
+        // Recorded as soon as the row exists, rather than once the work is queued. The export row carries no caller,
+        // so this act is the only place the answer to who asked for it is written — and the hand-on below can refuse
+        // at capacity and leave the row behind as a failed export, which would then say nothing about who it belonged
+        // to. Every persisted export therefore has its act before anything can go wrong with the queue.
+        await this.RecordAsync(
+            MailboxExportActKind.Started,
+            account,
+            folderPath,
+            export.Id,
+            measurement.MessageCount,
+            measurement.ByteCount,
+            cancellationToken);
+
         var work = ExportMailboxJobPayload.For(account, export.Id);
         var enqueued = await this.jobs.EnqueueAsync(
             JobEnqueueRequest.Create(work.ToIdempotencyKey(), work, account),
@@ -186,15 +199,6 @@ public sealed class MailboxExports
 
             throw new JobHandOnRefusedAtCapacityException(JobType.ExportMailbox);
         }
-
-        await this.RecordAsync(
-            MailboxExportActKind.Started,
-            account,
-            folderPath,
-            export.Id,
-            measurement.MessageCount,
-            measurement.ByteCount,
-            cancellationToken);
 
         return new MailboxExportStart(measurement, export, WasAlreadyRunning: false);
     }
