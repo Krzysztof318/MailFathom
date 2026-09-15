@@ -206,6 +206,20 @@ describe('useGrantRenewal', () => {
         expect(running.renewed[0]?.authorization).toBe('Bearer a-fresh-token');
     });
 
+    // The margin is five minutes of a token the deployment still accepts, and `App.tsx` presents it throughout. Ending
+    // the sign-in there empties the screen over a credential that works — and where the server issued a short-lived
+    // token, on the first tick after somebody signed in.
+    it('leaves a grant with no refresh token alone while its access token still works', async () => {
+        const { transport, asked } = answering({ body: issuedBody() });
+        const running = driven(endingIn(grantRenewalMargin / 2, null), transport);
+
+        await running.settle();
+        await running.tick();
+
+        expect(asked).toEqual([]);
+        expect(running.ended()).toBe(0);
+    });
+
     it('reports a grant with no refresh token to present as ended, rather than waiting on a renewal nothing can make', async () => {
         const { transport, asked } = answering({ body: issuedBody() });
         const running = driven(endingIn(0, null), transport);

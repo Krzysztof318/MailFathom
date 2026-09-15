@@ -4,7 +4,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { MailFathomTransport } from '@mailfathom/client-backend';
-import { renewOAuthGrant, renewalIsDue, type OAuthGrant } from './oauthGrant';
+import { accessTokenHasExpired, renewOAuthGrant, renewalIsDue, type OAuthGrant } from './oauthGrant';
 
 // Keeping somebody signed in while the access token they signed in with expires underneath them, which is the same job
 // `useSessionRenewal.ts` does for a password sign-in and is written the same way: read the clock rather than count down
@@ -62,7 +62,14 @@ export function useGrantRenewal(
                 // The server issued no refresh token, so this grant ends with its access token and nothing here can
                 // replace it. Saying so is what puts the person back on the sign-in screen rather than in front of a
                 // frame waiting on a read the expired token would never be made with.
-                onEnded();
+                //
+                // Once the token has actually run out rather than once the renewal is due, which is the same
+                // distinction `App.tsx` withholds on: a token inside the margin is one that frame still presents and
+                // the deployment still accepts, and ending the sign-in there would empty the screen over a credential
+                // that works — on the first tick after signing in, where the server issued a short-lived token.
+                if (accessTokenHasExpired(grant)) {
+                    onEnded();
+                }
 
                 return;
             }
