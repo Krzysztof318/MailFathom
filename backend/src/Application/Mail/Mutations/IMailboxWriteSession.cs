@@ -302,11 +302,15 @@ public interface IMailboxWriteSession : IAsyncDisposable
     /// <summary>Reports whether this source can be drained at all, which is whether it advertises <c>UIDPLUS</c>.</summary>
     /// <param name="cancellationToken">Cancels the reading.</param>
     /// <returns><see langword="true" /> where a message-scoped expunge exists on this server.</returns>
+    /// <exception cref="MailboxUnavailableException">Thrown when the mail server could not be reached to open the session the reading is taken from.</exception>
     /// <remarks>
     /// Asked before an account is moved into holding its own mailbox, and never as part of a batch. A source with no
     /// <c>UIDPLUS</c> has no way to remove one named message, so an account held against one would have its remote
     /// deletions switched off while its source was never emptied — it stays mirrored instead, and this is what
-    /// establishes that. It reads the capabilities the open session already carries and issues no command.
+    /// establishes that. It reads the capabilities the open session already carries and issues no command of its own,
+    /// which is not the same as being infallible: establishing or recovering the connection the reading is taken from
+    /// fails against an away source exactly as every command in the session does, and the caller answers a source it
+    /// could not reach by moving nothing and asking again next run.
     /// </remarks>
     Task<bool> SupportsDrainAsync(CancellationToken cancellationToken);
 

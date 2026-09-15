@@ -5,6 +5,7 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Accounts.Custody;
 using MailFathom.Application.Coordination;
+using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
@@ -239,7 +240,9 @@ public sealed class MailAccountCustodyEndpointsTests
             store,
             Substitute.For<IMailboxMutationRecordStore>(),
             Substitute.For<IEmailContentStore>(),
+            Substitute.For<IEmailContentRepairRequestStore>(),
             Substitute.For<IMailboxWriteSessionFactory>(),
+            Substitute.For<IMailFolderResolutionStore>(),
             Substitute.For<IMailTransportSecurityPolicyReader>(),
             Substitute.For<IMailFolderMappingReader>(),
             CommitPolicy(),

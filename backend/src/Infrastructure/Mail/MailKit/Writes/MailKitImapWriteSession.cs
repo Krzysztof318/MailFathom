@@ -448,8 +448,9 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
 
     /// <inheritdoc />
     /// <remarks>
-    /// Read from the capabilities the open connection already negotiated, so it costs no command and cannot itself
-    /// fail against a server that would refuse one.
+    /// Read from the capabilities the open connection already negotiated, so it issues no <c>CAPABILITY</c> command of
+    /// its own. It still goes through the same wrapper every command here does, which establishes or recovers the
+    /// connection, so an away source refuses this reading as it refuses the operations beside it.
     /// </remarks>
     public Task<bool> SupportsDrainAsync(CancellationToken cancellationToken) =>
         this.lease.Connection.ExecuteMutationAsync(

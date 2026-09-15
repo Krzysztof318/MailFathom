@@ -30,4 +30,12 @@ public enum MailboxDrainFailure
 
     /// <summary>The batch failed for a reason this pass could not classify.</summary>
     SomethingElse = 3,
+
+    /// <summary>The source refused the credential the account is reached under.</summary>
+    /// <remarks>
+    /// Told apart from a source that was merely busy because waiting does not clear it: an expired token, a revoked
+    /// application password, or a credential the server stopped accepting keeps every later run failing the same way
+    /// until somebody supplies a new one.
+    /// </remarks>
+    SourceRefusedTheCredential = 4,
 }

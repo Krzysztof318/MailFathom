@@ -298,4 +298,52 @@ public sealed class WorkLeaseStatementsTests
             },
             column => Assert.Contains($"\"{column}\"", statement.Format, StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// The reading a refusal turns on carries all three of its clauses, and each of them is load-bearing: the expiry
+    /// comparison is what keeps a released lease out of the answer, the ordering is what makes a filled answer a
+    /// prefix of the held scopes rather than a sample of them, and the bound is what keeps one answer bounded. A
+    /// clause lost here fails nothing at run time, which is why they are asserted as text.
+    /// </summary>
+    [Fact]
+    public void ComposeEveryHeldRead_ARead_CarriesTheExpiryTheOrderingAndTheBound()
+    {
+        // Act
+        var statement = WorkLeaseStatements.ComposeEveryHeldRead(512);
+
+        // Assert
+        Assert.Contains(
+            $"WHERE \"{nameof(WorkLeaseEntity.ExpiresAt)}\" > now()",
+            statement.Format,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"ORDER BY \"{nameof(WorkLeaseEntity.Scope)}\"",
+            statement.Format,
+            StringComparison.Ordinal);
+        Assert.Contains("LIMIT", statement.Format, StringComparison.Ordinal);
+        Assert.Contains(statement.GetArguments(), argument => argument is 512);
+        Assert.All(statement.GetArguments(), argument => Assert.IsNotType<DateTimeOffset>(argument));
+    }
+
+    /// <summary>
+    /// The rows come back as the mapped type here too, so this read names every mapped column as the scoped one does.
+    /// </summary>
+    [Fact]
+    public void ComposeEveryHeldRead_ARead_NamesEveryColumnTheMappedRowIsReadFrom()
+    {
+        // Act
+        var statement = WorkLeaseStatements.ComposeEveryHeldRead(512);
+
+        // Assert
+        Assert.All(
+            new[]
+            {
+                nameof(WorkLeaseEntity.Scope),
+                nameof(WorkLeaseEntity.Holder),
+                nameof(WorkLeaseEntity.Replica),
+                nameof(WorkLeaseEntity.HeldSince),
+                nameof(WorkLeaseEntity.ExpiresAt),
+            },
+            column => Assert.Contains($"\"{column}\"", statement.Format, StringComparison.Ordinal));
+    }
 }

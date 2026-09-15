@@ -113,15 +113,17 @@ internal static class MailAccountCustodyEndpoints
     /// <param name="cancellationToken">Cancels the request when the client disconnects.</param>
     /// <returns><c>200</c> with what the request did, <c>400</c> naming what was wrong with it, or <c>503</c> where the source could not be read.</returns>
     /// <remarks>
+    /// <para>
     /// A refused switch answers <c>200</c> with the refusals rather than an error status, because every one of them is
     /// a true statement about the deployment rather than a fault in the request: a replica running a build that does
     /// not know the mode, a folder mapping that names nothing the source advertises, a folder playing a virtual role.
     /// The operator acts on what the answer names and asks again.
-    /// </remarks>
-    /// <remarks>
+    /// </para>
+    /// <para>
     /// A switch off reads what the source advertises before it accepts anything, so a source that cannot be reached is
     /// the ordinary condition rather than a fault: it answers <c>503</c> saying nothing was started, because a
     /// generic failure there would read as the deployment being broken rather than as the mail server being away.
+    /// </para>
     /// </remarks>
     internal static async Task<Results<Ok<MailAccountCustodySwitchResponse>, ProblemHttpResult>> SwitchAsync(
         [FromBody] MailAccountCustodySwitchRequest? request,
@@ -137,8 +139,7 @@ internal static class MailAccountCustodyEndpoints
             return AdminAccountRequest.Refuse(request?.Account);
         }
 
-        if (!Enum.TryParse<MailAccountCustody>(request?.Custody, ignoreCase: true, out var requested)
-            || !Enum.IsDefined(requested))
+        if (ResolveCustody(request?.Custody) is not { } requested)
         {
             return TypedResults.Problem(
                 $"The request named no custody. Name one of {string.Join(", ", Enum.GetNames<MailAccountCustody>())}.",
@@ -170,6 +171,20 @@ internal static class MailAccountCustodyEndpoints
             outcome.State.Phase.ToString(),
             [.. outcome.Refusals.Select(refusal => refusal.Describe())]));
     }
+
+    /// <summary>Resolves the custody a request names, against the member names this API publishes.</summary>
+    /// <param name="written">The custody as the request wrote it.</param>
+    /// <returns>The custody named, or <see langword="null" /> where the text names none this API publishes.</returns>
+    /// <remarks>
+    /// Compared against the published names rather than parsed, the way an account's configured reading language is:
+    /// parsing accepts a bare number and combines a comma-separated list by bitwise OR even for an enum that is not a
+    /// flags set, so <c>1</c> and <c>MirrorSource,HoldMailbox</c> would both reach the one administrative act that
+    /// ends with a source server no longer holding a copy of the mailbox, while naming no custody this API publishes.
+    /// </remarks>
+    private static MailAccountCustody? ResolveCustody(string? written) => Enum.GetValues<MailAccountCustody>()
+        .Where(custody => string.Equals(custody.ToString(), written, StringComparison.OrdinalIgnoreCase))
+        .Select(custody => (MailAccountCustody?)custody)
+        .FirstOrDefault();
 }
 
 /// <summary>What a deployment is asked when one account's custody is to change.</summary>

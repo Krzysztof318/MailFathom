@@ -40,6 +40,7 @@ public sealed class PersistenceConcurrencyConflictsTests
         PersistenceConstraintNames.LocalMailFolderSiblingNameUniqueIndexName,
         PersistenceConstraintNames.LocalMailFolderRoleUniqueIndexName,
         PersistenceConstraintNames.EmailThreadStatePrimaryKeyConstraintName,
+        PersistenceConstraintNames.MailboxSourceRemovalOccurrenceUniqueIndexName,
     ];
 
     [Theory]

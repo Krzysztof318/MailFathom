@@ -4,6 +4,7 @@
 
 using System.Security.Cryptography;
 using System.Text;
+using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
@@ -334,6 +335,73 @@ public sealed class MailboxDrainPassTests
         Assert.Empty(context.ExpungedUids);
     }
 
+    /// <summary>
+    /// The capability belongs to the server and is asked of a folder the account has already bound, so an account
+    /// naming every folder by role is probed rather than waved through.
+    /// </summary>
+    [Fact]
+    public async Task DrainAsync_HoldingWasAskedForByAnAccountMappingItsFoldersByRole_ProbesTheBoundFolder()
+    {
+        // Arrange
+        var context = new DrainContext(
+                new MailAccountCustodyState(MailAccountCustody.HoldMailbox, MailAccountCustodyPhase.Mirrored))
+            .MappingItsFoldersByRole()
+            .WithSourceThatAdvertisesNoMessageScopedExpunge();
+
+        // Act
+        var report = await context.Pass.DrainAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(report.SourceCannotBeDrained);
+        Assert.Equal(MailAccountCustodyPhase.Mirrored, context.Custody.StateOf(Account)!.Phase);
+    }
+
+    /// <summary>
+    /// Nothing bound is nothing to ask, which is not the source refusing: the account stays mirroring and the next run
+    /// asks again once synchronization has bound a folder.
+    /// </summary>
+    [Fact]
+    public async Task DrainAsync_HoldingWasAskedForBeforeAnyFolderIsBound_LeavesTheAccountMirroringWithoutSayingTheSourceRefused()
+    {
+        // Arrange
+        var context = new DrainContext(
+                new MailAccountCustodyState(MailAccountCustody.HoldMailbox, MailAccountCustodyPhase.Mirrored))
+            .Storing(Stored(Inbox, uid: 11))
+            .WithNoFolderBoundYet();
+
+        // Act
+        var report = await context.Pass.DrainAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(report.SourceCannotBeDrained);
+        Assert.Equal(MailAccountCustodyPhase.Mirrored, context.Custody.StateOf(Account)!.Phase);
+        Assert.Empty(context.ExpungedUids);
+    }
+
+    /// <summary>
+    /// The bytes are intact and every other reader answers with them, but this is the caller about to destroy the
+    /// other copy: it keeps the message where it is and records the repair the other readers record.
+    /// </summary>
+    [Fact]
+    public async Task DrainAsync_PayloadWasServedFromTheRetainedCopy_HoldsTheMessageBackAndRecordsTheRepair()
+    {
+        // Arrange
+        var context = new DrainContext(Held)
+            .Storing(Stored(Inbox, uid: 11))
+            .WithPayloadServedFromTheRetainedCopy();
+
+        // Act
+        var report = await context.Pass.DrainAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, report.DrainedCount);
+        Assert.Empty(context.ExpungedUids);
+        Assert.Equal(1, report.HeldBack[MailboxDrainHoldBack.ContentObjectUnreadable]);
+        await context.RepairRequests.Received(1).RecordAsync(
+            Arg.Is<EmailContentRepairRequest>(request => request!.Defect == EmailContentDefect.ObjectUnreadable),
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task DrainAsync_HoldingWasAskedForWhileAChangeIsOutstanding_LeavesTheAccountMirrored()
     {
@@ -401,6 +469,7 @@ public sealed class MailboxDrainPassTests
 
         private readonly IMailFolderMappingReader mappings = Substitute.For<IMailFolderMappingReader>();
         private readonly IMailboxMutationRecordStore mutations = Substitute.For<IMailboxMutationRecordStore>();
+        private readonly IMailFolderResolutionStore resolutions = Substitute.For<IMailFolderResolutionStore>();
 
         internal DrainContext(MailAccountCustodyState custody, int maxPerCommand = 50, int maxPerRun = 200)
         {
@@ -416,6 +485,8 @@ public sealed class MailboxDrainPassTests
             ]);
             this.mutations.ReadOutstandingAsync(Account, Arg.Any<int>(), Arg.Any<CancellationToken>())
                 .Returns([]);
+            this.resolutions.GetCurrentResolutionAsync(Account, Inbox.Alias, Arg.Any<CancellationToken>())
+                .Returns(Inbox);
 
             this.Content = Substitute.For<IEmailContentStore>();
             this.Content.FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
@@ -453,24 +524,28 @@ public sealed class MailboxDrainPassTests
             var transportSecurity = Substitute.For<IMailTransportSecurityPolicyReader>();
             transportSecurity.GetPolicy(Account).Returns(TransportPolicy);
 
+            var clock = new FakeTimeProvider(RunInstant);
+
             this.Pass = new MailboxDrainPass(
                 this.Custody,
                 this.Store,
                 this.mutations,
                 this.Content,
+                this.RepairRequests,
                 this.WriteSessionFactory,
+                this.resolutions,
                 transportSecurity,
                 this.mappings,
                 new OptimisticConcurrencyRetryPolicy(
                     sessionFactory,
                     new PersistenceConcurrencyOptions { MaximumCommitAttempts = 1 },
-                    TimeProvider.System),
+                    clock),
                 new MailboxSynchronizationOptions
                 {
                     MaxDrainedEmailsPerRun = maxPerRun,
                     MaxDrainedEmailsPerCommand = maxPerCommand,
                 },
-                new FakeTimeProvider(RunInstant));
+                clock);
         }
 
         internal InMemoryMailAccountCustodyStore Custody { get; }
@@ -478,6 +553,9 @@ public sealed class MailboxDrainPassTests
         internal InMemoryMailboxDrainStore Store { get; } = new();
 
         internal IEmailContentStore Content { get; }
+
+        internal IEmailContentRepairRequestStore RepairRequests { get; } =
+            Substitute.For<IEmailContentRepairRequestStore>();
 
         internal IMailboxWriteSession WriteSession { get; }
 
@@ -511,6 +589,37 @@ public sealed class MailboxDrainPassTests
         {
             this.Content.FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
                 .Returns(new StoredEmailContent(Payload, Payload.Length + 1, SHA256.HashData(Payload)));
+
+            return this;
+        }
+
+        internal DrainContext WithPayloadServedFromTheRetainedCopy()
+        {
+            this.Content.FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
+                .Returns(new StoredEmailContent(Payload, Payload.Length, SHA256.HashData(Payload))
+                {
+                    WasServedFromRetainedCopy = true,
+                });
+
+            return this;
+        }
+
+        internal DrainContext WithNoFolderBoundYet()
+        {
+            this.resolutions.GetCurrentResolutionAsync(
+                    Arg.Any<MailAccountId>(),
+                    Arg.Any<MailFolderAlias>(),
+                    Arg.Any<CancellationToken>())
+                .Returns((MailFolderResolution?)null);
+
+            return this;
+        }
+
+        internal DrainContext MappingItsFoldersByRole()
+        {
+            this.mappings.FoldersOf(Account).Returns([
+                MailFolderMapping.ToSpecialUse(Inbox.Alias, MailFolderSpecialUse.Inbox),
+            ]);
 
             return this;
         }

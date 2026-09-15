@@ -73,6 +73,29 @@ public sealed class MailAccountCustodySwitchTests
         Assert.Equal(MailAccountCustody.MirrorSource, context.Custody.StateOf(Account)!.Requested);
     }
 
+    /// <summary>
+    /// A reading that filled its bound is a prefix of what the deployment holds, so an older build's lease may sit in
+    /// the part nothing read. The refusal names no replica because there is none to name.
+    /// </summary>
+    [Fact]
+    public async Task SwitchAsync_TheLeaseReadingFilledItsPage_RefusesTheSwitchNamingNoReplica()
+    {
+        // Arrange
+        var context = new SwitchContext().WithALeaseReadingThatFillsItsPage();
+
+        // Act
+        var outcome = await context.Switch.SwitchAsync(
+            Account,
+            MailAccountCustody.HoldMailbox,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.Single(outcome!.Refusals);
+        Assert.Equal(MailAccountCustodySwitchRefusal.ReplicaOnBuildWithoutTheMode, refusal.Reason);
+        Assert.Null(refusal.Subject);
+        Assert.Equal(MailAccountCustody.MirrorSource, context.Custody.StateOf(Account)!.Requested);
+    }
+
     [Fact]
     public async Task SwitchAsync_EveryLeaseNamesABuildThatKnowsTheMode_AcceptsTheSwitch()
     {
@@ -343,6 +366,26 @@ public sealed class MailAccountCustodySwitchTests
                     Arg.Any<CancellationToken>())
                 .Returns(Task.FromResult<IReadOnlyList<RemoteFolder>>(
                     [.. paths.Select(static path => new RemoteFolder(path, []))]));
+
+            return this;
+        }
+
+        /// <summary>Answers the lease reading with as many rows as it asked for, every one naming a build that knows the mode.</summary>
+        /// <remarks>
+        /// The bound is read from the call rather than restated here, so the arrangement stays the refusal's own
+        /// condition — a full page — whatever number the switch decides to ask for.
+        /// </remarks>
+        internal SwitchContext WithALeaseReadingThatFillsItsPage()
+        {
+            this.leases.ReadEveryHeldAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+                .Returns(call => Task.FromResult<IReadOnlyList<WorkLease>>(
+                [
+                    .. Enumerable.Range(0, call.Arg<int>()).Select(static index => new WorkLease(
+                        WorkScope.Create($"mail-account:account-{index}"),
+                        WorkLeaseHolder.ForBuild("0.8.0"),
+                        ReplicaIdentity.Create("replica-2"),
+                        Now.AddMinutes(1))),
+                ]));
 
             return this;
         }

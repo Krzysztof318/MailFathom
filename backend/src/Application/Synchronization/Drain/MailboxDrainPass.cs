@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Accounts.Custody;
+using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
@@ -28,8 +29,8 @@ namespace MailFathom.Application.Synchronization.Drain;
 /// <para>
 /// It runs at the end of an account's synchronization run, under the lease that run already holds, over the account's
 /// one write connection. Nothing here runs on a client, MCP, or rule request, so the source server's speed decides how
-/// soon the source is emptied and never how long anybody waits — and an unreachable source defers the drain through the
-/// account's own backoff while reading and acting on the account go on untouched.
+/// soon the source is emptied and never how long anybody waits — and a failing or unreachable source defers the drain
+/// alone, which the next ordinary run attempts again, without failing the run or putting the account into backoff.
 /// </para>
 /// <para>
 /// A pass is bounded and never a retry loop. It takes the oldest messages in hand once, issues what it can, and ends;
@@ -46,7 +47,9 @@ public sealed class MailboxDrainPass
     private readonly IMailboxDrainStore store;
     private readonly IMailboxMutationRecordStore mutations;
     private readonly IEmailContentStore content;
+    private readonly IEmailContentRepairRequestStore repairRequests;
     private readonly IMailboxWriteSessionFactory writeSessions;
+    private readonly IMailFolderResolutionStore resolutions;
     private readonly IMailTransportSecurityPolicyReader transportSecurity;
     private readonly IMailFolderMappingReader mappings;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
@@ -58,7 +61,9 @@ public sealed class MailboxDrainPass
     /// <param name="store">Reads what the source still holds and records what the pass did.</param>
     /// <param name="mutations">Says whether the account still owes its source a change, which a switch waits out.</param>
     /// <param name="content">Reads a stored payload back for the gate.</param>
+    /// <param name="repairRequests">Records an object the gate found could not be vouched for.</param>
     /// <param name="writeSessions">Opens the one session able to change the source mailbox.</param>
+    /// <param name="resolutions">Names a folder the account has already bound, which the capability probe opens against.</param>
     /// <param name="transportSecurity">Supplies the policy the source is reached under.</param>
     /// <param name="mappings">Reports the folders the account maps, which is what a paused drain is judged from.</param>
     /// <param name="commitPolicy">Commits what the pass records.</param>
@@ -71,7 +76,9 @@ public sealed class MailboxDrainPass
         IMailboxDrainStore store,
         IMailboxMutationRecordStore mutations,
         IEmailContentStore content,
+        IEmailContentRepairRequestStore repairRequests,
         IMailboxWriteSessionFactory writeSessions,
+        IMailFolderResolutionStore resolutions,
         IMailTransportSecurityPolicyReader transportSecurity,
         IMailFolderMappingReader mappings,
         OptimisticConcurrencyRetryPolicy commitPolicy,
@@ -82,7 +89,9 @@ public sealed class MailboxDrainPass
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(mutations);
         ArgumentNullException.ThrowIfNull(content);
+        ArgumentNullException.ThrowIfNull(repairRequests);
         ArgumentNullException.ThrowIfNull(writeSessions);
+        ArgumentNullException.ThrowIfNull(resolutions);
         ArgumentNullException.ThrowIfNull(transportSecurity);
         ArgumentNullException.ThrowIfNull(mappings);
         ArgumentNullException.ThrowIfNull(commitPolicy);
@@ -95,7 +104,9 @@ public sealed class MailboxDrainPass
         this.store = store;
         this.mutations = mutations;
         this.content = content;
+        this.repairRequests = repairRequests;
         this.writeSessions = writeSessions;
+        this.resolutions = resolutions;
         this.transportSecurity = transportSecurity;
         this.mappings = mappings;
         this.commitPolicy = commitPolicy;
@@ -140,10 +151,16 @@ public sealed class MailboxDrainPass
 
         if (custodyState.IsSwitchPending)
         {
-            if (custodyState.Requested is MailAccountCustody.HoldMailbox
-                && !await this.SourceCanBeDrainedAsync(account, transportSecurityPolicy, cancellationToken))
+            if (custodyState.Requested is MailAccountCustody.HoldMailbox)
             {
-                return MailboxDrainReport.SourceWithoutMessageScopedExpunge;
+                var drainable = await this.SourceCanBeDrainedAsync(account, transportSecurityPolicy, cancellationToken);
+
+                if (drainable is not true)
+                {
+                    return drainable is false
+                        ? MailboxDrainReport.SourceWithoutMessageScopedExpunge
+                        : MailboxDrainReport.Nothing;
+                }
             }
 
             custodyState = await this.AdvancePhaseAsync(custodyState, account, cancellationToken);
@@ -258,9 +275,16 @@ public sealed class MailboxDrainPass
     /// <summary>Removes from the source the messages an erasure took locally before the drain reached them.</summary>
     /// <returns>How much of the run's budget this half spent, which is what is left for the stored mail.</returns>
     /// <remarks>
+    /// <para>
     /// Taken beside the gate's own selection rather than by it, because there is no row left to gate: the erasing
     /// transaction wrote where the message was on the source and nothing else, which is what keeps an erasure reaching
     /// the source without ever reaching it on the request that asked for one.
+    /// </para>
+    /// <para>
+    /// What is spent is what actually left the source rather than what was read. A removal whose batch failed stays
+    /// recorded and is read again next run, so counting it as spent would let a folder the source no longer holds take
+    /// the whole budget on every run and starve the stored mail permanently.
+    /// </para>
     /// </remarks>
     private async Task<int> RemoveErasedMailAsync(
         MailAccountId account,
@@ -269,6 +293,7 @@ public sealed class MailboxDrainPass
         int budget,
         CancellationToken cancellationToken)
     {
+        var removedBefore = tally.RemovedCount;
         var removals = await this.store.ReadSourceRemovalsAsync(account, budget, cancellationToken);
 
         foreach (var generation in removals.GroupBy(static removal =>
@@ -287,7 +312,7 @@ public sealed class MailboxDrainPass
             }
         }
 
-        return removals.Count;
+        return tally.RemovedCount - removedBefore;
     }
 
     /// <summary>Applies the gate to one folder's candidates, reading each stored payload back once.</summary>
@@ -337,6 +362,12 @@ public sealed class MailboxDrainPass
     }
 
     /// <summary>Reads one stored payload back and holds it against the length and digest the row records.</summary>
+    /// <remarks>
+    /// A payload the object backend could not vouch for is held back even though the bytes read back are intact. Every
+    /// other reader answers with them, because refusing over content the deployment is holding would be a self-inflicted
+    /// outage — but this is the one caller about to destroy the other copy, and the bytes it was served are the ones an
+    /// operator is one decision away from releasing. The repair the other readers record is recorded here too.
+    /// </remarks>
     private async Task<MailboxDrainHoldBack> VerifyPayloadAsync(
         MailboxDrainCandidate candidate,
         CancellationToken cancellationToken)
@@ -351,6 +382,13 @@ public sealed class MailboxDrainPass
         if (stored.FindIntegrityDefect() is not null)
         {
             return MailboxDrainHoldBack.ContentDoesNotMatchRecord;
+        }
+
+        if (stored.WasServedFromRetainedCopy)
+        {
+            await this.repairRequests.NoteIfServedFromRetainedCopyAsync(stored, candidate.Email, cancellationToken);
+
+            return MailboxDrainHoldBack.ContentObjectUnreadable;
         }
 
         await this.commitPolicy.CommitAsync(
@@ -491,7 +529,8 @@ public sealed class MailboxDrainPass
     {
         MailboxMutationUnsupportedException => MailboxDrainFailure.SourceCannotExpungeOneMessage,
         MailboxDestinationFolderMissingException => MailboxDrainFailure.FolderMissing,
-        MailboxUnavailableException or MailboxCredentialRefusedException => MailboxDrainFailure.SourceUnavailable,
+        MailboxCredentialRefusedException => MailboxDrainFailure.SourceRefusedTheCredential,
+        MailboxUnavailableException => MailboxDrainFailure.SourceUnavailable,
         _ => MailboxDrainFailure.SomethingElse,
     };
 
@@ -523,34 +562,51 @@ public sealed class MailboxDrainPass
             && VirtualMailFolderRoles.Includes(mapping.SpecialUse));
 
     /// <summary>Establishes whether the account's source can be emptied of one named message at a time.</summary>
+    /// <returns>
+    /// <see langword="true" /> when the source answered that it can, <see langword="false" /> when it answered that it
+    /// cannot, and <see langword="null" /> when no folder could be asked because the account has bound none yet.
+    /// </returns>
     /// <remarks>
+    /// <para>
     /// Asked before the account is moved into holding its mailbox and never afterwards, because the alternative is an
     /// account whose remote deletions are switched off against a source that can never be emptied. A source that
     /// cannot be reached at all answers the same way: nothing moves, and the next run asks again.
+    /// </para>
+    /// <para>
+    /// It is a capability of the server rather than of a folder, so the first folder the account has already bound
+    /// answers it — the same binding the drain's own batches are issued against, which is why the probe reads the
+    /// durable resolution rather than the mapping's configured path. A mapping may carry no path at all, a role
+    /// naming the folder instead, and judging the source from the mapping alone would let every role-mapped account
+    /// past a probe that asked nothing. An account that has bound nothing yet is not an account whose source refused:
+    /// the unanswered question defers the switch to the next run, which asks once synchronization has bound a folder.
+    /// </para>
     /// </remarks>
-    /// <remarks>
-    /// It is a capability of the server rather than of a folder, so any folder the account maps by path answers it.
-    /// An account mapping every folder by role alone leaves nothing to open a session against, and the batches
-    /// themselves are then what the source refuses.
-    /// </remarks>
-    private async Task<bool> SourceCanBeDrainedAsync(
+    private async Task<bool?> SourceCanBeDrainedAsync(
         MailAccountId account,
         MailTransportSecurityPolicy transportSecurityPolicy,
         CancellationToken cancellationToken)
     {
-        if (this.mappings.FoldersOf(account).FirstOrDefault(static mapping =>
-            mapping.Participation.IsSynchronized && mapping.RemotePath is not null) is not { RemotePath: { } path } mapping)
+        var synchronizedAliases = this.mappings.FoldersOf(account)
+            .Where(static mapping => mapping.Participation.IsSynchronized)
+            .Select(static mapping => mapping.Alias);
+
+        foreach (var alias in synchronizedAliases)
         {
-            return true;
+            if (await this.resolutions.GetCurrentResolutionAsync(account, alias, cancellationToken) is not { } resolution)
+            {
+                continue;
+            }
+
+            await using var session = await this.writeSessions.OpenForWritingAsync(
+                account,
+                resolution,
+                transportSecurityPolicy,
+                cancellationToken);
+
+            return await session.SupportsDrainAsync(cancellationToken);
         }
 
-        await using var session = await this.writeSessions.OpenForWritingAsync(
-            account,
-            MailFolderResolution.FirstBindingOf(mapping.Alias, path),
-            transportSecurityPolicy,
-            cancellationToken);
-
-        return await session.SupportsDrainAsync(cancellationToken);
+        return null;
     }
 
     /// <summary>Accumulates what one pass did, so the counting is not spread across the batch methods.</summary>
@@ -560,12 +616,13 @@ public sealed class MailboxDrainPass
         private readonly Dictionary<MailboxDrainFailure, int> failedBatches = [];
 
         private int drainedCount;
-        private int removedCount;
         private int abandonedBatchCount;
+
+        internal int RemovedCount { get; private set; }
 
         internal void Drained(int count) => this.drainedCount += count;
 
-        internal void Removed(int count) => this.removedCount += count;
+        internal void Removed(int count) => this.RemovedCount += count;
 
         internal void Failed(MailboxDrainFailure reason) =>
             this.failedBatches[reason] = this.failedBatches.GetValueOrDefault(reason) + 1;
@@ -577,7 +634,7 @@ public sealed class MailboxDrainPass
 
         internal MailboxDrainReport ToReport() => new(
             this.drainedCount,
-            this.removedCount,
+            this.RemovedCount,
             this.heldBack,
             this.failedBatches,
             this.abandonedBatchCount);

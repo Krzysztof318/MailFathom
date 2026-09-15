@@ -21,7 +21,7 @@ namespace MailFathom.Infrastructure.Observability;
 /// </para>
 /// <para>
 /// The dimensions are the account alias and MailFathom's own name for a hold-back reason or a kind of failure, bounded
-/// by the configured accounts times the four reasons a message is held back and the four kinds of failure, and none of
+/// by the configured accounts times the five reasons a message is held back and the five kinds of failure, and none of
 /// them is derived from a message. Nothing here carries a subject, an address, a folder path, or a UID.
 /// </para>
 /// </remarks>

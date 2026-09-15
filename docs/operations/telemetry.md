@@ -938,15 +938,17 @@ locally. Both are additive: they are summed across replicas and read as a rate, 
 `mailfathom.mailbox.drain.held_back` is the one that turns *nothing is moving* into an answer. It counts the messages
 the gate left on the source and breaks them down by `mailfathom.mailbox.drain.held_back_reason`, whose values are
 MailFathom's own names for why: the content is above the size limit, the store has no headroom for it yet, the payload
-was never stored, or the bytes read back did not match what the row recorded. The last of those is the reading worth
-alerting on outright — a stored payload that no longer matches its own digest is why the gate exists.
+was never stored, the bytes read back did not match what the row recorded, or the payload was served from the copy the
+database retained because the object behind it could not be vouched for. The last two are the readings worth alerting on
+outright — a stored payload that no longer matches its own digest, or an object only its retained copy still answers
+for, is why the gate exists.
 
 `mailfathom.mailbox.drain.failed_batches` counts the batches whose commands the source did not serve, which the next
 ordinary run attempts again — a drain that fails never puts the account into backoff and never fails its run. It breaks
 them down by `mailfathom.mailbox.drain.failure`, whose values are MailFathom's own names for what refused the batch:
-the source was unavailable, the source advertises no message-scoped expunge, the folder is no longer there, or the pass
-could not classify it. The second of those is the one to act on rather than wait out, because repeating the batch can
-never get past it. `mailfathom.mailbox.drain.abandoned_batches` counts the batches abandoned before a command went out because the
+the source was unavailable, the source advertises no message-scoped expunge, the folder is no longer there, the source
+refused the credential, or the pass could not classify it. The second and the fourth are the ones to act on rather than
+wait out, because repeating the batch gets past neither until the server or the credential changes. `mailfathom.mailbox.drain.abandoned_batches` counts the batches abandoned before a command went out because the
 folder reported a `UIDVALIDITY` other than the one the occurrences named, which synchronization resolves rather than
 the drain. Both are additive.
 

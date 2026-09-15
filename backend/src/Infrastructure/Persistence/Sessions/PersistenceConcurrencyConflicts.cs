@@ -182,11 +182,19 @@ internal static class PersistenceConcurrencyConflicts
     /// folders already there.
     /// </para>
     /// <para>
-    /// The last is where one conversation stands, derived twice at once. The derivation reads whether the conversation
+    /// The next is where one conversation stands, derived twice at once. The derivation reads whether the conversation
     /// already has a state and inserts one when it does not, so two runs reaching a correspondence neither has read
     /// yet both insert and the loser violates the key. The retry is what converges them: it re-reads, finds the
     /// winner's state, and replaces it whole, so the conversation carries one reading rather than the second run
     /// ending on a violation of a key that did not exist when it looked.
+    /// </para>
+    /// <para>
+    /// The last is where the source still holds a message an erasure took locally, recorded once however many erasure
+    /// paths reach the same stored row. Two of them — a folder's mirror erased while a message in it is erased by
+    /// identity, or either beside the delete a person authored — read the row in separate transactions and both stage
+    /// the record, and the loser violates the occurrence index. The retry re-reads, finds the row already gone and the
+    /// winner's record standing, and stages nothing, which is what keeps one occurrence one thing for the drain to
+    /// expunge instead of ending the erasing run on a violation it could not have avoided.
     /// </para>
     /// </remarks>
     internal static bool IsConcurrencyConflict(DbUpdateException exception) =>
@@ -222,6 +230,7 @@ internal static class PersistenceConcurrencyConflicts
                 or PersistenceConstraintNames.NotificationUnreadConditionUniqueIndexName
                 or PersistenceConstraintNames.LocalMailFolderSiblingNameUniqueIndexName
                 or PersistenceConstraintNames.LocalMailFolderRoleUniqueIndexName
-                or PersistenceConstraintNames.EmailThreadStatePrimaryKeyConstraintName,
+                or PersistenceConstraintNames.EmailThreadStatePrimaryKeyConstraintName
+                or PersistenceConstraintNames.MailboxSourceRemovalOccurrenceUniqueIndexName,
         };
 }

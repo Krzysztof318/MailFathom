@@ -19,8 +19,9 @@ namespace MailFathom.Infrastructure.Persistence.Synchronization;
 /// cascades an erasing disposition already relies on: the raw MIME, the search document, the passages, their vectors,
 /// and any outstanding repair request are declared from the stored email and go with it.
 /// </remarks>
+/// <param name="timeProvider">Stamps when the erasure was asked for, on the source removal each erased row owes.</param>
 [RequiresIntegrationCoverage]
-internal sealed class StoredMailFolderMirrorStore : IStoredMailFolderMirrorStore
+internal sealed class StoredMailFolderMirrorStore(TimeProvider timeProvider) : IStoredMailFolderMirrorStore
 {
     /// <inheritdoc />
     public async Task<MailFolderMirrorErasure> EraseFolderMirrorAsync(
@@ -64,6 +65,11 @@ internal sealed class StoredMailFolderMirrorStore : IStoredMailFolderMirrorStore
             session,
             [.. removed.Select(static email => email.Id)],
             cancellationToken);
+
+        // Owed for the same reason every other erasure path owes it: on a held account the source still holds these
+        // messages, and the rows about to go are the only things that say where. Read before the removal is staged,
+        // like the two reads above, because the occurrence each record names lives on the row itself.
+        MailboxSourceRemovalRecords.Stage(sessionContext, removed, timeProvider.GetUtcNow());
 
         sessionContext.StoredEmails.RemoveRange(removed);
 

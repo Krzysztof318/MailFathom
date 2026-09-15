@@ -126,7 +126,7 @@ public interface IWorkLeaseStore
     /// <summary>Reads every scope the deployment is holding right now, whatever it names.</summary>
     /// <param name="maximumLeases">The most rows to read, which bounds an answer nothing else bounds.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>Every unexpired lease, up to the bound, in no particular order.</returns>
+    /// <returns>Every unexpired lease, ordered by scope and cut off at the bound.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maximumLeases" /> is not positive.</exception>
     /// <remarks>
     /// <para>
@@ -137,9 +137,11 @@ public interface IWorkLeaseStore
     /// </para>
     /// <para>
     /// Like the read above it is a snapshot and reserves nothing, and a caller may do nothing with it but report it or
-    /// refuse on it. The table holds one row per held scope, so the bound is a ceiling against a deployment that has
-    /// grown past what one answer should carry rather than a page — a reading that hits it has already found whatever
-    /// it was looking for or is reading a table nothing is releasing.
+    /// refuse on it. The table holds one row per held scope, so the bound is what keeps one answer bounded against a
+    /// deployment that has grown past what it should carry — and the ordering is what makes a filled answer a prefix
+    /// of the held scopes rather than an arbitrary sample of them. A caller refusing on what it did not see needs that
+    /// property: an answer that filled says the deployment holds at least this many leases and nothing about the rest,
+    /// which is a statement an implementation answering in an arbitrary order could not support.
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<WorkLease>> ReadEveryHeldAsync(int maximumLeases, CancellationToken cancellationToken);

@@ -20,8 +20,9 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 /// </para>
 /// <para>
 /// It is shared rather than written per store because every path that erases a stored row owes it: an erased folder's
-/// mail, one message erased by identity, and the delete a person authored in the client whose trash window has passed.
-/// A path that wrote its own copy is a path that would stop matching the others without anything saying so.
+/// mail, the local copy of a folder MailFathom no longer mirrors, one message erased by identity, and the delete a
+/// person authored in the client whose trash window has passed. A path that wrote its own copy is a path that would
+/// stop matching the others without anything saying so.
 /// </para>
 /// </remarks>
 internal static class MailboxSourceRemovalRecords
