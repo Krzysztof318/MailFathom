@@ -932,6 +932,47 @@ describe('FolderTree', () => {
         ]);
     });
 
+    it('reads the report for an account whose identifier an operator wrote with a space in it', async () => {
+        const { maintenance } = offering();
+        const spaced = {
+            ...tree,
+            accounts: [
+                {
+                    ...tree.accounts[0],
+                    account: { ...tree.accounts[0]?.account, id: 'personal mail', displayName: 'Personal mail' },
+                },
+            ],
+        };
+        const asksFor: string[] = [];
+
+        renderTree(
+            ({ path }) => {
+                const account = /\/managed-folders\?account=([^&]+)$/u.exec(path)?.[1];
+
+                if (account === undefined) {
+                    return Promise.resolve({ status: 200, body: JSON.stringify(spaced), headers: {} });
+                }
+
+                asksFor.push(decodeURIComponent(account));
+
+                return Promise.resolve({ status: 200, body: answeredAs(workMailbox), headers: {} });
+            },
+            true,
+            undefined,
+            undefined,
+            maintenance,
+        );
+        await drawn();
+
+        // An identifier is a key an operator invented, so it is asked for whole rather than through whatever the
+        // column joined it with — and a mailbox whose report never arrived is one whose folders offer nothing.
+        await waitFor(() => {
+            expect(asksFor).toEqual(['personal mail']);
+        });
+
+        expect(pressed(row(/^Archiwum/))).toContain('Delete folder');
+    });
+
     it('marks everything read before the report of what may be done has arrived, that act naming no folder', async () => {
         const { maintenance, asked } = offering();
 

@@ -261,14 +261,14 @@ export function FolderMaintenanceProvider({
 
             // The toast is settled here only where the rename is the whole of the save. Where a move follows it, the
             // one card stands until that move has answered, because two outcomes reported as two cards for one press
-            // is the client narrating its own requests rather than telling somebody what happened.
+            // is the client narrating its own requests rather than telling somebody what happened. Nothing is counted
+            // here either: one save is one change however many requests it took, and counting the rename as well
+            // would read the whole tree twice for one press.
             if (!moving || !committed(renamed)) {
                 report(renamed, settle, about);
 
                 return;
             }
-
-            setChanged((made) => made + 1);
         }
 
         const moved = await moveManagedMailFolder(session, transport, {
@@ -278,9 +278,11 @@ export function FolderMaintenanceProvider({
         });
 
         // A rename that committed and a move that did not is neither of the two sentences `report` has, so it is said
-        // here: the folder did change, and not in the way somebody asked for.
+        // here: the folder did change, and not in the way somebody asked for. It is counted here for that reason —
+        // the mailbox moved, and the only path that would otherwise leave the column drawing the old name.
         if (renaming && !committed(moved)) {
             settle({ kind: 'warning', title: translate('folders.renamedNotMoved', about) });
+            setChanged((made) => made + 1);
 
             return;
         }

@@ -302,6 +302,10 @@ describe('FolderMaintenanceProvider', () => {
         });
 
         expect(await screen.findByText('Moved Deals in Work.')).toBeDefined();
+
+        // One save is one change however many requests it took: counting each of them would read the whole tree, and
+        // every account's report beside it, twice for one press.
+        expect(held().changed).toBe(1);
     });
 
     it('says the folder was renamed and not moved where the move behind the rename was refused', async () => {
@@ -321,6 +325,10 @@ describe('FolderMaintenanceProvider', () => {
         expect(
             await screen.findByText('Renamed Deals, but it could not be moved. It is still where it was.'),
         ).toBeDefined();
+
+        // Counted all the same: the rename committed, so a column still drawing the old name is a column reading
+        // something that is no longer true.
+        expect(held().changed).toBe(1);
     });
 
     it('refuses a save on a folder nobody changed, there being nothing to ask the deployment for', () => {

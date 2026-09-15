@@ -157,17 +157,23 @@ export function FolderTree({
 
     // Which accounts the report is wanted for, as one value rather than a list, because a list built during render is
     // a new array every time and an effect keyed on one would read the folders of every mailbox on every render.
+    //
+    // Written as JSON rather than joined on a separator, because an account's identifier is a key an operator invented
+    // and may hold anything a key may hold — a space among it. A separator that can occur inside an identifier splits
+    // it into two that name no account, and what a reader would see is a mailbox whose folders offer nothing.
     const accountsAsked =
         answered?.result.outcome === 'read'
-            ? answered.result.value.accounts.map(({ account }) => account.id).join(' ')
-            : '';
+            ? JSON.stringify(answered.result.value.accounts.map(({ account }) => account.id))
+            : '[]';
 
     // The acts, read per account beside the tree. It is a second route rather than a field on the first because the
     // two answer different questions — what the folders are, and what may be done to them — and the service publishes
     // them apart for that reason. An account whose report fails is left out of the map rather than defaulted to
     // anything: the column then offers nothing on it, which is what an unknown answer must draw.
     useEffect(() => {
-        const accounts = accountsAsked.length === 0 ? [] : accountsAsked.split(' ');
+        // Read back rather than parsed: this component wrote it a line above out of values the wire layer already
+        // checked, so there is no untrusted body here to validate a second time.
+        const accounts = JSON.parse(accountsAsked) as readonly string[];
 
         if (!online || accounts.length === 0) {
             return;
