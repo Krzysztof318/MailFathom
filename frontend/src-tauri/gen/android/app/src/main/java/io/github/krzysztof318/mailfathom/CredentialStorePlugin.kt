@@ -36,8 +36,10 @@ import javax.crypto.spec.GCMParameterSpec
 // AES/GCM, which is exactly what is below — so taking the library would have added a third-party component, a licence
 // register row, and an Android closure that grew, to reach a store the platform hands out for free.
 //
-// What is written to disk is ciphertext only, in preferences private to this application, keyed by the deployment
-// address the credential was given for so one deployment's credential is never read back for another. Neither the
+// What is written to disk is ciphertext only, in preferences private to this application, keyed by the entry name
+// the application composed — which names the deployment the value was given for, so one deployment's credential is
+// never read back for another, and names what is being kept, so a session and an OAuth grant never answer for one
+// another either. Neither the
 // credential nor anything derived from it is logged, put in an exception message, or handed to the bridge on a failure
 // — every operation below answers with a value and never rejects, because everything it could say is about a credential.
 //
@@ -45,7 +47,7 @@ import javax.crypto.spec.GCMParameterSpec
 // `sharedpref` exclusion in both sections of `res/xml/data_extraction_rules.xml` are ADR 0027's, and they cover this
 // file's preferences along with everything else the head writes.
 
-/** The Keystore alias every deployment's credential on this device is encrypted under. */
+/** The Keystore alias every entry this device keeps is encrypted under. */
 private const val KEY_ALIAS = "mailfathom.credential"
 
 /**
@@ -71,13 +73,13 @@ private const val NOT_KEPT_STORAGE_UNREACHABLE = "notKeptStorageUnreachable"
 private const val NOT_KEPT_KEY_INVALIDATED = "notKeptKeyInvalidated"
 
 @InvokeArg
-internal class DeploymentArgument {
-    lateinit var deployment: String
+internal class EntryArgument {
+    lateinit var entry: String
 }
 
 @InvokeArg
 internal class CredentialArgument {
-    lateinit var deployment: String
+    lateinit var entry: String
     lateinit var credential: String
 }
 
@@ -92,19 +94,19 @@ class CredentialStorePlugin(private val activity: Activity) : Plugin(activity) {
     fun keep(invoke: Invoke) {
         val argument = invoke.parseArgs(CredentialArgument::class.java)
 
-        invoke.resolveObject(keep(argument.deployment, argument.credential))
+        invoke.resolveObject(keep(argument.entry, argument.credential))
     }
 
     @Command
     fun read(invoke: Invoke) {
-        val kept = read(invoke.parseArgs(DeploymentArgument::class.java).deployment)
+        val kept = read(invoke.parseArgs(EntryArgument::class.java).entry)
 
         if (kept == null) invoke.resolve() else invoke.resolveObject(kept)
     }
 
     @Command
     fun forget(invoke: Invoke) {
-        invoke.resolveObject(forget(invoke.parseArgs(DeploymentArgument::class.java).deployment))
+        invoke.resolveObject(forget(invoke.parseArgs(EntryArgument::class.java).entry))
     }
 
     /**
@@ -152,34 +154,34 @@ class CredentialStorePlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
-    /** Keeps the session document for one deployment, answering whether it is stored. */
-    private fun keep(deployment: String, credential: String): Boolean =
+    /** Keeps one value under the entry the application named, answering whether it is stored. */
+    private fun keep(entry: String, credential: String): Boolean =
         try {
             val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, credentialKey()) }
             val sealed = cipher.iv + cipher.doFinal(credential.toByteArray(Charsets.UTF_8))
 
-            preferences().edit().putString(deployment, Base64.encodeToString(sealed, Base64.NO_WRAP)).commit()
+            preferences().edit().putString(entry, Base64.encodeToString(sealed, Base64.NO_WRAP)).commit()
         } catch (refused: Exception) {
             false
         }
 
     /**
-     * The credential kept for one deployment, or nothing where none was kept or what was kept cannot be read back.
+     * What was kept under one entry, or nothing where nothing was kept there or what was kept cannot be read back.
      *
      * A ciphertext that will not open is a key the device replaced or an entry something else corrupted, and either way
      * it is a credential nobody can use again — so it is removed here rather than kept for every later start to fail on,
      * and the person is asked to sign in again.
      */
-    private fun read(deployment: String): String? =
+    private fun read(entry: String): String? =
         try {
-            val sealed = preferences().getString(deployment, null)?.let { Base64.decode(it, Base64.NO_WRAP) }
+            val sealed = preferences().getString(entry, null)?.let { Base64.decode(it, Base64.NO_WRAP) }
 
             if (sealed == null) {
                 null
             } else if (sealed.size <= NONCE_LENGTH) {
                 // Too short to be a nonce and a tag, so it is the same unusable entry the catch below removes rather
                 // than a value a later start could open — and leaving it would decode it again on every one of them.
-                forget(deployment)
+                forget(entry)
 
                 null
             } else {
@@ -196,20 +198,20 @@ class CredentialStorePlugin(private val activity: Activity) : Plugin(activity) {
                 )
             }
         } catch (unreadable: Exception) {
-            forget(deployment)
+            forget(entry)
 
             null
         }
 
     /**
-     * Removes what was kept for one deployment, answering whether it is gone.
+     * Removes what was kept under one entry, answering whether it is gone.
      *
      * An entry that was never there is the outcome asked for rather than a failure, which is why this answers on the
      * write rather than on whether anything was removed.
      */
-    private fun forget(deployment: String): Boolean =
+    private fun forget(entry: String): Boolean =
         try {
-            preferences().edit().remove(deployment).commit()
+            preferences().edit().remove(entry).commit()
         } catch (refused: Exception) {
             false
         }

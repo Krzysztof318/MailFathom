@@ -328,4 +328,30 @@ export {
     type DeploymentTelemetryLevel,
 } from './telemetry';
 export { reachDeployment, signIn, type DeploymentGreeting, type SignInOutcome, type SignInRefusal } from './signIn';
+export {
+    longestSignInMethodsAnswer,
+    mostAuthorizationServers,
+    originOf,
+    ownProviderName,
+    protectedResourceMetadataRoute,
+    readProtectedResource,
+    readSignInMethods,
+    signInMethodsRoute,
+    type ProtectedResource,
+    type SignInAuthorizationServer,
+    type SignInMethods,
+} from './signInMethods';
+export {
+    authorizationRequestAddress,
+    discoveryAddresses,
+    longestIssuedToken,
+    readAuthorizationServer,
+    redeemAuthorizationCode,
+    refreshAccessToken,
+    revokeRefreshToken,
+    type AuthorizationRequest,
+    type AuthorizationServerMetadata,
+    type IssuedAccessToken,
+    type TokenOutcome,
+} from './oauthSignIn';
 export { longestResponseBody, type ClientRequest, type ClientResponse, type MailFathomTransport } from './transport';

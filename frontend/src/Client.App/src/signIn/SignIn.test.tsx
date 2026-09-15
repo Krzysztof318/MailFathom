@@ -2,11 +2,13 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     sessionExchangeRoute,
     type ClientRequest,
+    type ClientResponse,
     type DeploymentAddress,
     type MailFathomTransport,
 } from '@mailfathom/client-backend';
@@ -15,8 +17,11 @@ import { LocalizationProvider } from '../localization/Localization';
 import type { CredentialNotice } from './CredentialNotices';
 import { SignIn } from './SignIn';
 import { longestCredentialPart } from './credentialEntry';
+import { startOAuthSignIn } from './oauthFlow';
 import type { KeptBeyondTheTab } from './credentialStore';
 import type { KeptSession } from './keptSession';
+import type { OAuthGrant } from './oauthGrant';
+import { receivesNoRedirect, type SignInRedirect, type SignInRedirectAnswer } from '../shellOperations/signInRedirect';
 
 // Everything below reaches the transport this screen takes from its caller, so nothing here patches a global or stands
 // up a server. What is under test is the real request, the real parsing, and the real failure mapping; only the answer
@@ -61,6 +66,182 @@ const credentialRefused: MailFathomTransport = () =>
 /** A deployment that knows who is asking and will not let them read any mail. */
 const grantMissing: MailFathomTransport = () => Promise.resolve({ status: 403, body: '', headers: {} });
 
+// What a deployment that offers authorization servers publishes, and what the servers themselves publish about
+// themselves. One transport answers all four routes, because one transport is what the screen is handed.
+const issuer = 'https://id.example.invalid';
+const ownIssuer = 'https://sso.example.invalid';
+
+const issuedToken = 'mfo_providerproof.cHJvdmlkZXItcHJvb2Y';
+
+function published(document: {
+    readonly acceptsPassword: boolean;
+    readonly authorizationServers: readonly { name: string; displayName: string; issuer: string; clientId: string }[];
+}): MailFathomTransport {
+    return (request) => {
+        if (request.path.endsWith('/api/client/sign-in-methods')) {
+            return Promise.resolve({ status: 200, body: JSON.stringify(document), headers: {} });
+        }
+
+        if (request.path.includes('/.well-known/oauth-protected-resource')) {
+            return Promise.resolve({
+                status: 200,
+                body: JSON.stringify({
+                    resource: `${knownDeployment.baseAddress}/api/client`,
+                    scopes_supported: ['mailfathom.read'],
+                }),
+                headers: {},
+            });
+        }
+
+        if (request.path.includes('/.well-known/')) {
+            const server = request.path.startsWith(ownIssuer) ? ownIssuer : issuer;
+
+            return Promise.resolve({
+                status: 200,
+                body: JSON.stringify({
+                    issuer: server,
+                    authorization_endpoint: `${server}/authorize`,
+                    token_endpoint: `${server}/token`,
+                }),
+                headers: {},
+            });
+        }
+
+        if (request.path.endsWith('/token')) {
+            return Promise.resolve({
+                status: 200,
+                body: JSON.stringify({ access_token: issuedToken, token_type: 'Bearer', expires_in: 3600 }),
+                headers: {},
+            });
+        }
+
+        // Who the deployment says the token belongs to, which is what an OAuth sign-in reads instead of an identity
+        // token, and what a `401` here would refuse.
+        return Promise.resolve({
+            status: 200,
+            body: JSON.stringify({ displayName: 'K. Kowalska', changeable: false }),
+            headers: {},
+        });
+    };
+}
+
+/** One authorization server beside the deployment's own, which is the pair the design draws two controls for. */
+const bothProviders = published({
+    acceptsPassword: true,
+    authorizationServers: [
+        { name: 'self', displayName: 'Nordwind SSO', issuer: ownIssuer, clientId: 'mailfathom-client' },
+        { name: 'keycloak', displayName: 'Keycloak', issuer, clientId: 'mailfathom-client' },
+    ],
+});
+
+/** The deployment's own server and nothing beside it, which is the case the divider under it has to name. */
+const ownProviderOnly = published({
+    acceptsPassword: true,
+    authorizationServers: [
+        { name: 'self', displayName: 'Nordwind SSO', issuer: ownIssuer, clientId: 'mailfathom-client' },
+    ],
+});
+
+/** A deployment that publishes its servers and will not say what a token has to be issued for. */
+const resourceWithheld: MailFathomTransport = (request) =>
+    request.path.includes('/.well-known/oauth-protected-resource')
+        ? Promise.resolve({ status: 500, body: '', headers: {} })
+        : bothProviders(request);
+
+/** The same failure, mended by the time the document is asked for again, which is what a read asked for again is for. */
+function resourceWithheldOnce(): MailFathomTransport {
+    let withheld = false;
+
+    return (request) => {
+        if (request.path.includes('/.well-known/oauth-protected-resource') && !withheld) {
+            withheld = true;
+
+            return Promise.resolve({ status: 500, body: '', headers: {} });
+        }
+
+        return bothProviders(request);
+    };
+}
+
+/** A deployment that publishes a provider and takes no password, which is the case that leaves no form on the screen. */
+const providersOnly = published({
+    acceptsPassword: false,
+    authorizationServers: [{ name: 'keycloak', displayName: 'Keycloak', issuer, clientId: 'mailfathom-client' }],
+});
+
+/** A deployment that publishes its providers and never answers the exchange a password is presented to. */
+const exchangeUnanswered: MailFathomTransport = (request) =>
+    request.path.endsWith(sessionExchangeRoute) ? new Promise<ClientResponse>(() => undefined) : bothProviders(request);
+
+/** The deployment and the server answering as they do, with the token endpoint held open until a test lets it go. */
+function tokenHeldOpen(): { transport: MailFathomTransport; answer: () => void } {
+    let release = (): void => undefined;
+    const held = new Promise<void>((settle) => {
+        release = () => {
+            settle();
+        };
+    });
+
+    return {
+        answer: () => {
+            release();
+        },
+        transport: (request) =>
+            request.path.endsWith('/token') ? held.then(() => bothProviders(request)) : bothProviders(request),
+    };
+}
+
+/** A head that receives a redirect, and what it was handed. */
+function redirectTo(handed: string[], answer: SignInRedirectAnswer | null = null): SignInRedirect {
+    return {
+        offered: true,
+        redirectUri: 'https://mail.example.invalid/',
+        hand: (address) => {
+            handed.push(address);
+
+            return Promise.resolve(answer);
+        },
+        abandon: () => undefined,
+        answerWaiting: () => null,
+    };
+}
+
+/**
+ * An attempt written down by a run the authorization server's page replaced, which is what the web head comes back to.
+ *
+ * @returns The `state` that run generated, which is what the server echoes back and what the answer has to carry.
+ */
+async function attemptWaitingForItsAnswer(): Promise<string> {
+    window.sessionStorage.clear();
+
+    const handed: string[] = [];
+
+    void startOAuthSignIn({
+        deployment: knownDeployment,
+        server: { name: 'keycloak', displayName: 'Keycloak', issuer, clientId: 'mailfathom-client' },
+        resource: { resource: `${knownDeployment.baseAddress}/api/client`, scopes: ['mailfathom.read'] },
+        redirect: {
+            offered: true,
+            redirectUri: 'https://mail.example.invalid/',
+            hand: (address) => {
+                handed.push(address);
+
+                // Nothing settles, which is what the document being replaced looks like from here.
+                return new Promise<SignInRedirectAnswer | null>(() => undefined);
+            },
+            abandon: () => undefined,
+            answerWaiting: () => null,
+        },
+        transport: bothProviders,
+    });
+
+    await vi.waitFor(() => {
+        expect(handed).toHaveLength(1);
+    });
+
+    return new URL(handed[0] ?? '').searchParams.get('state') ?? '';
+}
+
 /** What every request the screen made carried as a credential, so a test sees where a password did and did not go. */
 function credentialsSent(asked: readonly ClientRequest[]): (string | undefined)[] {
     return asked.map((request) => request.headers['Authorization']);
@@ -88,6 +269,12 @@ interface Rendered {
     readonly presented: { deployment: DeploymentAddress; session: KeptSession; keptBeyondTheTab: boolean }[];
     readonly attempts: AbortSignal[];
     readonly pointedAway: boolean[];
+
+    /** The grants an authorization server sign-in handed up, which is the other half of what this screen can produce. */
+    readonly granted: { deployment: DeploymentAddress; grant: OAuthGrant }[];
+
+    /** Takes the screen out of the document, which is what abandoning a sign-in that is still in flight looks like. */
+    readonly unmount: () => void;
 }
 
 // The screen is handed a transport per attempt rather than one transport, because giving up on an attempt is what
@@ -99,18 +286,24 @@ function renderScreen(
     beyondTheTab: KeptBeyondTheTab = 'inThisBrowser',
     notices: readonly CredentialNotice[] = [],
     clearTextPermitted: boolean | null = null,
+    redirect: SignInRedirect = receivesNoRedirect,
+    redirectAnswer: SignInRedirectAnswer | null = null,
+    strictly = false,
 ): Rendered {
     const presented: { deployment: DeploymentAddress; session: KeptSession; keptBeyondTheTab: boolean }[] = [];
+    const granted: { deployment: DeploymentAddress; grant: OAuthGrant }[] = [];
     const attempts: AbortSignal[] = [];
     const pointedAway: boolean[] = [];
 
-    render(
+    const screenUnder = (
         <LocalizationProvider>
             <SignIn
                 adopted={adopted}
                 clearTextPermitted={clearTextPermitted}
                 beyondTheTab={beyondTheTab}
                 notices={notices}
+                redirect={redirect}
+                redirectAnswer={redirectAnswer}
                 send={(abandoned) => {
                     attempts.push(abandoned);
 
@@ -119,14 +312,19 @@ function renderScreen(
                 onSignedIn={(reached, session, keptBeyondTheTab) => {
                     presented.push({ deployment: reached, session, keptBeyondTheTab });
                 }}
+                onSignedInWithGrant={(reached, issued) => {
+                    granted.push({ deployment: reached, grant: issued });
+                }}
                 onPointSomewhereElse={() => {
                     pointedAway.push(true);
                 }}
             />
-        </LocalizationProvider>,
+        </LocalizationProvider>
     );
 
-    return { presented, attempts, pointedAway };
+    const { unmount } = render(strictly ? <StrictMode>{screenUnder}</StrictMode> : screenUnder);
+
+    return { presented, granted, attempts, pointedAway, unmount };
 }
 
 function typeAddress(entry: string): void {
@@ -411,7 +609,9 @@ describe('SignIn', () => {
         // again, and the request the abandoned attempt started was cancelled rather than left on the wire.
         expect(screen.queryByRole('status')).toBeNull();
         expect(screen.getByRole('button', { name: 'Connect' }).hasAttribute('disabled')).toBe(false);
-        expect(attempts.map((abandoned) => abandoned.aborted)).toEqual([true]);
+        // The last transport handed out is the attempt's own; the one before it belongs to the read that asks what the
+        // deployment offers, which nobody gave up on.
+        expect(attempts.at(-1)?.aborted).toBe(true);
     });
 
     it('offers nothing to give up on before an attempt has been started', () => {
@@ -512,7 +712,9 @@ describe('SignIn', () => {
         submit();
 
         await screen.findByRole('alert');
-        expect(asked).toEqual(['https://mail.example.invalid/api/client/session/token']);
+        expect(asked.filter((path) => path.endsWith(sessionExchangeRoute))).toEqual([
+            'https://mail.example.invalid/api/client/session/token',
+        ]);
     });
 
     it('says what answered was not MailFathom rather than signing in against anything that replies', async () => {
@@ -755,16 +957,6 @@ describe('SignIn', () => {
         expect(screen.getByText('Advanced').closest('summary')?.textContent).not.toContain('no TLS');
     });
 
-    // The design offers sign-in through a provider above the password form, and this client speaks HTTP Basic alone:
-    // the three stand as controls that are not built rather than being left out, and none of them acts.
-    it('draws the provider sign-in the design offers as controls that say they are not built yet', () => {
-        renderScreen(signedIn, servingDeployment);
-
-        for (const provider of ['GitHub', 'Gmail', 'Keycloak']) {
-            expect(screen.getByRole('button', { name: `${provider} — not built yet` })).toBeDefined();
-        }
-    });
-
     it('signs in over a configured clear-text permission without anybody having to declare it again', async () => {
         const { presented } = renderScreen(signedIn, null, 'inThisBrowser', [], true);
 
@@ -777,5 +969,441 @@ describe('SignIn', () => {
                 { baseAddress: 'http://mail.example.test' },
             ]);
         });
+    });
+    it('draws the deployment’s own provider above everything and every other one in the grid beside it', async () => {
+        const handed: string[] = [];
+        renderScreen(bothProviders, servingDeployment, 'inThisBrowser', [], null, redirectTo(handed));
+
+        // The deployment's own is the one primary control, labelled as the design labels it, and the sentence under it
+        // names the provider rather than the control.
+        expect(await screen.findByRole('button', { name: 'Sign in' })).toBeDefined();
+        expect(screen.getByText('Nordwind SSO opens in your browser.')).toBeDefined();
+
+        // Every other server is a row in the grid, named by what it does rather than by the provider alone.
+        expect(screen.getByRole('button', { name: 'Continue to Keycloak' })).toBeDefined();
+
+        // And the password form stands beside both, because this deployment publishes that it takes one.
+        expect(screen.getByLabelText('Password')).toBeDefined();
+    });
+
+    it('draws no provider control on a head that receives no redirect, rather than one that goes nowhere', async () => {
+        renderScreen(bothProviders, servingDeployment);
+
+        // The password form is what is left, and it is what the wait is over.
+        await screen.findByRole('button', { name: 'Connect' });
+
+        expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Continue to Keycloak' })).toBeNull();
+    });
+
+    it('says a deployment offers no way in at all, rather than drawing a form nothing would take', async () => {
+        renderScreen(published({ acceptsPassword: false, authorizationServers: [] }), servingDeployment);
+
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            'This deployment offers no sign-in method. Check the address, or ask whoever runs it to configure one.',
+        );
+        expect(screen.queryByLabelText('Password')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull();
+    });
+
+    it('hands somebody to the authorization server with a challenge, a state, and what the token is for', async () => {
+        const handed: string[] = [];
+        renderScreen(bothProviders, servingDeployment, 'inThisBrowser', [], null, redirectTo(handed));
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue to Keycloak' }));
+
+        await vi.waitFor(() => {
+            expect(handed).toHaveLength(1);
+        });
+
+        const asked = new URL(handed[0] ?? '');
+
+        expect(asked.origin + asked.pathname).toBe(`${issuer}/authorize`);
+        expect(asked.searchParams.get('response_type')).toBe('code');
+        expect(asked.searchParams.get('client_id')).toBe('mailfathom-client');
+        expect(asked.searchParams.get('code_challenge_method')).toBe('S256');
+        expect(asked.searchParams.get('resource')).toBe(`${knownDeployment.baseAddress}/api/client`);
+
+        // The verifier itself never travels, which is the whole of RFC 7636 and the reason a page needs no secret.
+        expect(asked.searchParams.get('code_verifier')).toBeNull();
+        expect((asked.searchParams.get('state') ?? '').length).toBeGreaterThan(20);
+        expect((asked.searchParams.get('code_challenge') ?? '').length).toBeGreaterThan(20);
+    });
+
+    it('signs in with the grant the server issued, named by who the deployment says the token belongs to', async () => {
+        const handed: string[] = [];
+        let state = '';
+
+        // The shell head answers out of the control that started it, so the state it is answered with is the one the
+        // address it was handed carried — which is exactly what a real authorization server echoes back.
+        const redirect: SignInRedirect = {
+            offered: true,
+            redirectUri: 'https://mail.example.invalid/',
+            hand: (address) => {
+                handed.push(address);
+                state = new URL(address).searchParams.get('state') ?? '';
+
+                return Promise.resolve({ answered: 'code', code: 'a-code', state });
+            },
+            abandon: () => undefined,
+            answerWaiting: () => null,
+        };
+
+        const { granted } = renderScreen(bothProviders, servingDeployment, 'inThisBrowser', [], null, redirect);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue to Keycloak' }));
+
+        await vi.waitFor(() => {
+            expect(granted).toHaveLength(1);
+        });
+
+        expect(granted[0]?.deployment).toEqual(knownDeployment);
+        expect(granted[0]?.grant.authorization).toBe(`Bearer ${issuedToken}`);
+        expect(granted[0]?.grant.issuer).toBe(issuer);
+        expect(granted[0]?.grant.person).toBe('K. Kowalska');
+    });
+
+    // What the deployment offers has to be composed before a credential is presented, and every client nobody handed an
+    // address to reaches this screen with nothing adopted — so the address being typed is what the two documents are
+    // read for. It is read once what was typed has settled rather than per keystroke, which is what keeps a host
+    // somebody is halfway through naming from being asked about on every character.
+    it('composes the controls a typed address offers, once what was typed has settled', async () => {
+        vi.useFakeTimers();
+
+        try {
+            renderScreen(bothProviders, null, 'inThisBrowser', [], null, redirectTo([]));
+
+            typeAddress('mail.example.invalid');
+
+            expect(screen.queryByRole('button', { name: 'Continue to Keycloak' })).toBeNull();
+
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(1000);
+            });
+
+            expect(screen.getByRole('button', { name: 'Continue to Keycloak' })).toBeDefined();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // Somebody coming back from an authorization server meets this screen while the code is still being redeemed. A
+    // complete password form beside that wait is a second sign-in they can start against the same deployment while the
+    // first one is in flight.
+    it('says it is finishing the sign-in the run began with, and offers no second way in while it does', async () => {
+        renderScreen(bothProviders, servingDeployment, 'inThisBrowser', [], null, redirectTo([]), {
+            answered: 'code',
+            code: 'a-code',
+            state: 'a-state-nobody-here-made',
+        });
+
+        expect(screen.getByText('Finishing the sign-in with your provider…')).toBeDefined();
+        expect(screen.queryByLabelText('Password')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull();
+
+        // And the wait ends: the answer is refused, and the password form is back rather than the screen being left in
+        // a state nobody can leave.
+        expect(await screen.findByRole('alert')).toBeDefined();
+        expect(screen.getByLabelText('Password')).toBeDefined();
+    });
+
+    // A deployment that published a provider is configured. Saying it offers no sign-in method would name a fix nobody
+    // can make, so what this head cannot draw is said as this head's limit rather than as the deployment's.
+    it('says a published provider is one this head cannot open, rather than that the deployment offers none', async () => {
+        renderScreen(bothProviders, servingDeployment);
+
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            'This deployment offers a provider, which this version of the client cannot open. Sign in with a password here, or use the desktop client or a browser.',
+        );
+
+        // The password form is what is left, which is why this is not the deployment offering nothing.
+        expect(screen.getByLabelText('Password')).toBeDefined();
+    });
+
+    // The other half of that, and the difference matters: one is permanent on this head and the other is a read worth
+    // making again, which is what the control inside the notice is for.
+    it('says a published provider went undrawn because the resource document could not be read', async () => {
+        renderScreen(resourceWithheld, servingDeployment, 'inThisBrowser', [], null, redirectTo([]));
+
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            'This deployment offers a provider, and what a token has to be issued for could not be read just now.Ask again',
+        );
+    });
+
+    // A failure at the provider reported as a failure at MailFathom sends whoever reads it, and whoever they ask, to
+    // the wrong system.
+    it('reports an authorization server that did not answer as the provider rather than as the deployment', async () => {
+        const { granted } = renderScreen(bothProviders, servingDeployment, 'inThisBrowser', [], null, redirectTo([]));
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue to Keycloak' }));
+
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            'The provider did not answer, so nothing was signed in. Try again in a moment.',
+        );
+        expect(granted).toEqual([]);
+    });
+
+    // A hand-over is minutes long, and the screen it was started from can go in the middle of one. The shell head is
+    // holding its redirect port for the whole of that wait, and the verifier written down for the attempt is a secret
+    // with the life of one sign-in.
+    it('calls a hand-over off when the screen that started it goes, rather than leaving it waiting', async () => {
+        const handed: string[] = [];
+        const abandoned: number[] = [];
+        const redirect: SignInRedirect = {
+            offered: true,
+            redirectUri: 'https://mail.example.invalid/',
+            hand: (address) => {
+                handed.push(address);
+
+                // Nobody comes back, which is what being away in a browser looks like from here.
+                return new Promise<SignInRedirectAnswer | null>(() => undefined);
+            },
+            abandon: () => {
+                abandoned.push(1);
+            },
+            answerWaiting: () => null,
+        };
+
+        const { granted, unmount } = renderScreen(
+            bothProviders,
+            servingDeployment,
+            'inThisBrowser',
+            [],
+            null,
+            redirect,
+        );
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue to Keycloak' }));
+
+        await vi.waitFor(() => {
+            expect(handed).toHaveLength(1);
+        });
+
+        unmount();
+
+        expect(abandoned).toEqual([1]);
+        expect(window.sessionStorage.length).toBe(0);
+        expect(granted).toEqual([]);
+    });
+
+    // What is under the divider is what it names. The deployment's own server published alone leaves the password form
+    // directly beneath it, and a divider reading of another method there names nothing that is on the screen.
+    it('names the password form under the divider where the deployment’s own server is the only one published', async () => {
+        renderScreen(ownProviderOnly, servingDeployment, 'inThisBrowser', [], null, redirectTo([]));
+
+        expect(await screen.findByRole('button', { name: 'Sign in' })).toBeDefined();
+        expect(screen.getByText('or with a password')).toBeDefined();
+        expect(screen.queryByText('or another method')).toBeNull();
+    });
+
+    // A deployment taking no password whose providers this head cannot open leaves nothing on the screen to press, so
+    // the sentence names the heads that can rather than a password form that is not drawn.
+    it('says where to sign in instead where the deployment takes no password and no provider is drawn', async () => {
+        renderScreen(providersOnly, servingDeployment);
+
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            'This deployment offers a provider, which this version of the client cannot open, and it takes no password. Sign in from the desktop client or from a browser.',
+        );
+        expect(screen.queryByLabelText('Password')).toBeNull();
+    });
+
+    // The resource document failing is the one of those two reasons that is worth another read, so the notice carries
+    // the control that makes it rather than a sentence asking the person to do something the screen could do.
+    it('reads the documents again where the resource document is what failed, and draws the providers it answers with', async () => {
+        renderScreen(resourceWithheldOnce(), servingDeployment, 'inThisBrowser', [], null, redirectTo([]));
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Ask again' }));
+
+        expect(await screen.findByRole('button', { name: 'Continue to Keycloak' })).toBeDefined();
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    // A hand-over waits on somebody's browser for minutes, with every control on the screen disabled and the password
+    // form gone. Somebody who closed the provider window or pressed the wrong provider has to have something to press.
+    it('offers a way out of a hand-over nobody came back from, rather than holding the screen on it', async () => {
+        const handed: string[] = [];
+        const abandoned: number[] = [];
+        const redirect: SignInRedirect = {
+            offered: true,
+            redirectUri: 'https://mail.example.invalid/',
+            hand: (address) => {
+                handed.push(address);
+
+                return new Promise<SignInRedirectAnswer | null>(() => undefined);
+            },
+            abandon: () => {
+                abandoned.push(1);
+            },
+            answerWaiting: () => null,
+        };
+
+        renderScreen(bothProviders, servingDeployment, 'inThisBrowser', [], null, redirect);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue to Keycloak' }));
+
+        await vi.waitFor(() => {
+            expect(handed).toHaveLength(1);
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Stop trying' }));
+
+        expect(abandoned).toEqual([1]);
+        expect(window.sessionStorage.length).toBe(0);
+        expect(screen.getByRole('button', { name: 'Continue to Keycloak' })).toBeDefined();
+    });
+
+    // One attempt slot holds both ways in. A password attempt against a slow deployment that kept its controller when
+    // a hand-over took the slot would be unabortable, with the control that abandons it gone in the same render.
+    it('calls off a password attempt still running when a hand-over takes the slot it was in', async () => {
+        const { attempts } = renderScreen(
+            exchangeUnanswered,
+            servingDeployment,
+            'inThisBrowser',
+            [],
+            null,
+            redirectTo([]),
+        );
+
+        // The provider control is drawn from what the deployment published, so it is waited for before the password
+        // attempt starts — otherwise this test would press it before the screen had one.
+        const provider = await screen.findByRole('button', { name: 'Continue to Keycloak' });
+
+        typeCredential();
+        submit();
+
+        const presenting = attempts[attempts.length - 1];
+
+        fireEvent.click(provider);
+
+        expect(presenting?.aborted).toBe(true);
+    });
+
+    // The client is mounted in `StrictMode`, which runs an effect, its cleanup, and the effect again. The verifier is
+    // taken from storage as the answer is read, so a redemption entered twice spends the code on nothing and the
+    // second pass reports an answer belonging to no sign-in this client started.
+    it('redeems a waiting redirect once, under the doubled effects the client is mounted with', async () => {
+        const state = await attemptWaitingForItsAnswer();
+        const asked: ClientRequest[] = [];
+
+        const { granted } = renderScreen(
+            recording(asked, bothProviders),
+            servingDeployment,
+            'inThisBrowser',
+            [],
+            null,
+            redirectTo([]),
+            { answered: 'code', code: 'a-code', state },
+            true,
+        );
+
+        await waitFor(() => {
+            expect(granted).toHaveLength(1);
+        });
+
+        expect(asked.filter((request) => request.path.endsWith('/token'))).toHaveLength(1);
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    // Two spinners at once, and the primary control's own accessible name saying it is opening a provider the person
+    // did not press, is what reading the wait off `handing` alone produced.
+    it('leaves the deployment’s own control saying what it does while another provider is being opened', async () => {
+        const handed: string[] = [];
+        const redirect: SignInRedirect = {
+            offered: true,
+            redirectUri: 'https://mail.example.invalid/',
+            hand: (address) => {
+                handed.push(address);
+
+                return new Promise<SignInRedirectAnswer | null>(() => undefined);
+            },
+            abandon: () => undefined,
+            answerWaiting: () => null,
+        };
+
+        renderScreen(bothProviders, servingDeployment, 'inThisBrowser', [], null, redirect);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue to Keycloak' }));
+
+        await vi.waitFor(() => {
+            expect(handed).toHaveLength(1);
+        });
+
+        expect(screen.getByRole('button', { name: 'Sign in' })).toBeDefined();
+        expect(screen.queryByRole('button', { name: 'Opening Keycloak…' })).toBeNull();
+        expect(screen.getByText('Nordwind SSO opens in your browser.')).toBeDefined();
+    });
+
+    // The redemption is deliberately unabortable, so what giving up on it does is let go of its answer. Without the
+    // control there is nothing on this screen to press at all while it stands: no form, no provider control, and no
+    // way back but reloading the page.
+    it('lets the wait on a redirect answer be given up on, and signs nobody in when it later arrives', async () => {
+        const held = tokenHeldOpen();
+        const state = await attemptWaitingForItsAnswer();
+        const { granted } = renderScreen(held.transport, servingDeployment, 'inThisBrowser', [], null, redirectTo([]), {
+            answered: 'code',
+            code: 'a-code',
+            state,
+        });
+
+        expect(screen.getByText('Finishing the sign-in with your provider…')).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Stop trying' }));
+
+        // The form is back, which is what says the screen can be used again rather than only that the wait went.
+        expect(await screen.findByLabelText('Password')).toBeDefined();
+
+        held.answer();
+        await waitFor(() => {
+            expect(screen.queryByText('Finishing the sign-in with your provider…')).toBeNull();
+        });
+
+        expect(granted).toEqual([]);
+    });
+
+    // An answer belongs to the deployment it was started against. A screen composed for another one — or for none,
+    // which is where *Change the server* leaves it — would otherwise re-adopt the address that was abandoned.
+    it('signs nobody in for an answer whose deployment is not the one this screen is composed for', async () => {
+        const state = await attemptWaitingForItsAnswer();
+        const { granted } = renderScreen(bothProviders, null, 'inThisBrowser', [], null, redirectTo([]), {
+            answered: 'code',
+            code: 'a-code',
+            state,
+        });
+
+        // Waited out by the wait itself going, which is the redemption having answered and been dropped.
+        await waitFor(() => {
+            expect(screen.queryByText('Finishing the sign-in with your provider…')).toBeNull();
+        });
+
+        expect(granted).toEqual([]);
+    });
+
+    // While the wait stands there is no notice, no address field and no form, so the first paint of a run that came
+    // back from a provider leaves focus on the document; the screen replacing the wait is what it belongs on.
+    it('places focus on the screen that replaces the returning wait, rather than leaving it on the document', async () => {
+        renderScreen(bothProviders, servingDeployment, 'inThisBrowser', [], null, redirectTo([]), {
+            answered: 'code',
+            code: 'a-code',
+            state: 'a-state-nobody-here-made',
+        });
+
+        const login = await screen.findByRole('textbox', { name: 'Login' });
+
+        await waitFor(() => {
+            expect(document.activeElement).toBe(login);
+        });
+    });
+
+    it('redeems nothing for an answer carrying a state this client did not generate', async () => {
+        const { granted } = renderScreen(bothProviders, servingDeployment, 'inThisBrowser', [], null, redirectTo([]), {
+            answered: 'code',
+            code: 'a-code',
+            state: 'a-state-nobody-here-made',
+        });
+
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            'That answer belongs to no sign-in this client started. Start one from this screen rather than from a link.',
+        );
+        expect(granted).toEqual([]);
     });
 });

@@ -27,10 +27,12 @@ import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import type { CredentialStore, KeptBeyondTheTab } from './signIn/credentialStore';
 import type { KeptSession } from './signIn/keptSession';
+import type { OAuthGrant } from './signIn/oauthGrant';
 import { noTelemetry, TelemetryContext, type ClientEvent, type ClientTelemetry } from './telemetry/clientTelemetry';
 import { ThemeProvider } from './theme/Theme';
 import { ToastsProvider } from './toasts/Toasts';
 import { LinkOpenerContext } from './shellOperations/linkOpener';
+import { receivesNoRedirect, type SignInRedirect, type SignInRedirectAnswer } from './shellOperations/signInRedirect';
 import { SystemNotifierContext, type SystemNotifier } from './shellOperations/systemNotifier';
 import { WorkspaceProvider } from './workspace/Workspace';
 
@@ -513,16 +515,27 @@ interface RecordingStore extends CredentialStore {
 
     /** Whether what it holds was asked to outlive the tab, which is the choice the sign-in screen carries down. */
     readonly keptBeyondTheTab: Map<string, boolean>;
+
+    /** The OAuth grants it holds, by deployment, kept apart from the sessions exactly as the real store keeps them. */
+    readonly keptGrants: Map<string, string>;
 }
 
 export function storeKeeping(beyondTheTab: KeptBeyondTheTab = 'inThisBrowser'): RecordingStore {
     const kept = new Map<string, string>();
     const keptBeyondTheTab = new Map<string, boolean>();
+    const keptGrants = new Map<string, string>();
 
     return {
         kept,
         keptBeyondTheTab,
+        keptGrants,
         beyondTheTab,
+        readGrant: (deployment) => Promise.resolve(keptGrants.get(deployment.baseAddress) ?? null),
+        keepGrant: (deployment, grant) => {
+            keptGrants.set(deployment.baseAddress, grant);
+
+            return Promise.resolve(true);
+        },
         read: (deployment) => Promise.resolve(kept.get(deployment.baseAddress) ?? null),
         keep: (deployment, authorization, asked) => {
             kept.set(deployment.baseAddress, authorization);
@@ -540,6 +553,7 @@ export function storeKeeping(beyondTheTab: KeptBeyondTheTab = 'inThisBrowser'): 
         forget: (deployment) => {
             kept.delete(deployment.baseAddress);
             keptBeyondTheTab.delete(deployment.baseAddress);
+            keptGrants.delete(deployment.baseAddress);
 
             return Promise.resolve(true);
         },
@@ -551,6 +565,13 @@ export function storeRefusingToKeep(): RecordingStore {
     const store = storeKeeping('inTheDeviceStore');
 
     return { ...store, keep: () => Promise.resolve(false) };
+}
+
+/** The same store from the other way in: a grant an authorization server issued is what it will not write. */
+export function storeRefusingToKeepGrant(): RecordingStore {
+    const store = storeKeeping('inTheDeviceStore');
+
+    return { ...store, keepGrant: () => Promise.resolve(false) };
 }
 
 /** A store that holds the credential and will not give it up, which is a locked keychain from the client's side. */
@@ -625,6 +646,9 @@ export function renderApp(
     send: DeploymentTransport = deploymentAnswering(),
     credentials: CredentialStore = storeKeeping(),
     telemetry: ClientTelemetry = noTelemetry,
+    signedInWithGrant: OAuthGrant | null = null,
+    redirect: SignInRedirect = receivesNoRedirect,
+    redirectAnswer: SignInRedirectAnswer | null = null,
 ): void {
     render(
         <StrictMode>
@@ -643,9 +667,12 @@ export function renderApp(
                                                         deployment={deployment}
                                                         openSignals={noSignalChannel}
                                                         portraits={drawsNobody}
+                                                        redirect={redirect}
+                                                        redirectAnswer={redirectAnswer}
                                                         send={send}
                                                         signalSchedule={neverReopens}
                                                         signedInWith={signedInWith}
+                                                        signedInWithGrant={signedInWithGrant}
                                                     />
                                                 </Containment>
                                             </TelemetryContext>

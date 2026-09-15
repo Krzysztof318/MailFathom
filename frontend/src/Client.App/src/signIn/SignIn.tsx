@@ -2,19 +2,24 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
+    ownProviderName,
     reachDeployment,
+    readProtectedResource,
+    readSignInMethods,
     resolveDeploymentEntry,
     signIn,
     type ClientFailureReason,
     type DeploymentAddress,
     type DeploymentEntryRefusal,
     type DeploymentEntryResult,
+    type ProtectedResource,
+    type SignInAuthorizationServer,
+    type SignInMethods,
     type SignInRefusal,
 } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
-import { PlannedControl } from '../controls/PlannedControl';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { AdoptedDeployment } from '../deployment/adoptedDeployment';
 import type { DeploymentTransport } from '../deployment/sendToDeployment';
@@ -27,6 +32,16 @@ import { resolveCredentialEntry, resolveSessionCredential, type CredentialEntryR
 import type { KeptSession } from './keptSession';
 import { CredentialNotices, type CredentialNotice } from './CredentialNotices';
 import { offersMoreThanTheTab, type KeptBeyondTheTab } from './credentialStore';
+import {
+    completeOAuthSignIn,
+    discardWrittenAttempt,
+    startOAuthSignIn,
+    type OAuthSignInOutcome,
+    type OAuthSignInRefusal,
+} from './oauthFlow';
+import type { OAuthGrant } from './oauthGrant';
+import { ProviderMark } from './ProviderMark';
+import type { SignInRedirect, SignInRedirectAnswer } from '../shellOperations/signInRedirect';
 
 // The screen somebody meets before any mail: it collects the credential, and the address beside it wherever nothing has
 // already said where the deployment is. Those are one form rather than two screens because a person was handed all four
@@ -47,7 +62,21 @@ import { offersMoreThanTheTab, type KeptBeyondTheTab } from './credentialStore';
 // the credential's own encoding each belong to the module that owns them.
 
 /** Everything this screen can be stopped by, whether it was decided here, by the deployment, or by the wire. */
-type SignInScreenRefusal = DeploymentEntryRefusal | CredentialEntryRefusal | SignInRefusal | ClientFailureReason;
+type SignInScreenRefusal =
+    | DeploymentEntryRefusal
+    | CredentialEntryRefusal
+    | SignInRefusal
+    | OAuthSignInRefusal
+    | ClientFailureReason
+
+    /**
+     * The one refusal this screen names itself, because no other reader of `unavailable` needs it separated.
+     *
+     * An OAuth `unavailable` is the *authorization server* not answering, and `shownFor` below folds every other
+     * `unavailable` into a sentence about the deployment — which would point whoever reads it, and whoever they go and
+     * ask, at the wrong system entirely.
+     */
+    | 'providerUnavailable';
 
 /** Which controls a refusal is about, so the fields that have to change are the ones marked as needing it. */
 type RefusedControl = 'address' | 'userName' | 'password';
@@ -78,6 +107,14 @@ const refusals: Readonly<Record<SignInScreenRefusal, Refusal>> = {
 
     credentialRefused: { message: 'signIn.credentialRefused', controls: ['userName', 'password'] },
     basicNotOffered: { message: 'signIn.basicNotOffered', controls: [] },
+
+    // The four an authorization server sign-in can end at. None of them marks a control: nothing on this form was
+    // typed for one, and the way out of each is starting it again rather than correcting a field.
+    notAuthorized: { message: 'signIn.notAuthorized', controls: [] },
+    unexpectedAnswer: { message: 'signIn.unexpectedAnswer', controls: [] },
+    refused: { message: 'signIn.providerRefused', controls: [] },
+    notAUser: { message: 'signIn.notAUser', controls: [] },
+    providerUnavailable: { message: 'signIn.providerSilent', controls: [] },
 
     // `unauthenticated` is the answer `credentialRefused` already is — a 401 whose challenge did prove MailFathom
     // wrote it, a 401 that did not being an unreadable answer instead — so it reads as a refused credential and marks
@@ -130,18 +167,39 @@ const fieldInput =
 
 const fieldLabel = 'text-sm font-medium text-text-soft';
 
-// The providers the design's sign-in screen draws when a server declares them. A deployment declares none today and
-// this client could act on none, so these are the design's own three, drawn inert; the day the service declares a list,
-// it is that list that stands here.
-const designedProviders = ['GitHub', 'Gmail', 'Keycloak'] as const;
+/**
+ * How long a typed address is left alone before the two documents are read for it.
+ *
+ * Every keystroke that happens to resolve to an address is otherwise a request to a host somebody is halfway through
+ * naming, which is both noise and a disclosure. An address this screen was handed waits for none of this: it was
+ * settled before the screen was drawn.
+ */
+const typedAddressSettles = 600;
+
+/** What a deployment published about signing in, and which address it was published for. */
+interface Published {
+    readonly address: string;
+    readonly methods: SignInMethods | null;
+    readonly resource: ProtectedResource | null;
+}
+
+/** What this screen is in the middle of, where somebody has been handed to an authorization server or is back from one. */
+type HandingOver =
+    | { readonly stage: 'handingOff'; readonly provider: string }
+
+    /** A redirect was waiting when this run started, and the code in it is being redeemed. */
+    | { readonly stage: 'returning' };
 
 export function SignIn({
     adopted,
     clearTextPermitted: configuredClearText,
     beyondTheTab,
     notices,
+    redirect,
+    redirectAnswer,
     send,
     onSignedIn,
+    onSignedInWithGrant,
     onPointSomewhereElse,
 }: {
     readonly adopted: AdoptedDeployment | null;
@@ -153,8 +211,18 @@ export function SignIn({
     readonly beyondTheTab: KeptBeyondTheTab;
 
     readonly notices: readonly CredentialNotice[];
+
+    /** How somebody is handed to an authorization server and how the answer comes back, resolved at the composition root. */
+    readonly redirect: SignInRedirect;
+
+    /** The answer that was already waiting when this run started, which is the web head's whole way of answering. */
+    readonly redirectAnswer: SignInRedirectAnswer | null;
+
     readonly send: DeploymentTransport;
     readonly onSignedIn: (deployment: DeploymentAddress, session: KeptSession, keptBeyondTheTab: boolean) => void;
+
+    /** Signing in through an authorization server, which produces a grant rather than a session the deployment minted. */
+    readonly onSignedInWithGrant: (deployment: DeploymentAddress, grant: OAuthGrant) => void;
 
     /** Pointing away from an address somebody named themselves, which this screen offers inside its disclosure. */
     readonly onPointSomewhereElse: () => void;
@@ -184,12 +252,35 @@ export function SignIn({
     // this from the entry would then name the address being typed while the request goes to the one that was.
     const [reaching, setReaching] = useState<ResolvedConnection | null>(null);
     const [refusal, setRefusal] = useState<SignInScreenRefusal | null>(null);
+
+    // What the deployment published about signing in, kept beside the address it was published for rather than cleared
+    // when the address changes: the pairing is what makes a stale answer unreadable instead of making it somebody
+    // else's provider list, and it is read during render rather than synchronised by an effect.
+    const [published, setPublished] = useState<Published | null>(null);
+
+    // Seeded from the redirect rather than set by the effect that reads it, because a person coming back from an
+    // authorization server must meet the wait on the first paint: the redemption starts in the same commit, and a
+    // screen that drew the form first would be offering a sign-in to somebody who is already halfway through one.
+    const [handing, setHanding] = useState<HandingOver | null>(redirectAnswer === null ? null : { stage: 'returning' });
+
     const address = useRef<HTMLInputElement>(null);
     const name = useRef<HTMLInputElement>(null);
     const submit = useRef<HTMLButtonElement>(null);
     const notified = useRef<HTMLDivElement>(null);
     const attempt = useRef<AbortController | null>(null);
     const started = useRef(false);
+
+    /** How many times the two documents have been asked for, which is what a read asked for again keys the effect on. */
+    const [reading, setReading] = useState(0);
+
+    /** Which answer has already been redeemed, so a re-run of the effect below does not spend the code twice. */
+    const redeeming = useRef<SignInRedirectAnswer | null>(null);
+
+    /** How that redemption reports, read when the answer arrives so that no dependency re-enters the redemption. */
+    const reporting = useRef<(outcome: OAuthSignInOutcome) => void>(() => undefined);
+
+    /** Whether somebody gave up on that wait, which is what drops the answer rather than cancelling the request. */
+    const letGoOfTheAnswer = useRef(false);
 
     // The view changed, so focus is placed rather than left wherever the previous screen had it: on what this screen
     // has to say about why it is back where there is something, and otherwise on the first thing the form is asking to
@@ -199,9 +290,17 @@ export function SignIn({
     // from a chosen address puts an address field on a form that had none, and this screen is often already standing
     // when that happens — somebody signs out of the frame first and points elsewhere from here. Leaving focus in the
     // login field would leave them typing a password against a deployment they have just abandoned.
+    //
+    // And again when a hand-over ends, which is the third view change: while one runs there is nothing to place focus
+    // on — no notice, no address field, and no form — so the first paint of a run that came back from an authorization
+    // server leaves focus on the document, and the screen replacing the wait is what it is placed on instead.
     useEffect(() => {
+        if (handing !== null) {
+            return;
+        }
+
         (notified.current ?? address.current ?? name.current)?.focus();
-    }, [deployment]);
+    }, [deployment, handing]);
 
     // An attempt is answered for the deployment it was started against, so one whose deployment was abandoned while it
     // ran is called off rather than allowed to answer: the way out of a chosen address sits above this form and stays
@@ -232,10 +331,240 @@ export function SignIn({
         }
     }, [presenting]);
 
+    // Which deployment this screen is composed for, which is the one it was handed or the one being typed once what
+    // has been typed is an address at all. A typed one counts because the controls a deployment offers have to be
+    // composed before a credential is presented rather than after one was accepted: every client nobody handed an
+    // address to, and everybody who used *Change the server*, reaches this screen with nothing adopted, and a
+    // deployment that takes no password and publishes its own provider would otherwise be unreachable from there.
+    const named = deployment === null ? resolveDeploymentEntry(entry, clearTextPermitted) : null;
+    const asked: DeploymentAddress | null = deployment ?? (named?.outcome === 'resolved' ? named.deployment : null);
+    const askedAddress = asked?.baseAddress ?? null;
+
+    /** Whether the address was handed to this screen rather than typed into it, which is what decides it waits. */
+    const handed = deployment !== null;
+
+    // What the deployment says it offers, asked as soon as there is a deployment to ask and carrying no credential.
+    // Both documents are read together because a screen needs both before it draws a provider control at all — one
+    // says which servers are offered and the other what a token has to be issued for — and a deployment answering
+    // neither is an older one that still signs somebody in with a password.
+    useEffect(() => {
+        if (askedAddress === null) {
+            return;
+        }
+
+        const running = new AbortController();
+
+        const ask = (): void => {
+            const at = { baseAddress: askedAddress };
+            const asking = send(running.signal);
+
+            void Promise.all([readSignInMethods(at, asking), readProtectedResource(at, asking)]).then(
+                ([methods, resource]) => {
+                    if (running.signal.aborted) {
+                        return;
+                    }
+
+                    setPublished({
+                        address: askedAddress,
+                        methods: methods.outcome === 'read' ? methods.value : null,
+                        resource: resource.outcome === 'read' ? resource.value : null,
+                    });
+                },
+            );
+        };
+
+        if (handed) {
+            ask();
+
+            return () => {
+                running.abort();
+            };
+        }
+
+        const settling = window.setTimeout(ask, typedAddressSettles);
+
+        return () => {
+            window.clearTimeout(settling);
+            running.abort();
+        };
+    }, [askedAddress, handed, reading, send]);
+
+    // What an OAuth sign-in ended as, in one place, because the two halves reach it from different runs of the client:
+    // the shell head comes back out of the control that started it, and the web head out of a redirect that was
+    // already waiting when this run began.
+    const settleOAuth = useCallback(
+        (outcome: OAuthSignInOutcome): void => {
+            setHanding(null);
+
+            // An answer is for the deployment it was started against. Pointing the client somewhere else while a code
+            // is in flight is what the password attempt's own cleanup calls off through the slot; a redemption holds
+            // no slot and is deliberately unabortable, so what stands in for that here is dropping what it answers —
+            // signing somebody in would re-adopt the address they abandoned and write a grant into the store they
+            // have just asked to clear.
+            if (outcome.outcome === 'signedIn' && outcome.deployment.baseAddress !== askedAddress) {
+                return;
+            }
+
+            if (outcome.outcome === 'refused') {
+                // An authorization server that did not answer is said as that rather than as the deployment's silence,
+                // which is what every other `unavailable` on this screen reads as. A failure at the provider reported
+                // as a failure at MailFathom sends whoever reads it, and whoever they ask, to the wrong system.
+                const refused = outcome.refusal === 'unavailable' ? 'providerUnavailable' : outcome.refusal;
+
+                setRefusal(refused);
+                telemetry.happened('sign_in_refused', { 'mailfathom.client.refusal': refused });
+
+                return;
+            }
+
+            telemetry.happened('signed_in', {
+                'mailfathom.client.kept': 'true',
+                'mailfathom.client.method': 'authorizationServer',
+            });
+
+            onSignedInWithGrant(outcome.deployment, outcome.grant);
+        },
+        [askedAddress, onSignedInWithGrant, telemetry],
+    );
+
+    // A redirect that was waiting when this run started, redeemed exactly once for the answer it carried.
+    //
+    // Once, and not once per run of the effect: the verifier is taken from the tab's own storage as it is read, so a
+    // second pass over the same answer has nothing left to redeem with and the code is spent for nothing. `StrictMode`
+    // runs every effect, its cleanup, and the effect again on mount, and this component's own callbacks change
+    // identity with the frame above it — so the ref is what makes the redemption one act rather than one per re-run,
+    // and the outcome is settled through a ref of its own so that no dependency of this effect is a reason to re-enter
+    // it. It is not abandonable for the same reason: an aborted redemption is an authorization code nothing can spend.
+    useEffect(() => {
+        reporting.current = settleOAuth;
+    }, [settleOAuth]);
+
+    useEffect(() => {
+        if (redirectAnswer === null || redeeming.current === redirectAnswer) {
+            return;
+        }
+
+        redeeming.current = redirectAnswer;
+
+        void completeOAuthSignIn(redirectAnswer, send(new AbortController().signal)).then((outcome) => {
+            if (letGoOfTheAnswer.current) {
+                return;
+            }
+
+            reporting.current(outcome);
+        });
+    }, [redirectAnswer, send]);
+
     const shown = refusal === null ? null : shownFor(refusal, deployment);
     // Whether the choice between the tab and the device is a choice at all, which is what decides both that the
     // checkbox is drawn and that the sentence it replaces is not.
     const keptBeyondTheTabOffered = offersMoreThanTheTab(beyondTheTab);
+
+    // What this deployment offers, read during render from what was published for the address on the screen. An answer
+    // published for a different address is not read at all, and a deployment that published nothing is an older one —
+    // which offers a password, because that is what every deployment before this route offered.
+    const offered = published !== null && published.address === askedAddress ? published : null;
+    const acceptsPassword = offered?.methods?.acceptsPassword ?? true;
+
+    // What the deployment said it offers, which is read apart from what this head can actually draw a control for: the
+    // two answer different questions, and the sentences below say so separately.
+    const publishedServers = offered?.methods?.authorizationServers ?? [];
+
+    // A server is offerable where three things hold at once: the deployment published it, the deployment said what a
+    // token has to be issued for, and this head receives a redirect at all. The last is why the Android head draws no
+    // provider control rather than one that goes nowhere.
+    const servers: readonly SignInAuthorizationServer[] =
+        redirect.offered && offered?.resource != null ? publishedServers : [];
+
+    // The deployment's own is drawn as the one primary control above everything else, and every other server in the
+    // grid below it. That is the design's split between `showSso` and `showOauth`, and what decides it is the reserved
+    // name the configuration gives the operator's own provider.
+    const own = servers.find((server) => server.name === ownProviderName) ?? null;
+    const providers = servers.filter((server) => server.name !== ownProviderName);
+    const resource = offered?.resource ?? null;
+
+    // Nothing is offered at all, which is a deployment somebody has to go and configure rather than a screen to keep
+    // trying on. It is read off what the deployment *published* rather than off what is drawable here, because the two
+    // things that empty `servers` — a head that receives no redirect, and a resource document that could not be read —
+    // say nothing whatever about what the deployment offers, and telling somebody to go and configure one that is
+    // already configured names a fix nobody can make.
+    const noMethods = offered?.methods != null && !acceptsPassword && publishedServers.length === 0;
+
+    // The other half of that: the deployment published servers and this screen is drawing none of them. Which of the
+    // two reasons it is decides the sentence, because one is permanent on this head and the other is worth reading
+    // again — and whether a password form is standing under it decides which sentence, because one that names signing
+    // in with a password here names a way out that is not on the screen.
+    const withheldServers: MessageKey | null =
+        publishedServers.length === 0 || servers.length > 0
+            ? null
+            : redirect.offered
+              ? 'signIn.providersUnread'
+              : acceptsPassword
+                ? 'signIn.providersNotOnThisHead'
+                : 'signIn.providersOnAnotherHeadOnly';
+
+    /** Hands somebody to one authorization server, and settles whatever this head came back with. */
+    async function handOver(server: SignInAuthorizationServer): Promise<void> {
+        if (asked === null || resource === null) {
+            return;
+        }
+
+        // Whatever was already in the slot goes first. A password attempt against a slow deployment is still running
+        // when somebody presses a provider control, and replacing its controller unannounced would leave it
+        // unabortable — with the control that abandons it gone from the screen in the same render.
+        attempt.current?.abort();
+
+        const running = new AbortController();
+        attempt.current = running;
+
+        // What a hand-over that was called off has to undo, hung on the signal for the reason the password attempt's
+        // is: it holds however the attempt was abandoned, including a deployment changed underneath it while the
+        // person was away in their browser for minutes. The shell head is holding its redirect port for the whole of
+        // that wait, and the verifier written down for the attempt is a secret with the life of one sign-in.
+        running.signal.addEventListener(
+            'abort',
+            () => {
+                redirect.abandon();
+                discardWrittenAttempt();
+
+                if (attempt.current === running) {
+                    attempt.current = null;
+                    setHanding(null);
+                }
+            },
+            { once: true },
+        );
+
+        setRefusal(null);
+        setHanding({ stage: 'handingOff', provider: server.displayName });
+
+        const outcome = await startOAuthSignIn({
+            deployment: asked,
+            server,
+            resource,
+            redirect,
+            transport: send(running.signal),
+        });
+
+        // An abandoned hand-over has no answer, exactly as an abandoned password attempt has none: the screen is
+        // already back where the person left it, and signing them in to a deployment they pointed away from would
+        // write a grant into the store that was just asked to clear one.
+        if (running.signal.aborted) {
+            return;
+        }
+
+        attempt.current = null;
+        settleOAuth(outcome);
+    }
+
+    /** Whether one provider control is the one being waited for, which is what says the wait belongs to it. */
+    const opening = (server: SignInAuthorizationServer): boolean =>
+        handing?.stage === 'handingOff' && handing.provider === server.displayName;
+
+    // The password form stands down while a hand-over does. Somebody coming back from an authorization server meets
+    // this screen while the code is still being redeemed, and a complete form with an enabled control on it is a second
+    // sign-in they can start against the same deployment while the first one is in flight.
+    const passwordOffered = acceptsPassword && handing === null;
 
     // The two credential fields are described by where the sign-in is kept, and that sentence is the checkbox's
     // own hint where the choice is offered and the standing paragraph where it is not. Naming an element that is
@@ -388,7 +717,20 @@ export function SignIn({
     // with the only control on it disabled, which is a state nobody can leave. Abandoning frees the connection as well
     // as the screen, which is why it aborts the request rather than only ignoring what it says. Focus goes back to the
     // control this one stood beside, placed by the effect above, since this one is about to leave the document.
+    //
+    // It abandons a hand-over on the same terms and through the same slot, which is why the provider block draws it
+    // too: a hand-over waits on somebody's browser for minutes, and that is far longer than a deployment's silence.
     function abandon(): void {
+        // A redemption is deliberately unabortable — an aborted one is an authorization code nothing can spend — so
+        // giving up on that half is letting go of its answer rather than calling anything off. A hand-over is
+        // abortable and goes through the slot, whose abort listener gives the redirect back and discards the verifier.
+        if (handing?.stage === 'returning') {
+            letGoOfTheAnswer.current = true;
+            setHanding(null);
+
+            return;
+        }
+
         attempt.current?.abort();
     }
 
@@ -435,23 +777,113 @@ export function SignIn({
 
             <CredentialNotices notices={notices} ref={notified} />
 
-            {/* The design offers sign-in through a provider above the password, in the providers the deployment
-                declares. This client speaks HTTP Basic and nothing else, so the three the design draws stand here as
-                what they are — controls the client has not built — rather than being left out. */}
-            <div className="flex flex-col gap-2.25">
-                <p className="text-xs font-medium tracking-wide text-faint">{translate('signIn.viaProvider')}</p>
-                <div className="grid grid-cols-3 gap-2">
-                    {designedProviders.map((provider) => (
-                        <PlannedControl key={provider} label={provider} icon="key" shape="provider" />
-                    ))}
-                </div>
-            </div>
+            {/* The wait somebody coming back from an authorization server meets, in the place the answer will appear.
+                Nothing else on this screen is drawn for it: the two documents have not been read yet at that moment,
+                so there is no provider control standing to carry a spinner of its own. */}
+            {handing?.stage === 'returning' ? (
+                <p
+                    className="flex items-center gap-2.25 rounded-lg border border-line bg-panel px-3.25 py-2.75 text-sm text-text-soft"
+                    role="status"
+                >
+                    <Spinner />
+                    {translate('signIn.returning')}
+                </p>
+            ) : null}
 
-            <p className="flex items-center gap-2.75 text-xs text-faint">
-                <span aria-hidden="true" className="h-px flex-1 bg-line" />
-                {translate('signIn.orWithPassword')}
-                <span aria-hidden="true" className="h-px flex-1 bg-line" />
-            </p>
+            {/* Each of the three is drawn from what the deployment published and from nothing else, which is what lets
+                a deployment offering one of them draw one control rather than one control and two empty spaces. The
+                deployment's own provider stands above everything, as the design draws it, and every other server is a
+                row in the grid below. */}
+            {own === null ? null : (
+                <div className="flex flex-col gap-2">
+                    <button
+                        className="flex min-h-13 items-center justify-center gap-2 rounded-full border border-accent bg-accent px-4 text-lg font-semibold text-on-accent transition hover:brightness-107 disabled:opacity-85 workspace:min-h-11 workspace:rounded-xl workspace:text-md"
+                        disabled={handing !== null}
+                        type="button"
+                        onClick={() => {
+                            void handOver(own);
+                        }}
+                    >
+                        {/* The wait is this control's only where this control is what is being waited for, which is
+                            what the grid rows already compare: a person who pressed a row would otherwise be told by
+                            this control's own accessible name that it is opening a provider it is not opening. */}
+                        {opening(own) ? <Spinner /> : <Icon name="key" className="size-4.5" />}
+                        <span className="min-w-0 truncate">
+                            {opening(own)
+                                ? translate('signIn.openingProvider', { provider: own.displayName })
+                                : translate('signIn.signInWithProvider')}
+                        </span>
+                        {handing === null ? <Icon name="open_in_new" className="size-4.25 opacity-75" /> : null}
+                    </button>
+
+                    <p className="text-xs leading-normal text-faint text-pretty">
+                        {opening(own)
+                            ? translate('signIn.finishInBrowser')
+                            : translate('signIn.providerOpensInBrowser', { provider: own.displayName })}
+                    </p>
+                </div>
+            )}
+
+            {/* The way out of both halves of a hand-over, which is the same control the password attempt draws and is
+                here for the same reason: the shell head holds its redirect port for minutes, a redemption waits on a
+                server that may never answer, and the password form is not on the screen during either — so somebody
+                who closed the provider window, pressed the wrong provider, or came back to a wait that never ends
+                would otherwise have nothing to press but reload. */}
+            {handing === null ? null : (
+                <SecondaryButton label={translate('signIn.abandon')} shape="form" onActivate={abandon} />
+            )}
+
+            {/* What is under the divider decides what it says: the grid where there is one, and the password form
+                where the deployment's own server is the only one published. */}
+            {own === null || (providers.length === 0 && !passwordOffered) ? null : (
+                <Divider
+                    label={translate(providers.length === 0 ? 'signIn.orWithPassword' : 'signIn.orAnotherMethod')}
+                />
+            )}
+
+            {providers.length === 0 ? null : (
+                <div className="flex flex-col gap-2.25">
+                    <p className="text-xs font-medium tracking-wide text-faint">{translate('signIn.viaProvider')}</p>
+                    <div className="grid grid-cols-3 gap-2">
+                        {providers.map((provider) => (
+                            <ProviderButton
+                                key={provider.issuer}
+                                busy={opening(provider)}
+                                disabled={handing !== null}
+                                label={translate('signIn.continueToProvider', { provider: provider.displayName })}
+                                provider={provider}
+                                onActivate={() => {
+                                    void handOver(provider);
+                                }}
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {providers.length === 0 || !passwordOffered ? null : <Divider label={translate('signIn.orWithPassword')} />}
+
+            {noMethods ? <StatedNotice message={translate('signIn.noMethods')} /> : null}
+
+            {/* What the deployment offers and this screen is not drawing, said as its own sentence: a person told that
+                a configured deployment offers nothing has been pointed at a fix nobody can make. The document that
+                could not be read is the one case worth another read, so that notice carries the control rather than
+                asking somebody to produce the retry themselves. */}
+            {withheldServers === null ? null : (
+                <StatedNotice message={translate(withheldServers)}>
+                    {withheldServers === 'signIn.providersUnread' ? (
+                        <button
+                            className="shrink-0 self-start rounded-md border border-warning px-2.25 py-1 font-medium text-warning-text transition hover:bg-warning/10"
+                            type="button"
+                            onClick={() => {
+                                setReading((reads) => reads + 1);
+                            }}
+                        >
+                            {translate('signIn.readAgain')}
+                        </button>
+                    ) : null}
+                </StatedNotice>
+            )}
 
             <form
                 className="flex flex-col gap-4.5 workspace:gap-5"
@@ -506,107 +938,118 @@ export function SignIn({
                     </div>
                 )}
 
-                {/* Neither field carries a `maxLength`, deliberately: it truncates a paste without saying so, and a
-                    password silently shortened is refused by the deployment and read back as a wrong password.
+                {/* The password form, drawn only where the deployment said it takes one. Neither field carries a
+                    `maxLength`, deliberately: it truncates a paste without saying so, and a password silently
+                    shortened is refused by the deployment and read back as a wrong password.
                     `resolveCredentialEntry` refuses what is too long by name instead. */}
-                <div className="flex flex-col gap-1.5">
-                    <label className={fieldLabel} htmlFor="sign-in-user-name">
-                        {translate('signIn.userName')}
-                    </label>
-                    <div className={fieldBox}>
-                        <input
-                            aria-describedby={describedBy(keptBeyondTheTabOffered ? 'sign-in-keep' : 'sign-in-kept')}
-                            aria-invalid={marks('userName')}
-                            autoComplete="username"
-                            className={fieldInput}
-                            id="sign-in-user-name"
-                            placeholder={translate('signIn.userNameExample')}
-                            ref={name}
-                            spellCheck={false}
-                            type="text"
-                            value={userName}
-                            onChange={(event) => {
-                                setUserName(event.target.value);
-                                setRefusal(null);
-                            }}
-                        />
-                    </div>
-                </div>
+                {passwordOffered ? (
+                    <>
+                        <div className="flex flex-col gap-1.5">
+                            <label className={fieldLabel} htmlFor="sign-in-user-name">
+                                {translate('signIn.userName')}
+                            </label>
+                            <div className={fieldBox}>
+                                <input
+                                    aria-describedby={describedBy(
+                                        keptBeyondTheTabOffered ? 'sign-in-keep' : 'sign-in-kept',
+                                    )}
+                                    aria-invalid={marks('userName')}
+                                    autoComplete="username"
+                                    className={fieldInput}
+                                    id="sign-in-user-name"
+                                    placeholder={translate('signIn.userNameExample')}
+                                    ref={name}
+                                    spellCheck={false}
+                                    type="text"
+                                    value={userName}
+                                    onChange={(event) => {
+                                        setUserName(event.target.value);
+                                        setRefusal(null);
+                                    }}
+                                />
+                            </div>
+                        </div>
 
-                <div className="flex flex-col gap-1.5">
-                    <label className={fieldLabel} htmlFor="sign-in-password">
-                        {translate('signIn.password')}
-                    </label>
-                    <div className={fieldBox}>
-                        <input
-                            aria-describedby={describedBy(keptBeyondTheTabOffered ? 'sign-in-keep' : 'sign-in-kept')}
-                            aria-invalid={marks('password')}
-                            autoComplete="current-password"
-                            className={fieldInput}
-                            id="sign-in-password"
-                            type={revealed ? 'text' : 'password'}
-                            value={password}
-                            onChange={(event) => {
-                                setPassword(event.target.value);
-                                setRefusal(null);
-                            }}
-                        />
+                        <div className="flex flex-col gap-1.5">
+                            <label className={fieldLabel} htmlFor="sign-in-password">
+                                {translate('signIn.password')}
+                            </label>
+                            <div className={fieldBox}>
+                                <input
+                                    aria-describedby={describedBy(
+                                        keptBeyondTheTabOffered ? 'sign-in-keep' : 'sign-in-kept',
+                                    )}
+                                    aria-invalid={marks('password')}
+                                    autoComplete="current-password"
+                                    className={fieldInput}
+                                    id="sign-in-password"
+                                    type={revealed ? 'text' : 'password'}
+                                    value={password}
+                                    onChange={(event) => {
+                                        setPassword(event.target.value);
+                                        setRefusal(null);
+                                    }}
+                                />
 
-                        {/* A real button rather than a word somebody clicks, so it is reachable from the keyboard and
+                                {/* A real button rather than a word somebody clicks, so it is reachable from the keyboard and
                             announced as what it does. Its accessible name says the action; the word beside it is what
                             the design shows and is out of the accessibility tree because it would be read twice. */}
-                        <button
-                            aria-label={translate(
-                                revealed ? 'signIn.hidePasswordControl' : 'signIn.revealPasswordControl',
-                            )}
-                            className="-me-1.75 flex min-h-12 shrink-0 items-center rounded-xl px-3 text-base text-muted transition hover:bg-hover hover:text-text workspace:min-h-8 workspace:px-1.5 workspace:text-sm"
-                            type="button"
-                            onClick={() => {
-                                setRevealed(!revealed);
-                            }}
-                        >
-                            <span aria-hidden="true">
-                                {translate(revealed ? 'signIn.hidePassword' : 'signIn.revealPassword')}
-                            </span>
-                        </button>
-                    </div>
-                </div>
+                                <button
+                                    aria-label={translate(
+                                        revealed ? 'signIn.hidePasswordControl' : 'signIn.revealPasswordControl',
+                                    )}
+                                    className="-me-1.75 flex min-h-12 shrink-0 items-center rounded-xl px-3 text-base text-muted transition hover:bg-hover hover:text-text workspace:min-h-8 workspace:px-1.5 workspace:text-sm"
+                                    type="button"
+                                    onClick={() => {
+                                        setRevealed(!revealed);
+                                    }}
+                                >
+                                    <span aria-hidden="true">
+                                        {translate(revealed ? 'signIn.hidePassword' : 'signIn.revealPassword')}
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
 
-                {/* Under the password field and only where there is one, as the design draws it: what this keeps is a
+                        {/* Under the password field and only where there is one, as the design draws it: what this keeps is a
                     password sign-in, and a provider session follows the provider's own rules. It is also only drawn
                     where the store has somewhere to keep it — a choice between one place and the same place is not a
                     choice, and the sentence below the form says what is happening instead. */}
-                {keptBeyondTheTabOffered ? (
-                    <label className="flex cursor-pointer items-start gap-2.25 py-0.5 select-none">
-                        {/* Named by the line above the hint rather than by the whole label. A `label` wrapping both
+                        {keptBeyondTheTabOffered ? (
+                            <label className="flex cursor-pointer items-start gap-2.25 py-0.5 select-none">
+                                {/* Named by the line above the hint rather than by the whole label. A `label` wrapping both
                             would name the control with the sentence under it as well, which reads out as one run-on
                             name and is not what the hint is: it describes what ticking the box will do. */}
-                        <input
-                            aria-describedby="sign-in-keep"
-                            aria-labelledby="sign-in-keep-label"
-                            checked={keepSignedIn}
-                            className="mt-0.5 size-5.5 shrink-0 cursor-pointer accent-accent workspace:size-4.5"
-                            type="checkbox"
-                            onChange={(event) => {
-                                setKeepSignedIn(event.target.checked);
-                            }}
-                        />
+                                <input
+                                    aria-describedby="sign-in-keep"
+                                    aria-labelledby="sign-in-keep-label"
+                                    checked={keepSignedIn}
+                                    className="mt-0.5 size-5.5 shrink-0 cursor-pointer accent-accent workspace:size-4.5"
+                                    type="checkbox"
+                                    onChange={(event) => {
+                                        setKeepSignedIn(event.target.checked);
+                                    }}
+                                />
 
-                        <span className="flex min-w-0 flex-col gap-0.5">
-                            <span className="text-sm text-text-soft" id="sign-in-keep-label">
-                                {translate('signIn.keepMeSignedIn')}
-                            </span>
+                                <span className="flex min-w-0 flex-col gap-0.5">
+                                    <span className="text-sm text-text-soft" id="sign-in-keep-label">
+                                        {translate('signIn.keepMeSignedIn')}
+                                    </span>
 
-                            {/* The hint is the design's own, and it changes with the box rather than describing the
+                                    {/* The hint is the design's own, and it changes with the box rather than describing the
                                 control: ticked it says what will be kept and for how long, unticked it says what the
                                 choice does not cover. */}
-                            <span className="text-xs leading-snug text-faint text-pretty" id="sign-in-keep">
-                                {translate(
-                                    keepSignedIn ? nothingKeptMessages[beyondTheTab] : 'signIn.keepMeSignedInUnticked',
-                                )}
-                            </span>
-                        </span>
-                    </label>
+                                    <span className="text-xs leading-snug text-faint text-pretty" id="sign-in-keep">
+                                        {translate(
+                                            keepSignedIn
+                                                ? nothingKeptMessages[beyondTheTab]
+                                                : 'signIn.keepMeSignedInUnticked',
+                                        )}
+                                    </span>
+                                </span>
+                            </label>
+                        ) : null}
+                    </>
                 ) : null}
 
                 {shown === null || presenting ? null : (
@@ -619,23 +1062,25 @@ export function SignIn({
                     </p>
                 )}
 
-                <div className="flex items-center gap-3">
-                    <button
-                        className="flex min-h-13 flex-1 items-center justify-center gap-2.25 rounded-full bg-accent px-4.5 text-lg font-semibold text-on-accent transition hover:bg-accent-strong disabled:opacity-70 workspace:min-h-11.5 workspace:rounded-xl workspace:text-md"
-                        disabled={presenting}
-                        ref={submit}
-                        type="submit"
-                    >
-                        {presenting ? <Spinner /> : null}
-                        {presenting
-                            ? translate('signIn.presenting', { address: reaching?.authority ?? '' })
-                            : translate('signIn.submit')}
-                    </button>
+                {passwordOffered ? (
+                    <div className="flex items-center gap-3">
+                        <button
+                            className="flex min-h-13 flex-1 items-center justify-center gap-2.25 rounded-full bg-accent px-4.5 text-lg font-semibold text-on-accent transition hover:bg-accent-strong disabled:opacity-70 workspace:min-h-11.5 workspace:rounded-xl workspace:text-md"
+                            disabled={presenting}
+                            ref={submit}
+                            type="submit"
+                        >
+                            {presenting ? <Spinner /> : null}
+                            {presenting
+                                ? translate('signIn.presenting', { address: reaching?.authority ?? '' })
+                                : translate('signIn.submit')}
+                        </button>
 
-                    {presenting ? (
-                        <SecondaryButton label={translate('signIn.abandon')} shape="form" onActivate={abandon} />
-                    ) : null}
-                </div>
+                        {presenting ? (
+                            <SecondaryButton label={translate('signIn.abandon')} shape="form" onActivate={abandon} />
+                        ) : null}
+                    </div>
+                ) : null}
 
                 {/* Under the submit, as the design draws it, and on every shape of this screen: what a password is
                     about to cross is worth checking whether or not the address can be changed here. What the
@@ -679,6 +1124,74 @@ export function SignIn({
                 </p>
             ) : null}
         </section>
+    );
+}
+
+/**
+ * What this screen has to say about the deployment rather than about a field, in the one shape both such sentences take.
+ *
+ * Above the form rather than inside it, because neither is about something somebody typed: one says the deployment
+ * offers no way in at all, and the other that it offers one this screen is not drawing.
+ */
+function StatedNotice({ children, message }: { readonly children?: ReactNode; readonly message: string }) {
+    return (
+        <p
+            className="flex flex-wrap items-start gap-2.25 rounded-lg border border-warning bg-warning-soft px-3.25 py-2.75 text-xs leading-normal text-warning-text text-pretty"
+            role="alert"
+        >
+            <Icon name="report" className="mt-0.25 size-4 text-warning-text" />
+            {message}
+            {children}
+        </p>
+    );
+}
+
+/** The rule with a word on it that separates one offering from the next, which the design draws twice with two words. */
+function Divider({ label }: { readonly label: string }) {
+    return (
+        <p className="flex items-center gap-2.75 text-xs text-faint">
+            <span aria-hidden="true" className="h-px flex-1 bg-line" />
+            {label}
+            <span aria-hidden="true" className="h-px flex-1 bg-line" />
+        </p>
+    );
+}
+
+/**
+ * One provider in the grid, drawn with the mark the bundle carries for it or with the symbol every credential takes.
+ *
+ * The accessible name is the whole sentence rather than the provider's name alone, because what the control does is
+ * leave this application for somebody else's sign-in screen — which is exactly what a reader is owed before they press
+ * it. The label beside the mark is the provider's name, out of the accessibility tree, because it would otherwise be
+ * read twice.
+ */
+function ProviderButton({
+    busy,
+    disabled,
+    label,
+    provider,
+    onActivate,
+}: {
+    readonly busy: boolean;
+    readonly disabled: boolean;
+    readonly label: string;
+    readonly provider: SignInAuthorizationServer;
+    readonly onActivate: () => void;
+}) {
+    return (
+        <button
+            aria-label={label}
+            className={`flex min-h-13 items-center justify-center gap-1.75 overflow-hidden rounded-xl border bg-panel px-2.5 text-text-soft transition hover:border-line-strong hover:bg-hover disabled:opacity-70 workspace:min-h-11 ${busy ? 'border-accent' : 'border-line'}`}
+            disabled={disabled}
+            type="button"
+            onClick={onActivate}
+        >
+            {busy ? <Spinner /> : <ProviderMark name={provider.name} className="size-4.25" />}
+
+            <span aria-hidden="true" className="truncate text-sm font-medium">
+                {provider.displayName}
+            </span>
+        </button>
     );
 }
 

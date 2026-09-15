@@ -18,11 +18,6 @@
 // `primarySymbol` what `primary` narrows to. `named` is the words alone, which is how the design draws the acts in
 // the head of a message beside its subject.
 //
-// `provider` is the sign-in screen's own: one of the buttons the design draws under *sign in through a provider*,
-// in a three-column grid above the password form. The client has nothing to put behind one yet, so today it is drawn
-// only by `PlannedControl`; the shape is here all the same, because the day a provider is wired in it is the same
-// button that starts working rather than a second one drawn beside it.
-//
 // `link` is a control drawn as words in the accent inside a sentence, which is how the design draws the help link at
 // the foot of the sign-in form.
 //
@@ -44,7 +39,6 @@ export type ControlShape =
     | 'floating'
     | 'selected'
     | 'selectedSymbol'
-    | 'provider'
     | 'link'
     | 'accentPill';
 
@@ -57,8 +51,6 @@ export const controlShapes: Readonly<Record<ControlShape, string>> = {
     floating: 'size-13.5 justify-center rounded-4xl bg-accent text-on-accent shadow-overlay',
     selected: 'gap-1.75 rounded-lg px-2.75 py-1.75 text-base text-accent-deep hover:bg-accent-line',
     selectedSymbol: 'size-9.5 justify-center rounded-lg text-accent-deep hover:bg-accent-line',
-    provider:
-        'min-h-13 justify-center gap-1.75 rounded-xl border border-line bg-panel px-2.5 text-sm font-medium text-text-soft workspace:min-h-11',
     link: 'rounded-sm text-accent hover:text-accent-strong',
     accentPill:
         'min-h-8.5 justify-center gap-1.75 rounded-4xl bg-accent px-3.25 text-base font-semibold text-on-accent',
@@ -71,7 +63,6 @@ export function labelledShape(shape: ControlShape): boolean {
         shape === 'named' ||
         shape === 'primary' ||
         shape === 'selected' ||
-        shape === 'provider' ||
         shape === 'link' ||
         shape === 'accentPill'
     );

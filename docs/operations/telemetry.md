@@ -1440,6 +1440,7 @@ refused until the client had nothing but its own interval left, and a region tha
 | `DEBUG` | `signed_in` | A sign-in produced a credential, with `mailfathom.client.kept` saying whether it was kept |
 | `DEBUG` | `sign_in_refused` | A sign-in did not, with `mailfathom.client.refusal` naming which of the closed set of reasons |
 | `DEBUG` | `credential_no_longer_accepted` | The deployment stopped taking the credential a session held |
+| `DEBUG` | `grant_ended_by_provider` | The authorization server ended the grant a session held, by refusing the refresh token or by having issued none |
 | `DEBUG` | `request_failed` | A request produced no answer the client could act on, with the same `mailfathom.client.request`, `…outcome`, and `…failure` the span beside it carries, and `…request.duration_ms` |
 | `DEBUG` | `signals_opened` | A connection to the signal hub stands |
 | `DEBUG` | `signals_dropped` | One ended |

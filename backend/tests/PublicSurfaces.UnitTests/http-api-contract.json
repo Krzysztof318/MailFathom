@@ -3331,6 +3331,47 @@
         ],
         "type": "object"
       },
+      "ClientSignInMethodResponse": {
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "issuer",
+          "name",
+          "displayName",
+          "clientId"
+        ],
+        "type": "object"
+      },
+      "ClientSignInMethodsResponse": {
+        "properties": {
+          "acceptsPassword": {
+            "type": "boolean"
+          },
+          "authorizationServers": {
+            "items": {
+              "$ref": "#/components/schemas/ClientSignInMethodResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "acceptsPassword",
+          "authorizationServers"
+        ],
+        "type": "object"
+      },
       "ClientSignalTicketResponse": {
         "properties": {
           "expiresAt": {
@@ -14670,6 +14711,25 @@
             "Bearer": []
           }
         ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/sign-in-methods": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientSignInMethodsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
         "tags": [
           "Client"
         ]

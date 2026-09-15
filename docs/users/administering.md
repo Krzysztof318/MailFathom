@@ -725,6 +725,23 @@ belonging to a person — `mfctl credential create` is that — or switch them o
 applies. A deployment serving nobody is admissible on either surface for the same reason a deployment serving one is:
 there is no second person for an unauthenticated caller to be handed.
 
+**Letting people sign in to the client with your identity provider takes one configuration key and one credential
+each.** The authorization server is probably already configured, because it is the same
+`ClientEndpoint:Authentication:<n>:OAuth:AuthorizationServers:<m>` block whose tokens the endpoint already believes;
+what turns it into a way *in* is writing a `ClientId` on it — the client you registered at that server for MailFathom —
+and registering the address the head comes back to, which is the page's own address for a browser and
+`http://127.0.0.1:8766/` for the desktop head. The client then draws a control for it beside the password form, or
+instead of the form where no entry accepts a password.
+
+Nothing about the people changes: each person still needs a credential mapping their subject at that server onto their
+record, `mfctl credential create --method oauth-subject` being that, and a token whose subject you mapped to nobody is
+refused. `DisplayName` beside the client identifier is what the control says where the server's short name is not the
+words you want — `keycloak` as the name, so the client draws that provider's mark, and *Nordwind staff directory*
+beside it.
+[Offering a person a provider to sign in with](../operations/configuration-endpoints.md#offering-a-person-a-provider-to-sign-in-with)
+has every key, and [what a sign-in screen is offered](../operations/client-endpoint.md#what-a-sign-in-screen-is-offered)
+what a person then meets.
+
 **A deployment upgrading from a release that declared its own mailboxes does not start until the section is cleared.**
 `MailSynchronization:Accounts` is no longer read, and nothing imports what it declared, so a start that ignored it would
 leave you believing mail was being read that nothing was reading. The refusal names the section and the two commands

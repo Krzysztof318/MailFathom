@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Infrastructure.Security.Transport;
 
@@ -39,4 +40,25 @@ internal sealed record ComposedHostSurfaces(
     bool IsRateLimited,
     TimeSpan? McpRequestTimeout,
     TimeSpan? AdminRequestTimeout,
-    TimeSpan? ClientRequestTimeout);
+    TimeSpan? ClientRequestTimeout)
+{
+    /// <summary>Gets what the client endpoint offers a browser about to draw a sign-in screen.</summary>
+    /// <remarks>
+    /// <para>
+    /// Composed here rather than at either of the two places that read it, because they are two halves of one answer:
+    /// the route publishes the servers a person may sign in through, and the content security policy the client's page
+    /// is served under has to admit each of their origins. Two readings of the configuration could offer a server whose
+    /// origin the page is then refused permission to call, which arrives as a button that does nothing.
+    /// </para>
+    /// <para>
+    /// Composed only where the endpoint is served, because that is the gate its entries were validated behind:
+    /// <see cref="ClientEndpointOptions.FindConfigurationErrors" /> returns before it reaches
+    /// <see cref="ClientEndpointOptions.Authentication" /> while the endpoint is off, so an entry there may carry a
+    /// blank name or a malformed issuer and still pass every startup check. Reading one anyway would throw out of the
+    /// composition root, which reaches an operator as a start that failed naming no setting rather than as the
+    /// validation failure every other faulty value produces — and it would do so on a configuration nothing serves.
+    /// </para>
+    /// </remarks>
+    internal PublishedSignInMethods ClientSignInMethods { get; } =
+        Client.Enabled ? PublishedSignInMethods.For([.. Client.Authentication]) : PublishedSignInMethods.For([]);
+}

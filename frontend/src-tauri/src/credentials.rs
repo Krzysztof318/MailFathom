@@ -42,7 +42,7 @@ mod platform {
     use super::{KEPT_FOR_THE_RUN, KEPT_IN_THE_STORE};
     use keyring::Entry;
 
-    /// The service every entry is written under, beside the deployment address the credential was given for.
+    /// The service every entry is written under, beside the entry name the application composed for what it is keeping.
     const CREDENTIAL_SERVICE: &str = "MailFathom";
 
     /// Whether this machine offers a credential store at all, which is what the sign-in screen says before anybody types.
@@ -58,22 +58,22 @@ mod platform {
         }
     }
 
-    /// Keeps the session document for one deployment, answering whether it was kept.
-    pub async fn keep(deployment: String, credential: String) -> bool {
-        entry(&deployment).is_some_and(|entry| entry.set_password(&credential).is_ok())
+    /// Keeps one value under the entry the application named, answering whether it was kept.
+    pub async fn keep(entry: String, credential: String) -> bool {
+        store_entry(&entry).is_some_and(|entry| entry.set_password(&credential).is_ok())
     }
 
-    /// The session document kept for one deployment, or nothing where none was kept or the store would not answer.
-    pub async fn read(deployment: String) -> Option<String> {
-        entry(&deployment).and_then(|entry| entry.get_password().ok())
+    /// What was kept under one entry, or nothing where nothing was kept there or the store would not answer.
+    pub async fn read(entry: String) -> Option<String> {
+        store_entry(&entry).and_then(|entry| entry.get_password().ok())
     }
 
-    /// Deletes what was kept for one deployment, which is what sign-out does and the only thing that removes it.
+    /// Deletes what was kept under one entry, which is what sign-out does and the only thing that removes it.
     ///
     /// An entry that is already gone is the outcome asked for rather than a failure, so it answers the same as a
     /// deletion.
-    pub async fn forget(deployment: String) -> bool {
-        entry(&deployment).is_some_and(|entry| {
+    pub async fn forget(entry: String) -> bool {
+        store_entry(&entry).is_some_and(|entry| {
             matches!(
                 entry.delete_credential(),
                 Ok(()) | Err(keyring::Error::NoEntry)
@@ -81,9 +81,9 @@ mod platform {
         })
     }
 
-    /// The entry a deployment's credential is written under, or nothing where the store could not be reached.
-    fn entry(deployment: &str) -> Option<Entry> {
-        Entry::new(CREDENTIAL_SERVICE, deployment).ok()
+    /// The store entry one value is written under, or nothing where the store could not be reached.
+    fn store_entry(entry: &str) -> Option<Entry> {
+        Entry::new(CREDENTIAL_SERVICE, entry).ok()
     }
 }
 
@@ -92,8 +92,8 @@ mod platform {
     use super::{KEPT_IN_THE_STORE, NOT_KEPT_KEY_INVALIDATED, NOT_KEPT_STORAGE_UNREACHABLE};
     use std::collections::HashMap;
     use std::sync::OnceLock;
-    use tauri::plugin::{Builder, PluginHandle, TauriPlugin};
     use tauri::Wry;
+    use tauri::plugin::{Builder, PluginHandle, TauriPlugin};
 
     /// What holds the four operations on this head: an ordinary Kotlin class in the head's own application module,
     /// reached through Tauri's Android plugin bridge because the Keystore is Java's and the shell is Rust's.
@@ -136,8 +136,8 @@ mod platform {
         }
     }
 
-    /// Keeps the session document for one deployment, answering whether it was kept.
-    pub async fn keep(deployment: String, credential: String) -> bool {
+    /// Keeps one value under the entry the application named, answering whether it was kept.
+    pub async fn keep(entry: String, credential: String) -> bool {
         let Some(store) = PROTECTED_STORE.get() else {
             return false;
         };
@@ -145,37 +145,31 @@ mod platform {
         store
             .run_mobile_plugin_async::<bool>(
                 "keep",
-                HashMap::from([("deployment", deployment), ("credential", credential)]),
+                HashMap::from([("entry", entry), ("credential", credential)]),
             )
             .await
             .unwrap_or(false)
     }
 
-    /// The session document kept for one deployment, or nothing where none was kept or the store would not answer.
-    pub async fn read(deployment: String) -> Option<String> {
+    /// What was kept under one entry, or nothing where nothing was kept there or the store would not answer.
+    pub async fn read(entry: String) -> Option<String> {
         let store = PROTECTED_STORE.get()?;
 
         store
-            .run_mobile_plugin_async::<Option<String>>(
-                "read",
-                HashMap::from([("deployment", deployment)]),
-            )
+            .run_mobile_plugin_async::<Option<String>>("read", HashMap::from([("entry", entry)]))
             .await
             .ok()
             .flatten()
     }
 
-    /// Deletes what was kept for one deployment, which is what sign-out does and the only thing that removes it.
-    pub async fn forget(deployment: String) -> bool {
+    /// Deletes what was kept under one entry, which is what sign-out does and the only thing that removes it.
+    pub async fn forget(entry: String) -> bool {
         let Some(store) = PROTECTED_STORE.get() else {
             return false;
         };
 
         store
-            .run_mobile_plugin_async::<bool>(
-                "forget",
-                HashMap::from([("deployment", deployment)]),
-            )
+            .run_mobile_plugin_async::<bool>("forget", HashMap::from([("entry", entry)]))
             .await
             .unwrap_or(false)
     }

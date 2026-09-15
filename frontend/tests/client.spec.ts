@@ -113,6 +113,17 @@ async function servedByADeployment(page: Page): Promise<void> {
 
     await page.route('**/api/client/session', (route) => answering(route, sessionAnswer));
 
+    // What a screen may offer, which the client reads before it draws anything. The resting corpus publishes a
+    // password and no provider, so this is the screen every other check below is about.
+    await page.route('**/api/client/sign-in-methods', (route) => answering(route, deployment.signInMethods));
+
+    // The identifier the corpus states is composed onto the address the document was read at, because the client checks
+    // that an RFC 9728 document names the deployment it came from — and the deployment here is whatever port the
+    // preview server took.
+    await page.route('**/.well-known/oauth-protected-resource/**', (route) =>
+        answering(route, { ...deployment.protectedResource, resource: resourceReadAt(route.request().url()) }),
+    );
+
     // The exchange and the revocation beside it, which is what signing in and signing out actually reach. The glob
     // above ends at `session`, so neither is answered by it.
     await page.route('**/api/client/session/token', (route) => answering(route, deployment.mintedSession));
@@ -156,6 +167,17 @@ async function servedByADeployment(page: Page): Promise<void> {
             }),
         );
     });
+}
+
+/**
+ * What a deployment reached at this address states as the identifier a token has to be issued for.
+ *
+ * RFC 9728 has a client check that the document names the address it was read from, so the identifier is composed onto
+ * the origin this run actually took rather than written in the corpus, where the port is not known until the preview
+ * server has one.
+ */
+function resourceReadAt(address: string): string {
+    return `${new URL(address).origin}/api/client`;
 }
 
 /** One value of the corpus put on the wire as the deployment behind the preview server would answer with it. */
@@ -344,10 +366,15 @@ test('sends the password once to the exchange, and the session it was given on e
     // the bundler has been over it, and what a screen sends is not what a component was handed in jsdom.
     expect(presented.length).toBeGreaterThan(0);
     for (const [route, authorization] of presented) {
+        // What a sign-in screen may offer is read before anybody holds anything, so that one route carries no
+        // credential at all — and it is asserted here rather than skipped, because a client that presented a session on
+        // it would be one asking a question it has already answered.
         const expected =
-            route === '/api/client/session/token'
-                ? deployment.expectedAuthorization
-                : deployment.expectedSessionAuthorization;
+            route === '/api/client/sign-in-methods'
+                ? undefined
+                : route === '/api/client/session/token'
+                  ? deployment.expectedAuthorization
+                  : deployment.expectedSessionAuthorization;
 
         expect(authorization, `wrong credential on ${route}`).toBe(expected);
     }
@@ -443,6 +470,139 @@ test('reads a refused password itself rather than letting the browser ask for on
     }
 
     expect(prompted).toStrictEqual([]);
+});
+
+/**
+ * The deployment above with its operator's authorization server published, and that server faked beside it.
+ *
+ * Three things are faked rather than one, because a sign-in through a provider is three exchanges and a navigation.
+ * The policy is widened here because that is the deployment's own half of it: the bundle writes `connect-src 'self'`
+ * and a deployment publishing a server widens it with that issuer's origin at startup, which the preview server serving
+ * the built file does not do — and without it the browser refuses the discovery request before it ever leaves the page,
+ * which is the whole reason the service widens it at all.
+ */
+async function offeringAProvider(page: Page, authorizations: string[], redemptions: string[]): Promise<void> {
+    const issuer = deployment.authorizationServerIssuer;
+    const issuerOrigin = new URL(issuer).origin;
+
+    await page.route(
+        (url) => url.pathname === '/' && url.origin !== issuerOrigin,
+        async (route) => {
+            const served = await route.fetch();
+            const headers = { ...served.headers() };
+            const policy = headers['content-security-policy'] ?? '';
+
+            headers['content-security-policy'] = policy.replace(
+                "connect-src 'self'",
+                `connect-src 'self' ${issuerOrigin}`,
+            );
+
+            await route.fulfill({ response: served, headers });
+        },
+    );
+
+    await page.route('**/api/client/sign-in-methods', (route) => answering(route, deployment.signInMethodsOffered));
+
+    // The first of the three addresses RFC 8414 puts a document for a path-carrying issuer at, which is the one this
+    // client asks for first and the only one a server has to answer for the rest of the flow to happen.
+    await page.route('**/.well-known/oauth-authorization-server/**', (route) =>
+        answering(route, deployment.authorizationServerMetadata),
+    );
+
+    // The authorization server's own screen, which a person would meet here and which this answers for: it reads the
+    // request, hands back the code against the state it was given, and sends the browser to the address the client
+    // registered. A page of the server's own rather than a `302`, because a redirect the browser follows by itself is
+    // one hop of a single request — the answer would arrive at the client under this suite's own routing and under the
+    // policy the redirect started from, which is neither of the two things being proven here.
+    await page.route(`${issuer}/protocol/openid-connect/auth*`, (route) => {
+        const asked = new URL(route.request().url()).searchParams;
+        const back = new URL(asked.get('redirect_uri') ?? '');
+
+        authorizations.push(route.request().url());
+        back.searchParams.set('code', 'browser-suite-authorization-code');
+        back.searchParams.set('state', asked.get('state') ?? '');
+
+        return route.fulfill({
+            status: 200,
+            contentType: 'text/html',
+            body: `<!doctype html><title>Nordwind staff directory</title><script>location.replace(${JSON.stringify(
+                back.toString(),
+            )})</script>`,
+        });
+    });
+
+    await page.route(`${issuer}/protocol/openid-connect/token`, (route) => {
+        redemptions.push(route.request().postData() ?? '');
+
+        return answering(route, deployment.issuedToken);
+    });
+}
+
+// The one flow no unit test reaches end to end: it leaves the page for a second origin and comes back to a fresh
+// document, so what carries the attempt across is the browser's own session storage and what carries the answer back
+// is a real address bar. Everything below the navigation is covered beside its source; the navigation is not.
+test('signs a person in through a published provider, and presents the token it was issued afterwards', async ({
+    page,
+}) => {
+    const authorizations: string[] = [];
+    const redemptions: string[] = [];
+    const presented: string[] = [];
+    const violations: string[] = [];
+
+    await servedByADeployment(page);
+    await offeringAProvider(page, authorizations, redemptions);
+
+    page.on('console', (message) => {
+        if (message.text().includes('Content Security Policy')) {
+            violations.push(message.text());
+        }
+    });
+
+    page.on('request', (request) => {
+        if (new URL(request.url()).pathname.startsWith('/api/client/')) {
+            presented.push(request.headers()['authorization'] ?? '');
+        }
+    });
+
+    await page.goto('/');
+
+    const control = page.getByRole('button', { name: 'Continue to Keycloak' });
+
+    // Every way in the deployment published is drawn at once: its own provider above, the grid under it, the form below.
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+    await expect(control).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Login' })).toBeVisible();
+
+    await control.click();
+
+    await expect(page.getByRole('navigation', { name: 'Spaces' })).toBeVisible();
+
+    const asked = new URL(authorizations[0] ?? '').searchParams;
+
+    expect(asked.get('response_type')).toBe('code');
+    expect(asked.get('client_id')).toBe('mailfathom-client');
+    expect(asked.get('code_challenge_method')).toBe('S256');
+    expect(asked.get('resource')).toBe(resourceReadAt(page.url()));
+    expect(asked.get('scope')).toBe(deployment.protectedResource.scopes_supported.join(' '));
+    expect(asked.get('nonce')).not.toBeNull();
+
+    // The secret the redemption proves the request with is stated nowhere the address bar, a referrer, or a server log
+    // could carry it, which is the whole of what PKCE is.
+    expect(asked.get('code_verifier')).toBeNull();
+    expect(redemptions[0]).toContain('grant_type=authorization_code');
+    expect(redemptions[0]).toContain('code_verifier=');
+
+    // The code is taken out of the address before anything else runs, so a reload replays nothing and no referrer
+    // carries it onward.
+    expect(new URL(page.url()).search).toBe('');
+
+    // What every request afterwards presents is the token that server issued, and never a session this deployment
+    // minted — nothing exchanged one for the other.
+    expect(presented).toContain(deployment.expectedGrantAuthorization);
+    expect(presented).not.toContain(deployment.expectedSessionAuthorization);
+
+    // The whole flow ran inside the policy the page is served under, which is what the widened `connect-src` is for.
+    expect(violations).toStrictEqual([]);
 });
 
 test('opens in Discover, under the version it was built from and the one the deployment answered', async ({ page }) => {

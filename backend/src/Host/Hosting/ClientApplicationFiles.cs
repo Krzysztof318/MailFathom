@@ -69,6 +69,7 @@ internal static class ClientApplicationFiles
     /// <param name="app">The application pipeline being composed.</param>
     /// <param name="environment">The hosting environment, whose web root holds the bundle and the policy it was built with.</param>
     /// <param name="clientListenerPorts">The ports the client surface answers on.</param>
+    /// <param name="signInOrigins">The authorization server origins the page has to be permitted to call, empty where the deployment publishes no OAuth sign-in method.</param>
     /// <returns>The same application instance for chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the web root carries no content security policy, or one with nothing in it.</exception>
@@ -94,17 +95,26 @@ internal static class ClientApplicationFiles
     /// writes into the reading pane's frames, and a copy kept here would stop admitting them the first time one changed.
     /// Attaching it where the static files are answered is what confines it to the client listeners with them.
     /// </para>
+    /// <para>
+    /// The one thing the service does add to it is the origin of every authorization server it publishes as a sign-in
+    /// method. The bundle's own <c>connect-src</c> is <c>'self'</c>, which is the right value for every deployment that
+    /// offers none and is a policy that refuses the token request and the discovery read on every deployment that does —
+    /// and which servers those are is an operator's configuration rather than anything a build could know. It is added
+    /// here, on the client listeners, rather than written into the bundle, so one build serves both.
+    /// </para>
     /// </remarks>
     internal static IApplicationBuilder UseClientApplication(
         this IApplicationBuilder app,
         IWebHostEnvironment environment,
-        IReadOnlySet<int> clientListenerPorts)
+        IReadOnlySet<int> clientListenerPorts,
+        IReadOnlyList<string> signInOrigins)
     {
         ArgumentNullException.ThrowIfNull(app);
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(clientListenerPorts);
+        ArgumentNullException.ThrowIfNull(signInOrigins);
 
-        var contentSecurityPolicy = ContentSecurityPolicyOf(environment);
+        var contentSecurityPolicy = Admitting(ContentSecurityPolicyOf(environment), signInOrigins);
 
         var contentTypes = new FileExtensionContentTypeProvider();
 
@@ -129,6 +139,53 @@ internal static class ClientApplicationFiles
                     OnPrepareResponse = served =>
                         served.Context.Response.Headers.ContentSecurityPolicy = contentSecurityPolicy,
                 }));
+    }
+
+    /// <summary>The directive a page's outbound calls are judged by, which is the one the published origins join.</summary>
+    private const string ConnectDirective = "connect-src";
+
+    /// <summary>Widens the bundle's own policy by the origins a published sign-in has to reach.</summary>
+    /// <remarks>
+    /// <para>
+    /// A deployment publishing no OAuth sign-in method serves the bundle's policy byte for byte, which is what keeps
+    /// the ordinary deployment's page under exactly the policy its build proved. Where there are origins, they join the
+    /// directive the bundle already wrote rather than replacing it, so <c>'self'</c> — the deployment the page actually
+    /// talks to — survives the widening.
+    /// </para>
+    /// <para>
+    /// A bundle that named no <c>connect-src</c> at all gains one carrying <c>'self'</c> beside the origins. That is
+    /// not a shape any build here writes, and it is written this way because the alternative is worse than a redundant
+    /// line: appending the origins alone would leave the page under a directive that no longer falls back to
+    /// <c>default-src</c>, and the client would stop being able to call its own deployment.
+    /// </para>
+    /// </remarks>
+    private static string Admitting(string policy, IReadOnlyList<string> signInOrigins)
+    {
+        if (signInOrigins.Count == 0)
+        {
+            return policy;
+        }
+
+        var admitted = string.Join(' ', signInOrigins);
+
+        var directives = policy
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+        var connect = directives.FindIndex(directive =>
+            directive.Split(' ', 2, StringSplitOptions.TrimEntries)[0]
+                .Equals(ConnectDirective, StringComparison.OrdinalIgnoreCase));
+
+        if (connect < 0)
+        {
+            directives.Add($"{ConnectDirective} 'self' {admitted}");
+        }
+        else
+        {
+            directives[connect] = $"{directives[connect]} {admitted}";
+        }
+
+        return string.Join("; ", directives);
     }
 
     /// <summary>Reads the policy the bundle was built with, as the one header value its build wrote.</summary>

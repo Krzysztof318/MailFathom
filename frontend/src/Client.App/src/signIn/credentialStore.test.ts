@@ -7,6 +7,11 @@ import { credentialStore } from './credentialStore';
 
 const deployment = { baseAddress: 'https://mail.example.invalid' };
 const elsewhere = { baseAddress: 'https://elsewhere.example.invalid' };
+
+// What each of the two values is written under. Spelled out here rather than imported, so a rename that silently moved
+// somebody's keychain entry fails a test instead of passing one.
+const sessionEntry = `mailfathom.credential.${deployment.baseAddress}`;
+const grantEntry = `mailfathom.grant.${deployment.baseAddress}`;
 // One kept session as the store sees it: an opaque string it writes and reads back without looking inside.
 const credential = JSON.stringify({
     authorization: 'Bearer mfs_abcdef.ghijkl',
@@ -136,8 +141,47 @@ describe('a credential kept nowhere', () => {
         expect(await store.forget(deployment)).toBe(true);
         expect(asked).toContainEqual({
             command: 'forget_credential',
-            argument: { deployment: deployment.baseAddress },
+            argument: { entry: sessionEntry },
         });
+    });
+
+    // Before this client named its own entries the shell was handed the deployment address itself, so an installation
+    // that signed in under an earlier release holds the password under that bare name — and nothing else in the
+    // application would ever ask for it again. A credential no sign-out deletes outlives uninstalling the application.
+    it('asks the shell to forget the bare-address entry an earlier release wrote, beside its own', async () => {
+        const asked = shellAnswering({
+            credential_arrangement: 'keptInTheStore',
+            forget_credential: true,
+        });
+        const store = await credentialStore();
+
+        await store.forget(deployment);
+
+        expect(asked).toContainEqual({
+            command: 'forget_credential',
+            argument: { entry: deployment.baseAddress },
+        });
+    });
+
+    // An installation that never held one has not failed to sign out, so that answer is not what is reported.
+    it('reports a sign-out as complete where only the entry no earlier release wrote was refused', async () => {
+        const answers: Record<string, unknown> = { credential_arrangement: 'keptInTheStore' };
+        const global = window as unknown as Record<string, unknown>;
+
+        global['__TAURI__'] = {
+            core: {
+                invoke: (command: string, argument?: Readonly<Record<string, unknown>>) =>
+                    Promise.resolve(
+                        command === 'forget_credential'
+                            ? argument?.['entry'] !== deployment.baseAddress
+                            : answers[command],
+                    ),
+            },
+        };
+
+        const store = await credentialStore();
+
+        expect(await store.forget(deployment)).toBe(true);
     });
 
     it('reports the credential as still there where the shell would not remove it', async () => {
@@ -250,15 +294,36 @@ describe('a credential kept for the run', () => {
 });
 
 describe('a credential kept in the shell’s protected store', () => {
-    it('asks the shell for what it kept, naming the deployment the credential was given for', async () => {
+    it('asks the shell for what it kept, naming the entry the credential was written under', async () => {
         const asked = shellAnswering({ credential_arrangement: 'keptInTheStore', read_credential: credential });
         const store = await credentialStore();
 
         expect(await store.read(deployment)).toBe(credential);
         expect(asked.at(-1)).toEqual({
             command: 'read_credential',
-            argument: { deployment: deployment.baseAddress },
+            argument: { entry: sessionEntry },
         });
+    });
+
+    // The entry rather than the deployment, because two values are now kept per deployment and the name is the whole
+    // of what separates them: a grant read back under the session's name would be presented as a session.
+    it('keeps an OAuth grant under a name of its own, apart from the session for the same deployment', async () => {
+        const asked = shellAnswering({
+            credential_arrangement: 'keptInTheStore',
+            keep_credential: true,
+            read_credential: 'a-grant-document',
+        });
+        const store = await credentialStore();
+
+        await store.keepGrant(deployment, 'a-grant-document');
+
+        expect(asked.at(-1)).toEqual({
+            command: 'keep_credential',
+            argument: { entry: grantEntry, credential: 'a-grant-document' },
+        });
+
+        expect(await store.readGrant(deployment)).toBe('a-grant-document');
+        expect(asked.at(-1)).toEqual({ command: 'read_credential', argument: { entry: grantEntry } });
     });
 
     it('reads back nothing where the shell answered with something that is not a credential', async () => {
@@ -276,7 +341,7 @@ describe('a credential kept in the shell’s protected store', () => {
 
         expect(asked.at(-1)).toEqual({
             command: 'keep_credential',
-            argument: { deployment: deployment.baseAddress, credential },
+            argument: { entry: sessionEntry, credential },
         });
     });
 
@@ -298,15 +363,15 @@ describe('a credential kept in the shell’s protected store', () => {
         expect(await store.read(deployment)).toBe(credential);
     });
 
-    it('asks the shell to delete the entry when the credential is forgotten', async () => {
+    // Both entries, because signing out is one act however somebody signed in and a grant left behind would sign the
+    // next start back in.
+    it('asks the shell to delete both entries when the credential is forgotten', async () => {
         const asked = shellAnswering({ credential_arrangement: 'keptInTheStore', forget_credential: true });
         const store = await credentialStore();
 
         expect(await store.forget(deployment)).toBe(true);
-        expect(asked.at(-1)).toEqual({
-            command: 'forget_credential',
-            argument: { deployment: deployment.baseAddress },
-        });
+        expect(asked.map((one) => one.argument)).toContainEqual({ entry: sessionEntry });
+        expect(asked.map((one) => one.argument)).toContainEqual({ entry: grantEntry });
     });
 
     it.each([

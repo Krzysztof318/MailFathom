@@ -241,6 +241,114 @@ public sealed class AuthorizationServerOptionsTests
         Assert.True(profile.IsConfigured);
     }
 
+    /// <summary>A deployment serving agents alone offers a browser nothing, which is the posture rather than something to turn off.</summary>
+    [Fact]
+    public void IsOfferedToABrowser_AProfileNamingNoClientIdentifier_OffersABrowserNothing()
+    {
+        // Arrange
+        var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
+
+        // Act, Assert
+        Assert.False(profile.IsOfferedToABrowser);
+    }
+
+    [Fact]
+    public void IsOfferedToABrowser_AProfileNamingOne_IsPublishedToABrowser()
+    {
+        // Arrange
+        var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
+
+        // Act
+        profile.ClientId = "mailfathom-client";
+
+        // Assert
+        Assert.True(profile.IsOfferedToABrowser);
+        Assert.Equal("mailfathom-client", profile.PublishedClientId());
+    }
+
+    /// <summary>A setting written and left empty is one an operator meant to fill in, so reading it as absence would leave a control they configured undrawn.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void FindConfigurationErrors_AClientIdentifierWrittenAndLeftBlank_IsRefused(string clientId)
+    {
+        // Arrange
+        var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
+
+        // Act
+        profile.ClientId = clientId;
+        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
+
+        // Assert
+        Assert.StartsWith("ClientId", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void FindConfigurationErrors_ADisplayNameWrittenAndLeftBlank_IsRefused(string displayName)
+    {
+        // Arrange
+        var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
+
+        // Act
+        profile.DisplayName = displayName;
+        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
+
+        // Assert
+        Assert.StartsWith("DisplayName", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>The name is also what a client matches a provider mark against, so the words on the control are settable separately.</summary>
+    [Fact]
+    public void PublishedDisplayName_AProfileWritingOne_CarriesTheOperatorsOwnWords()
+    {
+        // Arrange
+        var profile = Profile("keycloak", "https://sso.example.test/realms/mailfathom");
+
+        // Act
+        profile.DisplayName = "Nordwind staff directory";
+
+        // Assert
+        Assert.Equal("Nordwind staff directory", profile.PublishedDisplayName());
+        Assert.Equal("keycloak", profile.PublishedName());
+    }
+
+    [Fact]
+    public void PublishedDisplayName_AProfileWritingNone_IsDrawnByItsName()
+    {
+        // Arrange
+        var profile = Profile("keycloak", "https://sso.example.test/realms/mailfathom");
+
+        // Act, Assert
+        Assert.Equal("keycloak", profile.PublishedDisplayName());
+    }
+
+    /// <summary>Reading what a profile publishes to a browser before it offers one anything is a defect in the caller rather than an empty answer.</summary>
+    [Fact]
+    public void PublishedClientId_AProfileOfferingABrowserNothing_IsRefused()
+    {
+        // Arrange
+        var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
+
+        // Act, Assert
+        Assert.Throws<InvalidOperationException>(profile.PublishedClientId);
+    }
+
+    /// <summary>A profile carrying only a client identifier is one an operator started writing, so it is validated rather than skipped.</summary>
+    [Fact]
+    public void IsConfigured_AProfileCarryingOnlyAClientIdentifier_ReportsSomethingWasWritten()
+    {
+        // Arrange
+        var profile = new AuthorizationServerOptions();
+
+        // Act
+        profile.ClientId = "mailfathom-client";
+
+        // Assert
+        Assert.True(profile.IsConfigured);
+    }
+
     private static AuthorizationServerOptions Profile(string? name, string? issuer) =>
         new() { Name = name, Issuer = issuer, AuthorizedSubjects = { UserSubject } };
 }

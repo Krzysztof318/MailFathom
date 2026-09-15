@@ -7,6 +7,9 @@ import {
     defaultTelemetryLevel,
     draftsMailReplies,
     endSession,
+    revokeRefreshToken,
+    readAuthorizationServer,
+    type ClientEvent,
     type ClientSession,
     type DeploymentAddress,
     type MailFathomSignalChannel,
@@ -79,8 +82,11 @@ import { useCoarsePointer, useDesktopComposition, useTwoPanes, useWideWorkspace 
 import { CredentialNotices, type CredentialNotice } from './signIn/CredentialNotices';
 import type { CredentialStore } from './signIn/credentialStore';
 import { writeKeptSession, type KeptSession } from './signIn/keptSession';
+import { accessTokenHasExpired, writeOAuthGrant, type OAuthGrant } from './signIn/oauthGrant';
+import { useGrantRenewal } from './signIn/useGrantRenewal';
 import { useSessionRenewal } from './signIn/useSessionRenewal';
 import { SignIn } from './signIn/SignIn';
+import type { SignInRedirect, SignInRedirectAnswer } from './shellOperations/signInRedirect';
 import { SignalledChangesContext } from './signals/signalledChanges';
 import { useSignals } from './signals/useSignals';
 import { useTelemetry } from './telemetry/clientTelemetry';
@@ -107,7 +113,10 @@ import { emptyWorkspace, useWorkspace, type Workspace } from './workspace/useWor
 export function App({
     deployment,
     signedInWith,
+    signedInWithGrant,
     credentials,
+    redirect,
+    redirectAnswer,
     send,
     portraits,
     openSignals,
@@ -115,7 +124,17 @@ export function App({
 }: {
     readonly deployment: ClientDeployment;
     readonly signedInWith: KeptSession | null;
+
+    /** The OAuth grant this machine was holding for the adopted deployment, or `null` where it held none. */
+    readonly signedInWithGrant: OAuthGrant | null;
+
     readonly credentials: CredentialStore;
+
+    /** How somebody is handed to an authorization server and how the answer comes back, resolved at the composition root. */
+    readonly redirect: SignInRedirect;
+
+    /** What an authorization server's redirect was carrying when this run started, read once before anything rendered. */
+    readonly redirectAnswer: SignInRedirectAnswer | null;
     readonly send: DeploymentTransport;
 
     /** How the picture the signed-in person is drawn by is read and written, octets not being what a transport speaks. */
@@ -131,11 +150,37 @@ export function App({
     const telemetry = useTelemetry();
     const [adopted, setAdopted] = useState(deployment.outcome === 'resolved' ? deployment.adopted : null);
     const [kept, setKept] = useState(signedInWith);
-    const authorization = kept?.authorization ?? null;
+
+    // The grant beside the session rather than instead of it: one of the two is what this client holds, and they are
+    // renewed by different parties on different terms — the deployment renews a session it minted, and an
+    // authorization server renews a grant the deployment does not own.
+    const [grant, setGrant] = useState(signedInWithGrant);
+    const authorization = kept?.authorization ?? grant?.authorization ?? null;
+
+    // What is actually presented, which is the credential above unless it is an access token that has run out. A cold
+    // start against a grant last used yesterday holds an expired token and a refresh token that still works; presenting
+    // the first is an `unauthenticated` from the deployment, which this frame acts on by clearing the sign-in — the
+    // refresh token with it — at exactly the moment the renewal below was about to replace it. The renewal needs two
+    // round trips to the authorization server against the connection read's one, so it loses that race in the ordinary
+    // case rather than in a rare one.
+    //
+    // Expiry rather than the renewal being due, which are five minutes apart: a token inside that margin is one the
+    // deployment still accepts, and withholding it would empty this frame — the open message unmounted, the spaces and
+    // the accounts gone — for as long as the renewal takes, which is the whole of it where the server is unreachable
+    // or this machine is offline.
+    //
+    // Withheld from the reads rather than from `authorization`: nobody has been signed out, so the sign-in screen is
+    // not what this draws. The frame waits the way it waits for any read that has not answered, and the renewal below
+    // starts on its first effect.
+    //
+    // A grant the server issued no refresh token for never waits here: nothing could replace its token, so the renewal
+    // below reports it as ended on its first tick and this screen becomes the sign-in rather than a frame waiting on a
+    // read that will never be made.
+    const presented = kept !== null || grant === null || !accessTokenHasExpired(grant) ? authorization : null;
 
     // Who is signed in, taken from what was kept rather than out of the credential. A session token names nobody — the
     // Basic header it replaced carried the name inside it — so the name travels beside it, and it is not a secret.
-    const person = kept?.person ?? null;
+    const person = kept?.person ?? grant?.person ?? null;
     const [notices, setNotices] = useState<readonly CredentialNotice[]>([]);
     const baseAddress = adopted === null ? null : adopted.deployment.baseAddress;
 
@@ -153,15 +198,15 @@ export function App({
     // Built once per address and credential rather than per render, because it is what the message read below depends
     // on: a fresh object every render would restart that read every render.
     const session = useMemo(
-        () => (baseAddress === null || authorization === null ? null : { baseAddress, authorization }),
-        [baseAddress, authorization],
+        () => (baseAddress === null || presented === null ? null : { baseAddress, authorization: presented }),
+        [baseAddress, presented],
     );
 
     // Who the deployment is read for, which is the identity above and whatever is being presented for them now. It is
     // built per render rather than memoized because nothing keys on the object: the hook keys on the identity inside
     // it and reads the header when a request actually goes out.
     const signedInCaller =
-        signedInAs === null || authorization === null ? null : { identity: signedInAs, authorization };
+        signedInAs === null || presented === null ? null : { identity: signedInAs, authorization: presented };
 
     // The transport those reads are made through, built once for the same reason. It carries a signal nothing ever
     // fires: the tree, the reading pane, and the body renderer each discard the answer to a read they stopped listening
@@ -198,24 +243,43 @@ export function App({
     //
     // It is held steady across renders because the connection below reads again whenever it changes, and a callback
     // rebuilt every render would be a read started every render.
-    const credentialRefused = useCallback(() => {
-        telemetry.happened('credential_no_longer_accepted');
-        setNotices(['credentialNoLongerAccepted']);
-        setKept(null);
-        revise(emptyWorkspace);
-        forgetListings();
-        forgetComposition();
+    // What is recorded travels with the notice, for the reason the notice itself is split: one occurrence naming the
+    // deployment for something the authorization server did sends whoever reads a collector hours later to the same
+    // wrong system the wrong sentence would have sent the person in front of the screen.
+    const signInEnded = useCallback(
+        (notice: CredentialNotice, occurrence: ClientEvent) => {
+            telemetry.happened(occurrence);
+            setNotices([notice]);
+            setKept(null);
+            setGrant(null);
+            revise(emptyWorkspace);
+            forgetListings();
+            forgetComposition();
 
-        if (baseAddress === null) {
-            return;
-        }
-
-        void credentials.forget({ baseAddress }).then((removed) => {
-            if (!removed) {
-                setNotices((shown) => [...shown, 'sessionNotRemoved']);
+            if (baseAddress === null) {
+                return;
             }
-        });
-    }, [baseAddress, credentials, revise, telemetry]);
+
+            void credentials.forget({ baseAddress }).then((removed) => {
+                if (!removed) {
+                    setNotices((shown) => [...shown, 'sessionNotRemoved']);
+                }
+            });
+        },
+        [baseAddress, credentials, revise, telemetry],
+    );
+
+    const credentialRefused = useCallback(() => {
+        signInEnded('credentialNoLongerAccepted', 'credential_no_longer_accepted');
+    }, [signInEnded]);
+
+    // The authorization server ended the grant — it refused the refresh token, or it issued none and the access token
+    // has expired. The deployment said nothing and is still accepting whatever it minted, so the sentence names the
+    // provider: a failure at one system reported as a failure at the other sends whoever reads it, and whoever they
+    // then go and ask, to the wrong place.
+    const grantEnded = useCallback(() => {
+        signInEnded('providerEndedTheSignIn', 'grant_ended_by_provider');
+    }, [signInEnded]);
 
     // A renewed session replaces what is held and what is kept, in that order and in one place: holding it without
     // keeping it would leave the next start presenting a token this run has already replaced, which the deployment
@@ -241,6 +305,22 @@ export function App({
     // out mid-morning. It renews only while there is a session to renew and a network to renew over; a client that was
     // offline across its own expiry is signed out at the next request, which is the same path a revoked one takes.
     useSessionRenewal(session, kept, readMail, connection.online, sessionRenewed, credentialRefused);
+
+    // A renewed grant replaces what is held and what is kept, in that order and for the reason a renewed session does:
+    // a server that rotates refresh tokens has already withdrawn the one this replaced, so a run holding the old one
+    // is a run that cannot renew again.
+    const grantRenewed = useCallback(
+        (renewed: OAuthGrant) => {
+            setGrant(renewed);
+
+            if (baseAddress !== null) {
+                void credentials.keepGrant({ baseAddress }, writeOAuthGrant(renewed));
+            }
+        },
+        [baseAddress, credentials],
+    );
+
+    useGrantRenewal(grant, readMail, connection.online, grantRenewed, grantEnded);
 
     const deploymentSession = connection.session?.outcome === 'read' ? connection.session.value : null;
     const offeredSpaces = deploymentSession === null ? [] : spacesOffered(deploymentSession);
@@ -622,6 +702,30 @@ export function App({
         setKept(session);
     }
 
+    // Signing in through an authorization server, which differs from the one above in what is kept and in nothing
+    // else: a grant goes to the durable half of the store whatever the checkbox holds, because how long it lasts is
+    // the server's decision rather than this screen's.
+    function signedInWithAGrant(reached: DeploymentAddress, issued: OAuthGrant): void {
+        if (adopted === null) {
+            storeDeployment(reached);
+            setAdopted({ deployment: reached, origin: 'chosen' });
+        }
+
+        setNotices([]);
+        revise(emptyWorkspace);
+        forgetListings();
+        forgetComposition();
+
+        // Its own sentence rather than the password path's: nobody typed a password here, and a deployment that takes
+        // none offers no way back in through one — what the next start actually does is hand them to the provider.
+        void credentials.keepGrant(reached, writeOAuthGrant(issued)).then((stored) => {
+            if (!stored) {
+                setNotices(['grantNotKept']);
+            }
+        });
+        setGrant(issued);
+    }
+
     // Everything this session held goes with the credential, including what the person carried between the spaces:
     // the question in the intent field and the mailbox it was scoped to are theirs rather than the machine's, and a
     // client that kept them would show the next person what the last one was asking about.
@@ -630,8 +734,11 @@ export function App({
     // kept until signing out, so a refused deletion leaves the session on the machine for the next start to read back
     // while the person believes they signed out.
     function signOut(): void {
+        const withdrawn = grant;
+
         setNotices([]);
         setKept(null);
+        setGrant(null);
         revise(emptyWorkspace);
         forgetListings();
         forgetComposition();
@@ -647,6 +754,24 @@ export function App({
             void endSession(session, readMail);
         }
 
+        // The authorization server is asked to withdraw the refresh token on the same terms the deployment is told:
+        // asked and not waited on. Signing out is complete when this head has forgotten what it kept, and a server
+        // that could not be reached must not be what keeps somebody signed in on the screen — but a refresh token
+        // nobody withdrew outlives the sign-out on the server, which is why it is asked at all.
+        if (withdrawn?.refreshToken != null) {
+            const presented = withdrawn.refreshToken;
+
+            void readAuthorizationServer(withdrawn.issuer, readMail).then((server) => {
+                if (server.outcome === 'read') {
+                    void revokeRefreshToken(
+                        { metadata: server.value, clientId: withdrawn.clientId, refreshToken: presented },
+                        readMail,
+                    );
+                }
+            });
+        }
+
+        // `forget` removes the grant beside the session, because signing out is one act however somebody signed in.
         void credentials.forget(adopted.deployment).then((removed) => {
             if (!removed) {
                 setNotices(['sessionNotRemoved']);
@@ -705,8 +830,11 @@ export function App({
                 clearTextPermitted={deployment.outcome === 'resolved' ? deployment.clearTextPermitted : null}
                 beyondTheTab={credentials.beyondTheTab}
                 notices={notices}
+                redirect={redirect}
+                redirectAnswer={redirectAnswer}
                 send={send}
                 onSignedIn={signedIn}
+                onSignedInWithGrant={signedInWithAGrant}
                 onPointSomewhereElse={pointSomewhereElse}
             />
         );
@@ -1211,8 +1339,11 @@ function SignInScreen({
     clearTextPermitted,
     beyondTheTab,
     notices,
+    redirect,
+    redirectAnswer,
     send,
     onSignedIn,
+    onSignedInWithGrant,
     onPointSomewhereElse,
 }: {
     readonly adopted: AdoptedDeployment | null;
@@ -1220,8 +1351,11 @@ function SignInScreen({
     readonly clearTextPermitted: boolean | null;
     readonly beyondTheTab: CredentialStore['beyondTheTab'];
     readonly notices: readonly CredentialNotice[];
+    readonly redirect: SignInRedirect;
+    readonly redirectAnswer: SignInRedirectAnswer | null;
     readonly send: DeploymentTransport;
     readonly onSignedIn: (reached: DeploymentAddress, session: KeptSession, keptBeyondTheTab: boolean) => void;
+    readonly onSignedInWithGrant: (reached: DeploymentAddress, grant: OAuthGrant) => void;
     readonly onPointSomewhereElse: () => void;
 }) {
     const { translate } = useLocalization();
@@ -1269,8 +1403,11 @@ function SignInScreen({
                             clearTextPermitted={clearTextPermitted}
                             beyondTheTab={beyondTheTab}
                             notices={notices}
+                            redirect={redirect}
+                            redirectAnswer={redirectAnswer}
                             send={send}
                             onSignedIn={onSignedIn}
+                            onSignedInWithGrant={onSignedInWithGrant}
                             onPointSomewhereElse={onPointSomewhereElse}
                         />
                     ) : (

@@ -572,6 +572,27 @@
     --color-mailbox-mark-3: oklch(0.648 0.107 81);
 }
 
+/* What each provider mark on the sign-in screen is drawn in. These are the one family of colours here that is not
+   MailFathom's: each is the brand's own, quoted from the design project's provider table exactly as it wrote it, which
+   is why they are the only values in this file written as hexadecimal rather than in `oklch` — a converted colour would
+   read as a value somebody chose rather than as one that was given. There is one per mark committed under
+   `assets/providers/`, and a provider the bundle carries no mark for is drawn with the credential symbol in the text
+   colour instead, so it needs none.
+
+   It is `static` for the reason the ramp above is: the fill is reached through the provider's name rather than through
+   a utility, so nothing Tailwind scans names one of these and every one of them would otherwise be dropped. */
+@theme static {
+    --color-provider-apple: #000000;
+    --color-provider-auth0: #eb5424;
+    --color-provider-discord: #5865f2;
+    --color-provider-github: #181717;
+    --color-provider-gitlab: #fc6d26;
+    --color-provider-gmail: #ea4335;
+    --color-provider-keycloak: #3b6fd6;
+    --color-provider-nextcloud: #0082c9;
+    --color-provider-okta: #000000;
+}
+
 /* The same names, dark. `data-theme` is written by `theme/Theme.tsx`, which resolves the follow-the-system choice
    before the first paint, so nothing on a screen ever asks which theme is in force. */
 :root[data-theme='dark'] {
@@ -612,6 +633,16 @@
     --color-highlight-line: oklch(0.72 0.13 85);
 
     --color-mailbox-mark-1: oklch(0.615 0.175 262);
+
+    /* Six of the nine marks are given a second colour by the design, for the ones whose own brand colour is a near
+       black or a blue too deep to read on a dark panel. The three it leaves alone are already drawn as one colour on
+       both of its artboards. */
+    --color-provider-apple: #e8e8e8;
+    --color-provider-discord: #7c86f5;
+    --color-provider-github: #e8e8e8;
+    --color-provider-keycloak: #8fb8ff;
+    --color-provider-nextcloud: #4aa8e0;
+    --color-provider-okta: #e8e8e8;
 
     --color-inset: rgb(255 255 255 / 0.045);
     --color-shadow-soft: oklch(0.1 0.03 262 / 0.5);

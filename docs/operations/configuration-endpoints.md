@@ -194,6 +194,8 @@ its position. The MCP and client endpoints take these entries; the administrativ
 | `…:<n>:OAuth:AuthorizationServers:<m>:Name` | string | — | Required; the identity diagnostics use, and unique across every entry because it composes the scheme its validator registers under | restart |
 | `…:<n>:OAuth:AuthorizationServers:<m>:Issuer` | string | — | Required; a well-formed `https` issuer, compared against `iss` exactly, and unique across every entry | restart |
 | `…:<n>:OAuth:AuthorizationServers:<m>:MetadataAddress` | string | unset | An absolute `https` URL on the issuer's own host; overrides issuer-derived discovery | restart |
+| `…:<n>:OAuth:AuthorizationServers:<m>:ClientId` | string | unset | The identifier a browser starts an authorization code flow with, registered by you at that server for the MailFathom client. Written, the server becomes a sign-in method the client endpoint publishes to a browser and a person is offered a control for it; unset, the server goes on validating tokens and is offered to nobody, which is what a deployment serving agents alone stays. Refused when the key is written and left empty. Read on `ClientEndpoint` alone — a browser signs in to no other surface, so the client endpoint is the only one that publishes it | restart |
+| `…:<n>:OAuth:AuthorizationServers:<m>:DisplayName` | string | the name | The words the sign-in control carries, where they should not be `Name`. It exists because the name is also what a client matches its provider marks against, so a deployment wanting *Nordwind staff directory* under the Keycloak mark writes `keycloak` as the name and that sentence here. Refused when the key is written and left empty | restart |
 
 
 MailFathom is a protected resource only; an external authorization server signs users in.
@@ -389,6 +391,33 @@ the MCP endpoint's grants come from, because the client reads the mail an agent 
 
 There is no `ClientCertificateProfiles` here: the trust question a certificate answers is a second one this surface does
 not yet ask.
+
+### Offering a person a provider to sign in with
+
+A server written with a `ClientId` becomes a way *in* rather than only a way a token is trusted, and three
+things follow from writing one. The client endpoint publishes it, unauthenticated, at
+`/api/client/sign-in-methods` — the issuer, the name, the display name, and that client identifier, none of
+which is a secret — because a browser has to know what to draw before it holds anything. The page this
+deployment serves is served under a content security policy widened by that issuer's origin, so the client may
+read the server's discovery document and redeem a code there; a deployment publishing no such server serves the
+policy its build wrote, unchanged. And the sign-in screen stops offering a password form where no entry accepts
+one, which is what makes a token-only deployment a screen somebody can use rather than a form nobody can submit.
+
+Name one of them `self` to have the client draw it as this deployment's own way in rather than as a third
+party's. It is a drawing instruction and nothing more: MailFathom issues no token and serves no login page
+whatever it is set to, the profile carrying it is an ordinary authorization server — yours — and every rule
+above applies to it unchanged. At most one server across a surface may carry the name, which the rule against a
+repeated name already enforces.
+
+**Register the redirect address at the authorization server before anybody signs in.** There are two, because
+the two heads come back differently, and each is compared exactly by the server: the web head is redirected to
+the address of the page itself — `https://mail.example.test/app/` where a published image serves it — and the
+desktop head is redirected to `http://127.0.0.1:8766/`, a loopback address its own shell listens on while the
+sign-in is in flight. Register whichever heads your people use. A server that has neither refuses the
+authorization request rather than the token, so the person meets it at the provider's own screen.
+
+[The client endpoint](client-endpoint.md#what-a-sign-in-screen-is-offered) is where the published document and
+what a client does with it are described.
 
 ### Serving the page — `ClientEndpoint:Application`
 

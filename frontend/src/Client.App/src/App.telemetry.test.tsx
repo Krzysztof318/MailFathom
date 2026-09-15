@@ -25,6 +25,7 @@ import {
     typedSession,
 } from './App.harness';
 import { writeKeptSession } from './signIn/keptSession';
+import type { OAuthGrant } from './signIn/oauthGrant';
 
 // What the frame records, who it records it for, and every answer that stops it recording. The arrangement is
 // `App.harness`, which the rest of this family shares.
@@ -76,6 +77,30 @@ describe('App telemetry', () => {
         await screen.findByText('This deployment has stopped accepting the sign-in that was kept. Sign in again.');
 
         expect(recording.events).toContain('credential_no_longer_accepted');
+    });
+
+    // The same shape of occurrence one system out, and it is its own name for the reason the sentence on the screen is
+    // its own: an operator reading `credential_no_longer_accepted` for this goes to their own deployment's logs, where
+    // nothing happened.
+    it('records the authorization server ending a grant as the provider having ended it', async () => {
+        const recording = telemetryRecording();
+        const spent: OAuthGrant = {
+            authorization: 'Bearer mfo_telemetry.dGVsZW1ldHJ5LXByb29m',
+            expiresAt: '2000-01-01T00:00:00.000Z',
+            refreshToken: null,
+            issuer: 'https://id.example.invalid',
+            clientId: 'mailfathom-client',
+            resource: `${servingAddress.baseAddress}/api/client`,
+            person: 'K. Kowalska',
+        };
+
+        renderApp(servedFrom, null, deploymentAnswering(), storeKeeping(), recording.telemetry, spent);
+        await screen.findByText(
+            'Your provider ended this sign-in, so it has been cleared from this machine. Sign in again to carry on.',
+        );
+
+        expect(recording.events).toContain('grant_ended_by_provider');
+        expect(recording.events).not.toContain('credential_no_longer_accepted');
     });
 
     // A deployment that forwards nothing is not known to forward nothing until it says so, and until then the client

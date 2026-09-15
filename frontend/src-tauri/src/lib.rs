@@ -6,7 +6,7 @@
 // the web head has no equivalent of: the operating system's own credential store. Every other behaviour the client has
 // belongs to the bundle it wraps, which is what keeps a screen one screen across every head.
 //
-// Four of the six commands below are what ADR 0023 decided this shell would offer, and they are part of the
+// Four of the nine commands below are what ADR 0023 decided this shell would offer, and they are part of the
 // application's only reach into Rust that this repository wrote. What answers them lives in `credentials.rs` beside
 // this file, in two implementations selected by target — the desktop keychain and, per ADR 0027, the Android Keystore
 // — because that is the one operation whose *answer* differs between the heads rather than only its mechanism. They
@@ -14,23 +14,31 @@
 // `capabilities/` file names them; what does reach them is the Tauri API the WebView is given through `withGlobalTauri`
 // in `tauri.conf.json`, which is why this shell pins no JavaScript binding of its own.
 //
-// Each of those four and the fifth beside them is `async` for one reason: Tauri runs a synchronous command on the main
-// thread, and every one of them ends in a blocking call to something outside the process — a credential store, which
-// on Linux is a D-Bus round trip that waits while a locked keyring asks its user to unlock it, or a file on a disk
-// that may be a network mount. Run there, that call freezes the window rather than the request; run on the async
-// runtime, it occupies a worker and the application keeps painting.
+// Each of those four and `client_configuration` beside them is `async` for one reason: Tauri runs a synchronous
+// command on the main thread, and every one of them ends in a blocking call to something outside the process — a
+// credential store, which on Linux is a D-Bus round trip that waits while a locked keyring asks its user to unlock it,
+// or a file on a disk that may be a network mount. Run there, that call freezes the window rather than the request;
+// run on the async runtime, it occupies a worker and the application keeps painting.
 //
 // None of the credential commands reports why it failed. Everything they could report is about a password, and a client
 // that is told nothing simply asks for it again — which is the same outcome a browser refusing storage produces on the
 // other head.
 //
-// The fifth is `client_configuration`, and it is the one place this shell reads anything an operator wrote. It resolves
+// Three more stand beside them and belong to one operation: `sign_in_redirect_uri`, `follow_sign_in_redirect`, and
+// `abandon_sign_in_redirect`, which are how an OAuth sign-in comes back to a head that has no browser origin for a
+// server to redirect to and how a sign-in nobody is waiting for any more gives the port back. `redirects.rs` holds the
+// arrangement and why the listener and the browser are one command rather than two. None of the three is a plugin's
+// command either, so none is named in a `capabilities/` file — and the authorization address is therefore checked
+// where it is opened rather than by the capability that narrows what the *page* may ask the opener for, which is a
+// different path into the same plugin.
+//
+// The eighth is `client_configuration`, and it is the one place this shell reads anything an operator wrote. It resolves
 // nothing: it reads the three places a deployment states a setting and hands back what each of them said, as text.
 // Which of the three wins, what a value has to be to be one, and what a contradiction between two of them costs are all
 // the application's, in `shellOperations/configuredConnection.ts` and `deployment/adoptedDeployment.ts`, because they
 // are the same decisions on either head and a rule written twice is a rule two heads eventually disagree about.
 //
-// The sixth is `raise_notification`, and it is the one command here that exists because a plugin could not do the whole
+// The ninth is `raise_notification`, and it is the one command here that exists because a plugin could not do the whole
 // of what it is for. It is not `async` and needs nothing from the runtime: it hands the waiting to a thread of its own
 // and returns, which `notifications.rs` beside this file explains along with why the waiting is what this shell had to
 // take over.
@@ -60,6 +68,7 @@
 
 mod credentials;
 mod notifications;
+mod redirects;
 
 use std::collections::HashMap;
 use tauri::Manager;
@@ -83,22 +92,22 @@ async fn credential_arrangement() -> &'static str {
     credentials::arrangement().await
 }
 
-/// Keeps the session document for one deployment, answering whether it was kept.
+/// Keeps one value under the entry the application named, answering whether it was kept.
 #[tauri::command]
-async fn keep_credential(deployment: String, credential: String) -> bool {
-    credentials::keep(deployment, credential).await
+async fn keep_credential(entry: String, credential: String) -> bool {
+    credentials::keep(entry, credential).await
 }
 
-/// The session document kept for one deployment, or nothing where none was kept or the store would not answer.
+/// What was kept under one entry, or nothing where nothing was kept there or the store would not answer.
 #[tauri::command]
-async fn read_credential(deployment: String) -> Option<String> {
-    credentials::read(deployment).await
+async fn read_credential(entry: String) -> Option<String> {
+    credentials::read(entry).await
 }
 
-/// Deletes what was kept for one deployment, which is what sign-out does and the only thing that removes it.
+/// Deletes what was kept under one entry, which is what sign-out does and the only thing that removes it.
 #[tauri::command]
-async fn forget_credential(deployment: String) -> bool {
-    credentials::forget(deployment).await
+async fn forget_credential(entry: String) -> bool {
+    credentials::forget(entry).await
 }
 
 /// What each of the three places an operator configures this client from said, whether or not any of it is usable.
@@ -195,6 +204,29 @@ fn from_configuration_file(app: &tauri::AppHandle) -> HashMap<&'static str, Stri
     stated
 }
 
+/// Where an OAuth sign-in comes back to on this head, or nothing where this head receives no redirect at all.
+#[tauri::command]
+fn sign_in_redirect_uri() -> Option<&'static str> {
+    redirects::redirect_uri()
+}
+
+/// Hands the person to the authorization server in their own browser and answers the query its redirect came back with.
+///
+/// `async` for the reason the credential commands are, and more so: it waits for somebody to type a password into a
+/// browser window. `redirects.rs` holds why it is one operation rather than a listener and a link opened separately.
+#[tauri::command]
+async fn follow_sign_in_redirect(address: String) -> Option<String> {
+    redirects::follow(address).await
+}
+
+/// Gives up on a hand-over nobody is waiting for any more, so the next attempt finds the redirect port free.
+///
+/// Not `async`: it sets a flag the waiting thread reads on its own next look and returns, which is the whole of it.
+#[tauri::command]
+fn abandon_sign_in_redirect() {
+    redirects::abandon();
+}
+
 /// Raises one system notification saying the sentence given, and answers a click on it by bringing the window forward.
 ///
 /// It answers nothing, because raising one answers nothing a caller could act on: whether anything appeared is the
@@ -228,6 +260,9 @@ pub fn run() {
             keep_credential,
             read_credential,
             forget_credential,
+            sign_in_redirect_uri,
+            follow_sign_in_redirect,
+            abandon_sign_in_redirect,
             client_configuration,
             raise_notification
         ])

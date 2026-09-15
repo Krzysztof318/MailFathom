@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src-tauri/run-tauri.ts -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSignInMethodsEndpoint.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Application/Access/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientManagedMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailCleanedBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/**, backend/src/Host/Signals/**, backend/src/Application/Signals/**, backend/src/Application/Mail/Mutations/MailboxMutationPerformer.cs, frontend/src/Client.App/contentSecurityPolicy.ts, frontend/src/Client.Backend/src/signInMethods.ts, frontend/src/Client.App/src/signIn/oauthFlow.ts, frontend/src/Client.App/src/shellOperations/signInRedirect.ts, frontend/src-tauri/src/redirects.rs, frontend/src-tauri/run-tauri.ts -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -59,6 +59,7 @@ AppHost provisions its synthetic credential after the service reports ready;
 
 | Route | Grant it needs |
 | --- | --- |
+| `GET /api/client/sign-in-methods` | none |
 | `GET /api/client/session` | none |
 | `POST /api/client/session/token` | none |
 | `POST /api/client/session/token/revocation` | none |
@@ -133,6 +134,45 @@ No path here carries a version segment MailFathom chose: the major version is `0
 permits breaking the contract outright, so `/v1` would be scaffolding for a promise this project has not made. The
 `/v1` in the three [telemetry routes](#the-telemetry-routes) is not one: those paths are fixed by the OTLP
 specification, so a client points its exporter at the prefix above them and appends nothing itself.
+
+### The sign-in methods route
+
+It answers a browser holding nothing, because a sign-in screen has to be drawn before anybody can authorize, and it is
+the one question the two documents a client could already read do not answer between them. The session route's
+challenge says whether a password would be taken; the RFC 9728 document names the issuers a token may come from. Neither
+says which servers a *person* may be offered a control for, what to write on the control, or the identifier the
+authorization request has to start with.
+
+```json
+{
+  "acceptsPassword": true,
+  "authorizationServers": [
+    {
+      "issuer": "https://sso.example.test/realms/nordwind",
+      "name": "keycloak",
+      "displayName": "Nordwind staff directory",
+      "clientId": "mailfathom-client"
+    }
+  ]
+}
+```
+
+`acceptsPassword` is whether any configured entry accepts `password`, and it is `true` where the endpoint is
+configured with no entry at all — such an endpoint requires no credential, so a password is a thing a client may
+present rather than one it may not. Each server is one
+`ClientEndpoint:Authentication:<n>:OAuth:AuthorizationServers:<m>` block that was written with a `ClientId`, in the
+order the configuration published them; a block without one goes on validating tokens and appears here not at all.
+`name` is what a client matches its provider marks against, `self` meaning the deployment's own identity provider;
+`displayName` is the words the control carries and defaults to the name.
+[Offering a person a provider to sign in with](configuration-endpoints.md#offering-a-person-a-provider-to-sign-in-with)
+is the configuration side.
+
+Nothing in the document is a secret. An issuer, a name, and a public client identifier all travel in the address bar of
+every authorization request the flow starts, so publishing them to a caller holding nothing gives away nothing it could
+not read there — and a deployment offering no provider publishes an empty list rather than a refusal.
+
+A deployment built before this route existed answers `404`, which a client reads as an older deployment rather than an
+unreachable one: it falls back to what the session route's challenge says about a password and draws the form.
 
 ### The session route
 
@@ -2961,6 +3001,58 @@ Behind a reverse proxy, write the public URL and keep the path: `https://mail.ex
 must prove, and why the advertised scope list is longer than the checked one, is
 [under the MCP endpoint](mcp-endpoint.md#oauth); none of it differs here.
 
+### What a sign-in screen is offered
+
+Both methods above are what an operator configures; this is what a person meets. The client asks
+[the sign-in methods route](#the-sign-in-methods-route) before it draws anything, and every part of the screen follows
+what came back independently — so the three postures below are what a deployment produces rather than modes it selects.
+
+| What is configured | What the screen shows |
+| --- | --- |
+| a `password` entry alone | The username and password form, and no provider control |
+| an `OAuth` entry whose servers carry a `ClientId`, and no `password` entry | A control per published server, and no form — which is what makes a token-only deployment a screen somebody can use rather than a form nobody can submit |
+| both | The `self` server's control at the top where one is published, the other servers beneath it, a divider, and the form under that |
+
+A deployment that publishes neither — every entry `api-key` or `public-key` — is told so on the screen rather than
+shown an inert form. An endpoint configured with no entry at all is not that case: it publishes `acceptsPassword` true
+for the reason above, and the screen it draws is the password form.
+
+**The flow is an authorization code with PKCE and nothing else.** The client reads the server's own discovery document
+from its issuer, generates a verifier it keeps and a `S256` challenge it sends, and starts the request with the
+published client identifier, the `resource` the protected-resource document names, the scopes that document advertises
+— `offline_access` among them is what gets a refresh token issued — and a single-use `state`, plus a `nonce` where the
+server is an OpenID provider. No client secret exists anywhere, which is why the identifier above is publishable: the
+verifier is what the redemption proves, and it is never stated in any address.
+
+**The protected-resource document is read against the deployment being signed in to.** A document naming a `resource`
+other than that deployment's own `/api/client` is refused and no provider control is drawn, which is RFC 9728 §3.3 — so
+the `Resource` an operator writes is the absolute address clients reach this endpoint at, exactly as the setting's own
+validation says. **And the flow needs TLS in front of the page**: a document served over plain HTTP is an insecure
+context, where the browser offers no digest to compute the PKCE challenge with, so a deployment somebody permitted
+clear text for offers the password form and reports the provider as unreachable rather than drawing a control that
+goes nowhere.
+
+**Register the redirect address before anybody signs in**, because each is compared exactly by the authorization
+server. The web head comes back to the address of the page itself — `https://mail.example.test/app/` where a
+deployment serves the bundle — and the desktop head comes back to `http://127.0.0.1:8766/`, a loopback address its own
+shell listens on for as long as one sign-in is in flight and then stops. Register whichever heads your people use; a
+server holding neither refuses the authorization request at its own screen rather than refusing the token afterwards.
+
+**What the deployment then does with the token is judge it as an `oauth-subject` credential**, exactly as it judges one
+an agent presented: the subject is mapped onto a user record with `mfctl credential create --method oauth-subject`, and
+a token whose subject is mapped to nobody is refused with an empty `401`. MailFathom mints nothing and serves no login
+page in any of this — the person authorized at the operator's own server, and this endpoint is a protected resource
+throughout.
+
+**The access token is renewed before it expires, and signing out asks for the refresh token to be revoked.** The client
+presents the refresh token it is holding and takes whichever one comes back, so a server that rotates them is followed
+rather than re-authorized; a refused refresh ends the sign-in, while a server that could not be reached at all is
+retried. Signing out clears the session and the grant together, on the head's own terms, and asks the authorization
+server's revocation endpoint to withdraw the refresh token — asked without waiting on the answer, and asked of nothing
+where the server publishes no such endpoint.
+[ADR 0023](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md)
+is where a grant is kept and what clears it.
+
 ## Browser origins
 
 Every MailFathom head calls this surface from an origin, and a preflight this endpoint cannot answer is a client that
@@ -3263,6 +3355,15 @@ picture's or a font's address.
 | `base-uri` | `'none'` | No `<base>` element can redirect the page's relative references, in the page or in a frame |
 | `form-action` | `'none'` | No form submits anywhere; the client's own forms are handled by the page |
 | `frame-ancestors` | `'none'` | No other page may frame this one |
+
+**`connect-src` is the one directive a deployment's own configuration widens**, and it is widened at startup rather
+than configured: each published authorization server's issuer contributes its origin — scheme, host, and port, never a
+path — to the directive the bundle wrote, so the page may read that server's discovery document and redeem a code
+there. Two realms on one server contribute one origin. A deployment publishing no such server serves the policy its
+build wrote, byte for byte, which is why turning a provider on is the only thing that widens it, and a bundle whose
+policy names no `connect-src` at all gains the directive rather than having nothing to widen. Nothing else in the
+policy moves, and the reason it has to move at all is that `connect-src 'self'` would otherwise refuse the flow at the
+first request — a page cannot sign somebody in to a server it may not call.
 
 The desktop head carries the same policy with one directive wider. Its `connect-src` is
 `'self' ipc: http://ipc.localhost https: wss: http: ws:`: `ipc:` and `http://ipc.localhost` are how its page reaches the

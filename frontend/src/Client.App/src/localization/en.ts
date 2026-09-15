@@ -84,8 +84,31 @@ export const en = {
     'signIn.revealPasswordControl': 'Show the password',
     'signIn.hidePasswordControl': 'Hide the password',
 
-    'signIn.viaProvider': 'Sign in through a provider',
+    'signIn.viaProvider': 'Sign in with a provider',
+    'signIn.orAnotherMethod': 'or another method',
     'signIn.orWithPassword': 'or with a password',
+    'signIn.signInWithProvider': 'Sign in',
+    'signIn.providerOpensInBrowser': '{provider} opens in your browser.',
+    'signIn.openingProvider': 'Opening {provider}…',
+    'signIn.finishInBrowser':
+        'Finish signing in in the browser window — this screen picks up the session when it returns.',
+    'signIn.continueToProvider': 'Continue to {provider}',
+    'signIn.noMethods':
+        'This deployment offers no sign-in method. Check the address, or ask whoever runs it to configure one.',
+    'signIn.providersNotOnThisHead':
+        'This deployment offers a provider, which this version of the client cannot open. Sign in with a password here, or use the desktop client or a browser.',
+    'signIn.providersOnAnotherHeadOnly':
+        'This deployment offers a provider, which this version of the client cannot open, and it takes no password. Sign in from the desktop client or from a browser.',
+    'signIn.providersUnread':
+        'This deployment offers a provider, and what a token has to be issued for could not be read just now.',
+    'signIn.readAgain': 'Ask again',
+    'signIn.returning': 'Finishing the sign-in with your provider…',
+    'signIn.notAuthorized': 'The provider did not finish the sign-in, so nothing was signed in. Start it again.',
+    'signIn.unexpectedAnswer':
+        'That answer belongs to no sign-in this client started. Start one from this screen rather than from a link.',
+    'signIn.providerRefused': 'The provider refused this sign-in. Start it again.',
+    'signIn.notAUser':
+        'The provider signed you in, but this deployment knows no user for that account. Ask whoever runs it to add one.',
     'signIn.forgotPassword': 'Forgot your password?',
     'signIn.itHelp': 'IT help',
     'signIn.title': 'Connect your mailbox',
@@ -104,11 +127,16 @@ export const en = {
         'This deployment does not accept a login and a password. Whoever runs it has to enable that before you can sign in here.',
     'signIn.grantMissing': 'This deployment accepted the credential, but it is allowed to read no mail.',
     'signIn.deploymentSilent': 'The deployment did not answer. Try again in a moment.',
+    'signIn.providerSilent': 'The provider did not answer, so nothing was signed in. Try again in a moment.',
+    'signIn.providerEnded':
+        'Your provider ended this sign-in, so it has been cleared from this machine. Sign in again to carry on.',
     'signIn.noLongerAccepted': 'This deployment has stopped accepting the sign-in that was kept. Sign in again.',
     'signIn.notRemoved':
         'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. MailFathom was asked to end the session, and it stops working on its own in any case. Remove the entry in the store itself if you would rather it were gone now.',
     'signIn.notKept':
         'This sign-in could not be stored on this machine, so you will be asked for your password again the next time you open MailFathom. You are signed in either way.',
+    'signIn.grantNotKept':
+        'This sign-in could not be stored on this machine, so you will be sent to your provider again the next time you open MailFathom. You are signed in either way.',
     'signIn.keepMeSignedIn': 'Keep me signed in',
     'signIn.keepMeSignedInUnticked':
         'This sign-in is kept until you close this tab. Applies to password sign-in only — provider sessions follow their own rules.',

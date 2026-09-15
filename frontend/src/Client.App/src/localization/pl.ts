@@ -83,8 +83,31 @@ export const pl: Catalogue = {
     'signIn.revealPasswordControl': 'Pokaż hasło',
     'signIn.hidePasswordControl': 'Ukryj hasło',
 
-    'signIn.viaProvider': 'Logowanie przez dostawcę',
+    'signIn.viaProvider': 'Logowanie u dostawcy',
+    'signIn.orAnotherMethod': 'lub inną metodą',
     'signIn.orWithPassword': 'lub hasłem',
+    'signIn.signInWithProvider': 'Zaloguj się',
+    'signIn.providerOpensInBrowser': '{provider} otworzy się w Twojej przeglądarce.',
+    'signIn.openingProvider': 'Otwieram {provider}…',
+    'signIn.finishInBrowser': 'Dokończ logowanie w oknie przeglądarki — ten ekran podejmie sesję, gdy wrócisz.',
+    'signIn.continueToProvider': 'Przejdź do {provider}',
+    'signIn.noMethods':
+        'To wdrożenie nie udostępnia żadnej metody logowania. Sprawdź adres albo poproś osobę, która je prowadzi, o skonfigurowanie jednej.',
+    'signIn.providersNotOnThisHead':
+        'To wdrożenie udostępnia dostawcę, którego ta wersja klienta nie potrafi otworzyć. Zaloguj się tutaj hasłem albo skorzystaj z klienta na komputer lub z przeglądarki.',
+    'signIn.providersOnAnotherHeadOnly':
+        'To wdrożenie udostępnia dostawcę, którego ta wersja klienta nie potrafi otworzyć, i nie przyjmuje hasła. Zaloguj się z klienta na komputer albo z przeglądarki.',
+    'signIn.providersUnread':
+        'To wdrożenie udostępnia dostawcę, a informacji o tym, na co ma zostać wystawiony token, nie udało się teraz odczytać.',
+    'signIn.readAgain': 'Zapytaj ponownie',
+    'signIn.returning': 'Kończę logowanie u Twojego dostawcy…',
+    'signIn.notAuthorized':
+        'Dostawca nie dokończył logowania, więc nikt nie został zalogowany. Zacznij je jeszcze raz.',
+    'signIn.unexpectedAnswer':
+        'Ta odpowiedź nie należy do żadnego logowania rozpoczętego przez tego klienta. Zacznij je z tego ekranu, a nie z odnośnika.',
+    'signIn.providerRefused': 'Dostawca odmówił temu logowaniu. Zacznij je jeszcze raz.',
+    'signIn.notAUser':
+        'Dostawca Cię zalogował, ale to wdrożenie nie zna użytkownika dla tego konta. Poproś osobę, która je prowadzi, o dodanie go.',
     'signIn.forgotPassword': 'Nie pamiętasz hasła?',
     'signIn.itHelp': 'Pomoc IT',
     'signIn.title': 'Połącz skrzynkę',
@@ -104,11 +127,16 @@ export const pl: Catalogue = {
         'To wdrożenie nie przyjmuje loginu i hasła. Osoba, która je prowadzi, musi najpierw włączyć taką możliwość.',
     'signIn.grantMissing': 'Wdrożenie przyjęło poświadczenie, ale nie zezwala mu na odczyt żadnej poczty.',
     'signIn.deploymentSilent': 'Wdrożenie nie odpowiedziało. Spróbuj ponownie za chwilę.',
+    'signIn.providerSilent': 'Dostawca nie odpowiedział, więc nikt nie został zalogowany. Spróbuj ponownie za chwilę.',
+    'signIn.providerEnded':
+        'Twój dostawca zakończył to logowanie, więc zostało usunięte z tego komputera. Zaloguj się ponownie, aby kontynuować.',
     'signIn.noLongerAccepted': 'To wdrożenie przestało akceptować zapamiętane logowanie. Zaloguj się ponownie.',
     'signIn.notRemoved':
         'Wylogowanie nie usunęło zapamiętanego logowania z magazynu poświadczeń tej maszyny, więc nadal jest tam przechowywane. MailFathom został poproszony o zakończenie sesji, a ona i tak przestaje działać sama. Usuń wpis w samym magazynie, jeśli wolisz, żeby zniknął już teraz.',
     'signIn.notKept':
         'Nie udało się zapisać tego logowania na tej maszynie, więc zapytamy o hasło ponownie przy następnym otwarciu MailFathom. Jesteś zalogowany tak czy inaczej.',
+    'signIn.grantNotKept':
+        'Nie udało się zapisać tego logowania na tej maszynie, więc przy następnym otwarciu MailFathom ponownie przekierujemy Cię do Twojego dostawcy. Jesteś zalogowany tak czy inaczej.',
     'signIn.keepMeSignedIn': 'Nie wylogowuj mnie',
     'signIn.keepMeSignedInUnticked':
         'To logowanie jest trzymane do zamknięcia tej karty. Dotyczy wyłącznie logowania hasłem — sesje u dostawców rządzą się własnymi regułami.',

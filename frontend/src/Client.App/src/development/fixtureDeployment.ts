@@ -5,8 +5,10 @@
 import {
     clientRoutePrefix,
     mailPermissions,
+    protectedResourceMetadataRoute,
     sessionExchangeRoute,
     sessionRevocationRoute,
+    signInMethodsRoute,
     type ClientRequest,
     type ClientResponse,
 } from '@mailfathom/client-backend';
@@ -121,6 +123,18 @@ export function fixtureAnswer(
         return null;
     }
 
+    // The one document published outside the client prefix, which RFC 9728 puts at the root with the prefix after it —
+    // so it is matched on the whole path before anything slices the prefix off, which would leave nothing to match on.
+    if (request.path.endsWith(protectedResourceMetadataRoute)) {
+        // The identifier is composed from the address this was read at rather than stated by the corpus, because the
+        // client checks that the document names the deployment it came from — and where the fixture is served from is
+        // whatever port a development run took.
+        return answering({
+            ...deployment.protectedResource,
+            resource: `${request.path.slice(0, -protectedResourceMetadataRoute.length)}${clientRoutePrefix}`,
+        });
+    }
+
     const surface = request.path.slice(request.path.indexOf(clientRoutePrefix) + clientRoutePrefix.length);
     const [route = '', query = ''] = surface.split('?');
 
@@ -146,6 +160,14 @@ export function fixtureAnswer(
     // deployment does not keep, and a run that signed out has already forgotten what it held.
     if (route === sessionRevocationRoute) {
         return { status: 204, body: '', headers: {} };
+    }
+
+    // The two documents a sign-in screen is composed from, both answered to a caller holding nothing, because a person
+    // has to be shown what they may do before they can do any of it. The corpus publishes every way in at once so a
+    // development run opens on the screen the design draws rather than on a password form with nothing beside it;
+    // nothing behind these servers is answered here, so a control that is pressed reaches a provider that is not there.
+    if (route === signInMethodsRoute) {
+        return answering(deployment.signInMethodsOffered);
     }
 
     if (route === '/session') {
