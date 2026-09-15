@@ -19,7 +19,7 @@ them:
 | `DatabaseCommandExecution` | Commands and queries against the local PostgreSQL database — the one class that is a classification rather than a pipeline; see the EF Core entry under the single-layer rule |
 | `AiProviderInvocation` | Chat and embedding provider calls |
 | `MailAuthorizationServerInvocation` | Exchanging a configured OAuth grant for a mailbox access token |
-| `ObjectStorageInvocation` | Requests to the S3-compatible endpoint a deployment stores message payloads in |
+| `ObjectStorageInvocation` | Requests to the S3-compatible endpoint a deployment stores message payloads in, and the archives an export writes there |
 
 A class exists when its failure modes and its rules for safe repetition differ from every other class. Session
 establishment is separate from retrieval because a rejected credential must never be repeated — against a mail server

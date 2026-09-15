@@ -115,6 +115,10 @@ Where streaming genuinely pays is a read path that serves a whole message to a n
 
 An earlier design described the port as offering streaming put, open-read, existence, and delete operations. It never did, and this record states what the port is rather than leaving that description standing to be read as a plan.
 
+**The condition above has been met once, and by something that is not a mail payload.** The mailbox export of [ADR 0034](0034-holding-a-mailbox-mailfathom-alone-keeps.md) produces one object per export whose size is the size of a mailbox, and no bound would make holding one whole acceptable — so it is written through a port of its own, `IMailboxExportArchiveStore`, over a multipart upload the archive writer streams into, and read back as a stream the transport copies to the caller. That port sits beside `IEmailContentStore` rather than inside it, because what it carries is not one of the five payload kinds, has no digest or recorded length the row is written against, and is not content-addressed by a write of stored mail: an export archive is a derived copy the deployment keeps for a stated retention and then deletes. The rules the objects themselves live under are unchanged — the archive's key is minted by the write that produced it under § 3, a deployment holding content in its database has no bucket and therefore refuses the export outright, and the key an export records is one of the references the reclamation asks about under § 2, so a live archive is never mistaken for an orphan.
+
+`ReadOnlyMemory<byte>` in and `StoredEmailContent` out therefore stays exactly what `IEmailContentStore` offers. Nothing here is a streaming overload on that port, and a mail payload still crosses it whole.
+
 ### 5. Neither backend encrypts mail content in MailFathom's own process
 
 The object is written as the same bytes the `bytea` column holds. Confidentiality in the bucket rests on transport TLS to the endpoint, on the endpoint's own server-side encryption where it offers one, and on a credential scoped to the one bucket and prefix.

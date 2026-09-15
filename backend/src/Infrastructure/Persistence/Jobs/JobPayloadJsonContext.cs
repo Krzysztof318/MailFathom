@@ -38,4 +38,5 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 [JsonSerializable(typeof(ReclaimContentObjectsJobPayload))]
 [JsonSerializable(typeof(EraseLocalMailFolderMailJobPayload))]
 [JsonSerializable(typeof(EraseWithdrawnMailFolderMailJobPayload))]
+[JsonSerializable(typeof(ExportMailboxJobPayload))]
 internal sealed partial class JobPayloadJsonContext : JsonSerializerContext;

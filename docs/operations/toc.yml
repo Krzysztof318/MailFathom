@@ -60,6 +60,9 @@
     - name: Moving stored content into the bucket
       href: moving-stored-content.md
       description: Carrying the mail content already in the database into the configured object backend, what it costs while it runs, and how to read its progress.
+    - name: Carrying a mailbox out
+      href: mailbox-export.md
+      description: Exporting one account's stored mail as a Maildir archive, what the archive holds, how long one is kept, and what an operator owes a mailbox nothing else holds.
     - name: Changing the embedding model
       href: embedding-profiles.md
       description: Activating a new embedding profile without invalidating the vectors already stored, and what the change costs while it runs.

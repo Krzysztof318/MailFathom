@@ -52,6 +52,7 @@ internal static class MailFathomConfigurationSections
         "Jobs",
         "Logging",
         "MailAnswering",
+        "MailboxExport",
         "MailboxSearch",
         "MailDelivery",
         "MailExtractionBackfill",

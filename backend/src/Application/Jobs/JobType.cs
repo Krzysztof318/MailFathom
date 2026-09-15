@@ -115,6 +115,16 @@ public readonly record struct JobType
     /// </remarks>
     public static JobType EraseWithdrawnMailFolderMail { get; } = new("erase-withdrawn-mail-folder-mail");
 
+    /// <summary>Gets the type whose work is writing the archive of one export of a mailbox.</summary>
+    /// <remarks>
+    /// Its payload contract is <see cref="ExportMailboxJobPayload" />, which names the account and the export and
+    /// nothing inside any message. The work is long and is one attempt rather than a chain of passes: an archive is one
+    /// object written in one stream, so a pass handing the rest to the next would have to hand over a half-written
+    /// object, which is exactly what an export must never leave behind. An attempt that stops abandons the write and
+    /// the export is asked for again.
+    /// </remarks>
+    public static JobType ExportMailbox { get; } = new("export-mailbox");
+
     /// <summary>Gets every declared job type.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
     public static IReadOnlyList<JobType> All { get; } =
@@ -128,6 +138,7 @@ public readonly record struct JobType
         ReclaimContentObjects,
         EraseLocalMailFolderMail,
         EraseWithdrawnMailFolderMail,
+        ExportMailbox,
     ];
 
     /// <summary>Gets whether this value names a declared job type rather than the unusable struct default.</summary>

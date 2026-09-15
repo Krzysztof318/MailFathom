@@ -828,6 +828,12 @@ would differ between the two, hand the same position to two keys, and leave two 
 from the record instead means the repeat composes the key the first attempt already used and is answered with the
 segment that is waiting. Two occasions are two names, so consecutive sweeps are never answered with each other's work.
 
+**The lookup asks about every kind of reference, not only the payload ones.** Five tables can name an object because
+they hold mail, and a sixth can because it holds a mailbox export's archive
+([Carrying a mailbox out](../operations/mailbox-export.md)). All six are asked in one query per page, so an archive
+somebody is still downloading is never mistaken for an orphan, and a key belonging to a kind nobody remembered to ask
+about would be deleted mail — which is why the question is one reader over every kind rather than one per caller.
+
 Three things bound what it may touch, and each is deliberate:
 
 - **The configured key prefix is its whole authority.** It lists beneath `ContentStorage:ObjectStorage:KeyPrefix` and

@@ -12,9 +12,9 @@ namespace MailFathom.Infrastructure.ObjectStorage;
 /// the materialization the sweep exists to avoid.
 /// </para>
 /// <para>
-/// All five payload kinds are asked at once, because an object gives no kind away. A key carries the kind as a segment
-/// for a reader's sake, and nothing derives one from a key — so a sweep that trusted the segment would delete a
-/// message the moment somebody renamed a group of keys.
+/// Every kind that can hold a key is asked at once — the five payload kinds and an export's archive — because an object
+/// gives no kind away. A key carries the kind as a segment for a reader's sake, and nothing derives one from a key — so
+/// a sweep that trusted the segment would delete a message the moment somebody renamed a group of keys.
 /// </para>
 /// <para>
 /// The seam is here rather than in the application because both of its sides are storage: one store lists and the other

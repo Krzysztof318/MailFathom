@@ -200,6 +200,13 @@ what it was never granted is what the record exists to make visible.
 | `GET /api/admin/content/release` | `mailfathom.admin.read` | Reports how much of this deployment's database is a copy of what its bucket already holds, and how much the move has not yet carried. This is what [`mfctl content release`](#freeing-the-copies-the-move-left-behind) reads first, and what `mfctl content move-status` reports beside the backlog. |
 | `POST /api/admin/content/release` | `mailfathom.admin.erase` | Frees one bounded batch of those copies, leaving the object the only place that mail is held. Refused with `409` while any payload is still waiting to be carried. |
 | `POST /api/admin/folders/erasure` | `mailfathom.admin.erase` | Erases one bounded pass of the mail stored for a folder the account no longer mirrors. **This is the one route that disposes of mail.** |
+| `GET /api/admin/exports/measurement` | `mailfathom.admin.export` | Reports what an export of one mailbox, or of one folder of it, would carry — per folder and in total — without starting one. The figures are summed from the recorded lengths, so no payload is read to produce them. |
+| `GET /api/admin/exports` | `mailfathom.admin.export` | Lists the exports one account has, newest first. |
+| `POST /api/admin/exports` | `mailfathom.admin.export` | Records an export and queues the work that writes its archive, answering with the measurement it was decided on. An export of the same scope already being written is answered with itself; a different scope is refused with `409` while one is running. Refused with `400` where this deployment keeps its content in the database, where the export is past the configured size limit, or where the stored-content ceiling has no room for a second copy of the mailbox. |
+| `GET /api/admin/exports/{exportId}` | `mailfathom.admin.export` | Reads where one export stands, including how much of it has reached the archive. |
+| `POST /api/admin/exports/{exportId}/cancellation` | `mailfathom.admin.export` | Stops an export still being written and deletes whatever it had produced. One that has already finished is answered as it stands rather than cancelled. |
+| `GET /api/admin/exports/{exportId}/archive` | `mailfathom.admin.export` | Serves the finished archive as `application/zip`, streamed from the object store rather than held in this process. Refused with `409` once the archive has expired, been deleted, or never finished. |
+| `DELETE /api/admin/exports/{exportId}` | `mailfathom.admin.export` | Deletes a finished archive before its retention ends. Repeating it on one already gone succeeds, because the caller asked for a state the deployment is already in. |
 | `GET /api/admin/contacts` | `mailfathom.admin.audit.read` | Reads one bounded, keyset-paginated page of the books `user` reads — their own beside the collected book of each mail account assigned to them — optionally narrowed to one origin. [The contact book](../features/contacts.md) holds which book answers where two of them carry one address. |
 | `POST /api/admin/contacts` | `mailfathom.admin.operate` | Records a person into the own book of `user`, as a contact they asserted. It never writes a mail account's collected book. A `user` this deployment holds no record for is refused with `400`, as it is on every contact route that acts under the user the request names. |
 | `GET /api/admin/contacts/by-address` | `mailfathom.admin.audit.read` | Reads whoever uses one address across the books `user` reads, in whichever casing the book that answers recorded it. |
@@ -1074,6 +1081,65 @@ setting is holding them and stops rather than asking again for the same answer.
 **What this removes cannot be undone from anywhere but a backup**, and there is no route that carries content back out
 of the bucket. [Moving stored content into the bucket](moving-stored-content.md) holds the order of the steps and what
 each one cannot be undone from.
+
+### Carrying a mailbox out of this deployment
+
+`mfctl export` is how one account's stored mail leaves as an archive. [Carrying a mailbox out](mailbox-export.md) is
+the operation in full — what the archive holds, how long one is kept, and what an operator owes a mailbox nothing else
+holds; this is the command group over it. All seven routes are published under `mailfathom.admin.export`, a name no
+reading grant confers.
+
+```console
+$ mfctl export measure --account work
+To export:  48,210 messages carrying 12,884,901,888 bytes of stored mail
+
+Folder        Messages           Bytes
+INBOX           31,004   8,589,934,592
+Archive         12,880   3,221,225,472
+Sent             4,326   1,073,741,824
+
+Nothing was written. Start the export with 'mfctl export start'.
+
+$ mfctl export start --account work
+To export:  48,210 messages carrying 12,884,901,888 bytes of stored mail
+Export that mailbox? [y/N] y
+Export:     0199a0c0d4b17c2e9f3a5b6c7d8e9f01
+State:      queued
+Written:    0 messages carrying 0 bytes
+Archive:    no archive to keep
+
+Watch it with 'mfctl export status', and fetch it with 'mfctl export download' once it is finished.
+
+$ mfctl export status --account work --export 0199a0c0d4b17c2e9f3a5b6c7d8e9f01
+Export:     0199a0c0d4b17c2e9f3a5b6c7d8e9f01
+State:      being written
+Written:    18,400 messages carrying 4,915,200,000 bytes
+Archive:    no archive to keep
+
+$ mfctl export download --account work --export 0199a0c0d4b17c2e9f3a5b6c7d8e9f01 --output work-mailbox.zip
+Written:    /home/operator/work-mailbox.zip
+Size:       11,274,289,152 bytes
+
+The deployment still holds the archive. Free that storage with 'mfctl export delete'.
+```
+
+**Measuring reads no payload**, so the answer comes back in seconds whatever the mailbox holds. `mfctl export start`
+measures again and asks before it commits, which `--yes` skips.
+
+**Starting one answers immediately.** The archive is written by a background job, so nothing is held open for the length
+of a mailbox, and `mfctl export status` is how it is followed. Asking again for the same scope answers with the export
+already running; a different scope while one is running is refused with `409`.
+
+**The download streams to disk.** The archive is served straight from the object store, and the command writes it as it
+arrives under whatever `--output` names, defaulting to `mailfathom-export-<id>.zip`. A partial file is removed rather
+than left behind when the transfer fails.
+
+**Two commands end an export.** `mfctl export cancel` stops one still being written and deletes what it had produced;
+`mfctl export delete` removes a finished archive before its retention ends, and repeating it on one already gone
+succeeds.
+
+**A deployment keeping its content in the database is refused**, with `ContentStorage:ObjectStorage` named in the
+refusal. An archive is a second full copy of the mailbox, and there is nowhere to put one.
 
 ### Administering the contact book
 

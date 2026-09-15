@@ -17,6 +17,7 @@ using MailFathom.Infrastructure.Persistence.Emails.Threads.Configurations;
 using MailFathom.Infrastructure.Persistence.Embeddings.Configurations;
 using MailFathom.Infrastructure.Persistence.Enrichment.Configurations;
 using MailFathom.Infrastructure.Persistence.Entities;
+using MailFathom.Infrastructure.Persistence.Exports.Configurations;
 using MailFathom.Infrastructure.Persistence.Folders.Configurations;
 using MailFathom.Infrastructure.Persistence.Jobs.Configurations;
 using MailFathom.Infrastructure.Persistence.Mutations.Configurations;
@@ -149,6 +150,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<ContentMoveRunEntity> ContentMoveRuns => this.Set<ContentMoveRunEntity>();
 
+    internal DbSet<MailboxExportEntity> MailboxExports => this.Set<MailboxExportEntity>();
+
     internal DbSet<MailRuleEvaluationRunEntity> MailRuleEvaluationRuns => this.Set<MailRuleEvaluationRunEntity>();
 
     internal DbSet<SynchronizationCheckpointEntity> SynchronizationCheckpoints => this.Set<SynchronizationCheckpointEntity>();
@@ -269,6 +272,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new MailRederivationPositionConfiguration());
         modelBuilder.ApplyConfiguration(new MailRederivationRunConfiguration());
         modelBuilder.ApplyConfiguration(new ContentMoveRunConfiguration());
+        modelBuilder.ApplyConfiguration(new MailboxExportConfiguration());
         modelBuilder.ApplyConfiguration(new SynchronizationCheckpointConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxRefreshTokenConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxMutationConfiguration());

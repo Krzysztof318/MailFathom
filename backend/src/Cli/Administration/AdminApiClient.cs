@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -12,6 +13,7 @@ using MailFathom.Cli.Administration.Configuration;
 using MailFathom.Cli.Administration.Contacts;
 using MailFathom.Cli.Administration.Content;
 using MailFathom.Cli.Administration.Embeddings;
+using MailFathom.Cli.Administration.Exports;
 using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Jobs;
 using MailFathom.Cli.Administration.Mailboxes;
@@ -58,6 +60,14 @@ internal sealed class AdminApiClient
     /// </remarks>
     private const string NoContentMoveMessage =
         "This deployment has never been asked to move its stored content, so there is none to act on.";
+
+    /// <summary>What every act on one export says when the account holds none under the identity it named.</summary>
+    /// <remarks>
+    /// The export's absence rather than the endpoint's, on the rule every route addressing a thing by identity follows:
+    /// telling an operator to check the port would send them after a deployment that is answering perfectly well.
+    /// </remarks>
+    private const string NoMailboxExportMessage =
+        "This account holds no export under that identity. 'export list' names the ones it has.";
 
     private static readonly string CommandVersion =
         StampedAssemblyVersion.ReadFrom(typeof(AdminApiClient).Assembly).Version;
@@ -437,6 +447,265 @@ internal sealed class AdminApiClient
             CliJsonContext.Default.ContentMoveRun,
             cancellationToken,
             absenceMessage: NoContentMoveMessage);
+
+    /// <summary>Asks the deployment what an export of a mailbox, or of one folder of it, would carry.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account to measure, as the deployment's configuration names it.</param>
+    /// <param name="folder">The one folder of it to measure, or <see langword="null" /> for the whole mailbox.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The measurement, per folder and in total.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a measurement.</exception>
+    internal Task<MailboxExportMeasurement> MeasureMailboxExportAsync(
+        string token,
+        string account,
+        string? folder,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.MailboxExportMeasurementPath}{new AdminQueryString().Add("account", account).Add("folder", folder)}",
+            token,
+            CliJsonContext.Default.MailboxExportMeasurement,
+            cancellationToken);
+    }
+
+    /// <summary>Asks the deployment for the exports one account has, newest first.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account asked about, as the deployment's configuration names it.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The exports.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a listing.</exception>
+    internal Task<MailboxExportListing> ListMailboxExportsAsync(
+        string token,
+        string account,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.MailboxExportsPath}{new AdminQueryString().Add("account", account)}",
+            token,
+            CliJsonContext.Default.MailboxExportListing,
+            cancellationToken);
+    }
+
+    /// <summary>Tells the deployment to write an archive of a mailbox, or of one folder of it.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account to export, as the deployment's configuration names it.</param>
+    /// <param name="folder">The one folder of it to export, or <see langword="null" /> for the whole mailbox.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The measurement the deployment decided on, and the export it now holds.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an export.</exception>
+    /// <remarks>It returns as soon as the export is written down. The archive is the deployment's own background work, so closing the terminal stops nothing and an export of any size answers immediately.</remarks>
+    internal Task<MailboxExportStart> StartMailboxExportAsync(
+        string token,
+        string account,
+        string? folder,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.MailboxExportsPath,
+            token,
+            CliJsonContext.Default.MailboxExportStart,
+            cancellationToken,
+            JsonContent.Create(
+                new MailboxExportRequest(account, folder),
+                CliJsonContext.Default.MailboxExportRequest));
+    }
+
+    /// <summary>Asks the deployment where one export stands.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account the export belongs to.</param>
+    /// <param name="exportId">The export's identity.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The export.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the account holds no such export, the deployment refused the credential, or it could not be reached.</exception>
+    internal Task<MailboxExport> ReadMailboxExportAsync(
+        string token,
+        string account,
+        Guid exportId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.MailboxExportPath(exportId)}{new AdminQueryString().Add("account", account)}",
+            token,
+            CliJsonContext.Default.MailboxExport,
+            cancellationToken,
+            absenceMessage: NoMailboxExportMessage);
+    }
+
+    /// <summary>Tells the deployment to stop an export still being written.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account the export belongs to.</param>
+    /// <param name="exportId">The export's identity.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The export as it now stands.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the account holds no such export, the deployment refused the credential, or it could not be reached.</exception>
+    internal Task<MailboxExport> CancelMailboxExportAsync(
+        string token,
+        string account,
+        Guid exportId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            $"{AdminEndpointRoutes.MailboxExportCancellationPath(exportId)}{new AdminQueryString().Add("account", account)}",
+            token,
+            CliJsonContext.Default.MailboxExport,
+            cancellationToken,
+            absenceMessage: NoMailboxExportMessage);
+    }
+
+    /// <summary>Tells the deployment to delete a finished archive before its retention period ends.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account the export belongs to.</param>
+    /// <param name="exportId">The export's identity.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The export as it now stands.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the account holds no such export, the deployment refused the credential, or it could not be reached.</exception>
+    internal Task<MailboxExport> DeleteMailboxExportAsync(
+        string token,
+        string account,
+        Guid exportId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return this.RequestAsync(
+            HttpMethod.Delete,
+            $"{AdminEndpointRoutes.MailboxExportPath(exportId)}{new AdminQueryString().Add("account", account)}",
+            token,
+            CliJsonContext.Default.MailboxExport,
+            cancellationToken,
+            absenceMessage: NoMailboxExportMessage);
+    }
+
+    /// <summary>Downloads a finished archive, writing it straight to a file as it arrives.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account the export belongs to.</param>
+    /// <param name="exportId">The export's identity.</param>
+    /// <param name="destinationPath">The file to write, which must not already exist.</param>
+    /// <param name="cancellationToken">Cancels the download, leaving no partial file behind.</param>
+    /// <returns>How many bytes were written.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the account holds no such export, its archive is gone, the deployment refused the credential, or it could not be reached.</exception>
+    /// <remarks>
+    /// The one route this command does not buffer. An archive is a whole mailbox, so the body is copied to the file as
+    /// it arrives and is never held in memory — which is also why the response is read headers-first: the request
+    /// timeout every other route is bounded by would otherwise end a download that is proceeding perfectly well.
+    /// <para>
+    /// A download that fails part way leaves nothing. A partial zip still lists entries and opens, which would leave
+    /// something that looks like a mailbox and is not.
+    /// </para>
+    /// </remarks>
+    internal async Task<long> DownloadMailboxExportArchiveAsync(
+        string token,
+        string account,
+        Guid exportId,
+        string destinationPath,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+
+        using var response = await this.SendCredentialedAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.MailboxExportArchivePath(exportId)}{new AdminQueryString().Add("account", account)}",
+            token,
+            content: null,
+            absenceMessage: NoMailboxExportMessage,
+            overBoundRemedy: null,
+            cancellationToken,
+            HttpCompletionOption.ResponseHeadersRead);
+
+        try
+        {
+            // Opened before the response stream is reached, so that everything the two clauses below discard a file
+            // for has happened after this attempt created it. Reading the stream can fail or be cancelled too, and
+            // with that step first the cleanup would remove a file this download never wrote.
+            await using var file = CreateArchiveFile(destinationPath);
+            await using var archive = await response.Content.ReadAsStreamAsync(cancellationToken);
+
+            await archive.CopyToAsync(file, cancellationToken);
+
+            return file.Length;
+        }
+        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
+        {
+            Discard(destinationPath);
+
+            throw new CliFailure(
+                $"The archive could not be written to '{ConsoleSafeText.Sanitize(destinationPath)}': {failure.Message}",
+                failure);
+        }
+        catch (OperationCanceledException)
+        {
+            Discard(destinationPath);
+
+            throw;
+        }
+    }
+
+    /// <summary>Opens the file the archive is written to, which must not already exist.</summary>
+    /// <param name="destinationPath">The file to write.</param>
+    /// <returns>The opened file.</returns>
+    /// <exception cref="CliFailure">Thrown when the file already exists, or the path cannot be written to.</exception>
+    /// <remarks>
+    /// Separated from the copy so that this failure reaches the caller as a <see cref="CliFailure" /> rather than as
+    /// one of the two the copy discards a half-written file on. A file already at the path belongs to somebody else —
+    /// very likely the archive of an earlier export, which for a drained mailbox is the only copy of it there is — and
+    /// deleting it because this download refused to overwrite it is the loss the refusal exists to prevent.
+    /// </remarks>
+    private static FileStream CreateArchiveFile(string destinationPath)
+    {
+        try
+        {
+            return new FileStream(destinationPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        }
+        catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+        {
+            throw new CliFailure(
+                $"The archive could not be written to '{ConsoleSafeText.Sanitize(destinationPath)}': {refused.Message}",
+                refused);
+        }
+    }
+
+    /// <summary>Removes a half-written archive, and says nothing when there is nothing to remove.</summary>
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "The download has already failed and this is the cleanup after it; replacing that failure with one about the cleanup would hide what went wrong.")]
+    private static void Discard(string destinationPath)
+    {
+        try
+        {
+            File.Delete(destinationPath);
+        }
+        catch (Exception removal)
+        {
+            // Left for the operator, whose real problem is the failure that brought the download here. Swallowed
+            // rather than reported, because replacing that failure with one about the cleanup would hide what went
+            // wrong; the path is not written anywhere either, since it is the operator's own.
+            _ = removal;
+        }
+    }
 
     /// <summary>Asks the deployment how much of its database is a copy of what its object backend already holds.</summary>
     /// <param name="token">The bearer credential to present.</param>
@@ -1864,7 +2133,8 @@ internal sealed class AdminApiClient
         HttpContent? content,
         string? absenceMessage,
         string? overBoundRemedy,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        HttpCompletionOption completionOption = HttpCompletionOption.ResponseContentRead)
     {
         ArgumentNullException.ThrowIfNull(token);
 
@@ -1873,7 +2143,7 @@ internal sealed class AdminApiClient
         using var request = new HttpRequestMessage(method, path) { Content = content };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var response = await this.SendAsync(request, cancellationToken, overBoundRemedy);
+        var response = await this.SendAsync(request, cancellationToken, overBoundRemedy, completionOption);
 
         try
         {
@@ -1978,14 +2248,16 @@ internal sealed class AdminApiClient
     /// <param name="request">The request to send.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <param name="overBoundRemedy">What the caller of this route can do about an answer past the bound, or <see langword="null" /> where the route has nothing to offer.</param>
+    /// <param name="completionOption">Whether the body is buffered before this returns, which the archive download alone turns off so a whole mailbox is never held in memory or cut short by the request timeout.</param>
     private async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken,
-        string? overBoundRemedy = null)
+        string? overBoundRemedy = null,
+        HttpCompletionOption completionOption = HttpCompletionOption.ResponseContentRead)
     {
         try
         {
-            return await this.transport.Client.SendAsync(request, cancellationToken);
+            return await this.transport.Client.SendAsync(request, completionOption, cancellationToken);
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

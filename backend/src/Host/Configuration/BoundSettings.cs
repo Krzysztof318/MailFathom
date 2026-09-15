@@ -161,6 +161,14 @@ internal static class BoundSettings
                 binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             .ValidateDataAnnotations()
             .ValidateOnStart();
+        // A root of its own rather than a section of ContentStorage: these are decisions about a mailbox leaving the
+        // deployment rather than about where the deployment keeps mail, and the two are changed by different people.
+        services.AddOptions<MailboxExportOptions>()
+            .Bind(
+                configuration.GetSection(MailboxExportOptions.SectionName),
+                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
         // A configuration root of its own, because durable background work is a mechanism every consumer shares rather than
         // a property of any one of them: what a job does belongs to the feature that enqueues it, and how much of the
         // instance the queue may take belongs here.

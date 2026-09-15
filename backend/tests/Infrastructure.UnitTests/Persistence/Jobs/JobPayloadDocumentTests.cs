@@ -8,6 +8,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Exports;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Jobs;
 using Xunit;
@@ -50,6 +51,9 @@ public sealed class JobPayloadDocumentTests
             Account,
             LocalMailFolderId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000002"))).Next(),
         EraseWithdrawnMailFolderMailJobPayload.For(Account, MailFolderAlias.Create("projects")).Next(),
+        ExportMailboxJobPayload.For(
+            Account,
+            MailboxExportId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000003"))),
     ];
 
     /// <summary>
