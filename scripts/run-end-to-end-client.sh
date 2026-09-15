@@ -93,6 +93,12 @@ readonly health_origin="http://$loopback:$health_endpoint_port"
 
 # Fabricated, and none of them outlives the run: the credential is provisioned into a database that is deleted with its
 # container, and the administrative key authenticates one process on loopback.
+# A mail account is a record in the database, and MailFathom persists a reference to a secret rather than the secret:
+# `plaintext:` names no place the material is kept, so it is refused into that column however fabricated the password
+# is. The environment block is the place this run keeps it — the scheme the documentation reserves for exactly this,
+# non-production automation standing a deployment up around a mailbox that dies with the run.
+readonly mailbox_password_variable='MAILFATHOM_END_TO_END_MAILBOX_PASSWORD'
+
 readonly client_username='end-to-end'
 readonly client_password='end-to-end-password'
 readonly admin_api_key_name='end-to-end-admin'
@@ -295,6 +301,9 @@ cp --recursive frontend/src/Client.App/dist/. "$host_directory/wwwroot"
 # Started from the published directory, which is what the container does and what makes the web root resolve at all: the
 # host reads its content root from the process's working directory, so one started from the repository looks for the
 # bundle there and refuses at startup to serve a client it is in fact carrying.
+#
+# One variable in the block is not configuration at all: the mailbox password, put where the reference the mail account
+# record carries can resolve it. The declaration of its name says why it cannot be written into that record instead.
 env --chdir="$host_directory" \
   ConnectionStrings__mailfathom="Host=$loopback;Port=$postgres_port;Database=$database_name;Username=$postgres_user_name;Password=$postgres_password" \
   DataEncryption__ActiveKeyId="$data_encryption_key_id" \
@@ -313,6 +322,7 @@ env --chdir="$host_directory" \
   AdminEndpoint__Port="$admin_endpoint_port" \
   AdminEndpoint__Authentication__0__ApiKey__Name="$admin_api_key_name" \
   AdminEndpoint__Authentication__0__ApiKey__SecretReference="plaintext:$admin_api_key" \
+  "$mailbox_password_variable"="$mailbox_password" \
   HealthEndpoints__BindAddress="$loopback" \
   HealthEndpoints__Port="$health_endpoint_port" \
   dotnet "$host_directory/MailFathom.Host.dll" \
@@ -354,7 +364,7 @@ mailbox_declaration="$(
         --arg host "$loopback" \
         --argjson port "$imap_port" \
         --arg userName "$mailbox_login" \
-        --arg password "$mailbox_password" \
+        --arg passwordReference "env:$mailbox_password_variable" \
         '{
            userId: $user,
            account: ({
@@ -366,7 +376,7 @@ mailbox_declaration="$(
              Secrets: {
                Password: {
                  Name: "end-to-end-mailbox-password",
-                 SecretReference: ("plaintext:" + $password)
+                 SecretReference: $passwordReference
                }
              },
              TransportSecurity: {
