@@ -1472,7 +1472,11 @@ somebody holding nothing but the export's identity for as long as
 | `ObjectLocator` | This deployment's own key for the archive object, null once there is nothing to serve. **It never reaches a caller**, and it is one of the references the content reclamation asks about, so a live archive is never mistaken for an orphan |
 | `CompletedAt`, `ExpiresAt` | When the archive was written and when it goes if nobody deletes it first. Both are null until one exists, and both are cleared with the locator when it goes |
 | `FailureCode` | The stable five-digit code of what stopped a failed export, null for every other state |
-| `ConcurrencyVersion` | The `xmin` token. An operator cancelling and the writing job completing reach this row at the same moment, so every write states the state it expects to find and the token is what makes the losing one a conflict rather than a silent overwrite |
+
+**No `xmin` token, for the reason `jobs` carries none.** An operator cancelling and the writing job completing do
+reach this row at the same moment, and what settles that is already a compare-and-set: every write states the state it
+expects to find and is applied as one conditional statement, so the loser changes nothing and is told so. A row version
+beside that would be read by neither writer, because neither goes through the change tracker.
 
 Two indexes, and each serves exactly one read. `ix_mailbox_exports_account_requested` over the account and
 `RequestedAt` descending is the listing an operator asks for. `ix_mailbox_exports_expires_at` is the expiry pass, and it

@@ -219,11 +219,16 @@ internal static class MailboxExportEndpoints
             return AdminAccountRequest.Refuse(account);
         }
 
+        if (!TryReadExportId(exportId, out var identity))
+        {
+            return EmptyIdentity();
+        }
+
         try
         {
             var export = await exports.ReadAsync(
                 servedAccount,
-                MailboxExportId.Create(exportId),
+                identity,
                 cancellationToken);
 
             return TypedResults.Ok(MailboxExportResponse.For(export));
@@ -257,11 +262,16 @@ internal static class MailboxExportEndpoints
             return AdminAccountRequest.Refuse(account);
         }
 
+        if (!TryReadExportId(exportId, out var identity))
+        {
+            return EmptyIdentity();
+        }
+
         try
         {
             var cancelled = await exports.CancelAsync(
                 servedAccount,
-                MailboxExportId.Create(exportId),
+                identity,
                 cancellationToken);
 
             return TypedResults.Ok(MailboxExportResponse.For(cancelled));
@@ -295,11 +305,16 @@ internal static class MailboxExportEndpoints
             return AdminAccountRequest.Refuse(account);
         }
 
+        if (!TryReadExportId(exportId, out var identity))
+        {
+            return EmptyIdentity();
+        }
+
         try
         {
             var deleted = await exports.DeleteAsync(
                 servedAccount,
-                MailboxExportId.Create(exportId),
+                identity,
                 cancellationToken);
 
             return TypedResults.Ok(MailboxExportResponse.For(deleted));
@@ -338,11 +353,16 @@ internal static class MailboxExportEndpoints
             return AdminAccountRequest.Refuse(account);
         }
 
+        if (!TryReadExportId(exportId, out var identity))
+        {
+            return EmptyIdentity();
+        }
+
         try
         {
             var archive = await exports.OpenArchiveAsync(
                 servedAccount,
-                MailboxExportId.Create(exportId),
+                identity,
                 cancellationToken);
 
             return TypedResults.Stream(
@@ -355,6 +375,35 @@ internal static class MailboxExportEndpoints
             return Refuse(refusal);
         }
     }
+
+    /// <summary>Reads the export a route named, refusing the one value its identity constraint still admits.</summary>
+    /// <param name="exportId">The identifier the route bound.</param>
+    /// <param name="identity">The export's identity, where the value is one.</param>
+    /// <returns><see langword="true" /> where the route named an identity an export can carry.</returns>
+    /// <remarks>
+    /// The <c>:guid</c> constraint admits the all-zero UUID like any other, and an unset script variable binds exactly
+    /// that — so it reaches here as a value no export can carry. <see cref="MailboxExportId.Create" /> refuses it by
+    /// raising, which no clause on these routes catches, so the guard is what turns it into the refusal the route
+    /// documents rather than into an unhandled failure.
+    /// </remarks>
+    private static bool TryReadExportId(Guid exportId, out MailboxExportId identity)
+    {
+        identity = default;
+
+        if (exportId == Guid.Empty)
+        {
+            return false;
+        }
+
+        identity = MailboxExportId.Create(exportId);
+
+        return true;
+    }
+
+    /// <summary>States that the route named the one identifier no export can carry.</summary>
+    private static ProblemHttpResult EmptyIdentity() => TypedResults.Problem(
+        "An export identifier cannot be empty.",
+        statusCode: StatusCodes.Status400BadRequest);
 
     /// <summary>States a refusal the use case raised, under the status its code means.</summary>
     /// <remarks>

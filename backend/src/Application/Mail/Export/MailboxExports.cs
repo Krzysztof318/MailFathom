@@ -30,7 +30,7 @@ namespace MailFathom.Application.Mail.Export;
 public sealed class MailboxExports
 {
     /// <summary>How many of an account's exports one listing reports.</summary>
-    /// <remarks>ponytail: a constant rather than a page; an account has a handful of exports, because one archive per mailbox is kept for two days.</remarks>
+    /// <remarks>A constant rather than a page, because an account has a handful of exports: one archive per mailbox is kept for two days and the rows behind it are what an operator reads a history of.</remarks>
     private const int ListingLimit = 50;
 
     private readonly AccessAuthorization authorization;

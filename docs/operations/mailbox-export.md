@@ -26,6 +26,10 @@ itself, because the archive is written into the bucket rather than composed from
 stored-content ceiling the deployment configured, both before any work is queued. A mailbox past either is refused with
 the figure and the bound, and exporting one folder at a time is the answer that needs no configuration change.
 
+The size limit is asked again while the archive is written, before each message goes into it, because a mailbox grows
+between the measurement and the job. An export that would cross the bound stops at the message that would cross it and
+fails with the figure it would have reached, so nothing past the limit is ever sent to the bucket.
+
 **The grant.** Every route and every command here is published under `mailfathom.admin.export`, which no reading grant
 confers. [Permissions](permissions.md) says why it is a name of its own.
 

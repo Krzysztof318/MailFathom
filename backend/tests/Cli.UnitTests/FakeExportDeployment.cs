@@ -58,6 +58,20 @@ internal static class FakeExportDeployment
             Task.FromResult(Answer(request, measured, started, one, listed, served)));
     }
 
+    /// <summary>Builds a deployment whose archive route answers and then fails while the body is read.</summary>
+    /// <returns>The deployment.</returns>
+    /// <remarks>
+    /// The shape a download meets when the connection drops after the headers arrive, which is ordinary on an archive
+    /// the size of a mailbox. What it is here for is the file already at the destination: a failure this early belongs
+    /// to a download that created nothing, so nothing may be removed for it.
+    /// </remarks>
+    internal static FakeHttpMessageHandler FailingWhileTheArchiveIsRead() =>
+        new((request, _) => Task.FromResult(
+            FakeAdminEndpoint.AnswerSession(request)
+            ?? (request.RequestUri?.AbsolutePath == AdminEndpointRoutes.MailboxExportArchivePath(ExportId)
+                ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new UnreadableArchiveContent() }
+                : FakeAdminEndpoint.Json(HttpStatusCode.NotFound, string.Empty))));
+
     /// <summary>Builds a deployment that holds no such export, which is what every route answers on a wrong identity.</summary>
     /// <returns>The deployment.</returns>
     internal static FakeHttpMessageHandler WithNoSuchExport() =>
@@ -208,4 +222,24 @@ internal static class FakeExportDeployment
             Headers = { ContentType = new MediaTypeHeaderValue("application/zip") },
         },
     };
+
+    /// <summary>An archive response whose body cannot be read at all.</summary>
+    private sealed class UnreadableArchiveContent : HttpContent
+    {
+        public UnreadableArchiveContent() =>
+            this.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
+
+        protected override Task<Stream> CreateContentReadStreamAsync() =>
+            Task.FromException<Stream>(new IOException("The connection was closed."));
+
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
+            Task.FromException(new IOException("The connection was closed."));
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+
+            return false;
+        }
+    }
 }

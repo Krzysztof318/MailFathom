@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
@@ -234,6 +235,60 @@ public sealed class MailboxExportArchiveWriterTests
         var document = JsonDocument.Parse(await ReadAsync(EntryNamed(archive, "keywords.json")));
 
         Assert.Empty(document.RootElement.GetProperty("messages").EnumerateArray());
+    }
+
+    /// <summary>
+    /// An arrival time is a header the remote server composed, and a zip entry's timestamp holds 1980 to 2107 and
+    /// nothing else. One message a server dated outside that would otherwise raise, and — being raised inside the job —
+    /// would fail every attempt to export the account it is in, which for a drained mailbox is its only way out of the
+    /// product. The file name still carries the instant the message states, so nothing about it is lost.
+    /// <para>
+    /// The third case is the one an instant comparison alone would miss: stated at a negative offset it names an
+    /// instant inside the range whose own components fall before it, and a zip entry's timestamp is those components.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("1969-07-20T20:17:40Z", "1980-01-01T00:00:00Z")]
+    [InlineData("2223-06-01T09:00:00Z", "2107-12-31T23:59:58Z")]
+    [InlineData("1979-12-31T23:00:00-02:00", "1980-01-01T01:00:00Z")]
+    public async Task WriteMessageAsync_AnArrivalTimeAZipEntryCannotHold_StampsTheEntryAtTheBoundAndNamesTheFileForTheInstant(
+        string receivedAt,
+        string expectedStamp)
+    {
+        // Arrange
+        var arrival = DateTimeOffset.Parse(receivedAt, CultureInfo.InvariantCulture);
+        var stored = Encoding.ASCII.GetBytes("From: sender@example.test\r\n\r\nBody.\r\n");
+        var destination = new MemoryStream();
+
+        // Act
+        await using (var writer = new MailboxExportArchiveWriter(destination))
+        {
+            var directory = writer.OpenFolder(Inbox);
+            await writer.WriteMessageAsync(
+                directory,
+                MessageIn(Inbox, stored.Length) with { ReceivedAt = arrival },
+                stored,
+                ordinal: 1,
+                TestContext.Current.CancellationToken);
+
+            await writer.WriteKeywordsAsync(TestContext.Current.CancellationToken);
+        }
+
+        // Assert
+        using var archive = OpenArchive(destination);
+        var entry = Assert.Single(
+            archive.Entries,
+            candidate => candidate.FullName.StartsWith("cur/", StringComparison.Ordinal) && !candidate.FullName.EndsWith('/'));
+
+        // Compared as a wall clock rather than as an instant: a zip entry's timestamp carries no zone, so the reader
+        // hands it back under whichever offset the machine runs at.
+        Assert.Equal(
+            DateTimeOffset.Parse(expectedStamp, CultureInfo.InvariantCulture).UtcDateTime,
+            entry.LastWriteTime.DateTime);
+        Assert.Contains(
+            arrival.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture),
+            entry.Name,
+            StringComparison.Ordinal);
     }
 
     private static ExportableMessage MessageIn(MailboxExportFolder folder, long byteLength) => new(

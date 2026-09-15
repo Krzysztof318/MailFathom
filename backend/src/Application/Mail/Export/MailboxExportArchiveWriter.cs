@@ -41,6 +41,12 @@ public sealed class MailboxExportArchiveWriter : IAsyncDisposable
     /// </summary>
     private const CompressionLevel Compression = CompressionLevel.Fastest;
 
+    /// <summary>The earliest instant a zip entry can record, which is the whole of what its DOS timestamp holds.</summary>
+    private static readonly DateTimeOffset EarliestEntryTime = new(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+    /// <summary>The latest instant a zip entry can record.</summary>
+    private static readonly DateTimeOffset LatestEntryTime = new(2107, 12, 31, 23, 59, 58, TimeSpan.Zero);
+
     private readonly ZipArchive archive;
     private readonly List<KeywordedMessage> keyworded = [];
 
@@ -103,7 +109,7 @@ public sealed class MailboxExportArchiveWriter : IAsyncDisposable
         var path = MaildirArchiveLayout.MessagePath(folderDirectory, fileName);
 
         var entry = this.archive.CreateEntry(path, Compression);
-        entry.LastWriteTime = message.ReceivedAt;
+        entry.LastWriteTime = WithinEntryTimeRange(message.ReceivedAt);
 
         await using (var content = entry.Open())
         {
@@ -116,6 +122,32 @@ public sealed class MailboxExportArchiveWriter : IAsyncDisposable
         }
 
         return path;
+    }
+
+    /// <summary>Holds an arrival time to what a zip entry can record.</summary>
+    /// <param name="receivedAt">What the message arrived at, which is what the server said.</param>
+    /// <returns>The instant to stamp the entry with.</returns>
+    /// <remarks>
+    /// <para>
+    /// An arrival time is a header the remote server composed, so it can be any instant at all, and a zip entry's
+    /// timestamp is a DOS date that holds 1980 to 2107 and nothing else — <see cref="ZipArchiveEntry.LastWriteTime" />
+    /// raises outside that. One message a server dated 1970 would otherwise fail every attempt to export the account it
+    /// is in, which for a drained mailbox is the account's only way out of the product. The file name carries the
+    /// unclamped instant, so what the message says about itself is not lost.
+    /// </para>
+    /// <para>
+    /// The instant is read as UTC before it is held, because what the entry records is a wall clock with no zone on it
+    /// and the setter reads the components rather than the instant. An arrival stated at a negative offset can name an
+    /// instant inside the range whose own components fall before it, and that is the one that would still raise.
+    /// </para>
+    /// </remarks>
+    private static DateTimeOffset WithinEntryTimeRange(DateTimeOffset receivedAt)
+    {
+        var asUtc = receivedAt.ToUniversalTime();
+
+        return asUtc < EarliestEntryTime
+            ? EarliestEntryTime
+            : asUtc > LatestEntryTime ? LatestEntryTime : asUtc;
     }
 
     /// <summary>Writes the document naming the keywords Maildir file names have no form for.</summary>

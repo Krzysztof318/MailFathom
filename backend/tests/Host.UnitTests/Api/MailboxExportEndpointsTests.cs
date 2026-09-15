@@ -220,6 +220,36 @@ public sealed class MailboxExportEndpointsTests
         Assert.DoesNotContain(Account.Value, served.FileDownloadName, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// The <c>:guid</c> constraint admits the all-zero UUID like any other, and an unset script variable binds exactly
+    /// that. Every one of these routes reads the identity before it reaches the use case, so the guard is what makes
+    /// such a request the refusal the route documents rather than an unhandled failure — and nothing is read for it.
+    /// </summary>
+    [Fact]
+    public async Task EveryRouteTakingAnExport_TheOneIdentityNoExportCanCarry_IsRefusedWithoutReadingAnything()
+    {
+        // Arrange
+        var store = Substitute.For<IMailboxExportStore>();
+        var exports = ExportsOver(store: store);
+        var accounts = CatalogServing(Account);
+        var token = TestContext.Current.CancellationToken;
+
+        // Act
+        var answers = await Task.WhenAll(
+            AsProblemAsync(async () => (await MailboxExportEndpoints.ReadAsync(Guid.Empty, Account.Value, accounts, exports, token)).Result),
+            AsProblemAsync(async () => (await MailboxExportEndpoints.CancelAsync(Guid.Empty, Account.Value, accounts, exports, token)).Result),
+            AsProblemAsync(async () => (await MailboxExportEndpoints.DeleteAsync(Guid.Empty, Account.Value, accounts, exports, token)).Result),
+            AsProblemAsync(async () => (await MailboxExportEndpoints.DownloadAsync(Guid.Empty, Account.Value, accounts, exports, token)).Result));
+
+        // Assert
+        Assert.All(answers, answer => Assert.Equal(StatusCodes.Status400BadRequest, answer.StatusCode));
+        await store.DidNotReceive()
+            .FindAsync(Arg.Any<MailAccountId>(), Arg.Any<MailboxExportId>(), Arg.Any<CancellationToken>());
+    }
+
+    private static async Task<ProblemHttpResult> AsProblemAsync(Func<Task<IResult>> route) =>
+        Assert.IsType<ProblemHttpResult>(await route());
+
     private static MailboxExport Finished() => new(
         MailboxExportId.Create(ExportId),
         Account,

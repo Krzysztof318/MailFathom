@@ -185,6 +185,18 @@ public sealed class MailboxExportHandler : IJobHandler
                     continue;
                 }
 
+                // Asked before the message is written rather than at the next checkpoint. The bound is on what the
+                // archive carries, so a check a hundred messages late is a bound on what the archive carried a hundred
+                // messages ago — it would admit everything in between and abort afterwards, having already sent it to
+                // the endpoint. Asked here, the export stops at the message that would cross the limit and the figure
+                // the refusal names is the one the archive would have reached.
+                if (progress.ByteCount + stored.RawMime.Length > this.settings.MaximumArchiveByteLength)
+                {
+                    throw MailboxExportRefusedException.TooLarge(
+                        progress.ByteCount + stored.RawMime.Length,
+                        this.settings.MaximumArchiveByteLength);
+                }
+
                 await writer.WriteMessageAsync(
                     directory,
                     message,
@@ -197,13 +209,6 @@ public sealed class MailboxExportHandler : IJobHandler
                 if (progress.MessageCount % MessagesBetweenCheckpoints != 0)
                 {
                     continue;
-                }
-
-                if (progress.ByteCount > this.settings.MaximumArchiveByteLength)
-                {
-                    throw MailboxExportRefusedException.TooLarge(
-                        progress.ByteCount,
-                        this.settings.MaximumArchiveByteLength);
                 }
 
                 await this.exports.SaveProgressAsync(

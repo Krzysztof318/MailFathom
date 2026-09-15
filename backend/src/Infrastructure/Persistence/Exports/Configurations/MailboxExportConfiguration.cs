@@ -53,8 +53,5 @@ internal sealed class MailboxExportConfiguration : IEntityTypeConfiguration<Mail
         entity.HasIndex(export => export.ExpiresAt)
             .HasDatabaseName(PersistenceConstraintNames.MailboxExportExpiryIndexName)
             .HasFilter("\"ExpiresAt\" IS NOT NULL");
-
-        // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
-        entity.Property(export => export.ConcurrencyVersion).IsRowVersion();
     }
 }

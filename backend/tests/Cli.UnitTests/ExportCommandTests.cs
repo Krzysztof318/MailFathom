@@ -311,6 +311,33 @@ public sealed class ExportCommandTests : IDisposable
             await File.ReadAllTextAsync(destination, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// A download that fails before it has created anything removes nothing. The cleanup exists for a half-written
+    /// archive this attempt produced, and a body that could not be read leaves no such thing — while the file at that
+    /// path is very likely an earlier export of the same mailbox, which for a drained account is its only copy.
+    /// </summary>
+    [Fact]
+    public async Task Download_AResponseWhoseBodyCannotBeRead_LeavesTheFileAlreadyAtThatPathWhereItIs()
+    {
+        // Arrange
+        using var deployment = FakeExportDeployment.FailingWhileTheArchiveIsRead();
+        var destination = this.DownloadPath("earlier-export.zip");
+        await File.WriteAllTextAsync(destination, "an earlier archive", TestContext.Current.CancellationToken);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "export", "download", "--account", "work", "--export", ExportArgument, "--output", destination,
+            "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.True(File.Exists(destination));
+        Assert.Equal(
+            "an earlier archive",
+            await File.ReadAllTextAsync(destination, TestContext.Current.CancellationToken));
+    }
+
     /// <summary>Cancelling deletes what the export had written, so an operator who does not agree stops nothing.</summary>
     [Fact]
     public async Task Cancel_AnOperatorWhoDeclines_StopsNothing()

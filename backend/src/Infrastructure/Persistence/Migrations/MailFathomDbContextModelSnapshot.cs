@@ -1846,12 +1846,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<uint>("ConcurrencyVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
                     b.Property<DateTimeOffset?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 

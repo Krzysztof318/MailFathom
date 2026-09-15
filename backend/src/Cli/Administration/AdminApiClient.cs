@@ -637,8 +637,11 @@ internal sealed class AdminApiClient
 
         try
         {
-            await using var archive = await response.Content.ReadAsStreamAsync(cancellationToken);
+            // Opened before the response stream is reached, so that everything the two clauses below discard a file
+            // for has happened after this attempt created it. Reading the stream can fail or be cancelled too, and
+            // with that step first the cleanup would remove a file this download never wrote.
             await using var file = CreateArchiveFile(destinationPath);
+            await using var archive = await response.Content.ReadAsStreamAsync(cancellationToken);
 
             await archive.CopyToAsync(file, cancellationToken);
 

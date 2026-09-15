@@ -77,23 +77,23 @@ public sealed class MailboxExportModelTests
     }
 
     /// <summary>
-    /// Every write states the state it expects to find, so a cancellation meeting a completion writes nothing. The row
-    /// version is what carries that decision to PostgreSQL rather than to a second read.
+    /// Every write states the state it expects to find and is applied as one conditional statement, so a cancellation
+    /// meeting a completion writes nothing. A concurrency token would be read by neither of them, because neither goes
+    /// through the change tracker — so the row carries none, exactly as the job row does.
     /// </summary>
     [Fact]
-    public void MailboxExportModel_TheColumnTwoRepliesWouldRaceOver_IsTheRowVersionPostgresAlreadyKeeps()
+    public void MailboxExportModel_TheRowTwoWritersRaceOver_CarriesNoConcurrencyTokenForTheStateCompareAndSetToDuplicate()
     {
         // Arrange
         using var context = new MailFathomDbContextDesignTimeFactory().CreateDbContext([]);
 
         // Act
-        var version = ExportEntityType(context)
-            .FindProperty(nameof(MailboxExportEntity.ConcurrencyVersion));
+        var tokens = ExportEntityType(context)
+            .GetProperties()
+            .Where(property => property.IsConcurrencyToken);
 
         // Assert
-        Assert.NotNull(version);
-        Assert.True(version.IsConcurrencyToken);
-        Assert.Equal(ValueGenerated.OnAddOrUpdate, version.ValueGenerated);
+        Assert.Empty(tokens);
     }
 
     /// <summary>

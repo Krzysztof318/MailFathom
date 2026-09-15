@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260915144642_AddMailboxExports")]
+    [Migration("20260915155630_AddMailboxExports")]
     partial class AddMailboxExports
     {
         /// <inheritdoc />
@@ -1848,12 +1848,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<uint>("ConcurrencyVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
 
                     b.Property<DateTimeOffset?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");

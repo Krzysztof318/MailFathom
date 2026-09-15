@@ -19,6 +19,13 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// archive goes, so a row pointing at an object and an object nothing points at are the same two states here as
 /// everywhere else content is stored.
 /// </para>
+/// <para>
+/// No optimistic concurrency token sits on this row, for the reason <see cref="JobEntity" /> gives for the same
+/// omission. An operator cancelling and the writing job completing do reach this row at the same moment, and what
+/// settles that is already a compare-and-set: every write states the state it expects to find and is applied as one
+/// conditional statement, so the loser changes nothing and is told so. A row version beside that would be read by
+/// nothing, because neither writer goes through the change tracker.
+/// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class MailboxExportEntity
@@ -60,11 +67,4 @@ internal sealed class MailboxExportEntity
     public int? FailureCode { get; set; }
 
     public MailboxAccountEntity? MailboxAccount { get; set; }
-
-    /// <summary>Gets or sets the optimistic concurrency token, which is PostgreSQL's own <c>xmin</c> rather than a column.</summary>
-    /// <remarks>
-    /// An operator cancelling and the writing job completing reach this row at the same moment. Every write states the
-    /// state it expects to find, and the token is what makes the losing one a conflict rather than a silent overwrite.
-    /// </remarks>
-    public uint ConcurrencyVersion { get; set; }
 }

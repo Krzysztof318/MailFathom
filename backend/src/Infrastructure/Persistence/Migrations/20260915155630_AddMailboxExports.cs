@@ -30,8 +30,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     ObjectLocator = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
                     CompletedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     ExpiresAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    FailureCode = table.Column<int>(type: "integer", nullable: true),
-                    xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false)
+                    FailureCode = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {

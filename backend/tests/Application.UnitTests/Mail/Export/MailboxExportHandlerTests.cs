@@ -174,6 +174,38 @@ public sealed class MailboxExportHandlerTests
         Assert.Equal(1, archives.AbandonedWrites);
     }
 
+    /// <summary>The limit stops the message that would cross it, rather than whichever message the next checkpoint falls on.</summary>
+    /// <remarks>
+    /// A mailbox of fewer messages than the checkpoint interval reaches no checkpoint at all, so a bound asked only
+    /// there would admit the whole of it however far past the limit it went — and would have sent it to the endpoint
+    /// before saying so. The figures here are deliberately small enough that nothing else would have stopped it.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_AMailboxPastTheLimitBeforeAnyCheckpoint_IsRefusedAtTheMessageThatWouldCrossIt()
+    {
+        // Arrange
+        var queued = Queued();
+        var store = new InMemoryMailboxExportStore().Holding(queued);
+        var archives = new InMemoryMailboxExportArchiveStore();
+        var handler = HandlerOver(
+            store,
+            ReaderHolding([.. Enumerable.Range(1, 5).Select(ordinal => MessageOf(ordinal, byteLength: 12))]),
+            archives,
+            settings: new MailboxExportSettings(30, MailboxExportSettings.DefaultRetention));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailboxExportRefusedException>(() =>
+            handler.RunAsync(PayloadFor(queued), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailboxExportTooLarge, refusal.ErrorCode);
+
+        var failed = store.Find(queued.Id);
+        Assert.Equal(MailboxExportState.Failed, failed?.State);
+        Assert.Equal(MailFathomErrorCode.MailboxExportTooLarge, failed?.FailureCode);
+        Assert.Equal(1, archives.AbandonedWrites);
+    }
+
     /// <summary>A payload erased between the walk and the read is gone rather than left out of an archive that holds it.</summary>
     [Fact]
     public async Task RunAsync_AMessageWhosePayloadIsNoLongerHeld_LeavesItOutAndCountsNeitherItNorItsBytes()
