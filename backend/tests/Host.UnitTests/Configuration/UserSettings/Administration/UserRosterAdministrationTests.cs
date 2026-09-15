@@ -466,7 +466,7 @@ public sealed class UserRosterAdministrationTests
                     candidate => candidate.User == SyntheticMailUser.Deployment);
                 statedAsQuiesced = call.Arg<IReadOnlyList<Guid>>()!;
 
-                return new MailUserErasure(true, null);
+                return new MailUserErasureOutcome(true, null);
             });
 
         // Act
@@ -526,7 +526,7 @@ public sealed class UserRosterAdministrationTests
         var appearedUnheld = Guid.Parse("7d3a9c15-4e28-4b61-9f07-2c8b6d0e5a34");
         harness.Erasure
             .EraseAsync(SyntheticMailUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
-            .Returns(new MailUserErasure(false, appearedUnheld));
+            .Returns(new MailUserErasureOutcome(false, appearedUnheld));
         var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
 
         // Act
@@ -791,7 +791,7 @@ public sealed class UserRosterAdministrationTests
 
             this.Erasure = Substitute.For<IMailUserErasure>();
             this.Erasure.EraseAsync(Arg.Any<MailUserId>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
-                .Returns(new MailUserErasure(false, null));
+                .Returns(new MailUserErasureOutcome(false, null));
 
             this.Documents = Substitute.For<IUserSettingsDocumentWriter>();
             this.Documents
@@ -863,6 +863,6 @@ public sealed class UserRosterAdministrationTests
 
         internal void Erasing(MailUserId user) =>
             this.Erasure.EraseAsync(user, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
-                .Returns(new MailUserErasure(true, null));
+                .Returns(new MailUserErasureOutcome(true, null));
     }
 }

@@ -5,6 +5,7 @@
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Observability;
 using Microsoft.EntityFrameworkCore;
 
@@ -345,21 +346,23 @@ internal sealed class JobStore(
     /// is writing to. Counting it instead refuses the erasure for as long as the row stays claimed, which is the
     /// direction this caller already prefers everywhere else.
     /// </remarks>
-    public async Task<IReadOnlyList<string>> ReadAccountsWithWorkInFlightAsync(
-        IReadOnlyList<string> accountIds,
+    public async Task<IReadOnlyList<MailAccountId>> ReadAccountsWithWorkInFlightAsync(
+        IReadOnlyList<MailAccountId> accounts,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(accountIds);
+        ArgumentNullException.ThrowIfNull(accounts);
 
-        if (accountIds.Count == 0)
+        if (accounts.Count == 0)
         {
             return [];
         }
 
-        var asked = accountIds.ToArray();
+        // The column holds the account as text, and that spelling stops here: what the caller asked with and what it
+        // is answered with are the domain's own type.
+        var asked = accounts.Select(static account => account.Value).ToArray();
         var claimed = nameof(JobState.Claimed);
 
-        return await dbContext.Database
+        var running = await dbContext.Database
             .SqlQuery<string>(
                 $"""
                  SELECT DISTINCT "MailboxAccountId" AS "Value" FROM jobs
@@ -368,6 +371,8 @@ internal sealed class JobStore(
                  ORDER BY "Value"
                  """)
             .ToListAsync(cancellationToken);
+
+        return [.. running.Select(MailAccountId.Create)];
     }
 
     /// <summary>Answers whether this job type already has as much waiting as the configured depth allows.</summary>

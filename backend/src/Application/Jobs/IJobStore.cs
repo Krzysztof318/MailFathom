@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Accounts;
+
 namespace MailFathom.Application.Jobs;
 
 /// <summary>Keeps durable background work, and hands each job to one worker at a time.</summary>
@@ -162,10 +164,10 @@ public interface IJobStore
     Task<bool> ReleaseAsync(JobId jobId, JobLeaseOwner user, CancellationToken cancellationToken);
 
     /// <summary>Names which of a set of mail accounts a worker is holding a job for right now.</summary>
-    /// <param name="accountIds">The accounts asked about, as the text a job row names one by.</param>
+    /// <param name="accounts">The accounts asked about.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The accounts among them a claim still holds a job for, in ordinal order, and an empty answer when none does.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="accountIds" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="accounts" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
     /// A claim rather than a queue depth, because what makes an account's work unfinished is a handler running against
@@ -182,7 +184,7 @@ public interface IJobStore
     /// the next claim.
     /// </para>
     /// </remarks>
-    Task<IReadOnlyList<string>> ReadAccountsWithWorkInFlightAsync(
-        IReadOnlyList<string> accountIds,
+    Task<IReadOnlyList<MailAccountId>> ReadAccountsWithWorkInFlightAsync(
+        IReadOnlyList<MailAccountId> accounts,
         CancellationToken cancellationToken);
 }

@@ -48,7 +48,7 @@ public interface IMailUserErasure
     /// roster refuses rather than being deleted with nothing holding it still.
     /// </para>
     /// </remarks>
-    Task<MailUserErasure> EraseAsync(
+    Task<MailUserErasureOutcome> EraseAsync(
         MailUserId user,
         IReadOnlyList<Guid> quiescedAccounts,
         CancellationToken cancellationToken);

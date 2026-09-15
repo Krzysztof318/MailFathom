@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Jobs;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Accounts;
@@ -298,6 +299,79 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         }
     }
 
+    /// <summary>
+    /// A job is claimed by type and reads no lease of the caller's, so the supervision hold reaches none of it. Two
+    /// separate statements answer that — the wait's read in front of the transaction, and the transaction's own lock
+    /// over the account's claimable rows — and both are raw SQL over a real queue, so a wrong column or a state literal
+    /// that matches nothing would fail open in every unit test and be found here or nowhere.
+    /// </summary>
+    [Fact]
+    public async Task EraseAsync_AJobClaimedForTheAccount_ErasesNothingUntilThatClaimEnds()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var erasedUserId = Guid.CreateVersion7();
+        var account = MailAccountId.Create(ErasedAccount);
+        var quiescing = Quiescing(services);
+
+        try
+        {
+            await services.CommitProducingAsync(
+                (_, session, token) => SeedUserAsync(session, erasedUserId, token),
+                cancellationToken);
+
+            // The seeded row arrives pending, which is a job nobody is running; a claim is what makes it work in
+            // flight, and what the erasure has to refuse over.
+            await SetSeededJobStateAsync(services, JobState.Claimed, cancellationToken);
+
+            var rowsBefore = await CountRowsNamingAccountAsync(services, ErasedAccount, cancellationToken);
+
+            // Act
+            var refusal = await quiescing.RunQuiescedAsync(
+                [account],
+                token => EraseAsync(services, erasedUserId, token),
+                cancellationToken);
+
+            var rowsWhileClaimed = await CountRowsNamingAccountAsync(services, ErasedAccount, cancellationToken);
+
+            // The transaction refuses on its own as well, which is what covers a claim landing after the wait above
+            // has already answered empty.
+            var withoutTheWait = await EraseAsync(services, erasedUserId, cancellationToken);
+            var rowsAfterTheTransactionRefused =
+                await CountRowsNamingAccountAsync(services, ErasedAccount, cancellationToken);
+
+            await SetSeededJobStateAsync(services, JobState.Succeeded, cancellationToken);
+
+            var refusalAfterTheJobFinished = await quiescing.RunQuiescedAsync(
+                [account],
+                token => EraseAsync(services, erasedUserId, token),
+                cancellationToken);
+
+            // Assert
+            Assert.DoesNotContain(0L, rowsBefore.Values);
+            Assert.NotNull(refusal);
+            Assert.Contains(ErasedAccount, refusal, StringComparison.Ordinal);
+            Assert.Equal(rowsBefore, rowsWhileClaimed);
+
+            Assert.False(withoutTheWait.UserErased);
+            Assert.Equal(Guid.Parse(ErasedAccount), withoutTheWait.UnquiescedAccount);
+            Assert.Equal(rowsBefore, rowsAfterTheTransactionRefused);
+
+            // A finished claim is not work in flight, so the same request goes through and takes everything.
+            Assert.Null(refusalAfterTheJobFinished);
+
+            var rowsAfter = await CountRowsNamingAccountAsync(services, ErasedAccount, cancellationToken);
+            Assert.DoesNotContain(rowsAfter, table => table.Value != 0);
+        }
+        finally
+        {
+            await services.CommitProducingAsync(
+                (_, session, token) => UserAccountErasure.EraseAsync(session, erasedUserId, QuiescedAccounts, token),
+                CancellationToken.None);
+        }
+    }
+
     /// <summary>Composes the quiescing with a bound this test states rather than waits out.</summary>
     /// <remarks>
     /// Zero, because what is asserted is which answer each state produces and never how long the wait before it took.
@@ -328,6 +402,17 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         Guid userId,
         CancellationToken cancellationToken) => services.CommitProducingAsync(
         (_, session, token) => UserAccountErasure.EraseAsync(session, userId, QuiescedAccounts, token),
+        cancellationToken);
+
+    /// <summary>Moves the seeded account's job into one state, which is how this class states what the queue is doing.</summary>
+    private static Task<int> SetSeededJobStateAsync(
+        OrchestratedMailFathomServices services,
+        JobState state,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+        (scope, token) => scope.GetRequiredService<MailFathomDbContext>()
+            .Jobs
+            .Where(job => job.MailboxAccountId == ErasedAccount)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(job => job.State, state), token),
         cancellationToken);
 
     private static Task<Guid> ReadSoleUserAsync(

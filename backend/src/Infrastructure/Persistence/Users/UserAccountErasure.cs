@@ -129,7 +129,7 @@ internal static class UserAccountErasure
 
         // Holding the supervision scope stops synchronization and nothing else: a job is claimed by type rather than
         // by account, so a row already queued for one of these accounts is claimable by any replica right up to the
-        // instant the cascade takes it. Locking every one of those rows closes that, because a claim selects under
+        // instant the cascade takes it. Locking the claimable rows closes that, because a claim selects under
         // `FOR UPDATE SKIP LOCKED` and therefore passes a locked row by. What the lock cannot undo is a claim that
         // landed a moment before it, which is what the read after it is for.
         if (orphanedAccounts.Count > 0)
@@ -137,7 +137,9 @@ internal static class UserAccountErasure
             var accountTexts = orphanedAccounts.Select(static account => account.ToString("D")).ToArray();
 
             await writeContext.Database
-                .SqlQueryRaw<Guid>(AccountJobRowLockStatement(writeContext.Model), [accountTexts])
+                .SqlQueryRaw<Guid>(
+                    AccountJobRowLockStatement(writeContext.Model),
+                    [accountTexts, nameof(JobState.Pending), nameof(JobState.Claimed)])
                 .ToListAsync(cancellationToken);
 
             var claimed = await writeContext.Database
@@ -433,12 +435,20 @@ internal static class UserAccountErasure
             """;
     }
 
-    /// <summary>The statement that takes every job row of these accounts out of reach of the next claim.</summary>
+    /// <summary>The statement that takes these accounts' claimable job rows out of reach of the next claim.</summary>
     /// <remarks>
-    /// Every row rather than the claimable ones, because what the lock is for is the row a claim would take next and
-    /// the states a row moves between are the queue's business rather than this walk's. It waits rather than skipping,
-    /// which is what makes it correct: a row another transaction is claiming right now is one this erasure has to see
-    /// the outcome of, and a claim is a single short statement, so the wait is bounded by that statement.
+    /// <para>
+    /// Narrowed to the two states a claim can take, because those are the whole of what the lock is for and the table
+    /// keeps every terminal row it has ever held — an account whose mail has been synchronized for a year would
+    /// otherwise have its entire job history read, locked, and materialized inside the erasure's own transaction. The
+    /// partial index the claim already reads is filtered to exactly these two, so the narrower statement is also the
+    /// one the database can answer from an index.
+    /// </para>
+    /// <para>
+    /// It waits rather than skipping, which is what makes it correct: a row another transaction is claiming right now
+    /// is one this erasure has to see the outcome of, and a claim is a single short statement, so the wait is bounded
+    /// by that statement.
+    /// </para>
     /// </remarks>
     private static string AccountJobRowLockStatement(IModel model)
     {
@@ -447,6 +457,7 @@ internal static class UserAccountErasure
         return $$"""
             SELECT {{QuotedColumn(jobs, nameof(JobEntity.Id))}} AS "Value" FROM {{QuotedTable(jobs)}}
             WHERE {{QuotedColumn(jobs, AccountIdentifierPropertyName)}} = ANY({0})
+              AND {{QuotedColumn(jobs, nameof(JobEntity.State))}} IN ({1}, {2})
             FOR UPDATE
             """;
     }

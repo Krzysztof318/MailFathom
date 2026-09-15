@@ -20,7 +20,7 @@ namespace MailFathom.Application.Access;
 /// writer, and the answer to that is to write nothing and say which account it was — half an erasure cannot be undone,
 /// and a caller told which mailbox is still busy can ask again.
 /// </remarks>
-public readonly record struct MailUserErasure(bool UserErased, Guid? UnquiescedAccount)
+public readonly record struct MailUserErasureOutcome(bool UserErased, Guid? UnquiescedAccount)
 {
     /// <summary>Gets whether the erasure was abandoned with nothing written.</summary>
     public bool Refused => this.UnquiescedAccount is not null;

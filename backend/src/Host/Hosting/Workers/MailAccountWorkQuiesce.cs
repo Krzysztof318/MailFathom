@@ -85,7 +85,7 @@ internal sealed class MailAccountWorkQuiesce(
 
         if (await this.WaitForJobsToFinishAsync(accounts, waitingUntil, cancellationToken) is { } running)
         {
-            return $"A job is still running for mail account {running}, so erasing it now would leave rows behind that no deletion here could reach. Nothing was erased; ask again once the job has finished.";
+            return $"A job is still running for mail account {running.Value}, so erasing it now would leave rows behind that no deletion here could reach. Nothing was erased; ask again once the job has finished.";
         }
 
         // The work runs against the holds rather than only against the caller, so a lease this replica stops being able
@@ -142,20 +142,18 @@ internal sealed class MailAccountWorkQuiesce(
     }
 
     /// <summary>Waits until no live claim holds a job for any of these accounts, and names the first that outlasts the bound.</summary>
-    private async Task<string?> WaitForJobsToFinishAsync(
+    private async Task<MailAccountId?> WaitForJobsToFinishAsync(
         IReadOnlyList<MailAccountId> accounts,
         DateTimeOffset waitingUntil,
         CancellationToken cancellationToken)
     {
-        var accountIds = accounts.Select(static account => account.Value).ToArray();
-
         while (true)
         {
             await using var serviceScope = scopeFactory.CreateAsyncScope();
 
             var running = await serviceScope.ServiceProvider
                 .GetRequiredService<IJobStore>()
-                .ReadAccountsWithWorkInFlightAsync(accountIds, cancellationToken);
+                .ReadAccountsWithWorkInFlightAsync(accounts, cancellationToken);
 
             if (running.Count == 0)
             {

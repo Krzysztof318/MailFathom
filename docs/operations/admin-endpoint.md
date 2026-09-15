@@ -1267,9 +1267,15 @@ run or the job has ended:
 
 ```console
 $ mfctl user remove --user 3f1d...
+Erasing 3f1d... (alex) takes their record, their mail accounts, and every message, folder, attachment, and index
+this deployment holds for them. Nothing here undoes it.
+Erase 3f1d... (alex) and everything this deployment holds for them? [y/N] y
 Mail account 1b8e2a40-5c31-4f7a-9d02-6ac41e5b7d10 is still being synchronized, so erasing it now would leave rows
 behind that no deletion here could reach. Nothing was erased; ask again once the run has ended.
 ```
+
+The confirmation is asked before any request is sent, so an answer of anything but `y` reaches the deployment not at
+all. `--yes` states the agreement in the command for a scripted erasure, exactly as it does for the rewind above.
 
 On a deployment of several replicas the mailbox may be held by a replica other than the one the request reached, and
 that replica goes on supervising it — it reads the same roster from the database, which still holds the user. Such an

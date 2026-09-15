@@ -116,7 +116,7 @@ public sealed class UserRecordEndpointsTests
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
         deployment.Serving(new ServedMailUser(SyntheticMailUser.Deployment, "alex", []));
         deployment.Erasure.EraseAsync(SyntheticMailUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
-            .Returns(new MailUserErasure(true, null));
+            .Returns(new MailUserErasureOutcome(true, null));
 
         // Act
         var result = await UserRecordEndpoints.EraseAsync(
@@ -142,7 +142,7 @@ public sealed class UserRecordEndpointsTests
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
         deployment.Serving(new ServedMailUser(SyntheticMailUser.Deployment, "alex", []));
         deployment.Erasure.EraseAsync(SyntheticMailUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
-            .Returns(new MailUserErasure(true, null));
+            .Returns(new MailUserErasureOutcome(true, null));
         deployment.Quiescing.Refusal = "Mail account 41d7b2e0 is still being synchronized.";
 
         // Act

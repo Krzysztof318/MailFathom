@@ -248,8 +248,10 @@ internal sealed partial class UserRosterAdministration(
     /// <para>
     /// The order here is the whole of what makes an erasure true afterwards, and none of it is bookkeeping. The user
     /// leaves the runtime roster <em>first</em>, so the accounts they alone were assigned leave the set this replica
-    /// serves and its synchronization coordinator gives their supervision back; the announcement carries the same to
-    /// every other replica. Only then are those accounts held stopped, and only under that hold is anything deleted —
+    /// serves and its synchronization coordinator gives their supervision back. No other replica is told before the
+    /// deletion commits — the announcement follows a committed erasure and is not made on a refusal — so an account
+    /// one of them still supervises refuses this erasure rather than being deleted under it. Only then are those
+    /// accounts held stopped, and only under that hold is anything deleted —
     /// because a synchronization run or a job handler writes rows keyed to a mail account rather than to the user, and
     /// no lock the erasure's own transaction could take reaches such a writer.
     /// </para>

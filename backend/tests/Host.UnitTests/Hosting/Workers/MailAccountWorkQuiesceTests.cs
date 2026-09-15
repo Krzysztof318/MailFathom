@@ -252,8 +252,8 @@ public sealed class MailAccountWorkQuiesceTests
     private static IJobStore JobsInFlightFor(params MailAccountId[] accounts)
     {
         var jobs = Substitute.For<IJobStore>();
-        jobs.ReadAccountsWithWorkInFlightAsync(Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
-            .Returns([.. accounts.Select(static account => account.Value)]);
+        jobs.ReadAccountsWithWorkInFlightAsync(Arg.Any<IReadOnlyList<MailAccountId>>(), Arg.Any<CancellationToken>())
+            .Returns([.. accounts]);
 
         return jobs;
     }

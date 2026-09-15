@@ -34,7 +34,7 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 internal sealed class PersistedMailUserErasure(OptimisticConcurrencyRetryPolicy commitPolicy) : IMailUserErasure
 {
     /// <inheritdoc />
-    public async Task<MailUserErasure> EraseAsync(
+    public async Task<MailUserErasureOutcome> EraseAsync(
         MailUserId user,
         IReadOnlyList<Guid> quiescedAccounts,
         CancellationToken cancellationToken)
@@ -50,6 +50,6 @@ internal sealed class PersistedMailUserErasure(OptimisticConcurrencyRetryPolicy 
             (session, token) => UserAccountErasure.EraseAsync(session, user.Value, quiescedAccounts, token),
             cancellationToken);
 
-        return new MailUserErasure(erasure.UserErased, erasure.UnquiescedAccount);
+        return new MailUserErasureOutcome(erasure.UserErased, erasure.UnquiescedAccount);
     }
 }
