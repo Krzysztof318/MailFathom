@@ -222,7 +222,7 @@ public sealed class ComposedMcpEndpointSecurityTests
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task McpEndpoint_AUserBurstingPastTheirCapacity_IsRefusedWithoutSpendingAnothersAllowance()
+    public async Task McpEndpoint_AUserBurstingPastTheirCapacity_IsRefusedWithoutSpendingAnotherUsersAllowance()
     {
         // Arrange
         using var client = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
