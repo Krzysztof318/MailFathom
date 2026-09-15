@@ -66,6 +66,9 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
     /// <remarks>Minted by the deployment and reported once, so it is kept here rather than read again: the administrative surface never answers with a key a second time.</remarks>
     private string? composedHostMcpApiKey;
 
+    /// <summary>The user the composed host serves, whose records every per-user administrative route is asked for.</summary>
+    private Guid? composedHostUserId;
+
     /// <summary>Gets the certificates the mutual-TLS host is served with and judges presented certificates against.</summary>
     /// <remarks>Issued when this fixture is constructed, because the material has to exist before the app model is built: the host reads it from the environment variables the build injects it into.</remarks>
     public OrchestratedMutualTlsCertificates MutualTlsCertificates { get; } = new();
@@ -309,6 +312,23 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
             ?? throw new InvalidOperationException("The composed host started without the suite recording its mail account.");
     }
 
+    /// <summary>Starts the composed MailFathom host and reports the user whose records it serves.</summary>
+    /// <param name="cancellationToken">Cancels waiting for the host to become reachable.</param>
+    /// <returns>The identifier of the user the suite recorded the composed host's mailbox against.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started, or when the host resource refused the start command.</exception>
+    /// <remarks>
+    /// A contact book, like a mailbox, belongs to one user rather than to the deployment, so every administrative route
+    /// over one names the user it reads. An operator reads that identifier from <c>mfctl user list</c>; a test reads it
+    /// from here, because the suite recorded the user itself and the answer is the same row.
+    /// </remarks>
+    public async Task<Guid> ComposedHostUserAsync(CancellationToken cancellationToken)
+    {
+        await this.StartMailFathomHostAsync(cancellationToken);
+
+        return this.composedHostUserId
+            ?? throw new InvalidOperationException("The composed host started without the suite recording its served user.");
+    }
+
     /// <summary>Starts the composed MailFathom host and reports the key its MCP clients authenticate with.</summary>
     /// <param name="cancellationToken">Cancels waiting for the host to become reachable.</param>
     /// <returns>The key the deployment minted for the user whose mailbox the host serves.</returns>
@@ -548,6 +568,7 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
                     var served = await ComposedHostMailbox.RecordAsync(adminAddress, startCancellation.Token);
 
                     this.composedHostAccountId = served.Account;
+                    this.composedHostUserId = served.User;
 
                     // Provisioned here rather than by the first test that needs it, because the app model configures no
                     // key at all: the endpoint accepts a method and the credential is a row. Every composed-host test

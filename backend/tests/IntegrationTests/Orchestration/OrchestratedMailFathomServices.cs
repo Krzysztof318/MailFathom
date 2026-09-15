@@ -578,16 +578,16 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         var host = builder.Build();
         await host.StartAsync(cancellationToken);
 
-        // Nothing owns the host between starting it and handing it to the wrapper, and the read below throws whenever
-        // the database holds anything but exactly one user — the state a class that provisions a second user leaves
-        // if its erasure did not run. Without this the caller's `await using` never binds, so the started host keeps
-        // its data source and pooled connections for the rest of the suite and every later start leaks another. The
-        // user is recorded after the start rather than before it, because the connection string that reaching the
-        // database needs is composed while the host starts.
+        // Nothing owns the host between starting it and handing it to the wrapper, and the reads below reach a database
+        // that may refuse them — a suite label the schema no longer carries, a connection the server closed. Without
+        // this the caller's `await using` never binds, so the started host keeps its data source and pooled connections
+        // for the rest of the suite and every later start leaks another. The user is recorded after the start rather
+        // than before it, because the connection string that reaching the database needs is composed while the host
+        // starts.
         try
         {
             await RecordTheSuiteUserUnlessOneIsHeldAsync(host, cancellationToken);
-            deploymentUser.Resolved(await ReadSoleUserAsync(host, cancellationToken));
+            deploymentUser.Resolved(await ReadSuiteUserAsync(host, cancellationToken));
             await AssignTheSuiteAccountUnlessItIsHeldAsync(host, deploymentUser.User, cancellationToken);
         }
         catch
@@ -685,14 +685,16 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Reads the one user the orchestrated database holds, which the harness recorded before the first start.</summary>
+    /// <summary>Reads the user this harness records its mail under, which is the row carrying the suite's own label.</summary>
     /// <remarks>
     /// The identifier is the database's rather than the harness's because the schema keys onto it: a contact names its
     /// user through a foreign key, so a stated identifier would name a row that does not exist. It is read once, after
     /// the migrations have run and before any test reaches a scope, exactly where a deployment's own startup gate reads
-    /// it.
+    /// it. Sought by the label rather than as the only row, because a class proving something about two users holds a
+    /// second one while it runs, and a start made during that stretch belongs to the suite's user exactly as any other
+    /// does; the label's unique index is what makes the read single.
     /// </remarks>
-    private static async Task<MailUserId> ReadSoleUserAsync(IHost host, CancellationToken cancellationToken)
+    private static async Task<MailUserId> ReadSuiteUserAsync(IHost host, CancellationToken cancellationToken)
     {
         await using var scope = host.Services.CreateAsyncScope();
 
@@ -700,6 +702,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             .GetRequiredService<MailFathomDbContext>()
             .UserAccounts
             .AsNoTracking()
+            .Where(user => user.DisplayName == SuiteUserDisplayName)
             .Select(user => user.Id)
             .SingleAsync(cancellationToken);
 

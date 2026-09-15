@@ -217,14 +217,20 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
                         0,
                         await context.Set<MailDraftAttachmentContentEntity>()
                             .CountAsync(octets => octets.Attachment.MailDraft.UserId == erasedUserId, token));
+
+                    // Counted over this class's own account rather than over the surviving user, because that user is
+                    // the one the whole suite's mail hangs off: every other class staging a draft beneath them would
+                    // be counted here, and the number would be about the suite's order rather than about the erasure.
                     Assert.Equal(
                         1,
                         await context.Set<MailDraftAttachmentEntity>()
-                            .CountAsync(attachment => attachment.MailDraft.UserId == survivingUserId, token));
+                            .CountAsync(attachment => attachment.MailDraft.MailboxAccountId == SurvivingAccount, token));
                     Assert.Equal(
                         1,
                         await context.Set<MailDraftAttachmentContentEntity>()
-                            .CountAsync(octets => octets.Attachment.MailDraft.UserId == survivingUserId, token));
+                            .CountAsync(
+                                octets => octets.Attachment.MailDraft.MailboxAccountId == SurvivingAccount,
+                                token));
 
                     return 0;
                 },

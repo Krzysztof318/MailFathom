@@ -6,12 +6,11 @@ using System.Globalization;
 using System.Text.Json;
 using MailFathom.AppHost;
 using MailFathom.Application.Signals;
-using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Signals;
 using MailFathom.IntegrationTests.Hosting;
 using MailFathom.IntegrationTests.Orchestration;
-using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,9 +37,10 @@ namespace MailFathom.IntegrationTests.Signals;
 /// </para>
 /// <para>
 /// It joins the composed-host collection for that collection's ordering rather than for its fixture — the two hosts
-/// bind ports of their own and reach the orchestrated mailbox not at all — and takes two values from it: the
+/// bind ports of their own and reach the orchestrated mailbox not at all — and takes four values from it: the
 /// orchestrated database, because a signal ticket is minted on one replica and redeemed on the other and the store
-/// behind it is PostgreSQL, and the address the orchestration published the RESP server at.
+/// behind it is PostgreSQL, the address the orchestration published the RESP server at, and the user and mailbox the
+/// collection recorded, which are what a minted ticket keys onto and what decides whose connection a signal reaches.
 /// </para>
 /// </remarks>
 [Collection(ComposedHostCollectionDefinition.Name)]
@@ -60,9 +60,6 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
     /// </remarks>
     private static readonly TimeSpan RaiseInterval = TimeSpan.FromMilliseconds(250);
 
-    private static readonly MailAccountId Account =
-        MailAccountId.Create("work");
-
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
 
     /// <summary>
@@ -76,11 +73,18 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
         var cancellationToken = TestContext.Current.CancellationToken;
         var ports = OrchestrationContract.FindFreePorts(2);
 
+        // The user and the mailbox are the collection's own rather than stated here, and they are resolved before
+        // either shape starts: a ticket is a row keyed onto the user record, and whose connection a signal naming a
+        // mailbox reaches is resolved from the records the replicas read at start — so a stated pair would be refused
+        // by the foreign key and, past it, would name a mailbox nobody is served and reach nobody.
+        var user = MailUserId.Create(await orchestration.ComposedHostUserAsync(cancellationToken));
+        var account = await orchestration.ComposedHostAccountIdAsync(cancellationToken);
+
         await using var raising = await this.StartAsync(ports[0], cancellationToken);
         await using var holding = await this.StartAsync(ports[1], cancellationToken);
 
         var ticket = await holding.Services.GetRequiredService<ClientSignalTickets>()
-                .MintAsync(SyntheticMailUser.Deployment, cancellationToken)
+                .MintAsync(user, cancellationToken)
             ?? throw new InvalidOperationException("The host holding the connection refused to mint a signal ticket.");
 
         await using var connection = ConnectionTo(ports[1], ticket.Value);
@@ -93,14 +97,14 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
         await connection.StartAsync(cancellationToken);
 
         // Act
-        var signal = ClientSignal.MailArrived(Account, Inbox, newEmailCount: 3);
+        var signal = ClientSignal.MailArrived(account, Inbox, newEmailCount: 3);
         var channel = raising.Services.GetRequiredService<IClientSignalChannel>();
 
         var payload = await RaiseUntilDeliveredAsync(channel, signal, delivered.Task, cancellationToken);
 
         // Assert
         Assert.Equal(signal.Kind.Name, payload.GetProperty("kind").GetString());
-        Assert.Equal(Account.Value, payload.GetProperty("account").GetString());
+        Assert.Equal(account.Value, payload.GetProperty("account").GetString());
         Assert.Equal(Inbox.Value, payload.GetProperty("folder").GetString());
         Assert.Equal(3, payload.GetProperty("count").GetInt32());
     }
