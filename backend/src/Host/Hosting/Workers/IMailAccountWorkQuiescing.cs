@@ -27,12 +27,22 @@ internal interface IMailAccountWorkQuiescing
     /// <param name="accounts">The accounts to quiesce, which are the ones the work is about to dispose of.</param>
     /// <param name="work">The work to run while nothing is writing to them.</param>
     /// <param name="cancellationToken">Cancels the wait and the work, which gives back whatever was held.</param>
-    /// <returns>The sentence naming what is still running, or <see langword="null" /> when the work ran.</returns>
+    /// <returns>The sentence naming what is still running, or <see langword="null" /> when the work ran to its end.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="accounts" /> or <paramref name="work" /> is <see langword="null" />.</exception>
-    /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken" /> is cancelled while the accounts are being waited on.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken" /> is cancelled, which is the caller's own withdrawal and nothing this seam decided.</exception>
     /// <remarks>
-    /// A refusal means the work never started, which is what makes it safe for the caller to report that nothing was
-    /// done: half an erasure is worse than none, so the bound running out is an answer rather than a delay.
+    /// <para>
+    /// A refusal means the work either never started or was rolled back, which is what makes it safe for the caller to
+    /// report that nothing was done: half an erasure is worse than none, so the bound running out is an answer rather
+    /// than a delay.
+    /// </para>
+    /// <para>
+    /// There are three ways the work does not happen and only one of them is an exception. The bound running out
+    /// refuses before the work starts; a hold lost while the work runs cancels it, which rolls the work back and is
+    /// refused here with the mailbox named, because to the caller that outcome is a mailbox that would not stay still
+    /// rather than a fault of the machinery; and the caller cancelling is the caller's own act and is the one that
+    /// leaves as <see cref="OperationCanceledException" />.
+    /// </para>
     /// </remarks>
     Task<string?> RunQuiescedAsync(
         IReadOnlyList<MailAccountId> accounts,

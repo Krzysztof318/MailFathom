@@ -68,6 +68,14 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
     /// <summary>The mailbox the surviving user is assigned, which the erasure leaves whole.</summary>
     private const string SurvivingAccount = "2c9f3b51-6d42-4a8b-8e13-7bd52f6c8e21";
 
+    /// <summary>What the caller states it is holding stopped, which for the erased user is their one mailbox.</summary>
+    /// <remarks>
+    /// The walk refuses an account it is about to delete and which is not stated here, so passing it is part of
+    /// arranging an erasure rather than a formality: a test that seeded a second mailbox for this user and left it out
+    /// would be refused, which is the guarantee that behaviour exists for.
+    /// </remarks>
+    private static readonly Guid[] QuiescedAccounts = [Guid.Parse(ErasedAccount)];
+
     private const string AccountIdentifierPropertyName = nameof(MailFolderEntity.MailboxAccountId);
 
     /// <summary>The one address in the erased user's book, in a domain no other class here writes into.</summary>
@@ -109,7 +117,7 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
 
             // Act
             var erasure = await services.CommitProducingAsync(
-                (_, session, token) => UserAccountErasure.EraseAsync(session, erasedUserId, token),
+                (_, session, token) => UserAccountErasure.EraseAsync(session, erasedUserId, QuiescedAccounts, token),
                 cancellationToken);
 
             // Assert
@@ -217,7 +225,7 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
             // Through the seam rather than by hand, so a test that failed part-way still leaves the deployment with the
             // one user record every folder binding after it is resolved against.
             await services.CommitProducingAsync(
-                (_, session, token) => UserAccountErasure.EraseAsync(session, erasedUserId, token),
+                (_, session, token) => UserAccountErasure.EraseAsync(session, erasedUserId, QuiescedAccounts, token),
                 CancellationToken.None);
         }
     }
@@ -285,7 +293,7 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         finally
         {
             await services.CommitProducingAsync(
-                (_, session, token) => UserAccountErasure.EraseAsync(session, erasedUserId, token),
+                (_, session, token) => UserAccountErasure.EraseAsync(session, erasedUserId, QuiescedAccounts, token),
                 CancellationToken.None);
         }
     }
@@ -319,7 +327,7 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         OrchestratedMailFathomServices services,
         Guid userId,
         CancellationToken cancellationToken) => services.CommitProducingAsync(
-        (_, session, token) => UserAccountErasure.EraseAsync(session, userId, token),
+        (_, session, token) => UserAccountErasure.EraseAsync(session, userId, QuiescedAccounts, token),
         cancellationToken);
 
     private static Task<Guid> ReadSoleUserAsync(

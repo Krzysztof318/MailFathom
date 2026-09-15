@@ -3,9 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Persistence;
+using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using MailFathom.Infrastructure.Persistence.Users;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MailFathom.IntegrationTests.Orchestration;
 
@@ -59,11 +62,29 @@ internal static class OrchestratedForeignUser
     /// <param name="userId">The identifier the caller provisioned.</param>
     /// <returns>What the erasure reported it removed.</returns>
     /// <remarks>
+    /// <para>
     /// Uncancellable by construction: it runs in a <c>finally</c>, and a token already cancelled by the failure that
     /// sent the test there would leave the deployment holding a second user record.
+    /// </para>
+    /// <para>
+    /// The accounts the walk refuses to delete unstated are read here rather than passed in, because a teardown is
+    /// answerable for whatever the test it is cleaning up after left assigned. Nothing in this suite runs a
+    /// synchronization pass against a provisioned user's mailbox, so there is no hold for the read to stand in for.
+    /// </para>
     /// </remarks>
-    internal static Task<UserErasure> EraseAsync(OrchestratedMailFathomServices services, Guid userId) =>
-        services.CommitProducingAsync(
-            (_, session, token) => UserAccountErasure.EraseAsync(session, userId, token),
+    internal static async Task<UserErasure> EraseAsync(OrchestratedMailFathomServices services, Guid userId)
+    {
+        var assigned = await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailFathomDbContext>()
+                .MailAccountAssignments
+                .AsNoTracking()
+                .Where(assignment => assignment.UserId == userId)
+                .Select(assignment => assignment.MailAccountId)
+                .ToListAsync(token),
             CancellationToken.None);
+
+        return await services.CommitProducingAsync(
+            (_, session, token) => UserAccountErasure.EraseAsync(session, userId, assigned, token),
+            CancellationToken.None);
+    }
 }

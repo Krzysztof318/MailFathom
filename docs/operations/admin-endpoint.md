@@ -1254,8 +1254,11 @@ rows keyed to a *mail account* rather than to the person — so a deletion racin
 deployment holds nothing while it was still being written to. What the request does first is therefore take the user off
 the roster this replica serves and hold the supervision of every mailbox they were the last one assigned, which is the
 same lease a replica takes before it synchronizes that mailbox: holding it means no replica is running that account, and
-none starts one until the erasure has committed. A mailbox somebody else is also assigned is left running, because
-erasing this user takes nothing of it.
+none starts one until the erasure has committed. A mailbox somebody else is also assigned is left running and is not
+held: the mailbox, its mail, and the work going on in it are untouched, because that mail is the other person's. What
+does go from it is what the erased user themselves authored there — their drafts and their standing recurring sends —
+since those are the departing person's rather than the mailbox's, and an erasure that left them would leave that person
+still present in a colleague's mailbox.
 
 Both waits are bounded at **30 seconds**, and running out of that is a `409` naming what is still running — the mailbox
 a synchronization run has not finished with, or the one a job is still held for. **Nothing at all is erased when it

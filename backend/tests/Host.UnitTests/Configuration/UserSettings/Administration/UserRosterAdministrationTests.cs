@@ -420,7 +420,7 @@ public sealed class UserRosterAdministrationTests
 
             // Assert
             Assert.False(erasing.IsCompleted);
-            await harness.Erasure.DidNotReceiveWithAnyArgs().EraseAsync(default, CancellationToken.None);
+            await harness.Erasure.DidNotReceiveWithAnyArgs().EraseAsync(default, [], CancellationToken.None);
         }
         finally
         {
@@ -457,13 +457,17 @@ public sealed class UserRosterAdministrationTests
             new MailAccountRecord(sharedAccount, "shared@roster.test", "shared", "{}", 1));
 
         var servedWhileErasing = true;
-        harness.Erasure.EraseAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>()).Returns(_ =>
-        {
-            servedWhileErasing = harness.ServedUsers.Users.Any(
-                candidate => candidate.User == SyntheticMailUser.Deployment);
+        IReadOnlyList<Guid> statedAsQuiesced = [];
+        harness.Erasure
+            .EraseAsync(SyntheticMailUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                servedWhileErasing = harness.ServedUsers.Users.Any(
+                    candidate => candidate.User == SyntheticMailUser.Deployment);
+                statedAsQuiesced = call.Arg<IReadOnlyList<Guid>>()!;
 
-            return true;
-        });
+                return new MailUserErasure(true, null);
+            });
 
         // Act
         var outcome = await harness.Roster.EraseAsync(
@@ -474,6 +478,10 @@ public sealed class UserRosterAdministrationTests
         Assert.True(outcome.UserErased);
         Assert.False(servedWhileErasing);
         Assert.Equal([ownAccount.ToString("D")], [.. harness.Quiescing.Quiesced.Select(account => account.Value)]);
+
+        // The transaction refuses an account it would delete and which the caller did not state, so the same set that
+        // was held is the set it is told about — a shared mailbox being in neither.
+        Assert.Equal([ownAccount], statedAsQuiesced);
     }
 
     /// <summary>
@@ -499,7 +507,39 @@ public sealed class UserRosterAdministrationTests
         Assert.False(outcome.UserErased);
         Assert.False(outcome.IsQuiesced);
         Assert.Equal(harness.Quiescing.Refusal, outcome.RefusalMessage);
-        await harness.Erasure.DidNotReceiveWithAnyArgs().EraseAsync(default, CancellationToken.None);
+        await harness.Erasure.DidNotReceiveWithAnyArgs().EraseAsync(default, [], CancellationToken.None);
+        Assert.Contains(harness.ServedUsers.Users, candidate => candidate.User == SyntheticMailUser.Deployment);
+        Assert.Empty(heard);
+    }
+
+    /// <summary>
+    /// The transaction refuses on what only it can see — an account that became this user's alone after the holds were
+    /// taken, or a job claimed a moment before the lock. Nothing was written, so the caller is answered as for any
+    /// other refusal rather than told a user was erased.
+    /// </summary>
+    [Fact]
+    public async Task EraseAsync_TheTransactionRefusesOnAnAccountNothingHolds_ReportsARefusalAndAnnouncesNothing()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminErase);
+        harness.Serving(SyntheticMailUser.Deployment);
+        var appearedUnheld = Guid.Parse("7d3a9c15-4e28-4b61-9f07-2c8b6d0e5a34");
+        harness.Erasure
+            .EraseAsync(SyntheticMailUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new MailUserErasure(false, appearedUnheld));
+        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+
+        // Act
+        var outcome = await harness.Roster.EraseAsync(
+            SyntheticMailUser.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(outcome.UserErased);
+        Assert.False(outcome.IsQuiesced);
+        Assert.Contains(appearedUnheld.ToString("D"), outcome.RefusalMessage!, StringComparison.Ordinal);
+
+        // Nothing was erased, so the person goes on being served and no replica is told otherwise.
         Assert.Contains(harness.ServedUsers.Users, candidate => candidate.User == SyntheticMailUser.Deployment);
         Assert.Empty(heard);
     }
@@ -529,7 +569,7 @@ public sealed class UserRosterAdministrationTests
         await Assert.ThrowsAsync<ArgumentException>(
             () => harness.Roster.EraseAsync(default, TestContext.Current.CancellationToken));
 
-        await harness.Erasure.DidNotReceiveWithAnyArgs().EraseAsync(default, TestContext.Current.CancellationToken);
+        await harness.Erasure.DidNotReceiveWithAnyArgs().EraseAsync(default, [], TestContext.Current.CancellationToken);
     }
 
     /// <summary>Erasing somebody disposes of every message this deployment holds for them, which is a grant of its own.</summary>
@@ -750,7 +790,8 @@ public sealed class UserRosterAdministrationTests
                 .Returns(true);
 
             this.Erasure = Substitute.For<IMailUserErasure>();
-            this.Erasure.EraseAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns(false);
+            this.Erasure.EraseAsync(Arg.Any<MailUserId>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+                .Returns(new MailUserErasure(false, null));
 
             this.Documents = Substitute.For<IUserSettingsDocumentWriter>();
             this.Documents
@@ -821,6 +862,7 @@ public sealed class UserRosterAdministrationTests
         internal void Serving(params ServedMailUser[] users) => this.ServedUsers.Resolved(users);
 
         internal void Erasing(MailUserId user) =>
-            this.Erasure.EraseAsync(user, Arg.Any<CancellationToken>()).Returns(true);
+            this.Erasure.EraseAsync(user, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+                .Returns(new MailUserErasure(true, null));
     }
 }

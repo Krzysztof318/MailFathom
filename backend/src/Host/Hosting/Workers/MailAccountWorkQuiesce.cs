@@ -80,7 +80,7 @@ internal sealed class MailAccountWorkQuiesce(
                 return $"Mail account {account.Value} is still being synchronized, so erasing it now would leave rows behind that no deletion here could reach. Nothing was erased; ask again once the run has ended.";
             }
 
-            quiesced.Keep(hold);
+            quiesced.Keep(account, hold);
         }
 
         if (await this.WaitForJobsToFinishAsync(accounts, waitingUntil, cancellationToken) is { } running)
@@ -92,7 +92,17 @@ internal sealed class MailAccountWorkQuiesce(
         // to show it has cancels the deletion instead of letting it commit as a second writer.
         using var held = CancellationTokenSource.CreateLinkedTokenSource([cancellationToken, .. quiesced.Lost]);
 
-        await work(held.Token);
+        try
+        {
+            await work(held.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && quiesced.LostAccount is not null)
+        {
+            // The deletion was rolled back rather than committed, so this is the same outcome as the bound running
+            // out and is answered the same way. Letting it leave as a cancellation would reach the caller as a fault
+            // of the machinery, and on an irreversible route that is the one thing an operator must not have to guess.
+            return $"Mail account {quiesced.LostAccount?.Value} stopped being held part-way through the erasure, so it was rolled back rather than committed while another replica could take the account. Nothing was erased; ask again.";
+        }
 
         return null;
     }

@@ -115,7 +115,8 @@ public sealed class UserRecordEndpointsTests
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
         deployment.Serving(new ServedMailUser(SyntheticMailUser.Deployment, "alex", []));
-        deployment.Erasure.EraseAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>()).Returns(true);
+        deployment.Erasure.EraseAsync(SyntheticMailUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new MailUserErasure(true, null));
 
         // Act
         var result = await UserRecordEndpoints.EraseAsync(
@@ -140,7 +141,8 @@ public sealed class UserRecordEndpointsTests
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
         deployment.Serving(new ServedMailUser(SyntheticMailUser.Deployment, "alex", []));
-        deployment.Erasure.EraseAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>()).Returns(true);
+        deployment.Erasure.EraseAsync(SyntheticMailUser.Deployment, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new MailUserErasure(true, null));
         deployment.Quiescing.Refusal = "Mail account 41d7b2e0 is still being synchronized.";
 
         // Act
@@ -172,7 +174,7 @@ public sealed class UserRecordEndpointsTests
         // Assert
         AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
         await deployment.Erasure.DidNotReceiveWithAnyArgs()
-            .EraseAsync(default, TestContext.Current.CancellationToken);
+            .EraseAsync(default, [], TestContext.Current.CancellationToken);
     }
 
     /// <summary>The answer carries both switches as the record now states them, including the one the request left out.</summary>

@@ -254,7 +254,10 @@ internal sealed partial class UserRosterAdministration(
     /// no lock the erasure's own transaction could take reaches such a writer.
     /// </para>
     /// <para>
-    /// Work that will not stop within its bound refuses the erasure and deletes nothing. The user is therefore
+    /// Work that will not stop within its bound refuses the erasure and deletes nothing. So does the transaction
+    /// itself, on what only it can see: an account that became solely this user's after the set below was read, and a
+    /// job claimed between the wait and the lock the transaction takes over those accounts' job rows. All three answer
+    /// the caller identically, because all three leave the deployment exactly as it was. The user is therefore
     /// <em>withheld</em> rather than erased from the roster until the deletion has actually committed: refusing to
     /// erase somebody is not a reason to stop serving them, and putting them back is what a refusal does.
     /// </para>
@@ -275,6 +278,7 @@ internal sealed partial class UserRosterAdministration(
         var solelyAssigned = await accounts.ReadSolelyAssignedAsync(user, cancellationToken);
         bool served;
         var erased = false;
+        Guid? unquiesced = null;
         string? refusal;
         await servedUsers.WaitForRosterPublicationAsync(cancellationToken);
 
@@ -286,7 +290,13 @@ internal sealed partial class UserRosterAdministration(
 
             refusal = await quiescing.RunQuiescedAsync(
                 [.. solelyAssigned.Select(static account => MailAccountId.Create(account.ToString("D")))],
-                async token => erased = await erasure.EraseAsync(user, token),
+                async token =>
+                {
+                    var outcome = await erasure.EraseAsync(user, solelyAssigned, token);
+
+                    erased = outcome.UserErased;
+                    unquiesced = outcome.UnquiescedAccount;
+                },
                 cancellationToken);
 
             if (erased)
@@ -305,6 +315,17 @@ internal sealed partial class UserRosterAdministration(
             this.LogUserErasureRefused();
 
             return UserErasureOutcome.Refused(stillRunning);
+        }
+
+        // The transaction refused on what only it could see: an account that became solely this user's after the set
+        // above was read, or a job claimed between the wait and the lock the transaction takes. Nothing was written,
+        // so it is the same answer to the caller as a wait that ran out.
+        if (unquiesced is { } accountStillBusy)
+        {
+            this.LogUserErasureRefused();
+
+            return UserErasureOutcome.Refused(
+                $"Mail account {accountStillBusy:D} was still being worked on when the erasure reached it, so nothing was erased. Ask again once that has ended.");
         }
 
         if (erased)

@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Accounts;
+
 namespace MailFathom.Host.Hosting.Workers;
 
 /// <summary>The supervision scopes one quiescing is holding, given back together however it ends.</summary>
@@ -28,7 +30,7 @@ internal sealed class MailAccountWorkHold(TimeProvider timeProvider) : IAsyncDis
     /// </remarks>
     private static readonly TimeSpan RenewalStopTimeout = TimeSpan.FromSeconds(5);
 
-    private readonly List<WorkLeaseHold> holds = [];
+    private readonly List<(MailAccountId Account, WorkLeaseHold Hold)> holds = [];
     private readonly List<Task> renewals = [];
     private readonly CancellationTokenSource renewalStop = new();
     private bool released;
@@ -39,16 +41,27 @@ internal sealed class MailAccountWorkHold(TimeProvider timeProvider) : IAsyncDis
     /// work that went on deleting under it would be the second writer the hold was taken to exclude — and a deletion
     /// cancelled mid-transaction rolls back, which is the answer that leaves the deployment where it was.
     /// </remarks>
-    internal IReadOnlyList<CancellationToken> Lost => [.. this.holds.Select(static hold => hold.Lost)];
+    internal IReadOnlyList<CancellationToken> Lost => [.. this.holds.Select(static held => held.Hold.Lost)];
+
+    /// <summary>Gets the first account whose hold was lost, or <see langword="null" /> while every one is still held.</summary>
+    /// <remarks>
+    /// The caller is told which mailbox would not stay still rather than that something was cancelled, which is the
+    /// difference between an answer an operator can act on and a fault they can only retry.
+    /// </remarks>
+    internal MailAccountId? LostAccount => this.holds
+        .Where(static held => held.Hold.Lost.IsCancellationRequested)
+        .Select(static held => (MailAccountId?)held.Account)
+        .FirstOrDefault();
 
     /// <summary>Takes one more account's hold into this one, and starts renewing it.</summary>
-    /// <param name="hold">The hold on one account's supervision scope.</param>
+    /// <param name="account">The account the hold is on, so a hold lost later can be named.</param>
+    /// <param name="hold">The hold on that account's supervision scope.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="hold" /> is <see langword="null" />.</exception>
-    internal void Keep(WorkLeaseHold hold)
+    internal void Keep(MailAccountId account, WorkLeaseHold hold)
     {
         ArgumentNullException.ThrowIfNull(hold);
 
-        this.holds.Add(hold);
+        this.holds.Add((account, hold));
         this.renewals.Add(hold.KeepAsync(this.renewalStop.Token));
     }
 
@@ -79,7 +92,7 @@ internal sealed class MailAccountWorkHold(TimeProvider timeProvider) : IAsyncDis
             // this replica no longer holds, which writes nothing.
         }
 
-        foreach (var hold in this.holds)
+        foreach (var (_, hold) in this.holds)
         {
             await hold.ReleaseAsync();
             hold.Dispose();

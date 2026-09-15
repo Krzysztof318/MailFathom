@@ -79,9 +79,11 @@ public interface IMailAccountRecordStore
     /// <remarks>
     /// <para>
     /// It is what an erasure has to know before it begins rather than after: the accounts whose work has to be stopped
-    /// are exactly these, and an account somebody else still reads is left running because erasing this user takes
-    /// nothing of it. The set is read from the assignment relation rather than from a runtime roster, so an account
-    /// assigned to a user whose record this build will not read still counts as shared.
+    /// are exactly these. An account somebody else still reads is left running and unheld, because the mailbox and its
+    /// mail are that person's — the erasure still takes what the departing user authored in it, their drafts and their
+    /// recurring sends, and those rows key onto the user rather than needing the mailbox to be still. The set is read
+    /// from the assignment relation rather than from a runtime roster, so an account assigned to a user whose record
+    /// this build will not read still counts as shared.
     /// </para>
     /// <para>
     /// It is the one read here that takes no ceiling, and deliberately: a truncated answer would leave an account of

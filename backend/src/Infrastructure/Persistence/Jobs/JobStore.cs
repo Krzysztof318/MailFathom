@@ -338,9 +338,12 @@ internal sealed class JobStore(
 
     /// <inheritdoc />
     /// <remarks>
-    /// The expiry is compared against the database's clock for the reason every other lease comparison here is: a
-    /// replica running fast would otherwise read a lease as live that every other replica has already let go, and the
-    /// caller waiting on this answer would wait out its whole bound for a job nobody is running.
+    /// The claim is the whole of the test and the expiry is deliberately not part of it. A claimed row whose lease has
+    /// run out is not a row nobody holds: an attempt waits on the concurrency gate after it is claimed and before it
+    /// starts renewing, so with a batch wide enough and a gate narrow enough a handler runs for a stretch with its
+    /// expiry already behind it — and reading that as quiet would let an erasure commit against an account a handler
+    /// is writing to. Counting it instead refuses the erasure for as long as the row stays claimed, which is the
+    /// direction this caller already prefers everywhere else.
     /// </remarks>
     public async Task<IReadOnlyList<string>> ReadAccountsWithWorkInFlightAsync(
         IReadOnlyList<string> accountIds,
@@ -362,7 +365,6 @@ internal sealed class JobStore(
                  SELECT DISTINCT "MailboxAccountId" AS "Value" FROM jobs
                  WHERE "MailboxAccountId" = ANY({asked})
                    AND "State" = {claimed}
-                   AND "LeaseExpiresAt" > now()
                  ORDER BY "Value"
                  """)
             .ToListAsync(cancellationToken);
