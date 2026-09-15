@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Contacts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -20,9 +21,10 @@ namespace MailFathom.Infrastructure.Persistence.Contacts.Configurations;
 /// </para>
 /// <para>
 /// The check constraint is what stops the three from disagreeing. Exactly one of the two holders is present, the
-/// holder column repeats whichever it is, and the origin agrees with the kind of book — so a collected contact filed
-/// under a user, or an asserted one under a mailbox, is a row the database refuses rather than a state every reader
-/// has to reason about.
+/// holder column is that one prefixed with the kind of book it is, and the origin agrees with that kind — so a
+/// collected contact filed under a user, an asserted one under a mailbox, or a row filed under a key its own holder
+/// columns do not produce, is a row the database refuses rather than a state every reader has to reason about. The
+/// prefix is where the two namespaces are kept apart, and <see cref="ContactBookHolder" /> holds why that matters.
 /// </para>
 /// <para>
 /// The default address is a column on the person instead of a flag on each address. A flag would need a filtered unique
@@ -82,7 +84,7 @@ internal sealed class ContactConfiguration : IEntityTypeConfiguration<ContactEnt
             PersistenceConstraintNames.ContactBookHolderCheckConstraintName,
             $"""
              (("{nameof(ContactEntity.UserId)}" IS NOT NULL)::int + ("{nameof(ContactEntity.MailboxAccountId)}" IS NOT NULL)::int) = 1
-             AND "{nameof(ContactEntity.BookHolderId)}" = COALESCE("{nameof(ContactEntity.UserId)}"::text, "{nameof(ContactEntity.MailboxAccountId)}")
+             AND "{nameof(ContactEntity.BookHolderId)}" = CASE WHEN "{nameof(ContactEntity.UserId)}" IS NULL THEN '{ContactBookHolder.AccountKeyPrefix}' || "{nameof(ContactEntity.MailboxAccountId)}" ELSE '{ContactBookHolder.UserKeyPrefix}' || "{nameof(ContactEntity.UserId)}"::text END
              AND "{nameof(ContactEntity.Origin)}" = CASE WHEN "{nameof(ContactEntity.UserId)}" IS NULL THEN '{nameof(ContactOrigin.Collected)}' ELSE '{nameof(ContactOrigin.Asserted)}' END
              """));
 

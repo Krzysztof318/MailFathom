@@ -635,10 +635,11 @@ A contact is a *person* rather than an address, which is why the third command a
 match: one person uses a work address, a personal one, and an old one they still receive on, and the book knows those
 are the same person. [Contacts](../features/contacts.md) is what the record holds and every rule it obeys.
 
-**Every one of those commands acts for one user**, because a book belongs to somebody rather than to the deployment.
-`--user` is how you say which, and you can leave it off while the deployment holds one person — the command asks and
-acts on the single one. On a deployment holding several it refuses rather than guessing, and prints the identifiers to
-choose between.
+**Every one of those commands but `mfctl contact delete-collected` acts for one user**, because a book belongs to
+somebody rather than to the deployment. `--user` is how you say which, and you can leave it off while the deployment
+holds one person — the command asks and acts on the single one. On a deployment holding several it refuses rather than
+guessing, and prints the identifiers to choose between. `delete-collected` is the exception because the book it empties
+belongs to a mail account rather than to a person: it takes `--account` and no `--user` at all.
 
 Two of the commands are not conveniences. **`mfctl contact delete` erases somebody** — the record and their addresses go
 from the database and nothing can put them back, so the command shows you the record and asks first. **`mfctl contact

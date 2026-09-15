@@ -22,8 +22,8 @@ namespace MailFathom.Cli.Commands.Contacts;
 /// <para>
 /// A page is read over every book that user reads at once: their own, and the collected book of each mail account they
 /// are assigned. Where two of those hold one address the page serves it once, from the user's own book first and then
-/// from the accounts in the order of their identifiers — so a page may be shorter than the size asked for while the
-/// walk still has more to serve, and the cursor rather than the count is what says whether it does.
+/// from the accounts in the order of their identifiers. The hiding is applied as the page is read rather than to a page
+/// already served, so the cursor rather than the count is what says whether more is waiting.
 /// </para>
 /// </remarks>
 internal static class ListContactsCommand

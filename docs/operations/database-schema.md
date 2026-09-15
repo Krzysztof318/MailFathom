@@ -308,9 +308,20 @@ would have to guess, because a wrong guess would publish one user's corresponden
 mailbox. So a deployment where each person has their own mailbox loses nothing, and one that already shares a mailbox,
 or assigns somebody several, loses what those accounts had collected. **Nothing an operator or a user wrote down is
 touched either way**, and collection rebuilds what was deleted from the mail that arrives next, exactly as it does after
-`mfctl contact delete-collected`. An operator who wants the old rows kept reads them before upgrading with
-`mfctl contact list --origin Collected` and exports each with `mfctl contact export`; there is no way back to them
-afterwards.
+`mfctl contact delete-collected`. There is no way back to them afterwards, so an operator who wants them kept reads
+them **before** the upgrade — and which reading is available depends on the deployment being upgraded from, because on
+the release carrying that migration every `mfctl contact` command still reaches the book of the one user the deployment
+serves. A deployment serving one user reads them with `mfctl contact list --origin Collected` and exports each with
+`mfctl contact export`. A deployment serving several — which is exactly the shape that loses rows — cannot, so it reads
+them from the database instead, before the migration runs:
+
+```sql
+SELECT c."Id", c."UserId", c."DisplayName", c."Note", a."Address"
+FROM contacts c
+JOIN contact_addresses a ON a."ContactId" = c."Id"
+WHERE c."Origin" = 'Collected'
+ORDER BY c."UserId", c."DisplayName";
+```
 
 **The release carrying `MakeStoredEmailOccurrenceOptional` leaves queued classifications alone.** Arriving mail is
 now classified under a job type of its own, `classify-stored-email-spam`, which names the stored email; a replica of

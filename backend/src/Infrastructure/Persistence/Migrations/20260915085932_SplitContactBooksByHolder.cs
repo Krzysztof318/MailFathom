@@ -124,7 +124,12 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
             // rather than its own former user column: a carried-over contact is in the account's book now, and its
             // addresses belong to the same book by construction.
             migrationBuilder.Sql(
-                """UPDATE contacts SET "BookHolderId" = COALESCE("UserId"::text, "MailboxAccountId");""");
+                """
+                UPDATE contacts
+                SET "BookHolderId" = CASE
+                    WHEN "UserId" IS NULL THEN 'account:' || "MailboxAccountId"
+                    ELSE 'user:' || "UserId"::text END;
+                """);
 
             migrationBuilder.Sql(
                 """
@@ -183,7 +188,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "ck_contacts_book_holder",
                 table: "contacts",
-                sql: "((\"UserId\" IS NOT NULL)::int + (\"MailboxAccountId\" IS NOT NULL)::int) = 1\nAND \"BookHolderId\" = COALESCE(\"UserId\"::text, \"MailboxAccountId\")\nAND \"Origin\" = CASE WHEN \"UserId\" IS NULL THEN 'Collected' ELSE 'Asserted' END");
+                sql: "((\"UserId\" IS NOT NULL)::int + (\"MailboxAccountId\" IS NOT NULL)::int) = 1\nAND \"BookHolderId\" = CASE WHEN \"UserId\" IS NULL THEN 'account:' || \"MailboxAccountId\" ELSE 'user:' || \"UserId\"::text END\nAND \"Origin\" = CASE WHEN \"UserId\" IS NULL THEN 'Collected' ELSE 'Asserted' END");
 
             migrationBuilder.CreateIndex(
                 name: "ix_contact_addresses_book_holder_normalized_address",

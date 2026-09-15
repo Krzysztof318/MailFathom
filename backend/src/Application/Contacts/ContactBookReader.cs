@@ -92,12 +92,13 @@ public sealed class ContactBookReader
     /// <summary>Reads the person who uses one address.</summary>
     /// <param name="address">The address to resolve.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The contact holding that address, or <see langword="null" /> when nobody in the book does.</returns>
+    /// <returns>The contact holding that address, or <see langword="null" /> when no book in the scope does.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the reading grant.</exception>
     /// <remarks>
-    /// The lookup a caller reaches for once it has an address out of mail, answered from the unique index over the
-    /// user and the address comparison form rather than from a search over the book. At most one contact of that
-    /// user's book can answer, which is the book's own uniqueness rule rather than a property of this method.
+    /// The lookup a caller reaches for once it has an address out of mail, answered from the address index leading
+    /// with the book rather than from a search over one. Several books of the scope may each hold the address, and the
+    /// earliest of them is the one that answers — the same precedence a page is read under, rather than a uniqueness
+    /// rule the database keeps.
     /// </remarks>
     public Task<Contact?> FindByAddressAsync(EmailAddress address, CancellationToken cancellationToken)
     {

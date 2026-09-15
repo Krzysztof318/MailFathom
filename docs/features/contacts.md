@@ -55,8 +55,9 @@ hides it for that user alone, because the other users of the mailbox never saw t
 accounts both collected is answered once, from the first of the two in that order — the same answer on every read, and
 the same answer for two users of one mailbox, because the order is the accounts' own rather than the order either user's
 record happened to declare them in. The database applies it in the query rather than a reader applying it afterwards, so
-a page never serves one person twice — which also means a page may come back shorter than the size asked for while the
-walk still has more to serve, and the cursor rather than the count is what says whether it does.
+a page never serves one person twice, and it is applied as the page is read rather than to a page already served — so a
+page still holds the size asked for while the walk has more to serve, and the cursor rather than the count is what says
+whether it does.
 
 **Which book an act writes is never the same question as which books it reads.** A caller's writes go into their own
 book: recording a person, amending one, promoting one. Collection writes into the book of the account it is
@@ -307,7 +308,7 @@ Three lookups and one listing:
 - **A page of the books**, bounded and continued by a keyset cursor. The order is the name's comparison form and then
   the identity, across the books the page is of, which makes it total: two people with one name are still served in a
   fixed order, so a walk serves every contact exactly once. A record a book earlier in the reader's order hides is not
-  served at all, which is why a page may be shorter than the size asked for while the walk has more to give. A page holds 50 contacts unless the caller asks for fewer, and never more than 200.
+  served at all, and the hiding is applied as the page is read, so a page holds the size asked for until the walk runs out. A page carries 50 contacts unless the caller asks for fewer, and never more than 200.
   A listing may be narrowed to one origin, which is the question "what did my instance pick up" and its inverse, and to
   a **search**.
 

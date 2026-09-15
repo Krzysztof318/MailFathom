@@ -542,9 +542,9 @@ answer "who is this from" for somebody who writes from three of them.
 **There are two books and a read of both.** Your own holds the people somebody wrote down; each mailbox you are assigned
 holds the addresses its own arriving mail picked up, which everybody assigned that mailbox reads. Every read here merges
 them — your own book first, then your mailboxes in the order of their identifiers — and an address held in more than one
-of them is answered once, from the first, so your own record is what an agent sees where you have written one. A page
-can therefore come back shorter than the size asked for while the walk has more to give; read `nextCursor` rather than
-the count.
+of them is answered once, from the first, so your own record is what an agent sees where you have written one. The hiding
+is applied as the page is read, so a page holds the size asked for until the walk runs out; read `nextCursor` rather
+than the count.
 
 `get_contact` by address is the one worth building a habit around: it is an index lookup, it is exact, and one person
 answers it. Searching for an address in `list_contacts` finds the same person more slowly and finds others besides.

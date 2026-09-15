@@ -2,11 +2,15 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
@@ -74,6 +78,7 @@ public sealed class ContactEndpointsTests
             User,
             new ContactRecordRequest("Anna Kowalska", ["anna@example.test"], "anna@example.test", Note: null),
             this.Book(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -196,6 +201,7 @@ public sealed class ContactEndpointsTests
                 preferredAddress,
                 note),
             this.Book(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -218,6 +224,7 @@ public sealed class ContactEndpointsTests
                 "anna@example.test",
                 Note: null),
             this.Book(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         var longNote = await ContactEndpoints.RecordAsync(
@@ -228,6 +235,7 @@ public sealed class ContactEndpointsTests
                 "anna@example.test",
                 new string('n', ContactNote.MaximumLength + 1)),
             this.Book(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -244,6 +252,7 @@ public sealed class ContactEndpointsTests
             User,
             request: null,
             book: this.Book(),
+            users: this.Roster(),
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
@@ -267,6 +276,7 @@ public sealed class ContactEndpointsTests
             User,
             new ContactRecordRequest("Anna Kowalska", addresses, addresses[0], Note: null),
             this.Book(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -464,6 +474,7 @@ public sealed class ContactEndpointsTests
         var result = await ContactEndpoints.EraseCollectedAsync(
             Account,
             this.Book(),
+            CatalogServing(SyntheticMailAccount.Deployment),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -483,11 +494,57 @@ public sealed class ContactEndpointsTests
         var result = await ContactEndpoints.EraseCollectedAsync(
             Account,
             this.Book(),
+            CatalogServing(SyntheticMailAccount.Deployment),
             TestContext.Current.CancellationToken);
 
         // Assert
         var erasure = Assert.IsType<Ok<CollectedContactErasureResponse>>(result.Result);
         Assert.Equal((0, 0), (erasure.Value!.ContactsErased, erasure.Value.AddressesErased));
+    }
+
+    /// <summary>A write names the user it writes under, so a user nobody holds is refused rather than committed.</summary>
+    /// <remarks>
+    /// The foreign key onto the user record would refuse it anyway, as a fault rather than as one of this surface's own
+    /// refusals — which is what makes the check worth having above the store rather than under it.
+    /// </remarks>
+    [Fact]
+    public async Task RecordAsync_AUserThisDeploymentHoldsNoRecordFor_RefusesWithoutWriting()
+    {
+        // Arrange
+        this.HoldsNoAddresses();
+
+        // Act
+        var result = await ContactEndpoints.RecordAsync(
+            SyntheticMailUser.Another.Value,
+            new ContactRecordRequest("Anna Kowalska", ["anna@example.test"], "anna@example.test", Note: null),
+            this.Book(),
+            this.Roster(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await this.AssertRefusedWithoutWriting(result, "holds no user");
+    }
+
+    /// <summary>An erasure cannot be undone, so an account nothing serves is refused rather than answered with nothing removed.</summary>
+    [Fact]
+    public async Task EraseCollectedAsync_AnAccountThisDeploymentDoesNotServe_RefusesWithoutErasing()
+    {
+        // Act
+        var result = await ContactEndpoints.EraseCollectedAsync(
+            "not-an-account-this-deployment-serves",
+            this.Book(),
+            CatalogServing(SyntheticMailAccount.Deployment),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+
+        await this.store.DidNotReceive().EraseCollectedAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailAccountId>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>Exporting somebody the book does not hold produces no document rather than an empty one.</summary>
@@ -589,6 +646,34 @@ public sealed class ContactEndpointsTests
         this.directory
             .FindHoldersOfAsync(Arg.Any<ContactBookHolder>(), Arg.Any<IReadOnlyCollection<EmailAddress>>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<EmailAddress, ContactId>());
+
+    /// <summary>Reports the accounts a deployment serves, which is what an administrative route resolves one against.</summary>
+    private static IDeploymentMailAccountCatalog CatalogServing(params MailAccountId[] accounts)
+    {
+        var catalog = Substitute.For<IDeploymentMailAccountCatalog>();
+
+        catalog.ServedAccounts.Returns(
+        [
+            .. accounts.Select(account => new ServedMailAccount(
+                account,
+                MailAccountDisplayName.Create(account.Value),
+                MailSynchronizationMode.Polling)),
+        ]);
+
+        return catalog;
+    }
+
+    /// <summary>Holds a record for the one user these routes are asked about, and for nobody else.</summary>
+    private IMailUserDirectory Roster()
+    {
+        var users = Substitute.For<IMailUserDirectory>();
+
+        users.ReadUserAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns((MailUserRecord?)null);
+        users.ReadUserAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>())
+            .Returns(new MailUserRecord(SyntheticMailUser.Deployment, "The deployment's user"));
+
+        return users;
+    }
 
     /// <summary>Composes the books a named user reads, over a deployment that has assigned them no account.</summary>
     /// <remarks>

@@ -1718,7 +1718,7 @@
       "readOnlyHint": true,
       "title": "List contacts"
     },
-    "description": "Lists people from the contact books you read, ordered by name, with the addresses each of them uses: your own book, holding whoever was written down, and the collected book of each mail account you are assigned. Reads local state only: it never contacts a mail server and changes nothing. Narrow the page with search, which matches text anywhere in a name or an address without regard to case, and with origin. Returns at most 200 contacts per call and 50 by default, with an opaque cursor for the next page; there is no way to ask for the whole book in one call. An address held in more than one of those books is served once, from your own book first and then from the accounts in the order of their identifiers, so a page can come back shorter than pageSize while the walk has more to serve — read nextCursor rather than the count to know. To resolve one address to the person using it, call get_contact with that address rather than searching for it here.",
+    "description": "Lists people from the contact books you read, ordered by name, with the addresses each of them uses: your own book, holding whoever was written down, and the collected book of each mail account you are assigned. Reads local state only: it never contacts a mail server and changes nothing. Narrow the page with search, which matches text anywhere in a name or an address without regard to case, and with origin. Returns at most 200 contacts per call and 50 by default, with an opaque cursor for the next page; there is no way to ask for the whole book in one call. An address held in more than one of those books is served once, from your own book first and then from the accounts in the order of their identifiers. The hiding is applied as the page is read, so a full page never means more is waiting and a short one never means it is: read nextCursor rather than the count to know. To resolve one address to the person using it, call get_contact with that address rather than searching for it here.",
     "inputSchema": {
       "properties": {
         "cursor": {
@@ -3570,11 +3570,11 @@
       "readOnlyHint": false,
       "title": "Update contact"
     },
-    "description": "Amends one person in MailFathom's own contact book. State the whole record you want them to have — the name, every address, which one is preferred, and the note — rather than only what changes: an address the new record does not name is removed, and an omitted note clears the one held. Read the contact with get_contact first so nothing is dropped by accident. Writes to local state only, and touches no mail. A contact a mail account collected from arriving mail answers contactWasCollected: that record is the mailbox's and the account's other users read it, so take your own copy on with promote_contact and amend the copy.",
+    "description": "Amends one person in your own contact book. State the whole record you want them to have — the name, every address, which one is preferred, and the note — rather than only what changes: an address the new record does not name is removed, and an omitted note clears the one held. Read the contact with get_contact first so nothing is dropped by accident. Writes to local state only, and touches no mail. A contact a mail account collected from arriving mail answers contactWasCollected: that record is the mailbox's and the account's other users read it, so take your own copy on with promote_contact and amend the copy.",
     "inputSchema": {
       "properties": {
         "addresses": {
-          "description": "Every mail address the contact is to hold afterwards, at most 32 entries, two spellings of one address counting as two entries and stored as one. An address the record no longer names is removed and becomes free for another contact to claim; one another contact already holds refuses the write.",
+          "description": "Every mail address the contact is to hold afterwards, at most 32 entries, two spellings of one address counting as two entries and stored as one. An address the record no longer names is removed and becomes free for another contact to claim; one another contact in your own book already holds refuses the write, while one a mail account collected is free here.",
           "items": {
             "type": "string"
           },

@@ -1955,9 +1955,9 @@ a page of the book.
 
 The page is read over every book the caller reads at once, in the order [contacts](contacts.md#two-books-and-a-read-of-both)
 documents: the user's own book first, then the collected book of each of their mail accounts by the account's
-identifier. An address two of those books hold is served once, from the first of them, so **a page may come back
-shorter than `pageSize` while the walk still has more to serve** — `nextCursor` rather than the count is what says
-whether it does.
+identifier. An address two of those books hold is served once, from the first of them, and that hiding is applied as
+the page is read rather than to a page already served — so **a page holds the size asked for until the walk runs out**,
+and `nextCursor` rather than the count is what says whether more is waiting.
 
 ### Arguments
 

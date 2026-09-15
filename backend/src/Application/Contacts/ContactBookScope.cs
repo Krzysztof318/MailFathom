@@ -80,6 +80,10 @@ public sealed record ContactBookScope
     /// <summary>Describes a read of one user's own book alone, reaching nothing any mailbox collected.</summary>
     /// <param name="user">The user.</param>
     /// <returns>The scope.</returns>
-    /// <remarks>What an amendment resolves against: a caller amends the people they wrote down, and a collected record is promoted rather than edited in place.</remarks>
+    /// <remarks>
+    /// The shape a user assigned no mail account reads in, which is what the tests stating that case are written
+    /// against. Nothing in production narrows to it: every read and every write resolves the whole scope, because
+    /// reaching a collected record is what lets it be refused as collected rather than reported absent.
+    /// </remarks>
     public static ContactBookScope OfOwnBookAlone(MailUserId user) => Of(user, []);
 }

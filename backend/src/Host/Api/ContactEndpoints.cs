@@ -2,9 +2,10 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Contacts;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Security.Endpoints;
@@ -207,19 +208,32 @@ internal static class ContactEndpoints
     /// <param name="user">The user whose book the person is written into.</param>
     /// <param name="request">The record to write.</param>
     /// <param name="book">Performs the write.</param>
+    /// <param name="users">Answers whether this deployment holds a record for the named user.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the outcome, or <c>400</c> naming which rule the record broke.</returns>
+    /// <remarks>
+    /// The roster is asked before the write rather than after it because this is the one contact route that inserts
+    /// under a user the request named: a read of a user nobody holds is an empty book, but a write under one would
+    /// reach the commit and fail on the foreign key onto the user record, which is a fault where a refusal is owed.
+    /// </remarks>
     internal static async Task<Results<Ok<ContactWriteResponse>, ProblemHttpResult>> RecordAsync(
         [FromQuery] Guid user,
         [FromBody] ContactRecordRequest? request,
         [FromServices] ContactBook book,
+        [FromServices] IMailUserDirectory users,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
+        ArgumentNullException.ThrowIfNull(users);
 
         if (!TryReadUser(user, out var writer))
         {
             return EmptyUser();
+        }
+
+        if (await users.ReadUserAsync(writer, cancellationToken) is null)
+        {
+            return UnknownUser(writer);
         }
 
         var read = ReadRecord(request);
@@ -456,6 +470,7 @@ internal static class ContactEndpoints
     /// <summary>Erases the whole of one mail account's collected book, leaving every user's own book where it is.</summary>
     /// <param name="account">The mail account whose book is erased.</param>
     /// <param name="book">Performs the erasure.</param>
+    /// <param name="accounts">Reports the accounts this deployment serves, which the named one is resolved against.</param>
     /// <param name="cancellationToken">Cancels the erasure when the client disconnects.</param>
     /// <returns><c>200</c> with what was removed, including a book that had collected nobody.</returns>
     /// <remarks>
@@ -468,16 +483,21 @@ internal static class ContactEndpoints
     internal static async Task<Results<Ok<CollectedContactErasureResponse>, ProblemHttpResult>> EraseCollectedAsync(
         [FromQuery] string? account,
         [FromServices] ContactBook book,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
+        ArgumentNullException.ThrowIfNull(accounts);
 
-        if (string.IsNullOrWhiteSpace(account))
+        // The same two questions every administrative route taking an account asks of it, and they matter more here
+        // than anywhere: this act cannot be undone, and a mistyped identifier would otherwise be answered with an
+        // erasure of nothing, which reads exactly like a successful one on the account that was meant.
+        if (AdminAccountRequest.Resolve(account, accounts) is not { } servedAccount)
         {
-            return Refused("The erasure names no mail account, and a collected book belongs to one.");
+            return AdminAccountRequest.Refuse(account);
         }
 
-        var erasure = await book.EraseCollectedAsync(MailAccountId.Create(account), cancellationToken);
+        var erasure = await book.EraseCollectedAsync(servedAccount, cancellationToken);
 
         return TypedResults.Ok(new CollectedContactErasureResponse(
             erasure.ContactsErased,
@@ -564,6 +584,12 @@ internal static class ContactEndpoints
     /// <summary>States that the request named no user, and every route but the collected erasure reaches one user's books.</summary>
     private static ProblemHttpResult EmptyUser() =>
         Refused("The request names no user, and a contact book belongs to one.");
+
+    /// <summary>States that the user a write named is not one this deployment holds a record for.</summary>
+    /// <param name="user">The user that was looked up, which is MailFathom's own identifier rather than request text.</param>
+    /// <returns>The refusal.</returns>
+    private static ProblemHttpResult UnknownUser(MailUserId user) =>
+        Refused($"This deployment holds no user '{user.Value:D}'.");
 
     /// <summary>Reads the origin a listing was narrowed to, refusing a value naming no origin.</summary>
     /// <remarks>

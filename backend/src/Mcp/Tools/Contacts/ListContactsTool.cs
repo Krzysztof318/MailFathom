@@ -73,8 +73,9 @@ internal sealed class ListContactsTool(ContactBookReader contactBookReader)
         + "matches text anywhere in a name or an address without regard to case, and with origin. Returns at most 200 "
         + "contacts per call and 50 by default, with an opaque cursor for the next page; there is no way to ask for the "
         + "whole book in one call. An address held in more than one of those books is served once, from your own book "
-        + "first and then from the accounts in the order of their identifiers, so a page can come back shorter than "
-        + "pageSize while the walk has more to serve — read nextCursor rather than the count to know. To resolve one "
+        + "first and then from the accounts in the order of their identifiers. The hiding is applied as the page is "
+        + "read, so a full page never means more is waiting and a short one never means it is: read nextCursor "
+        + "rather than the count to know. To resolve one "
         + "address to the person using it, call get_contact with that address rather than searching for it here.")]
     public async Task<ListContactsToolResult> ListContactsAsync(
         [Description("Return only contacts carrying this text in their name or in one of their addresses. Matched anywhere in the value and without regard to case, up to 320 characters. Wildcard characters match themselves. Omit to list the whole book, which an empty string does too.")]

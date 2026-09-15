@@ -1227,7 +1227,7 @@ the schema itself decides is below.
 | Column | What it records |
 |---|---|
 | `Id` | MailFathom's own UUIDv7, minted when the contact is recorded. Never an address, because an address is a thing a person has rather than a thing they are |
-| `BookHolderId` | Which book holds this person, as text: the user's identifier where the book is a user's own, the mail account's where it is an account's. It leads the two indexes a read would otherwise walk the table for — the listing and the address uniqueness below — so a read over several books seeks into each of them rather than scanning. It never changes: a contact is written in a book rather than moved between them, which is why promotion copies |
+| `BookHolderId` | Which book holds this person, as text, led by the kind of holder: `user:` and the user's identifier where the book is a user's own, `account:` and the mail account's where it is an account's. The prefix is what keeps the two namespaces apart — an account identifier is text an operator wrote and nothing constrains its shape, so one written as some user's identifier would otherwise name that user's own book. It leads the two indexes a read would otherwise walk the table for — the listing and the address uniqueness below — so a read over several books seeks into each of them rather than scanning. It never changes: a contact is written in a book rather than moved between them, which is why promotion copies |
 | `UserId` | The user whose own book this is, keyed onto `settings_accounts` and cascading from it, or null on a collected row. The cascade is what takes a user's own book with the user |
 | `MailboxAccountId` | The mail account whose collected book this is, or null on an asserted row. Keyed onto `mailbox_accounts` and cascading from it, beside that account's folders, threads, and jobs, so a collected book goes with the mailbox that assembled it |
 | `DisplayName`, `DisplayNameSortKey` | The name as the user wrote it, and the upper-cased comparison form the listing is ordered and paginated by. The form is stored rather than derived in the query and its column is pinned to the `C` collation, so the order is the ordinal one that form was derived to produce instead of whichever collation the database was created with |
@@ -1238,9 +1238,10 @@ the schema itself decides is below.
 | `ConcurrencyVersion` | The `xmin` token, because a contact is amended in place. What it settles is a row that changed or disappeared between the read an amendment is applied to and the commit — above all an amendment racing an erasure, which then writes nothing rather than putting the person back |
 
 **The three holder columns cannot disagree.** A check constraint requires exactly one of `UserId` and `MailboxAccountId`
-to be present, requires `BookHolderId` to repeat whichever it is, and requires `Origin` to be `Collected` on a mailbox's
-row and `Asserted` on a user's. A collected contact filed under a user, or an asserted one under a mailbox, is therefore
-a row the database refuses rather than a state every reader has to reason about.
+to be present, requires `BookHolderId` to be whichever it is under that kind's prefix, and requires `Origin` to be
+`Collected` on a mailbox's row and `Asserted` on a user's. A collected contact filed under a user, an asserted one under
+a mailbox, or a row filed under a key its own holder columns do not produce, is therefore a row the database refuses
+rather than a state every reader has to reason about.
 
 `contact_addresses` carries the address as written beside its comparison form, the contact it belongs to, and the book
 that contact belongs to. It is rows rather than an array column, and that is what makes both rules over it structural.

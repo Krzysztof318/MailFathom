@@ -279,7 +279,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.ToTable("contacts", null, t =>
                         {
-                            t.HasCheckConstraint("ck_contacts_book_holder", "((\"UserId\" IS NOT NULL)::int + (\"MailboxAccountId\" IS NOT NULL)::int) = 1\nAND \"BookHolderId\" = COALESCE(\"UserId\"::text, \"MailboxAccountId\")\nAND \"Origin\" = CASE WHEN \"UserId\" IS NULL THEN 'Collected' ELSE 'Asserted' END");
+                            t.HasCheckConstraint("ck_contacts_book_holder", "((\"UserId\" IS NOT NULL)::int + (\"MailboxAccountId\" IS NOT NULL)::int) = 1\nAND \"BookHolderId\" = CASE WHEN \"UserId\" IS NULL THEN 'account:' || \"MailboxAccountId\" ELSE 'user:' || \"UserId\"::text END\nAND \"Origin\" = CASE WHEN \"UserId\" IS NULL THEN 'Collected' ELSE 'Asserted' END");
                         });
                 });
 

@@ -201,13 +201,13 @@ what it was never granted is what the record exists to make visible.
 | `POST /api/admin/content/release` | `mailfathom.admin.erase` | Frees one bounded batch of those copies, leaving the object the only place that mail is held. Refused with `409` while any payload is still waiting to be carried. |
 | `POST /api/admin/folders/erasure` | `mailfathom.admin.erase` | Erases one bounded pass of the mail stored for a folder the account no longer mirrors. **This is the one route that disposes of mail.** |
 | `GET /api/admin/contacts` | `mailfathom.admin.audit.read` | Reads one bounded, keyset-paginated page of the books `user` reads — their own beside the collected book of each mail account assigned to them — optionally narrowed to one origin. [The contact book](../features/contacts.md) holds which book answers where two of them carry one address. |
-| `POST /api/admin/contacts` | `mailfathom.admin.operate` | Records a person into the own book of `user`, as a contact they asserted. It never writes a mail account's collected book. |
+| `POST /api/admin/contacts` | `mailfathom.admin.operate` | Records a person into the own book of `user`, as a contact they asserted. It never writes a mail account's collected book. A `user` this deployment holds no record for is refused with `400`, because this is the one contact route that writes under a user the request named. |
 | `GET /api/admin/contacts/by-address` | `mailfathom.admin.audit.read` | Reads whoever uses one address across the books `user` reads, in whichever casing the book that answers recorded it. |
 | `GET /api/admin/contacts/{id}` | `mailfathom.admin.audit.read` | Reads one contact by the identity its book gave it, from the books `user` reads. |
 | `PUT /api/admin/contacts/{id}` | `mailfathom.admin.operate` | Amends one contact of the own book of `user` to the whole record the body states. A collected record is not amended in place; it is promoted first. |
 | `POST /api/admin/contacts/{id}/promotion` | `mailfathom.admin.operate` | Writes an asserted copy of a collected contact into the own book of `user`, under a new identity. The mail account's own record stays where it is, because the account's other users still read it. |
 | `DELETE /api/admin/contacts/{id}` | `mailfathom.admin.erase` | Erases one person, from whichever of the books `user` reads holds them, and everything that book derived from them. A collected record leaves for every user assigned that mail account. **This is the one route that disposes of a contact, and it cannot be undone.** |
-| `DELETE /api/admin/contacts/collected` | `mailfathom.admin.erase` | Erases the whole collected book of the mail account `account` names, leaving every user's own book where it is. It names an account rather than a user, because collection is switched on per account. **This cannot be undone either.** |
+| `DELETE /api/admin/contacts/collected` | `mailfathom.admin.erase` | Erases the whole collected book of the mail account `account` names, leaving every user's own book where it is. It names an account rather than a user, because collection is switched on per account. An `account` this deployment does not serve is refused with `400` rather than answered with nothing erased, which would read exactly like a mistyped identifier succeeding. **This cannot be undone either.** |
 | `GET /api/admin/contacts/{id}/export` | `mailfathom.admin.audit.read` | Produces everything the books `user` reads hold about one person, as of the instant it was taken. |
 | `GET /api/admin/configuration` | `mailfathom.admin.read` | Reports the settings at or beneath a path as this deployment reads them, each with the layer that decided it, and the persisted version they were composed over. Secret-bearing values read back as the redaction marker. This is what [`mfctl config get` and `mfctl config show`](#reading-and-changing-the-deployments-own-configuration) ask. |
 | `POST /api/admin/configuration` | `mailfathom.admin.configuration.write` | Applies keyed changes to the persisted configuration document, together or not at all, over the version the body states. |
@@ -1153,7 +1153,8 @@ everything else the command prints goes to standard error.
 for fewer and never more than 200, ordered by the name's comparison form and then by identity. That order is total, so
 walking a page at a time serves every contact exactly once. A page that has more behind it prints the cursor the next
 one is asked with — and it is the cursor rather than the count that says so, because a page read over several books
-serves an address held in two of them once and therefore comes back shorter than the size asked for.
+serves an address held in two of them once, and applies that as the page is read rather than to a page already served,
+so a page holds the size asked for until the walk runs out.
 
 Every refusal names the rule rather than the value: a malformed address is reported as an address that is not usable and
 never echoed, and no name, address, or note reaches a log line, a problem document, a trace, or a failing command's

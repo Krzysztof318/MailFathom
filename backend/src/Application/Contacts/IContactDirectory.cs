@@ -24,9 +24,9 @@ namespace MailFathom.Application.Contacts;
 /// never disagree about which of the two exists.
 /// </para>
 /// <para>
-/// A page therefore holds up to the size asked for rather than exactly it: a record hidden this way leaves a gap the
-/// page does not refill, and the cursor still continues the walk from the last contact served. Reading to the end of
-/// the book is asking for pages until one carries no cursor, exactly as it was before.
+/// The hiding happens in the query rather than over a page already read, so a page still holds exactly the size asked
+/// for while the walk has more to serve, and a short page means the walk is over. Reading to the end of the book is
+/// asking for pages until one carries no cursor, exactly as it was before.
 /// </para>
 /// <para>
 /// Every read joins no transaction and returns complete contacts rather than an entity graph, which is why it is a port

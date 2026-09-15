@@ -71,7 +71,7 @@ internal sealed class UpdateContactTool(ContactBookWriter contactBookWriter)
         OpenWorld = false,
         UseStructuredContent = true)]
     [Description(
-        "Amends one person in MailFathom's own contact book. State the whole record you want them to have — the name, "
+        "Amends one person in your own contact book. State the whole record you want them to have — the name, "
         + "every address, which one is preferred, and the note — rather than only what changes: an address the new "
         + "record does not name is removed, and an omitted note clears the one held. Read the contact with get_contact "
         + "first so nothing is dropped by accident. Writes to local state only, and touches no mail. A contact a mail "
@@ -82,7 +82,7 @@ internal sealed class UpdateContactTool(ContactBookWriter contactBookWriter)
         string contactId,
         [Description("The name the contact is to carry, up to 256 characters. Characters that render as nothing are refused.")]
         string displayName,
-        [Description("Every mail address the contact is to hold afterwards, at most 32 entries, two spellings of one address counting as two entries and stored as one. An address the record no longer names is removed and becomes free for another contact to claim; one another contact already holds refuses the write.")]
+        [Description("Every mail address the contact is to hold afterwards, at most 32 entries, two spellings of one address counting as two entries and stored as one. An address the record no longer names is removed and becomes free for another contact to claim; one another contact in your own book already holds refuses the write, while one a mail account collected is free here.")]
         IReadOnlyList<string> addresses,
         [Description("The address to use by default afterwards. Must be one of addresses.")]
         string preferredAddress,
