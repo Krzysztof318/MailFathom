@@ -94,9 +94,16 @@ if (runsEphemeralServers)
     // The host port is stated only for the end-to-end client run, which reaches this server from outside the app model
     // to apply the schema artifact — the operator's own path, and one that needs an address written down rather than
     // allocated. The integration suite reads its connection string out of the orchestration it started and needs none.
+    //
+    // The connection ceiling is raised above the image's hundred because this topology is several MailFathom processes
+    // against one server rather than one: the suite composes a service graph per test class, the composed host serves
+    // requests that each resolve a credential row, and every one of them holds a pool of its own. At the shipped
+    // default the server starts refusing with `too many clients`, which reaches a test as a request answered with a
+    // fault rather than as a server that ran out of room.
     postgres
         .WithContainerName($"{ephemeralResourceNamePrefix}-postgres")
         .WithVolume($"{ephemeralResourceNamePrefix}-postgres-data", postgresDataDirectory)
+        .WithArgs("-c", "max_connections=400")
         .WithHostPort(runsEndToEndClient ? OrchestrationContract.EndToEndClientPostgresPort : null);
 }
 else
@@ -391,6 +398,11 @@ if (runsIntegrationTests)
         // Stated here rather than left to appsettings.json, because the isolation above is a promise this app model
         // makes: a default edited elsewhere must not be able to turn the started host into a synchronizing one.
         .WithEnvironment("MailSynchronization__Enabled", "false")
+        // The mailbox password, which the account record the suite writes names by reference rather than carries:
+        // material written into a persisted record is refused. ComposedHostMailboxPasswordVariable holds why.
+        .WithEnvironment(
+            OrchestrationContract.ComposedHostMailboxPasswordVariable,
+            OrchestrationContract.MailServerAccountPassword)
         // No mailbox is configured here, because a deployment no longer reads one from its own file: every account it
         // serves is one a user's record declares. The suite records its user and the account it stores its mail under
         // once the host is running, through the administrative surface below, which is what lets a tool call over the
@@ -400,19 +412,13 @@ if (runsIntegrationTests)
         // The endpoint is served under the posture worth proving end to end — a credential is required, and the origins
         // are narrowed. Leaving the permissive origin default would let a suite pass while the check was never wired in.
         .WithEnvironment("McpEndpoint__Enabled", "true")
-        .WithEnvironment("McpEndpoint__Authentication__0__ApiKey__Name", OrchestrationContract.McpApiKeyName)
-        .WithEnvironment(
-            "McpEndpoint__Authentication__0__ApiKey__SecretReference",
-            $"plaintext:{OrchestrationContract.McpApiKey}")
-        // A second key exists to be spent. Rate limits are counted per client, so proving one is enforced means taking a
-        // client to zero, and doing that to the key every other test authenticates with would make this suite's results
-        // depend on the order it ran in.
-        .WithEnvironment(
-            "McpEndpoint__Authentication__1__ApiKey__Name",
-            OrchestrationContract.McpExpendableApiKeyName)
-        .WithEnvironment(
-            "McpEndpoint__Authentication__1__ApiKey__SecretReference",
-            $"plaintext:{OrchestrationContract.McpExpendableApiKey}")
+        // The entry states the method and nothing else, which is all a mail-serving endpoint's section may hold: a key
+        // that reaches somebody's mail names whose mail it reaches, so it is a row provisioned for a user rather than a
+        // value written here. The suite provisions one against the served user once the host is answering, the way an
+        // operator reaches for `mfctl credential create --method api-key`, and the burst that proves the rate limiter is
+        // wired provisions a second user of its own — capacity is counted per user, so two keys of one user would share
+        // a bucket and the test would be measuring nothing.
+        .WithEnvironment("McpEndpoint__Authentication__0__Method", "api-key")
         .WithEnvironment("McpEndpoint__Cors__AllowedOrigins__0", OrchestrationContract.McpPermittedOrigin)
         // The administrative surface, served under the posture worth proving end to end: enabled, on a listener of its
         // own, and behind a credential that is none of the MCP keys above. A socket of its own rather than the shared

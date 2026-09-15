@@ -10,9 +10,18 @@ namespace MailFathom.IntegrationTests.Orchestration;
 
 /// <summary>Resolves the scope a mailbox read runs with, the way a deployment resolves it.</summary>
 /// <remarks>
+/// <para>
 /// A scope names the folders configuration admits a tool to, so one built by hand names none and every read through it
 /// answers with nothing whatever the store holds. Resolving it through the registered resolver is what a production
 /// read does as well, which keeps a test's arrangement from describing a scope no deployment could produce.
+/// </para>
+/// <para>
+/// It resolves under a caller rather than under the process identity, because the scope is the accounts the caller is
+/// assigned and work no caller requested is assigned none — which reaches a test as a refusal rather than as an empty
+/// answer. The grant is empty: what admits the resolution is being a caller at all, and what bounds it is the
+/// assignment relation. A test resolving it inside a scope of its own opens that scope the same way, with
+/// <see cref="OrchestratedMailFathomServices.AsCallerInScopeAsync{TResult}" />.
+/// </para>
 /// </remarks>
 internal static class OrchestratedMailboxScope
 {
@@ -24,8 +33,9 @@ internal static class OrchestratedMailboxScope
     internal static Task<MailboxScope> ReadableAsync(
         OrchestratedMailFathomServices services,
         IReadOnlyList<string> folderAliases,
-        CancellationToken cancellationToken) => services.InScopeAsync(
+        CancellationToken cancellationToken) => services.AsCallerInScopeAsync(
         (scope, _) => Task.FromResult(Readable(scope, folderAliases)),
+        [],
         cancellationToken);
 
     /// <summary>Resolves the same scope inside a service scope a test already opened.</summary>

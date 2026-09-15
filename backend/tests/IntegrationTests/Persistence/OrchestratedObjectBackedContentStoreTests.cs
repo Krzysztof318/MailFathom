@@ -649,6 +649,17 @@ public sealed class OrchestratedObjectBackedContentStoreTests(MailFathomOrchestr
                     AvailableAt = now,
                 };
 
+                // One recipient, because a record naming none is not a state a deployment produces: the mapping every
+                // reader of this table goes through refuses it, so a row seeded without one fails whichever pass over
+                // the account's outbox reaches it next rather than this class's own writes.
+                record.Recipients.Add(new OutgoingEmailRecipientEntity
+                {
+                    OutgoingEmailId = record.Id,
+                    OutgoingEmail = record,
+                    Ordinal = 0,
+                    Address = "recipient@object-backed-content.test",
+                });
+
                 context.OutgoingEmails.Add(record);
                 await context.SaveChangesAsync(token);
 

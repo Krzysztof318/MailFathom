@@ -93,6 +93,12 @@ readonly health_origin="http://$loopback:$health_endpoint_port"
 
 # Fabricated, and none of them outlives the run: the credential is provisioned into a database that is deleted with its
 # container, and the administrative key authenticates one process on loopback.
+# A mail account is a record in the database, and MailFathom persists a reference to a secret rather than the secret:
+# `plaintext:` names no place the material is kept, so it is refused into that column however fabricated the password
+# is. The environment block is the place this run keeps it — the scheme the documentation reserves for exactly this,
+# non-production automation standing a deployment up around a mailbox that dies with the run.
+readonly mailbox_password_variable='MAILFATHOM_END_TO_END_MAILBOX_PASSWORD'
+
 readonly client_username='end-to-end'
 readonly client_password='end-to-end-password'
 readonly admin_api_key_name='end-to-end-admin'
@@ -242,8 +248,13 @@ app_model_pid=$!
 
 postgres_container="${ephemeral_run_prefix}-postgres"
 
+# Probed over TCP rather than over the socket, which is the reading `deploy/helm/mailfathom/templates/postgres-statefulset.yaml`
+# already states for the same server: TCP is the listener a client actually reaches. It matters more here than there,
+# because the image initializes its data directory behind a temporary server that listens on the socket alone — a
+# socket probe reports that one ready, and the shutdown that ends initialization then removes the socket under the very
+# next command, which is a run that fails to connect seconds after being told the database was up.
 wait_until 'The orchestrated PostgreSQL server' 300 "$app_model_pid" \
-  "$container_runtime" exec "$postgres_container" pg_isready --username "$postgres_user_name"
+  "$container_runtime" exec "$postgres_container" pg_isready --host "$loopback" --username "$postgres_user_name"
 
 wait_until 'The orchestrated mail server' 300 "$app_model_pid" \
   curl --fail --silent "http://$loopback:$mail_server_api_port/api/service/readiness"
@@ -290,6 +301,9 @@ cp --recursive frontend/src/Client.App/dist/. "$host_directory/wwwroot"
 # Started from the published directory, which is what the container does and what makes the web root resolve at all: the
 # host reads its content root from the process's working directory, so one started from the repository looks for the
 # bundle there and refuses at startup to serve a client it is in fact carrying.
+#
+# One variable in the block is not configuration at all: the mailbox password, put where the reference the mail account
+# record carries can resolve it. The declaration of its name says why it cannot be written into that record instead.
 env --chdir="$host_directory" \
   ConnectionStrings__mailfathom="Host=$loopback;Port=$postgres_port;Database=$database_name;Username=$postgres_user_name;Password=$postgres_password" \
   DataEncryption__ActiveKeyId="$data_encryption_key_id" \
@@ -308,6 +322,7 @@ env --chdir="$host_directory" \
   AdminEndpoint__Port="$admin_endpoint_port" \
   AdminEndpoint__Authentication__0__ApiKey__Name="$admin_api_key_name" \
   AdminEndpoint__Authentication__0__ApiKey__SecretReference="plaintext:$admin_api_key" \
+  "$mailbox_password_variable"="$mailbox_password" \
   HealthEndpoints__BindAddress="$loopback" \
   HealthEndpoints__Port="$health_endpoint_port" \
   dotnet "$host_directory/MailFathom.Host.dll" \
@@ -334,7 +349,9 @@ served_user="$(
 
 # The mailbox is a mail account record of its own, assigned to that user as it is created. The three transport opt-ins
 # are here rather than in the environment for one reason: the mail server beside this run speaks no TLS, and a
-# deployment reaching a clear-text server has to say so wherever the mailbox is declared.
+# deployment reaching a clear-text server has to say so wherever the mailbox is declared. The language is stated for a
+# different reason: every account names the one MailFathom writes about its mail in, and this run replays an English
+# corpus.
 
 # A refusal answers 200 with the reasons rather than a failing status, because every one of them is something the caller
 # composes the next attempt from. So the outcome is read rather than the status code.
@@ -349,19 +366,20 @@ mailbox_declaration="$(
         --arg host "$loopback" \
         --argjson port "$imap_port" \
         --arg userName "$mailbox_login" \
-        --arg password "$mailbox_password" \
+        --arg passwordReference "env:$mailbox_password_variable" \
         '{
            userId: $user,
            account: ({
              EmailAddress: $emailAddress,
              DisplayName: "End-to-end mailbox",
+             Language: "English",
              Host: $host,
              Port: $port,
              UserName: $userName,
              Secrets: {
                Password: {
                  Name: "end-to-end-mailbox-password",
-                 SecretReference: ("plaintext:" + $password)
+                 SecretReference: $passwordReference
                }
              },
              TransportSecurity: {

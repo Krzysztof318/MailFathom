@@ -5,7 +5,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using MailFathom.Application.Accounts;
-using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.IntegrationTests.Orchestration;
@@ -32,9 +31,6 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
     private const string MovedRowAccount = "refresh-token-binding";
 
     private const string OtherAccount = "refresh-token-binding-other";
-
-    /// <summary>The one identifier two users each hold an account under, which is what the composite key permits.</summary>
-    private const string SharedNameAccount = "refresh-token-shared-name";
 
     /// <summary>One test covers the whole write path, because storing twice is the same operation as storing once.</summary>
     [Fact]
@@ -116,7 +112,7 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         await SaveAsync(services, account, "a-refresh-token", cancellationToken);
 
         // Act — what a restored dump, a mistaken repair, or a stolen row copied into another tenant's account looks
-        // like from the database's side: the same ciphertext under a different user.
+        // like from the database's side: the same ciphertext under a different account.
         await services.InScopeAsync(
             async (scope, token) =>
             {
@@ -125,8 +121,8 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
                 return await dbContext.Database.ExecuteSqlAsync(
                     $"""
                      INSERT INTO mailbox_refresh_tokens
-                         ("UserId", "MailboxAccountId", "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt")
-                     SELECT "UserId", {OtherAccount}, "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt"
+                         ("MailboxAccountId", "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt")
+                     SELECT {OtherAccount}, "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt"
                      FROM mailbox_refresh_tokens
                      WHERE "MailboxAccountId" = {MovedRowAccount}
                      """,
@@ -141,85 +137,6 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
                     MailAccountId.Create(OtherAccount),
                     token),
             cancellationToken));
-    }
-
-    /// <summary>
-    /// Two users each holding a token for an account of one name keep two rows, each opens only its own, and a row
-    /// copied between them refuses to open.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Both halves are new with the composite key. The two rows exist because the table is keyed by the user and the
-    /// identifier together — under the single-column key the second save would have overwritten the first user's
-    /// credential — and the refusal is what keeps the binding meaningful once one identifier no longer names one
-    /// account: bound to the identifier alone, both users' tokens would carry the same associated data and each
-    /// would open as the other's.
-    /// </para>
-    /// <para>
-    /// The copy is written as the database sees it, which is what a restored dump or a mistaken repair amounts to, and
-    /// it is the shape a stolen credential would be planted in.
-    /// </para>
-    /// </remarks>
-    [Fact]
-    public async Task FindTokenAsync_TwoUsersHoldingOneAccountName_EachOpensOnlyTheirOwnToken()
-    {
-        // Arrange
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var foreignUserId = Guid.CreateVersion7();
-        var accountId = MailAccountId.Create(SharedNameAccount);
-        var ours = accountId;
-        var theirs = accountId;
-
-        try
-        {
-            Assert.Equal(
-                PersistenceCommitResult.Committed,
-                await OrchestratedForeignUser.ProvisionAsync(services, foreignUserId, cancellationToken));
-
-            // Act
-            await SaveAsync(services, ours, "our-refresh-token", cancellationToken);
-            await SaveAsync(services, theirs, "their-refresh-token", cancellationToken);
-
-            using var ourToken = await services.InScopeAsync(
-                (scope, token) => scope.GetRequiredService<IMailboxRefreshTokenStore>().FindTokenAsync(ours, token),
-                cancellationToken);
-            using var theirToken = await services.InScopeAsync(
-                (scope, token) => scope.GetRequiredService<IMailboxRefreshTokenStore>().FindTokenAsync(theirs, token),
-                cancellationToken);
-
-            // Assert
-            // Two rows under one identifier, which the single-column key made impossible.
-            Assert.Equal(2, (await ReadRowsAsync(services, SharedNameAccount, cancellationToken)).Count);
-            Assert.NotNull(ourToken);
-            Assert.NotNull(theirToken);
-            Assert.Equal("our-refresh-token", ourToken.RevealAsString());
-            Assert.Equal("their-refresh-token", theirToken.RevealAsString());
-
-            // The other user's ciphertext put under ours: bound to the identifier alone it would open as ours.
-            await services.InScopeAsync(
-                (scope, token) => scope.GetRequiredService<MailFathomDbContext>().Database.ExecuteSqlAsync(
-                    $"""
-                     UPDATE mailbox_refresh_tokens AS ours
-                     SET "SealedRefreshToken" = theirs."SealedRefreshToken",
-                         "DataEncryptionKeyId" = theirs."DataEncryptionKeyId"
-                     FROM mailbox_refresh_tokens AS theirs
-                     WHERE ours."MailboxAccountId" = {SharedNameAccount}
-                       AND ours."UserId" = {SyntheticMailAccount.User.Value}
-                       AND theirs."MailboxAccountId" = {SharedNameAccount}
-                       AND theirs."UserId" = {foreignUserId}
-                     """,
-                    token),
-                cancellationToken);
-
-            await Assert.ThrowsAnyAsync<CryptographicException>(() => services.InScopeAsync(
-                (scope, token) => scope.GetRequiredService<IMailboxRefreshTokenStore>().FindTokenAsync(ours, token),
-                cancellationToken));
-        }
-        finally
-        {
-            await OrchestratedForeignUser.EraseAsync(services, foreignUserId);
-        }
     }
 
     private static async Task SaveAsync(

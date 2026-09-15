@@ -450,7 +450,7 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
         MailFolderResolution binding,
         CancellationToken cancellationToken,
         string? keyword = null,
-        bool? isRemotelyFlagged = null) => services.InScopeAsync(
+        bool? isRemotelyFlagged = null) => services.AsCallerInScopeAsync(
             (scope, token) => scope.GetRequiredService<IStoredEmailTimelineReader>().ReadPageAsync(
                 EmailTimelineFilter.Create(
                     ScopeOf(scope, binding),
@@ -467,12 +467,13 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
                 continueAfter: null,
                 limit: 50,
                 token),
+            [],
             cancellationToken);
 
     private static Task<IReadOnlyList<EmailSearchMatch>> SearchAsync(
         OrchestratedMailFathomServices services,
         MailFolderResolution binding,
-        CancellationToken cancellationToken) => services.InScopeAsync(
+        CancellationToken cancellationToken) => services.AsCallerInScopeAsync(
             async (scope, token) =>
             {
                 var reader = scope.GetRequiredService<IEmailSearchIndexReader>();
@@ -498,6 +499,7 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
                     candidates,
                     token);
             },
+            [],
             cancellationToken);
 
     private static MailboxScope ScopeOf(IServiceProvider scope, MailFolderResolution binding) =>

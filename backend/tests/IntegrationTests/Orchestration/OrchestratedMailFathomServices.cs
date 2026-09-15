@@ -14,11 +14,13 @@ using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Move;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.AttachmentText.Limits;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs.Execution;
@@ -433,6 +435,15 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // the deriver takes the pacer by key — so the first orchestrated test to resolve an attachment pass would fail
         // to build the container rather than fail an assertion.
         builder.Services.AddSingleton(AttachmentDerivationBudget.Unbounded);
+        // What one attachment may cost to parse, at the shipped values because nothing here parses one: the suite
+        // commits a reading through the store rather than extracting it. Registered rather than left out because
+        // AddInfrastructure hands it to every attachment reader it composes, so its absence fails to build the
+        // container for a test that never reaches an attachment at all.
+        builder.Services.AddSingleton(new AttachmentTextExtractionOptions());
+        // The message and run ceilings beside it, and disabled for the same reason the suite reads no attachment: it
+        // is what a deployment that turned nothing on is bounded by, and the workload reader resolves it to decide
+        // which mail is still owed a reading.
+        builder.Services.AddSingleton(EmailAttachmentTextBounds.Disabled);
         builder.Services.AddKeyedScoped(
             ServiceCollectionExtensions.ImageDescriptionPacerKey,
             (provider, _) => ProviderRequestPacer.Create(
@@ -468,6 +479,12 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddScoped(_ => new StatedAuthorizedPrincipalSource());
         builder.Services.AddScoped<IAuthorizedPrincipalSource>(provider =>
             provider.GetRequiredService<StatedAuthorizedPrincipalSource>());
+        // Registered by the composition root beside the database health checks rather than by AddInfrastructure, so
+        // the resolver that reads a secret straight off the pool — a bare command rather than a unit of work — would
+        // find nothing to bound itself by here. The shipped default, because nothing this suite asserts is about a
+        // command outliving its bound.
+        builder.Services.AddSingleton(new DatabaseCommandTimeout(
+            TimeSpan.FromSeconds(HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds)));
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(orchestration.DatabaseConnectionString, null, null),
             PostgresTextSearchConfiguration.Default,
@@ -561,16 +578,16 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         var host = builder.Build();
         await host.StartAsync(cancellationToken);
 
-        // Nothing owns the host between starting it and handing it to the wrapper, and the read below throws whenever
-        // the database holds anything but exactly one user — the state a class that provisions a second user leaves
-        // if its erasure did not run. Without this the caller's `await using` never binds, so the started host keeps
-        // its data source and pooled connections for the rest of the suite and every later start leaks another. The
-        // user is recorded after the start rather than before it, because the connection string that reaching the
-        // database needs is composed while the host starts.
+        // Nothing owns the host between starting it and handing it to the wrapper, and the reads below reach a database
+        // that may refuse them — a suite label the schema no longer carries, a connection the server closed. Without
+        // this the caller's `await using` never binds, so the started host keeps its data source and pooled connections
+        // for the rest of the suite and every later start leaks another. The user is recorded after the start rather
+        // than before it, because the connection string that reaching the database needs is composed while the host
+        // starts.
         try
         {
             await RecordTheSuiteUserUnlessOneIsHeldAsync(host, cancellationToken);
-            deploymentUser.Resolved(await ReadSoleUserAsync(host, cancellationToken));
+            deploymentUser.Resolved(await ReadSuiteUserAsync(host, cancellationToken));
             await AssignTheSuiteAccountUnlessItIsHeldAsync(host, deploymentUser.User, cancellationToken);
         }
         catch
@@ -668,14 +685,16 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Reads the one user the orchestrated database holds, which the harness recorded before the first start.</summary>
+    /// <summary>Reads the user this harness records its mail under, which is the row carrying the suite's own label.</summary>
     /// <remarks>
     /// The identifier is the database's rather than the harness's because the schema keys onto it: a contact names its
     /// user through a foreign key, so a stated identifier would name a row that does not exist. It is read once, after
     /// the migrations have run and before any test reaches a scope, exactly where a deployment's own startup gate reads
-    /// it.
+    /// it. Sought by the label rather than as the only row, because a class proving something about two users holds a
+    /// second one while it runs, and a start made during that stretch belongs to the suite's user exactly as any other
+    /// does; the label's unique index is what makes the read single.
     /// </remarks>
-    private static async Task<MailUserId> ReadSoleUserAsync(IHost host, CancellationToken cancellationToken)
+    private static async Task<MailUserId> ReadSuiteUserAsync(IHost host, CancellationToken cancellationToken)
     {
         await using var scope = host.Services.CreateAsyncScope();
 
@@ -683,6 +702,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             .GetRequiredService<MailFathomDbContext>()
             .UserAccounts
             .AsNoTracking()
+            .Where(user => user.DisplayName == SuiteUserDisplayName)
             .Select(user => user.Id)
             .SingleAsync(cancellationToken);
 

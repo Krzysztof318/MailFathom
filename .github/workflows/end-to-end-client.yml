@@ -121,6 +121,10 @@ jobs:
         with:
           name: end-to-end-client-browser
           path: 'frontend/.playwright-end-to-end/**'
+          # The directory's name begins with a dot, and this action passes over a hidden path unless it is told not to.
+          # Without this the upload succeeded and carried nothing, which `if-no-files-found: ignore` then said nothing
+          # about — a failed run whose whole diagnosis was an artifact that was never there.
+          include-hidden-files: true
           if-no-files-found: ignore
 
       # What each step of standing the deployment up printed, which is where a failure before the browser is read.

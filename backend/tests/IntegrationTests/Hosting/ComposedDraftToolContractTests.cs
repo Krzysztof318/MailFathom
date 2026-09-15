@@ -47,7 +47,7 @@ public sealed class ComposedDraftToolContractTests(MailFathomOrchestrationFixtur
         var cancellationToken = TestContext.Current.CancellationToken;
         var accountId = (await orchestration.ComposedHostAccountIdAsync(cancellationToken)).Value;
 
-        using var client = await orchestration.OpenMcpEndpointClientAsync(cancellationToken);
+        using var client = await orchestration.OpenServedMcpEndpointClientAsync(cancellationToken);
         using var saveRequest = McpToolCall.Of(
             "save_draft",
             new

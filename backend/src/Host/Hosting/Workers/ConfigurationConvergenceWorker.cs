@@ -37,26 +37,27 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
 
     private readonly ConfigurationChangeAnnouncements announcements;
     private readonly ServedMailUsersConvergence users;
-    private readonly RootSettingsReloader? rootSettings;
+    private readonly Func<RootSettingsReloader?> rootSettings;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<ConfigurationConvergenceWorker> logger;
 
     /// <summary>Initializes the worker over the readings it runs.</summary>
     /// <param name="announcements">What another replica's change is heard through.</param>
     /// <param name="users">Brings the roster up to the users' records.</param>
-    /// <param name="rootSettings">Brings the persisted layer up to the deployment's document, or <see langword="null" /> where the host composed no persisted layer.</param>
+    /// <param name="rootSettings">Resolves what brings the persisted layer up to the deployment's document, answering <see langword="null" /> where the host composed no persisted layer.</param>
     /// <param name="timeProvider">What the interval is measured by.</param>
     /// <param name="logger">Records a reading that failed.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     public ConfigurationConvergenceWorker(
         ConfigurationChangeAnnouncements announcements,
         ServedMailUsersConvergence users,
-        RootSettingsReloader? rootSettings,
+        Func<RootSettingsReloader?> rootSettings,
         TimeProvider timeProvider,
         ILogger<ConfigurationConvergenceWorker> logger)
     {
         ArgumentNullException.ThrowIfNull(announcements);
         ArgumentNullException.ThrowIfNull(users);
+        ArgumentNullException.ThrowIfNull(rootSettings);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
@@ -70,6 +71,12 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Resolved here rather than taken at construction, because the reader beneath it holds the connection pool and
+        // the pool cannot be built until startup composed the connection string. Every hosted service is constructed
+        // before any of them is started, so asking for this one at construction builds that pool a phase too early and
+        // ends the process on a connection string that does not exist yet.
+        var persistedSettings = this.rootSettings();
+
         var listening = false;
 
         while (!stoppingToken.IsCancellationRequested)
@@ -78,9 +85,9 @@ internal sealed partial class ConfigurationConvergenceWorker : BackgroundService
 
             await this.WaitForAnnouncementOrIntervalAsync(stoppingToken);
 
-            if (this.rootSettings is not null)
+            if (persistedSettings is not null)
             {
-                await this.ReadInIsolationAsync(this.rootSettings.ReloadAsync, stoppingToken);
+                await this.ReadInIsolationAsync(persistedSettings.ReloadAsync, stoppingToken);
             }
 
             await this.ReadInIsolationAsync(this.users.ConvergeAsync, stoppingToken);

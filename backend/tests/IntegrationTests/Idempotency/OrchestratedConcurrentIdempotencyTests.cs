@@ -386,15 +386,22 @@ public sealed class OrchestratedConcurrentIdempotencyTests(MailFathomOrchestrati
     /// <summary>Counts this class's messages that carry the stamp, which the message left queued would be reported by.</summary>
     private static Task<int> CountStampedMessagesAsync(
         OrchestratedMailFathomServices services,
-        CancellationToken cancellationToken) => services.InScopeAsync(
+        CancellationToken cancellationToken)
+    {
+        // The alias as the binding wrote it: the domain compares an alias in one case and stores it in that case, so a
+        // count written against the spelling of the constant matches no row and reads as an operation that did nothing.
+        var storedAlias = MailFolderAlias.Create(FolderAlias).Value;
+
+        return services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailFathomDbContext>().StoredEmails
                 .AsNoTracking()
                 .CountAsync(
                     storedEmail => storedEmail.MailFolder.MailboxAccountId == SyntheticMailAccount.AccountId.Value
-                        && storedEmail.MailFolder.Alias == FolderAlias
+                        && storedEmail.MailFolder.Alias == storedAlias
                         && storedEmail.RulesEvaluatedAt == EvaluatedAt,
                     token),
             cancellationToken);
+    }
 
     private static Task<DateTimeOffset?> ReadStampAsync(
         OrchestratedMailFathomServices services,

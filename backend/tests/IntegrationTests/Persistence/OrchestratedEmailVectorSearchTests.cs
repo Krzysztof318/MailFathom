@@ -60,13 +60,17 @@ public sealed class OrchestratedEmailVectorSearchTests(MailFathomOrchestrationFi
         await StoreEveryVectorAsync(services, farther, profileId, axis: 1, cancellationToken);
 
         // Act
-        var rankings = await services.InScopeAsync(
+        // Read as a caller rather than as the process, for the reason OrchestratedMailOwnershipTests states: the scope
+        // a read model resolves is the accounts the caller is assigned, and work no caller requested is assigned none.
+        // The grant is empty because this reader is a store rather than a published use case.
+        var rankings = await services.AsCallerInScopeAsync(
             (scope, token) => scope.GetRequiredService<IEmailVectorSearchIndexReader>().ReadNearestCandidatesAsync(
                 SelectionOf(scope, binding),
                 profile,
                 QueryVector(),
                 limit: 50,
                 token),
+            [],
             cancellationToken);
 
         // Assert

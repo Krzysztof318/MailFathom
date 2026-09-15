@@ -142,9 +142,10 @@ public sealed class ComposedAdminEndpointSecurityTests
         // Arrange
         using var adminClient = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
         using var mcpClient = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
+        var mcpKey = await this.orchestration.ComposedHostMcpApiKeyAsync(TestContext.Current.CancellationToken);
 
         // Act
-        using var mcpKeyOnAdminEndpoint = SessionRequest(OrchestrationContract.McpApiKey);
+        using var mcpKeyOnAdminEndpoint = SessionRequest(mcpKey);
         using var administrativeRefusal = await adminClient.SendAsync(
             mcpKeyOnAdminEndpoint,
             TestContext.Current.CancellationToken);
@@ -177,11 +178,18 @@ public sealed class ComposedAdminEndpointSecurityTests
         // Arrange
         using var client = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
 
+        // The refused route reads one user's book and says so in its signature, so the request names a user even though
+        // the grant stops it before anything is read: an unbound required parameter fails while the request delegate is
+        // being invoked, which is ahead of the filter and would answer a fault where a refusal is the claim.
+        var user = await this.orchestration.ComposedHostUserAsync(TestContext.Current.CancellationToken);
+
         // Act
         using var permittedRequest = AuthenticatedGet("/api/admin/rules", OrchestrationContract.AdminNarrowedApiKey);
         using var permitted = await client.SendAsync(permittedRequest, TestContext.Current.CancellationToken);
 
-        using var refusedRequest = AuthenticatedGet("/api/admin/contacts", OrchestrationContract.AdminNarrowedApiKey);
+        using var refusedRequest = AuthenticatedGet(
+            $"/api/admin/contacts?user={user:D}",
+            OrchestrationContract.AdminNarrowedApiKey);
         using var refused = await client.SendAsync(refusedRequest, TestContext.Current.CancellationToken);
 
         // Assert

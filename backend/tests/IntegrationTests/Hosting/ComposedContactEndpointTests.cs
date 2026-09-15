@@ -80,6 +80,9 @@ public sealed class ComposedContactEndpointTests
         // Arrange
         using var client = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
 
+        // A book belongs to one user rather than to the deployment, so every route over it names whose book is meant.
+        var user = await this.orchestration.ComposedHostUserAsync(TestContext.Current.CancellationToken);
+
         // An address of this test's own, so the book's uniqueness rule cannot collide with another class's contact.
         var address = $"composed-contact-{Guid.NewGuid():N}@example.test";
 
@@ -87,7 +90,7 @@ public sealed class ComposedContactEndpointTests
         using var recorded = await this.SendAsync(
             client,
             HttpMethod.Post,
-            ContactsRoute,
+            $"{ContactsRoute}?user={user:D}",
             JsonContent.Create(new
             {
                 displayName = "Composed Endpoint Contact",
@@ -105,13 +108,13 @@ public sealed class ComposedContactEndpointTests
 
         var identity = written.RootElement.GetProperty("contact").GetProperty("id").GetGuid();
 
-        using var byIdentity = await this.SendAsync(client, HttpMethod.Get, $"{ContactsRoute}/{identity:D}");
+        using var byIdentity = await this.SendAsync(client, HttpMethod.Get, $"{ContactsRoute}/{identity:D}?user={user:D}");
         using var byAddress = await this.SendAsync(
             client,
             HttpMethod.Get,
-            $"{ContactsRoute}/by-address?address={Uri.EscapeDataString(address.ToUpperInvariant())}");
-        using var erased = await this.SendAsync(client, HttpMethod.Delete, $"{ContactsRoute}/{identity:D}");
-        using var afterwards = await this.SendAsync(client, HttpMethod.Get, $"{ContactsRoute}/{identity:D}");
+            $"{ContactsRoute}/by-address?user={user:D}&address={Uri.EscapeDataString(address.ToUpperInvariant())}");
+        using var erased = await this.SendAsync(client, HttpMethod.Delete, $"{ContactsRoute}/{identity:D}?user={user:D}");
+        using var afterwards = await this.SendAsync(client, HttpMethod.Get, $"{ContactsRoute}/{identity:D}?user={user:D}");
 
         // Assert
         Assert.Equal(identity, await ContactIdentityOf(byIdentity));

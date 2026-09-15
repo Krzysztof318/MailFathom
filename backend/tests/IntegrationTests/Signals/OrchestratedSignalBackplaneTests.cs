@@ -5,16 +5,18 @@
 using System.Globalization;
 using System.Text.Json;
 using MailFathom.AppHost;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Signals;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Signals;
 using MailFathom.IntegrationTests.Hosting;
 using MailFathom.IntegrationTests.Orchestration;
-using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace MailFathom.IntegrationTests.Signals;
@@ -38,9 +40,10 @@ namespace MailFathom.IntegrationTests.Signals;
 /// </para>
 /// <para>
 /// It joins the composed-host collection for that collection's ordering rather than for its fixture — the two hosts
-/// bind ports of their own and reach the orchestrated mailbox not at all — and takes two values from it: the
+/// bind ports of their own and reach the orchestrated mailbox not at all — and takes three values from it: the
 /// orchestrated database, because a signal ticket is minted on one replica and redeemed on the other and the store
-/// behind it is PostgreSQL, and the address the orchestration published the RESP server at.
+/// behind it is PostgreSQL, the address the orchestration published the RESP server at, and the user the deployment
+/// holds, because a ticket is a row keyed onto that record.
 /// </para>
 /// </remarks>
 [Collection(ComposedHostCollectionDefinition.Name)]
@@ -60,8 +63,7 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
     /// </remarks>
     private static readonly TimeSpan RaiseInterval = TimeSpan.FromMilliseconds(250);
 
-    private static readonly MailAccountId Account =
-        MailAccountId.Create("work");
+    private static readonly MailAccountId Account = MailAccountId.Create("work");
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
 
@@ -76,11 +78,16 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
         var cancellationToken = TestContext.Current.CancellationToken;
         var ports = OrchestrationContract.FindFreePorts(2);
 
-        await using var raising = await this.StartAsync(ports[0], cancellationToken);
-        await using var holding = await this.StartAsync(ports[1], cancellationToken);
+        // The person is the deployment's own rather than stated, because a ticket is a row keyed onto the user record
+        // and a stated identifier would be refused by that foreign key. The mailbox they are served is this class's,
+        // through the substitute both replicas are composed with.
+        var user = MailUserId.Create(await orchestration.ComposedHostUserAsync(cancellationToken));
+
+        await using var raising = await this.StartAsync(ports[0], user, cancellationToken);
+        await using var holding = await this.StartAsync(ports[1], user, cancellationToken);
 
         var ticket = await holding.Services.GetRequiredService<ClientSignalTickets>()
-                .MintAsync(SyntheticMailUser.Deployment, cancellationToken)
+                .MintAsync(user, cancellationToken)
             ?? throw new InvalidOperationException("The host holding the connection refused to mint a signal ticket.");
 
         await using var connection = ConnectionTo(ports[1], ticket.Value);
@@ -160,7 +167,7 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
             .Build();
 
     /// <summary>Composes one replica: the client surface on its own socket, over the endpoint the orchestration published.</summary>
-    private Task<InProcessComposedHost> StartAsync(int port, CancellationToken cancellationToken) =>
+    private Task<InProcessComposedHost> StartAsync(int port, MailUserId served, CancellationToken cancellationToken) =>
         InProcessComposedHost.StartAsync(
             [
                 // The orchestration's own database rather than the shape's unreachable default, because a ticket is
@@ -185,5 +192,27 @@ public sealed class OrchestratedSignalBackplaneTests(MailFathomOrchestrationFixt
                     $"plaintext:{orchestration.SignalBackplaneConnectionString}"),
             ],
             cancellationToken,
+            builder =>
+            {
+                builder.Services.RemoveAll<IMailAccountAssignments>();
+                builder.Services.AddSingleton<IMailAccountAssignments>(new OneMailboxOnePerson(served));
+            },
             overRealSockets: true);
+
+    /// <summary>States one mailbox served to one person, which is the relation a raised signal is fanned out over.</summary>
+    /// <remarks>
+    /// Substituted rather than arranged, because the relation is not what this class establishes. Whose connection a
+    /// signal naming a mailbox reaches is decided from the deployment's own account records, and what those records
+    /// hold is asserted where they are written; a replica here only has to agree that the person holding the
+    /// connection is served the mailbox the signal names, and writing a record for that would make the class about
+    /// the records instead of about the crossing.
+    /// </remarks>
+    private sealed class OneMailboxOnePerson(MailUserId served) : IMailAccountAssignments
+    {
+        /// <inheritdoc />
+        public IReadOnlyList<MailAccountId> AccountsAssignedTo(MailUserId user) => user == served ? [Account] : [];
+
+        /// <inheritdoc />
+        public IReadOnlyList<MailUserId> UsersAssignedTo(MailAccountId account) => account == Account ? [served] : [];
+    }
 }

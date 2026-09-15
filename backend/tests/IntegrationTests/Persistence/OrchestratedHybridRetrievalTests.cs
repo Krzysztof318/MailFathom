@@ -124,11 +124,12 @@ public sealed class OrchestratedHybridRetrievalTests(MailFathomOrchestrationFixt
             cancellationToken);
 
         // Act
-        var lookup = await services.InScopeAsync(
+        var lookup = await services.AsCallerInScopeAsync(
             (scope, token) => scope.GetRequiredService<MailboxKnowledgeSearch>().FindPassagesAsync(
                 OrchestratedMailboxScope.Readable(scope, [FolderAlias]),
                 EmailKnowledgeQuery.ForText(QueryTerm),
                 token),
+            [],
             cancellationToken);
 
         // Assert
@@ -155,7 +156,7 @@ public sealed class OrchestratedHybridRetrievalTests(MailFathomOrchestrationFixt
     /// <summary>Runs the full-text ranking on its own, which is what the fused window is read against.</summary>
     private static Task<IReadOnlyList<StoredEmailId>> LexicalCandidatesAsync(
         OrchestratedMailFathomServices services,
-        CancellationToken cancellationToken) => services.InScopeAsync(
+        CancellationToken cancellationToken) => services.AsCallerInScopeAsync(
             async (scope, token) =>
             {
                 var candidates = await scope.GetRequiredService<IEmailSearchIndexReader>().ReadRankedCandidatesAsync(
@@ -166,6 +167,7 @@ public sealed class OrchestratedHybridRetrievalTests(MailFathomOrchestrationFixt
 
                 return (IReadOnlyList<StoredEmailId>)[.. candidates.Select(candidate => candidate.StoredEmailId)];
             },
+            [],
             cancellationToken);
 
     private static SearchEmailsRequest SearchRequest() => new()

@@ -41,7 +41,7 @@ public sealed class ComposedContactToolContractTests(MailFathomOrchestrationFixt
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        using var client = await orchestration.OpenMcpEndpointClientAsync(cancellationToken);
+        using var client = await orchestration.OpenServedMcpEndpointClientAsync(cancellationToken);
 
         // Act
         using var created = await CallAsync(
