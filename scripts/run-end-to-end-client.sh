@@ -242,8 +242,13 @@ app_model_pid=$!
 
 postgres_container="${ephemeral_run_prefix}-postgres"
 
+# Probed over TCP rather than over the socket, which is the reading `deploy/helm/mailfathom/templates/postgres-statefulset.yaml`
+# already states for the same server: TCP is the listener a client actually reaches. It matters more here than there,
+# because the image initializes its data directory behind a temporary server that listens on the socket alone — a
+# socket probe reports that one ready, and the shutdown that ends initialization then removes the socket under the very
+# next command, which is a run that fails to connect seconds after being told the database was up.
 wait_until 'The orchestrated PostgreSQL server' 300 "$app_model_pid" \
-  "$container_runtime" exec "$postgres_container" pg_isready --username "$postgres_user_name"
+  "$container_runtime" exec "$postgres_container" pg_isready --host "$loopback" --username "$postgres_user_name"
 
 wait_until 'The orchestrated mail server' 300 "$app_model_pid" \
   curl --fail --silent "http://$loopback:$mail_server_api_port/api/service/readiness"
