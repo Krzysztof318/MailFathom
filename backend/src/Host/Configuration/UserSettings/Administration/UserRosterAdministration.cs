@@ -381,10 +381,13 @@ internal sealed partial class UserRosterAdministration(
 
     /// <remarks>
     /// Named neither by user nor by account, for the reason the line above is: what an operator acts on came back in
-    /// the refusal itself, and this records that the deployment declined to erase rather than failing to.
+    /// the refusal itself, and this records that the deployment declined to erase rather than failing to. It names no
+    /// cause either, because every refusal reaches it — a wait that ran out of its bound, an account whose assignments
+    /// changed under the request, a job claimed between the wait and the lock, and a supervision hold lost part-way —
+    /// and the sentence the caller was answered with is what says which.
     /// </remarks>
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "An erasure was refused because work bound to the user's own mail accounts did not stop within the bound. Nothing was erased, and the runtime roster goes on serving them.")]
+        Message = "An erasure was refused because work bound to the user's own mail accounts was still in flight. Nothing was erased, and the runtime roster goes on serving them.")]
     private partial void LogUserErasureRefused();
 }

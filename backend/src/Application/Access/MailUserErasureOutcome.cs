@@ -10,8 +10,9 @@ namespace MailFathom.Application.Access;
 /// which is the no-op the caller asked for rather than a failure.
 /// </param>
 /// <param name="UnquiescedAccount">
-/// The mail account the erasure could not establish was still, or <see langword="null" /> when every account it was
-/// about to delete was covered for the whole transaction. It is set only where nothing was written.
+/// The mail account the erasure could not establish was quiesced for the whole of its transaction — either no hold
+/// covered it, or a job was found claimed for it under the lock — or <see langword="null" /> when every account it was
+/// about to delete was covered throughout. It is set only where nothing was written.
 /// </param>
 /// <remarks>
 /// The refusal exists because what the caller stopped before it asked and what the transaction finds are two readings

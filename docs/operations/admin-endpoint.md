@@ -1260,10 +1260,24 @@ does go from it is what the erased user themselves authored there — their draf
 since those are the departing person's rather than the mailbox's, and an erasure that left them would leave that person
 still present in a colleague's mailbox.
 
-Both waits are bounded at **30 seconds**, and running out of that is a `409` naming what is still running — the mailbox
-a synchronization run has not finished with, or the one a job is still held for. **Nothing at all is erased when it
-answers that**, and the user goes on being served exactly as before, so the same request is worth repeating once the
-run or the job has ended:
+**One deadline of 30 seconds covers both waits** — the supervision of every mailbox and then the jobs held for them —
+rather than one each, so a request that spent most of it waiting for a mailbox has that much less left for the queue.
+Four different refusals come back as a `409`, each naming the mailbox it is about, and **nothing at all is erased when
+one answers**: the user goes on being served exactly as before, and the same request is worth repeating.
+
+- **The mailbox is still being synchronized.** The deadline ran out with a run holding it, here or on another replica.
+  Ask again once the run has ended.
+- **A job is still running for the mailbox.** The deadline ran out with a handler holding a job keyed to it. Ask again
+  once it has finished.
+- **The mailbox was still being worked on when the erasure reached it.** Both waits succeeded, and the transaction then
+  found the mailbox in a state neither had covered — an assignment that ended after the request read who holds what,
+  leaving a mailbox solely this user's that nothing was holding, or a job claimed in the moment between the wait and the
+  deletion. Ask again.
+- **The mailbox stopped being held part-way through the erasure.** A supervision hold could not be renewed while the
+  deletion ran, so it was rolled back rather than committed while another replica could take the mailbox back. Ask
+  again.
+
+The first of them reads:
 
 ```console
 $ mfctl user remove --user 3f1d...

@@ -132,12 +132,22 @@ public sealed class MailAccountWorkQuiesceTests
         var leases = StoreGrantingClaims(clock);
         await using var services = Composed(leases, JobsInFlightFor());
         var quiescing = Quiescing(services, clock);
+        var ran = false;
 
         // Act
-        var refusal = await quiescing.RunQuiescedAsync([], _ => Task.CompletedTask, TestContext.Current.CancellationToken);
+        var refusal = await quiescing.RunQuiescedAsync(
+            [],
+            _ =>
+            {
+                ran = true;
+
+                return Task.CompletedTask;
+            },
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(refusal);
+        Assert.True(ran);
         await leases.DidNotReceive()
             .ClaimAsync(Arg.Any<WorkScope>(), Arg.Any<WorkLeaseHolder>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
     }

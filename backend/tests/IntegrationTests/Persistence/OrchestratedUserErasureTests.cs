@@ -262,16 +262,30 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
                 cancellationToken);
             var supervising = await TakeSupervisionAsync(otherReplica, account, cancellationToken);
 
+            // The arrangement is the claim's whole premise, so a scope this replica was refused says so here rather
+            // than as a failure further down.
+            Assert.NotNull(supervising);
+
+            string? refusal;
+            IReadOnlyDictionary<string, long> rowsWhileSupervised;
+
             // Act
-            var refusal = await quiescing.RunQuiescedAsync(
-                [account],
-                token => EraseAsync(services, erasedUserId, token),
-                cancellationToken);
+            try
+            {
+                refusal = await quiescing.RunQuiescedAsync(
+                    [account],
+                    token => EraseAsync(services, erasedUserId, token),
+                    cancellationToken);
 
-            var rowsWhileSupervised = await CountRowsNamingAccountAsync(services, ErasedAccount, cancellationToken);
-
-            await supervising!.ReleaseAsync();
-            supervising.Dispose();
+                rowsWhileSupervised = await CountRowsNamingAccountAsync(services, ErasedAccount, cancellationToken);
+            }
+            finally
+            {
+                // A ten-minute lease on this account is left behind otherwise, and the class's next test would then be
+                // refused on supervision rather than on the job claim it is about.
+                await supervising.ReleaseAsync();
+                supervising.Dispose();
+            }
 
             var refusalAfterTheRunEnded = await quiescing.RunQuiescedAsync(
                 [account],
