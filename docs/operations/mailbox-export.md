@@ -58,9 +58,9 @@ rather than starting a second; asking for a different scope while one is running
 **Following it reports progress.** The message and byte counts advance as the archive is written, about once every
 hundred messages, so a long export is visibly moving rather than merely not finished.
 
-**Cancelling — `mfctl export cancel --account work --export <id>` — stops it within one message** and deletes whatever
-had been written. The archive never existed as far as anything outside the job is concerned: an abandoned write leaves
-nothing under its key.
+**Cancelling — `mfctl export cancel --account work --export <id>` — stops it at the next checkpoint**, so within a
+hundred messages rather than at the end of the mailbox, and deletes whatever had been written. The archive never existed
+as far as anything outside the job is concerned: an abandoned write leaves nothing under its key.
 
 **Downloading streams.** The archive is served straight from the object store as `application/zip`, and `mfctl export
 download` writes it to disk as it arrives, so neither the deployment nor the terminal holds a multi-gigabyte file in

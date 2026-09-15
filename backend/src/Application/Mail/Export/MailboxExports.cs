@@ -252,8 +252,9 @@ public sealed class MailboxExports
     /// <exception cref="MailboxExportRefusedException">Thrown when the account holds no export under that identity.</exception>
     /// <remarks>
     /// Cancelling one that already finished is not a failure and not a cancellation either: the archive is there and the
-    /// act to take on it is a deletion, so the export is answered as it stands. The writing job reads the record between
-    /// messages, so a cancellation reaches it within one message rather than at the end of the mailbox.
+    /// act to take on it is a deletion, so the export is answered as it stands. The writing job reads the record at its
+    /// checkpoint, once every hundred messages, so a cancellation reaches it within a hundred messages rather than at
+    /// the end of the mailbox.
     /// </remarks>
     public async Task<MailboxExport> CancelAsync(
         MailAccountId account,

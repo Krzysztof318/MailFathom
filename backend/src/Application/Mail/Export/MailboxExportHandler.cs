@@ -21,8 +21,10 @@ namespace MailFathom.Application.Mail.Export;
 /// the store is left holding nothing under the key, and the export is asked for again.
 /// </para>
 /// <para>
-/// It reads the export's record between messages, so an operator's cancellation reaches it within one message rather
-/// than at the end of a mailbox, and so does the size limit it is enforcing against what has actually been written.
+/// It reads the export's record at a checkpoint, once every hundred messages, so an operator's cancellation reaches it
+/// within a hundred messages rather than at the end of a mailbox. The size limit is asked before every message instead
+/// of at that checkpoint, because a message admitted past the bound is already in the archive by the time the next
+/// checkpoint could refuse it.
 /// </para>
 /// <para>
 /// Nothing here holds more than one message: the walk hands out identities, the content store answers one payload, and
