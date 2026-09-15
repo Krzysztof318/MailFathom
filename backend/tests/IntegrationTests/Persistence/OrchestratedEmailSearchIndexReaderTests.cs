@@ -142,7 +142,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
         var selection = await SeededSelectionAsync(services, cancellationToken);
 
         // Act
-        var trackedEntityCount = await services.InScopeAsync(
+        var trackedEntityCount = await services.AsCallerInScopeAsync(
             async (scope, token) =>
             {
                 var matches = await RankedWindowAsync(
@@ -156,6 +156,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
 
                 return scope.GetRequiredService<MailFathomDbContext>().ChangeTracker.Entries().Count();
             },
+            [],
             cancellationToken);
 
         // Assert
@@ -179,13 +180,14 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
         string queryText,
         CancellationToken cancellationToken,
         MailboxEmailSelection? selection = null,
-        EmailSearchSnippetBounds? snippetBounds = null) => services.InScopeAsync(
+        EmailSearchSnippetBounds? snippetBounds = null) => services.AsCallerInScopeAsync(
             (scope, token) => RankedWindowAsync(
                 scope.GetRequiredService<IEmailSearchIndexReader>(),
                 selection ?? SeededSelection(scope),
                 queryText,
                 snippetBounds ?? EmailSearchSnippetBounds.Default,
                 token),
+            [],
             cancellationToken);
 
     /// <summary>Runs both halves of the port the way the use case does: rank the mail, then read the window it chose.</summary>
@@ -233,8 +235,9 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
 
         await EnsureSeededAsync(services, binding, cancellationToken);
 
-        return await services.InScopeAsync(
+        return await services.AsCallerInScopeAsync(
             (scope, _) => Task.FromResult(SeededSelection(scope)),
+            [],
             cancellationToken);
     }
 

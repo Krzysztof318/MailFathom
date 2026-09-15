@@ -145,33 +145,16 @@ public static class OrchestrationContract
     /// <summary>The environment variable the mutual-TLS host reads its one client-certificate trust anchor from.</summary>
     public const string MutualTlsClientTrustAnchorVariable = "MAILFATHOM_INTEGRATIONTESTS_CLIENT_TRUST_ANCHOR";
 
-    /// <summary>The name the integration-test topology configures its one MCP API key under.</summary>
-    /// <remarks>Present only under <see cref="IntegrationTestingArgument" />, like the key itself.</remarks>
-    public const string McpApiKeyName = "integration-tests";
-
-    /// <summary>The MCP API key the integration-test topology's host accepts.</summary>
+    /// <summary>The environment variable the composed host reads its one mailbox's password from.</summary>
     /// <remarks>
-    /// A literal for the same reason <see cref="MailServerAccountPassword" /> is one, and under the same restriction.
-    /// It authenticates against one host that exists for the duration of one test run, is reachable only from that run,
-    /// and is destroyed with it; there is no deployment it could also unlock. Declaring it here is what keeps the app
-    /// model that configures the endpoint and the suite that calls it reading one value, so a change cannot reach only
-    /// one side and surface as an authentication failure that says nothing about the behavior under test. Nothing
-    /// outside the ephemeral topology may use it.
+    /// The account record the suite writes names the password by reference rather than carrying it, because a record
+    /// persisted with a <c>plaintext:</c> reference is refused: material in the column a user's declarations live in is
+    /// the one outcome that check exists to prevent. The material itself is
+    /// <see cref="MailServerAccountPassword" />, handed to the host here so the reference resolves to the same
+    /// throwaway mailbox the mail server was created with.
     /// </remarks>
-    public const string McpApiKey = "integration-tests-only-mcp-api-key";
-
-    /// <summary>The name the integration-test topology configures a second, deliberately expendable MCP API key under.</summary>
-    /// <remarks>
-    /// A rate limit is counted per client, so a test that exhausts one has to exhaust a client nothing else in the suite
-    /// depends on. This key exists to be spent: the burst that proves the limiter is wired takes it to zero, and
-    /// <see cref="McpApiKeyName" /> keeps its own capacity untouched, which is also what makes the partitions'
-    /// independence observable from outside the process.
-    /// </remarks>
-    public const string McpExpendableApiKeyName = "integration-tests-expendable";
-
-    /// <summary>The second MCP API key the integration-test topology's host accepts.</summary>
-    /// <remarks>A literal under the same restriction as <see cref="McpApiKey" />, and it authenticates the same ephemeral host.</remarks>
-    public const string McpExpendableApiKey = "integration-tests-only-mcp-expendable-key";
+    public const string ComposedHostMailboxPasswordVariable =
+        "MAILFATHOM_INTEGRATIONTESTS_COMPOSED_HOST_MAILBOX_PASSWORD";
 
     /// <summary>The burst one MCP client may spend in the integration-test topology before it is refused.</summary>
     /// <remarks>
@@ -181,8 +164,8 @@ public static class OrchestrationContract
     /// </para>
     /// <para>
     /// It bounds two different things at once, because the limiter partitions by client and carries one capacity for
-    /// every partition. <see cref="McpExpendableApiKeyName" /> spends it deliberately, once, and stays spent — the
-    /// replenishment period outlasts the run. <see cref="McpApiKeyName" /> spends it one request at a time across
+    /// every partition. The expendable user the burst test provisions spends it deliberately, once, and stays spent —
+    /// the replenishment period outlasts the run. The served user spends it one request at a time across
     /// *every* composed-host test that reaches the MCP endpoint, and that spending is cumulative for the same reason:
     /// nothing is restored between classes. So this number has to stay above what the whole collection sends with that
     /// key, and a class added to the collection spends from the same bucket as the ones already there. At twenty it was
@@ -204,8 +187,8 @@ public static class OrchestrationContract
     /// </para>
     /// <para>
     /// Nothing is lost by the spent client staying spent. Rate limits are counted per client, and
-    /// <see cref="McpExpendableApiKeyName" /> exists to be taken to zero exactly once; every other test authenticates
-    /// with <see cref="McpApiKeyName" />, whose own capacity the burst never touches.
+    /// the user the burst test provisions exists to be taken to zero exactly once; every other test authenticates as
+    /// the served user, whose own capacity the burst never touches.
     /// </para>
     /// </remarks>
     public const string McpRateLimitReplenishmentPeriod = "00:10:00";
@@ -259,8 +242,8 @@ public static class OrchestrationContract
 
     /// <summary>The administrative API key the integration-test topology's host accepts.</summary>
     /// <remarks>
-    /// A literal under the same restriction as <see cref="McpApiKey" />, and it authenticates the same ephemeral host.
-    /// It is deliberately a different value from every MCP key: reading a mailbox and administering the service that
+    /// A literal under the same restriction as <see cref="MailServerAccountPassword" />, and it authenticates one host
+    /// that exists for the duration of one test run. It is deliberately not a key any user holds: reading a mailbox and administering the service that
     /// reads it are different authorities, and a suite whose two surfaces shared a key could not observe that neither
     /// one's credential authenticates the other.
     /// </remarks>

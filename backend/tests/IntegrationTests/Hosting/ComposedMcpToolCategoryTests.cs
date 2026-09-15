@@ -5,7 +5,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using MailFathom.AppHost;
 using MailFathom.IntegrationTests.Orchestration;
 using Xunit;
 
@@ -54,7 +53,7 @@ public sealed class ComposedMcpToolCategoryTests
     public async Task ListTools_ARequestNamingNoCategory_IsServedToolsFromMoreThanOneCategory()
     {
         // Arrange
-        using var client = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
+        using var client = await this.orchestration.OpenServedMcpEndpointClientAsync(TestContext.Current.CancellationToken);
 
         // Act
         var listed = await ListedToolsAsync(client, requestedCategories: null);
@@ -68,7 +67,7 @@ public sealed class ComposedMcpToolCategoryTests
     public async Task ListTools_ARequestNamingOneCategory_IsServedThatCategoryAlone()
     {
         // Arrange
-        using var client = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
+        using var client = await this.orchestration.OpenServedMcpEndpointClientAsync(TestContext.Current.CancellationToken);
 
         // Act
         var listed = await ListedToolsAsync(client, requestedCategories: "mailbox");
@@ -83,7 +82,7 @@ public sealed class ComposedMcpToolCategoryTests
     public async Task CallTool_AToolTheRequestNarrowedAway_IsAnsweredAsAnUnknownTool()
     {
         // Arrange
-        using var client = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
+        using var client = await this.orchestration.OpenServedMcpEndpointClientAsync(TestContext.Current.CancellationToken);
         using var request = McpToolCall.Of(ContactTool, new { });
         request.Headers.Add(ToolCategoryHeaderName, "mailbox");
 
@@ -109,7 +108,6 @@ public sealed class ComposedMcpToolCategoryTests
             }),
         };
 
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", OrchestrationContract.McpApiKey);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
 

@@ -47,7 +47,7 @@ public sealed class ComposedAuthoredSendBoundsTests(MailFathomOrchestrationFixtu
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        using var client = await orchestration.OpenMcpEndpointClientAsync(cancellationToken);
+        using var client = await orchestration.OpenServedMcpEndpointClientAsync(cancellationToken);
         using var request = SendCall(
             [$"stranger@{OrchestrationContract.ComposedHostRefusedRecipientDomain}"],
             idempotencyKey: "authored-send-bounds-policy",
@@ -71,7 +71,7 @@ public sealed class ComposedAuthoredSendBoundsTests(MailFathomOrchestrationFixtu
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        using var client = await orchestration.OpenMcpEndpointClientAsync(cancellationToken);
+        using var client = await orchestration.OpenServedMcpEndpointClientAsync(cancellationToken);
         using var request = SendCall(
             MoreRecipientsThanTheCeilingPermits,
             idempotencyKey: "authored-send-bounds-ceiling",

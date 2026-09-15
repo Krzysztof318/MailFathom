@@ -74,7 +74,7 @@ public sealed class ComposedOutgoingMailToolContractTests(MailFathomOrchestratio
         var cancellationToken = TestContext.Current.CancellationToken;
         var accountId = (await orchestration.ComposedHostAccountIdAsync(cancellationToken)).Value;
 
-        using var client = await orchestration.OpenMcpEndpointClientAsync(cancellationToken);
+        using var client = await orchestration.OpenServedMcpEndpointClientAsync(cancellationToken);
         using var sendRequest = McpToolCall.Of(
             "send_email",
             new

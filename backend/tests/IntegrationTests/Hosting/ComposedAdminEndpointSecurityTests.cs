@@ -142,9 +142,10 @@ public sealed class ComposedAdminEndpointSecurityTests
         // Arrange
         using var adminClient = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
         using var mcpClient = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
+        var mcpKey = await this.orchestration.ComposedHostMcpApiKeyAsync(TestContext.Current.CancellationToken);
 
         // Act
-        using var mcpKeyOnAdminEndpoint = SessionRequest(OrchestrationContract.McpApiKey);
+        using var mcpKeyOnAdminEndpoint = SessionRequest(mcpKey);
         using var administrativeRefusal = await adminClient.SendAsync(
             mcpKeyOnAdminEndpoint,
             TestContext.Current.CancellationToken);

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Security.Transport;
 using MailFathom.IntegrationTests.Orchestration;
@@ -60,15 +61,9 @@ public sealed class ComposedClientEndpointSecurityTests
 
     private const string ClientProtectedResourceMetadataPath = "/.well-known/oauth-protected-resource/api/client";
 
-    private const string ClientKeyName = "desktop-client";
-
     private const string ClientKey = "not-a-real-client-key";
 
-    private const string NarrowedClientKeyName = "narrowed-client";
-
     private const string NarrowedClientKey = "not-a-real-narrowed-client-key";
-
-    private const string McpKeyName = "workstation";
 
     private const string McpKey = "not-a-real-mcp-key";
 
@@ -77,6 +72,18 @@ public sealed class ComposedClientEndpointSecurityTests
     private const string AdminKey = "not-a-real-admin-key";
 
     private const string PageOrigin = "https://client.example.test";
+
+    /// <summary>The user <see cref="ClientKey" /> was provisioned for, served on the client endpoint alone.</summary>
+    private static readonly MailUserId ClientUser =
+        MailUserId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
+
+    /// <summary>The user <see cref="NarrowedClientKey" /> was provisioned for, whose credential holds the answering grant alone.</summary>
+    private static readonly MailUserId NarrowedClientUser =
+        MailUserId.Create(new Guid("22222222-2222-2222-2222-222222222222"));
+
+    /// <summary>The user <see cref="McpKey" /> was provisioned for, served on the MCP endpoint alone.</summary>
+    private static readonly MailUserId McpUser =
+        MailUserId.Create(new Guid("33333333-3333-3333-3333-333333333333"));
 
     private const string AuthorizationServerName = "workforce";
 
@@ -92,9 +99,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task ClientEndpoint_ADeploymentThatDidNotEnableIt_ServesNothingAtItsPrefix(int localPort)
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            OtherSurfacesServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            OtherSurfacesServed());
 
         // Act
         var response = await host.SendAsync(HttpMethods.Get, ClientSessionRoute, localPort);
@@ -109,9 +115,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task ClientEndpoint_ServedBesideTheOthers_AnswersOnItsOwnListenerAndNoOther(int localPort)
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            EverySurfaceServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            EverySurfaceServed());
 
         // Act
         var refused = await host.SendAsync(
@@ -143,9 +148,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task ClientEndpoint_AWriteDeclaringABodyBound_NarrowsTheServersLimitToItBeforeTheHandlerIsEntered()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            EverySurfaceServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            EverySurfaceServed());
 
         // Act
         var answered = await host.SendAsync(
@@ -167,9 +171,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task ClientEndpoint_AReadDeclaringNoBodyBound_LeavesTheServersOwnLimitAlone()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            EverySurfaceServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            EverySurfaceServed());
 
         // Act
         await host.SendAsync(
@@ -186,9 +189,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task ClientEndpoint_ARequestCarryingNoCredential_IsRefusedBeforeTheSessionHandlerAnswers()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            EverySurfaceServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            EverySurfaceServed());
 
         // Act
         var response = await host.SendAsync(HttpMethods.Get, ClientSessionRoute, ClientPort);
@@ -198,12 +200,11 @@ public sealed class ComposedClientEndpointSecurityTests
     }
 
     [Fact]
-    public async Task ClientEndpoint_ARequestCarryingTheConfiguredKey_ReachesTheSessionHandler()
+    public async Task ClientEndpoint_ARequestCarryingAProvisionedKey_ReachesTheSessionHandler()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            EverySurfaceServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            EverySurfaceServed());
 
         // Act
         var response = await host.SendAsync(
@@ -226,9 +227,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task ClientAccountsRoute_ServedBesideTheOthers_AnswersOnItsOwnListenerAndNoOther(int localPort)
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            EverySurfaceServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            EverySurfaceServed());
 
         // Act
         var elsewhere = await host.SendAsync(
@@ -258,9 +258,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task ClientAccountsRoute_ACredentialWithoutTheMailboxGrant_IsRefusedRatherThanServedAnEmptyAnswer()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            EverySurfaceServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            EverySurfaceServed());
 
         // Act
         var session = await host.SendAsync(
@@ -290,9 +289,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task ClientFoldersRoute_ServedBesideTheOthers_AnswersOnItsOwnListenerAndNoOther(int localPort)
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            EverySurfaceServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            EverySurfaceServed());
 
         // Act
         var elsewhere = await host.SendAsync(
@@ -320,9 +318,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task ClientFoldersRoute_ACredentialWithoutTheMailboxGrant_IsRefusedRatherThanServedAnEmptyTree()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            EverySurfaceServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            EverySurfaceServed());
 
         // Act
         var session = await host.SendAsync(
@@ -344,18 +341,20 @@ public sealed class ComposedClientEndpointSecurityTests
 
     /// <summary>
     /// The claim this class exists for, in the direction a mistake would be worst: a key an operator provisioned for an
-    /// agent or for administering the service must buy nothing on the surface that serves a person's mail.
+    /// agent or for administering the service must buy nothing on the surface that serves a person's mail. The
+    /// administrative key is a configured one and is refused because that surface keeps its own list; the MCP key is a
+    /// credential row this deployment resolves, and what refuses it here is the switch on the user it was provisioned
+    /// for — which is the separation the user axis replaced the two key lists with.
     /// </summary>
     [Theory]
     [InlineData(McpKey)]
     [InlineData(AdminKey)]
-    public async Task ClientEndpoint_PresentedWithAnotherSurfacesConfiguredKey_RefusesItLikeAnyUnrecognizedCredential(
+    public async Task ClientEndpoint_PresentedWithAnotherSurfacesCredential_RefusesItLikeAnyUnrecognizedCredential(
         string credential)
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            EverySurfaceServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            EverySurfaceServed());
 
         // Act
         var response = await host.SendAsync(
@@ -372,15 +371,14 @@ public sealed class ComposedClientEndpointSecurityTests
     [Theory]
     [InlineData("GET", AdminSessionRoute, AdminPort)]
     [InlineData("POST", McpEndpointRoute.Path, McpPort)]
-    public async Task AnotherSurface_PresentedWithTheClientsConfiguredKey_RefusesItLikeAnyUnrecognizedCredential(
+    public async Task AnotherSurface_PresentedWithTheClientsCredential_RefusesItLikeAnyUnrecognizedCredential(
         string method,
         string route,
         int localPort)
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            EverySurfaceServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            EverySurfaceServed());
 
         // Act
         var response = await host.SendAsync(
@@ -398,9 +396,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task ClientEndpoint_ARequestOnItsOwnListener_ReachesNoOtherSurfacesScheme()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            EverySurfaceServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            EverySurfaceServed());
 
         // Act
         await host.SendAsync(
@@ -420,9 +417,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task AnotherSurfacesRequest_ReachesNoClientScheme(string method, string route, int localPort)
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            EverySurfaceServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            EverySurfaceServed());
 
         // Act
         await host.SendAsync(
@@ -443,9 +439,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task ClientEndpoint_TheProtectedResourceMetadataDocument_IsServedToACallerHoldingNothing()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            ClientServedWithOAuth(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            ClientServedWithOAuth());
 
         // Act
         var response = await host.SendAsync(
@@ -463,9 +458,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task ClientEndpoint_TheProtectedResourceMetadataDocument_IsNotServedOnAnotherSurfacesListener()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            ClientServedWithOAuth(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            ClientServedWithOAuth());
 
         // Act
         var response = await host.SendAsync(
@@ -487,9 +481,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task ClientEndpoint_APreflightFromTheConfiguredOrigin_IsAnswered()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            EverySurfaceServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            EverySurfaceServed());
 
         // Act
         var response = await host.SendAsync(
@@ -515,9 +508,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task ClientEndpoint_AnUnstatedOriginList_AnswersAPreflightFromLocalhost()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            ClientServedWithoutANamedOrigin(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            ClientServedWithoutANamedOrigin());
 
         // Act
         var response = await host.SendAsync(
@@ -538,9 +530,8 @@ public sealed class ComposedClientEndpointSecurityTests
     public async Task HealthProbes_BesideAServedClientSurface_KeepAnswering()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            EverySurfaceServed(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            EverySurfaceServed());
 
         // Act
         var response = await host.SendAsync(HttpMethods.Get, "/alive", HealthPort);
@@ -558,12 +549,37 @@ public sealed class ComposedClientEndpointSecurityTests
     private static bool IsClientScheme(string schemeName) =>
         schemeName.StartsWith($"MailFathom:{TransportSurface.Client.Name}:", StringComparison.Ordinal);
 
+    /// <summary>Starts a shape with the three keys this class presents already provisioned against their users.</summary>
+    /// <remarks>
+    /// Each user is served on one mail-serving endpoint and not the other, which is where the isolation the class is
+    /// about now lives: the two surfaces no longer hold key lists of their own, so a key reaching only one of them is a
+    /// switch on the user it was provisioned for. The narrowed credential carries the answering grant alone, which the
+    /// endpoint's section used to state per key.
+    /// </remarks>
+    private static Task<InProcessComposedHost> StartAsync(IReadOnlyList<KeyValuePair<string, string?>> shape) =>
+        InProcessComposedHost.StartAsync(
+            shape,
+            TestContext.Current.CancellationToken,
+            ProvisionedUserApiKeys.Holding(
+                new ProvisionedUserApiKey(
+                    ClientKey,
+                    ClientUser,
+                    EndpointAccess: new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true)),
+                new ProvisionedUserApiKey(
+                    NarrowedClientKey,
+                    NarrowedClientUser,
+                    [MailFathomPermission.MailAsk],
+                    new MailUserEndpointAccess(McpEndpoint: false, ClientEndpoint: true)),
+                new ProvisionedUserApiKey(
+                    McpKey,
+                    McpUser,
+                    EndpointAccess: new MailUserEndpointAccess(McpEndpoint: true, ClientEndpoint: false))));
+
     /// <summary>The two surfaces that existed before this one, each authenticating, and no client endpoint at all.</summary>
     private static IReadOnlyList<KeyValuePair<string, string?>> OtherSurfacesServed() =>
     [
         new("McpEndpoint:Enabled", "true"),
-        new("McpEndpoint:Authentication:0:ApiKey:Name", McpKeyName),
-        new("McpEndpoint:Authentication:0:ApiKey:SecretReference", $"plaintext:{McpKey}"),
+        new("McpEndpoint:Authentication:0:Method", "api-key"),
         new("AdminEndpoint:Enabled", "true"),
         new("AdminEndpoint:Port", AdminPort.ToString(CultureInfo.InvariantCulture)),
         new("AdminEndpoint:Authentication:0:ApiKey:Name", AdminKeyName),
@@ -581,11 +597,7 @@ public sealed class ComposedClientEndpointSecurityTests
         new("ClientEndpoint:Enabled", "true"),
         new("ClientEndpoint:Port", ClientPort.ToString(CultureInfo.InvariantCulture)),
         new("ClientEndpoint:Cors:AllowedOrigins:0", PageOrigin),
-        new("ClientEndpoint:Authentication:0:ApiKey:Name", ClientKeyName),
-        new("ClientEndpoint:Authentication:0:ApiKey:SecretReference", $"plaintext:{ClientKey}"),
-        new("ClientEndpoint:Authentication:1:ApiKey:Name", NarrowedClientKeyName),
-        new("ClientEndpoint:Authentication:1:ApiKey:SecretReference", $"plaintext:{NarrowedClientKey}"),
-        new("ClientEndpoint:Authentication:1:Permissions:0", "mailfathom.mail.ask"),
+        new("ClientEndpoint:Authentication:0:Method", "api-key"),
     ];
 
     /// <summary>The local Aspire shape: the client surface is on, authenticated, and CORS is left at every origin.</summary>
@@ -594,8 +606,7 @@ public sealed class ComposedClientEndpointSecurityTests
         .. OtherSurfacesServed(),
         new("ClientEndpoint:Enabled", "true"),
         new("ClientEndpoint:Port", ClientPort.ToString(CultureInfo.InvariantCulture)),
-        new("ClientEndpoint:Authentication:0:ApiKey:Name", ClientKeyName),
-        new("ClientEndpoint:Authentication:0:ApiKey:SecretReference", $"plaintext:{ClientKey}"),
+        new("ClientEndpoint:Authentication:0:Method", "api-key"),
     ];
 
     /// <summary>The client surface accepting an access token, which is the shape that publishes its metadata document.</summary>
@@ -604,9 +615,9 @@ public sealed class ComposedClientEndpointSecurityTests
         new("McpEndpoint:Enabled", "true"),
         new("ClientEndpoint:Enabled", "true"),
         new("ClientEndpoint:Port", ClientPort.ToString(CultureInfo.InvariantCulture)),
+        new("ClientEndpoint:Authentication:0:Method", "oauth-subject"),
         new("ClientEndpoint:Authentication:0:OAuth:Resource", "https://mail.example.test/api/client"),
         new("ClientEndpoint:Authentication:0:OAuth:AuthorizationServers:0:Name", AuthorizationServerName),
         new("ClientEndpoint:Authentication:0:OAuth:AuthorizationServers:0:Issuer", "https://sso.example.test"),
-        new("ClientEndpoint:Authentication:0:OAuth:AuthorizationServers:0:AuthorizedSubjects:0", "someone"),
     ];
 }

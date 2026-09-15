@@ -67,7 +67,7 @@ public sealed class ComposedMailResponseToolContractTests(MailFathomOrchestratio
         var accountId = await orchestration.ComposedHostAccountIdAsync(cancellationToken);
         var answeredEmailId = await this.SeedOneAnsweredMessageAsync(accountId, cancellationToken);
 
-        using var client = await orchestration.OpenMcpEndpointClientAsync(cancellationToken);
+        using var client = await orchestration.OpenServedMcpEndpointClientAsync(cancellationToken);
         using var replyRequest = McpToolCall.Of(
             "reply_to_email",
             new

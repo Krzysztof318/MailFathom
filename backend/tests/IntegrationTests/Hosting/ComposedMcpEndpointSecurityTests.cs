@@ -39,15 +39,19 @@ public sealed class ComposedMcpEndpointSecurityTests
 {
     private const string ToolListedByTheProtocolSurface = "list_emails";
 
-    /// <summary>How far past a client's whole capacity the burst below reaches, which is the count of refusals it expects.</summary>
+    /// <summary>How far past a user's whole capacity the burst below reaches, which is the count of refusals it expects.</summary>
     /// <remarks>
     /// Added to the capacity rather than multiplying it, because the capacity is sized by what the rest of the
-    /// collection spends with the other key rather than by what proves a refusal here — so a multiple would make every
+    /// collection spends as the served user rather than by what proves a refusal here — so a multiple would make every
     /// raise of that bound cost this test another hundred requests while proving nothing more. The margin is what makes
     /// the assertion exact: the bucket starts full, restores nothing while the burst is in flight, and therefore serves
     /// the capacity and refuses precisely this many.
     /// </remarks>
     private const int RefusedBurstMargin = 20;
+
+    /// <summary>The label the user this test spends is recorded under, told apart from the served user by name.</summary>
+    /// <remarks>Erased when the test ends, on the terms <c>OrchestratedForeignUser</c> states: a second user left in the roster breaks every later start rather than the test that wrote it.</remarks>
+    private const string ExpendableUserDisplayName = "integration-tests-expendable";
 
     /// <summary>The probe served on the socket below, chosen because it consults process-local state and nothing else.</summary>
     private const string LivenessProbePath = "/alive";
@@ -145,11 +149,12 @@ public sealed class ComposedMcpEndpointSecurityTests
     }
 
     [Fact]
-    public async Task McpEndpoint_RequestCarryingTheConfiguredKeyFromAServedOrigin_ReachesTheProtocolSurface()
+    public async Task McpEndpoint_RequestCarryingTheServedUsersKeyFromAServedOrigin_ReachesTheProtocolSurface()
     {
         // Arrange
         using var client = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
-        using var request = ListToolsRequest(OrchestrationContract.McpApiKey);
+        using var request = ListToolsRequest(
+            await this.orchestration.ComposedHostMcpApiKeyAsync(TestContext.Current.CancellationToken));
         request.Headers.Add("Origin", OrchestrationContract.McpPermittedOrigin);
 
         // Act
@@ -165,11 +170,12 @@ public sealed class ComposedMcpEndpointSecurityTests
 
     /// <summary>A valid credential is deliberately presented, so what the refusal proves is the origin check rather than the absence of one.</summary>
     [Fact]
-    public async Task McpEndpoint_RequestFromAnOriginTheDeploymentDoesNotServe_IsRefusedEvenWithTheConfiguredKey()
+    public async Task McpEndpoint_RequestFromAnOriginTheDeploymentDoesNotServe_IsRefusedEvenWithTheServedUsersKey()
     {
         // Arrange
         using var client = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
-        using var request = ListToolsRequest(OrchestrationContract.McpApiKey);
+        using var request = ListToolsRequest(
+            await this.orchestration.ComposedHostMcpApiKeyAsync(TestContext.Current.CancellationToken));
         request.Headers.Add("Origin", "https://attacker.mailfathom.test");
 
         // Act
@@ -186,7 +192,7 @@ public sealed class ComposedMcpEndpointSecurityTests
     /// <summary>
     /// What the limiter does with a partition is unit-tested; what only a composed host shows is that a limiter is on
     /// this route at all. Two of its parts are invisible from a unit test and are asserted together here rather than in
-    /// tests of their own: that the route carries the policy, and that one client's exhausted capacity is not another's,
+    /// tests of their own: that the route carries the policy, and that one user's exhausted capacity is not another's,
     /// which is the whole point of partitioning and would look identical from inside the process if it were broken.
     /// </summary>
     /// <remarks>
@@ -205,38 +211,66 @@ public sealed class ComposedMcpEndpointSecurityTests
     /// burst, so the process-wide limiter is not merely distinguishable here but cannot have refused anything at all.
     /// Without both, this test would pass on concurrency refusals alone even if the route carried no policy.
     /// </para>
+    /// <para>
+    /// The burst is spent by a user of this test's own rather than by a second key, because capacity is counted per
+    /// user: every key, password, and token one person holds spends one allowance, so a second key provisioned against
+    /// the served user would take the bucket every other test in this collection reads from and this test would be
+    /// measuring one partition against itself. The user is erased in a <c>finally</c> for the reason
+    /// <c>OrchestratedForeignUser</c> gives — a second row left in the roster breaks every later start rather than the
+    /// test that wrote it — and this collection runs after every orchestrated one, so nothing reads the roster between
+    /// the two writes.
+    /// </para>
     /// </remarks>
     [Fact]
-    public async Task McpEndpoint_AClientBurstingPastItsCapacity_IsRefusedWithoutSpendingAnotherClients()
+    public async Task McpEndpoint_AUserBurstingPastTheirCapacity_IsRefusedWithoutSpendingAnothersAllowance()
     {
         // Arrange
         using var client = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
-        var burstSize = OrchestrationContract.McpRateLimitTokenCapacity + RefusedBurstMargin;
+        using var administration = ComposedHostAdministration.Open(
+            await this.orchestration.StartMailFathomAdminEndpointAsync(TestContext.Current.CancellationToken));
+        var servedKey = await this.orchestration.ComposedHostMcpApiKeyAsync(TestContext.Current.CancellationToken);
+        var expendable = await ComposedHostAdministration.RecordUserAsync(
+            administration,
+            ExpendableUserDisplayName,
+            TestContext.Current.CancellationToken);
 
-        // Act
-        var burst = await Task.WhenAll(Enumerable
-            .Range(0, burstSize)
-            .Select(_ => this.AnswerToAsync(client, OrchestrationContract.McpExpendableApiKey)));
+        try
+        {
+            var expendableKey = await ComposedHostAdministration.ProvisionApiKeyAsync(
+                administration,
+                expendable,
+                TestContext.Current.CancellationToken);
+            var burstSize = OrchestrationContract.McpRateLimitTokenCapacity + RefusedBurstMargin;
 
-        using var afterTheBurst = ListToolsRequest(OrchestrationContract.McpApiKey);
-        afterTheBurst.Headers.Add("Origin", OrchestrationContract.McpPermittedOrigin);
-        using var otherClient = await client.SendAsync(afterTheBurst, TestContext.Current.CancellationToken);
+            // Act
+            var burst = await Task.WhenAll(Enumerable
+                .Range(0, burstSize)
+                .Select(_ => this.AnswerToAsync(client, expendableKey)));
 
-        // Assert
-        var refusals = burst.Where(answer => answer.StatusCode == HttpStatusCode.TooManyRequests).ToArray();
+            using var afterTheBurst = ListToolsRequest(servedKey);
+            afterTheBurst.Headers.Add("Origin", OrchestrationContract.McpPermittedOrigin);
+            using var otherUser = await client.SendAsync(afterTheBurst, TestContext.Current.CancellationToken);
 
-        // An exact count rather than "some", because the topology restores nothing while the burst is in flight: the
-        // bucket starts full, queues nothing, and therefore serves its capacity and refuses the rest. A test that only
-        // asked for one refusal would still pass on a limiter that had started refusing everything.
-        Assert.Equal(RefusedBurstMargin, refusals.Length);
-        Assert.All(refusals, refusal => Assert.Empty(refusal.Body));
-        Assert.All(refusals, refusal => Assert.Equal("no-store", refusal.CacheControl));
-        Assert.All(refusals, refusal => Assert.NotNull(refusal.RetryAfter));
-        Assert.Equal(HttpStatusCode.OK, otherClient.StatusCode);
-        Assert.Contains(
-            ToolListedByTheProtocolSurface,
-            await otherClient.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
-            StringComparison.Ordinal);
+            // Assert
+            var refusals = burst.Where(answer => answer.StatusCode == HttpStatusCode.TooManyRequests).ToArray();
+
+            // An exact count rather than "some", because the topology restores nothing while the burst is in flight:
+            // the bucket starts full, queues nothing, and therefore serves its capacity and refuses the rest. A test
+            // that only asked for one refusal would still pass on a limiter that had started refusing everything.
+            Assert.Equal(RefusedBurstMargin, refusals.Length);
+            Assert.All(refusals, refusal => Assert.Empty(refusal.Body));
+            Assert.All(refusals, refusal => Assert.Equal("no-store", refusal.CacheControl));
+            Assert.All(refusals, refusal => Assert.NotNull(refusal.RetryAfter));
+            Assert.Equal(HttpStatusCode.OK, otherUser.StatusCode);
+            Assert.Contains(
+                ToolListedByTheProtocolSurface,
+                await otherUser.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            await ComposedHostAdministration.EraseUserAsync(administration, expendable);
+        }
     }
 
     /// <summary>

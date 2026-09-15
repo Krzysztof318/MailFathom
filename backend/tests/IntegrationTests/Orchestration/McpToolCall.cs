@@ -10,10 +10,13 @@ namespace MailFathom.IntegrationTests.Orchestration;
 
 /// <summary>Builds a tool call against the composed host's MCP endpoint, and reads the message that comes back.</summary>
 /// <remarks>
-/// Shared because both halves are the transport's shape rather than any one test's: the credential and the origin this
-/// host serves are what get a call through the controls in front of the endpoint, and which of its two content types the
-/// Streamable HTTP transport replies with is the transport's decision. A class asserting what a tool answers restates
-/// neither. A class about the controls themselves builds its own request, since varying a header is what it is for.
+/// Shared because both halves are the transport's shape rather than any one test's: the origin this host serves is
+/// what gets a call through the controls in front of the endpoint, and which of its two content types the Streamable
+/// HTTP transport replies with is the transport's decision. A class asserting what a tool answers restates neither. The
+/// credential is not written here at all — it belongs to the client
+/// <c>MailFathomOrchestrationFixture.OpenServedMcpEndpointClientAsync</c> hands back, because a key is provisioned for a
+/// user at runtime rather than configured, so there is no value this file could name. A class about the controls
+/// themselves builds its own request, since varying a header is what it is for.
 /// </remarks>
 internal static class McpToolCall
 {
@@ -37,7 +40,6 @@ internal static class McpToolCall
             }),
         };
 
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", OrchestrationContract.McpApiKey);
         request.Headers.Add("Origin", OrchestrationContract.McpPermittedOrigin);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));

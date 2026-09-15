@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Security.Transport;
 using MailFathom.IntegrationTests.Orchestration;
 using MailFathom.Mcp;
@@ -45,11 +46,7 @@ public sealed class ComposedPipelineOrderTests
 
     private const int HealthPort = 8081;
 
-    private const string McpKeyName = "workstation";
-
     private const string McpKey = "not-a-real-mcp-key";
-
-    private const string SecondMcpKeyName = "laptop";
 
     private const string SecondMcpKey = "not-a-real-second-mcp-key";
 
@@ -62,6 +59,14 @@ public sealed class ComposedPipelineOrderTests
     private const string SecondAdminKey = "not-a-real-second-admin-key";
 
     private const string Issuer = "https://sso.example.test";
+
+    /// <summary>The user <see cref="McpKey" /> was provisioned for.</summary>
+    private static readonly MailUserId Workstation =
+        MailUserId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
+
+    /// <summary>The user <see cref="SecondMcpKey" /> was provisioned for, told apart from the one above so the two spend separate allowances.</summary>
+    private static readonly MailUserId Laptop =
+        MailUserId.Create(new Guid("22222222-2222-2222-2222-222222222222"));
 
     private const string AuthorizationServerName = "workforce";
 
@@ -184,9 +189,8 @@ public sealed class ComposedPipelineOrderTests
     public async Task Compose_AnMcpRequest_ReachesNoAdministrativeScheme(bool mcpAuthenticates, bool adminAuthenticates)
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            BothSurfacesServed(mcpAuthenticates, adminAuthenticates),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            BothSurfacesServed(mcpAuthenticates, adminAuthenticates));
 
         // Act
         await host.SendAsync(
@@ -207,9 +211,8 @@ public sealed class ComposedPipelineOrderTests
     public async Task Compose_AnAdministrativeRequest_ReachesNoMcpScheme(bool mcpAuthenticates, bool adminAuthenticates)
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            BothSurfacesServed(mcpAuthenticates, adminAuthenticates),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            BothSurfacesServed(mcpAuthenticates, adminAuthenticates));
 
         // Act
         await host.SendAsync(
@@ -235,9 +238,8 @@ public sealed class ComposedPipelineOrderTests
     public async Task Compose_AProtectedMcpRequest_IsPreAuthenticatedThroughTheApplicationDefault(bool adminAuthenticates)
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            BothSurfacesServed(mcpAuthenticates: true, adminAuthenticates),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            BothSurfacesServed(mcpAuthenticates: true, adminAuthenticates));
 
         // Act
         await host.SendAsync(
@@ -262,9 +264,8 @@ public sealed class ComposedPipelineOrderTests
     public async Task Compose_AnAdministrativeRequest_IsNotPreAuthenticatedByTheApplicationDefault(bool mcpAuthenticates)
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            BothSurfacesServed(mcpAuthenticates, adminAuthenticates: true),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            BothSurfacesServed(mcpAuthenticates, adminAuthenticates: true));
 
         // Act
         await host.SendAsync(
@@ -294,9 +295,8 @@ public sealed class ComposedPipelineOrderTests
     public async Task Compose_AdministrativeAuthenticationAlone_StillRunsTheApplicationDefaultAtTheRoot()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            BothSurfacesServed(mcpAuthenticates: false, adminAuthenticates: true),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            BothSurfacesServed(mcpAuthenticates: false, adminAuthenticates: true));
 
         // Act
         await host.SendAsync(HttpMethods.Post, McpEndpointRoute.Path, McpPort);
@@ -311,9 +311,8 @@ public sealed class ComposedPipelineOrderTests
     public async Task Compose_NeitherSurfaceAuthenticating_ComposesNoAuthenticationAtAll()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            BothSurfacesServed(mcpAuthenticates: false, adminAuthenticates: false),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            BothSurfacesServed(mcpAuthenticates: false, adminAuthenticates: false));
 
         // Act
         var response = await host.SendAsync(HttpMethods.Post, McpEndpointRoute.Path, McpPort);
@@ -337,9 +336,8 @@ public sealed class ComposedPipelineOrderTests
     public async Task Compose_AnAnonymousRoute_IsNeitherChallengedNorGivenATransportIdentity(string path, int localPort)
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            BothSurfacesServedWithOAuth(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            BothSurfacesServedWithOAuth());
 
         // Act: forwarded as HTTPS, because that is how each of these arrives in the deployment this fix is about, and
         // because the metadata document a scheme publishes is served only for the scheme its resource identifier names.
@@ -366,9 +364,8 @@ public sealed class ComposedPipelineOrderTests
     public async Task Compose_TheMcpProtectedResourceMetadataDocument_IsStillPublishedByItsAuthenticationScheme()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            McpServedWithOAuth(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            McpServedWithOAuth());
 
         // Act
         var response = await host.SendAsync(
@@ -391,9 +388,8 @@ public sealed class ComposedPipelineOrderTests
     public async Task Compose_TheAdministrativeProtectedResourceMetadataDocument_IsStillServedToACallerHoldingNothing()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            BothSurfacesServedWithOAuth(),
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            BothSurfacesServedWithOAuth());
 
         // Act
         var response = await host.SendAsync(
@@ -407,17 +403,16 @@ public sealed class ComposedPipelineOrderTests
     }
 
     /// <summary>
-    /// The MCP endpoint's per-caller bucket counts per credential, which is only possible because authentication runs
-    /// ahead of the limiter. Two callers each spending the one token the shape allows is what proves the identity was
-    /// there when the partition was chosen; sharing a partition, they would have spent one bucket between them.
+    /// The MCP endpoint's per-caller bucket counts per user, which is only possible because authentication runs ahead
+    /// of the limiter. Two users each spending the one token the shape allows is what proves the identity was there
+    /// when the partition was chosen; sharing a partition, they would have spent one bucket between them.
     /// </summary>
     [Fact]
-    public async Task Compose_TwoAuthenticatedMcpCallers_SpendSeparateRateLimitPartitions()
+    public async Task Compose_TwoAuthenticatedMcpUsers_SpendSeparateRateLimitPartitions()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            [.. BothSurfacesServed(mcpAuthenticates: true, adminAuthenticates: true), .. OneRequestPerCaller],
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            [.. BothSurfacesServed(mcpAuthenticates: true, adminAuthenticates: true), .. OneRequestPerCaller]);
 
         // Act
         var first = await host.SendAsync(
@@ -454,9 +449,8 @@ public sealed class ComposedPipelineOrderTests
     public async Task Compose_TwoAuthenticatedAdministrativeCallers_ShareOneRateLimitPartition()
     {
         // Arrange
-        await using var host = await InProcessComposedHost.StartAsync(
-            [.. BothSurfacesServed(mcpAuthenticates: true, adminAuthenticates: true), .. OneRequestPerCaller],
-            TestContext.Current.CancellationToken);
+        await using var host = await StartAsync(
+            [.. BothSurfacesServed(mcpAuthenticates: true, adminAuthenticates: true), .. OneRequestPerCaller]);
 
         // Act
         var first = await host.SendAsync(
@@ -475,6 +469,20 @@ public sealed class ComposedPipelineOrderTests
         Assert.NotEqual(StatusCodes.Status429TooManyRequests, first.StatusCode);
         Assert.Equal(StatusCodes.Status429TooManyRequests, second.StatusCode);
     }
+
+    /// <summary>Starts a shape with the two MCP keys this class presents already provisioned against their users.</summary>
+    /// <remarks>
+    /// A key a user's client presents is a row rather than a configured value, so the shape names the method and this
+    /// supplies the credentials. The administrative keys stay configured, because that surface's credentials are the
+    /// operator's own and are still written in its section.
+    /// </remarks>
+    private static Task<InProcessComposedHost> StartAsync(IReadOnlyList<KeyValuePair<string, string?>> shape) =>
+        InProcessComposedHost.StartAsync(
+            shape,
+            TestContext.Current.CancellationToken,
+            ProvisionedUserApiKeys.Holding(
+                new ProvisionedUserApiKey(McpKey, Workstation),
+                new ProvisionedUserApiKey(SecondMcpKey, Laptop)));
 
     /// <summary>One token per caller and an hour before the next one, so no replenishment can land between two requests a test sends back to back.</summary>
     private static IReadOnlyList<KeyValuePair<string, string?>> OneRequestPerCaller =>
@@ -498,10 +506,7 @@ public sealed class ComposedPipelineOrderTests
         .. mcpAuthenticates
             ?
             [
-                new("McpEndpoint:Authentication:0:ApiKey:Name", McpKeyName),
-                new("McpEndpoint:Authentication:0:ApiKey:SecretReference", $"plaintext:{McpKey}"),
-                new("McpEndpoint:Authentication:1:ApiKey:Name", SecondMcpKeyName),
-                new KeyValuePair<string, string?>("McpEndpoint:Authentication:1:ApiKey:SecretReference", $"plaintext:{SecondMcpKey}"),
+                new KeyValuePair<string, string?>("McpEndpoint:Authentication:0:Method", "api-key"),
             ]
             : Array.Empty<KeyValuePair<string, string?>>(),
         .. adminAuthenticates
@@ -538,10 +543,10 @@ public sealed class ComposedPipelineOrderTests
     /// <summary>The MCP endpoint's one OAuth entry, stated once because two shapes carry it.</summary>
     private static IReadOnlyList<KeyValuePair<string, string?>> McpOAuthEntry =>
     [
+        new("McpEndpoint:Authentication:0:Method", "oauth-subject"),
         new("McpEndpoint:Authentication:0:OAuth:Resource", "https://mail.example.test/mcp"),
         new("McpEndpoint:Authentication:0:OAuth:AuthorizationServers:0:Name", AuthorizationServerName),
         new("McpEndpoint:Authentication:0:OAuth:AuthorizationServers:0:Issuer", Issuer),
-        new("McpEndpoint:Authentication:0:OAuth:AuthorizationServers:0:AuthorizedSubjects:0", "someone"),
     ];
 
     /// <summary>Composes a credential that selects one authorization server's validator and is never verified by it.</summary>

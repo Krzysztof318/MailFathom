@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -41,23 +40,25 @@ internal static class ComposedHostMailbox
     /// </summary>
     private const string RecordedUserDisplayName = "user";
 
-    /// <summary>Records the mailbox, or finds the one an earlier start over this database recorded, and reports its identifier.</summary>
+    /// <summary>Records the mailbox, or finds the one an earlier start over this database recorded, and reports it with the user it belongs to.</summary>
     /// <remarks>
     /// The identifier is the one the deployment generated, so it is read back rather than stated: a composed-host test
     /// names the mailbox by it and seeds mail under it. An address is held by one account in the whole deployment, so an
-    /// account already assigned to the user for this address is reused rather than created again and refused.
+    /// account already assigned to the user for this address is reused rather than created again and refused. The user
+    /// comes back beside it because the credential a test authenticates with is provisioned for that user, and there is
+    /// nowhere else the identifier is known.
     /// </remarks>
-    internal static async Task<MailAccountId> RecordAsync(Uri adminAddress, CancellationToken cancellationToken)
+    internal static async Task<(MailAccountId Account, Guid User)> RecordAsync(
+        Uri adminAddress,
+        CancellationToken cancellationToken)
     {
-        using var client = new HttpClient { BaseAddress = adminAddress };
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", OrchestrationContract.AdminApiKey);
+        using var client = ComposedHostAdministration.Open(adminAddress);
 
         var user = await ReadOrRecordSoleUserAsync(client, cancellationToken);
 
         if (await FindAssignedAccountAsync(client, user, cancellationToken) is { } recorded)
         {
-            return recorded;
+            return (recorded, user);
         }
 
         var requestBody = new JsonObject
@@ -83,7 +84,7 @@ internal static class ComposedHostMailbox
                     outcome.RootElement.GetProperty("messages").EnumerateArray().Select(static message => message.GetString()))}].");
         }
 
-        return MailAccountId.Create(outcome.RootElement.GetProperty("accountId").GetGuid().ToString("D"));
+        return (MailAccountId.Create(outcome.RootElement.GetProperty("accountId").GetGuid().ToString("D")), user);
     }
 
     private static async Task<MailAccountId?> FindAssignedAccountAsync(
@@ -115,6 +116,10 @@ internal static class ComposedHostMailbox
     {
         ["EmailAddress"] = OrchestrationContract.ComposedHostSendingAddress,
         ["DisplayName"] = OrchestrationContract.ServedMailAccountDisplayName,
+        // Stated by every account being written, because a derivation about this mail comes out in some language
+        // whether or not anybody chose one. Nothing here reads a derivation, so the value is the shipped default
+        // rather than a choice this suite is making.
+        ["Language"] = "English",
         ["Host"] = OrchestrationContract.ComposedHostSubmissionHost,
         ["UserName"] = OrchestrationContract.ComposedHostSendingAddress,
         ["Secrets"] = PasswordBlock(OrchestrationContract.ComposedHostReadingPasswordName),
@@ -137,15 +142,23 @@ internal static class ComposedHostMailbox
 
     /// <summary>Composes one secret block, under the name it is declared by.</summary>
     /// <remarks>
+    /// <para>
     /// The name is the caller's rather than a constant here, because the reading block and the delivery block carry
     /// the same material under two names: a record is judged in one walk and a secret name is claimed once within it.
+    /// </para>
+    /// <para>
+    /// The reference names where the material is kept rather than carrying it. A record persisted with a
+    /// <c>plaintext:</c> reference is refused outright — material in the column a user's declarations live in is the
+    /// one outcome that check exists to prevent — so the app model hands the password to the host in
+    /// <see cref="OrchestrationContract.ComposedHostMailboxPasswordVariable" /> and the record names that variable.
+    /// </para>
     /// </remarks>
     private static JsonObject PasswordBlock(string name) => new()
     {
         ["Password"] = new JsonObject
         {
             ["Name"] = name,
-            ["SecretReference"] = $"plaintext:{OrchestrationContract.MailServerAccountPassword}",
+            ["SecretReference"] = $"env:{OrchestrationContract.ComposedHostMailboxPasswordVariable}",
         },
     };
 
@@ -166,23 +179,9 @@ internal static class ComposedHostMailbox
         return users switch
         {
             [var only] => only,
-            [] => await RecordUserAsync(client, cancellationToken),
+            [] => await ComposedHostAdministration.RecordUserAsync(client, RecordedUserDisplayName, cancellationToken),
             _ => throw new InvalidOperationException(
                 $"The composed host holds {users.Length} users, and the mailbox this suite reads belongs to one."),
         };
-    }
-
-    private static async Task<Guid> RecordUserAsync(HttpClient client, CancellationToken cancellationToken)
-    {
-        using var content = new StringContent(
-            new JsonObject { ["displayName"] = RecordedUserDisplayName }.ToJsonString(),
-            Encoding.UTF8,
-            "application/json");
-        using var response = await client.PostAsync(new Uri("api/admin/users", UriKind.Relative), content, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        using var provisioned = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-
-        return provisioned.RootElement.GetProperty("id").GetGuid();
     }
 }

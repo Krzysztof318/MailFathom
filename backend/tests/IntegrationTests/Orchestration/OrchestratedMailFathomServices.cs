@@ -14,11 +14,13 @@ using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Move;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.AttachmentText.Limits;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs.Execution;
@@ -433,6 +435,15 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // the deriver takes the pacer by key — so the first orchestrated test to resolve an attachment pass would fail
         // to build the container rather than fail an assertion.
         builder.Services.AddSingleton(AttachmentDerivationBudget.Unbounded);
+        // What one attachment may cost to parse, at the shipped values because nothing here parses one: the suite
+        // commits a reading through the store rather than extracting it. Registered rather than left out because
+        // AddInfrastructure hands it to every attachment reader it composes, so its absence fails to build the
+        // container for a test that never reaches an attachment at all.
+        builder.Services.AddSingleton(new AttachmentTextExtractionOptions());
+        // The message and run ceilings beside it, and disabled for the same reason the suite reads no attachment: it
+        // is what a deployment that turned nothing on is bounded by, and the workload reader resolves it to decide
+        // which mail is still owed a reading.
+        builder.Services.AddSingleton(EmailAttachmentTextBounds.Disabled);
         builder.Services.AddKeyedScoped(
             ServiceCollectionExtensions.ImageDescriptionPacerKey,
             (provider, _) => ProviderRequestPacer.Create(
@@ -468,6 +479,12 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddScoped(_ => new StatedAuthorizedPrincipalSource());
         builder.Services.AddScoped<IAuthorizedPrincipalSource>(provider =>
             provider.GetRequiredService<StatedAuthorizedPrincipalSource>());
+        // Registered by the composition root beside the database health checks rather than by AddInfrastructure, so
+        // the resolver that reads a secret straight off the pool — a bare command rather than a unit of work — would
+        // find nothing to bound itself by here. The shipped default, because nothing this suite asserts is about a
+        // command outliving its bound.
+        builder.Services.AddSingleton(new DatabaseCommandTimeout(
+            TimeSpan.FromSeconds(HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds)));
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(orchestration.DatabaseConnectionString, null, null),
             PostgresTextSearchConfiguration.Default,

@@ -68,7 +68,7 @@ public sealed class ComposedMcpToolContractTests(MailFathomOrchestrationFixture 
         var accountId = await orchestration.ComposedHostAccountIdAsync(cancellationToken);
         await this.SeedOneMessageAsync(accountId, cancellationToken);
 
-        using var client = await orchestration.OpenMcpEndpointClientAsync(cancellationToken);
+        using var client = await orchestration.OpenServedMcpEndpointClientAsync(cancellationToken);
         using var request = SearchEmailsCall();
 
         // Act
