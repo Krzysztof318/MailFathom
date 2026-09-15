@@ -5,20 +5,22 @@
 using System.CommandLine;
 using System.Globalization;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Commands.Accounts;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
-/// <summary>Erases every contact the deployment collected from arriving mail, leaving the ones you wrote down.</summary>
+/// <summary>Erases everything one mail account collected from the mail that arrived on it.</summary>
 /// <remarks>
 /// <para>
-/// The way out for a user who changed their mind about collection. Everything collection produced is a contact of its
-/// own origin, so taking that origin out takes the whole of what an instance inferred and nothing of what its user
-/// entered.
+/// The way out for a user who changed their mind about collection. A collected book is one mail account's, so this
+/// names the account: everything it picked up goes, what another account picked up stays, and nothing anybody wrote
+/// down is in this book to go with it.
 /// </para>
 /// <para>
-/// It cannot be undone, which is why it asks first like every other irreversible command here. Switching collection off
-/// afterwards is a separate act in configuration, and one worth making: with it still on, the book fills again from the
-/// mail that arrives next.
+/// The book it empties is read by every user assigned that account, so this is an act over a mailbox rather than over
+/// one person's records. It cannot be undone, which is why it asks first like every other irreversible command here.
+/// Switching collection off for the account afterwards is a separate act in configuration, and one worth making: with
+/// it still on, the book fills again from the mail that arrives next.
 /// </para>
 /// </remarks>
 internal static class DeleteCollectedContactsCommand
@@ -32,19 +34,22 @@ internal static class DeleteCollectedContactsCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
+        var accountOption = MailAccountOptions.Account();
 
         var confirmedOption = CliOptions.Confirmed("erasure");
 
         Command command = new(
             "delete-collected",
-            "Erase every contact the deployment collected from arriving mail, keeping the ones you entered. This cannot be undone.")
+            "Erase everything one mail account collected from the mail that arrived on it. This cannot be undone.")
         {
+            accountOption,
             confirmedOption,
             endpointOption,
         };
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
+            result.GetValue(accountOption),
             CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             result.GetValue(confirmedOption),
             cancellationToken));
@@ -54,6 +59,7 @@ internal static class DeleteCollectedContactsCommand
 
     private static async Task<int> RunAsync(
         CliContext context,
+        Guid accountId,
         string? requestedDeployment,
         bool confirmedUpFront,
         CancellationToken cancellationToken)
@@ -65,8 +71,8 @@ internal static class DeleteCollectedContactsCommand
         if (!CliConfirmation.Agreed(
                 context,
                 confirmedUpFront,
-                "There is nobody at the terminal to agree to this, and erasing what was collected cannot be undone. Pass --yes to erase without being asked.",
-                "Erase every contact this deployment collected from arriving mail? The ones you entered are kept. [y/N] "))
+                $"There is nobody at the terminal to agree to erasing what mail account {accountId:D} collected, and it cannot be undone. Pass --yes to erase without being asked.",
+                $"Erase everything mail account {accountId:D} collected? Every user assigned it reads that book, and what anybody wrote down is kept. [y/N] "))
         {
             context.Console.WriteError("Nothing was erased.");
 
@@ -76,11 +82,14 @@ internal static class DeleteCollectedContactsCommand
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
         var deployment = new AdminApiClient(transport, context.Console);
 
-        var erasure = await deployment.EraseCollectedContactsAsync(profile.Token, cancellationToken);
+        var erasure = await deployment.EraseCollectedContactsAsync(
+            profile.Token,
+            accountId.ToString("D", CultureInfo.InvariantCulture),
+            cancellationToken);
 
         context.Console.WriteLine(erasure.ContactsErased == 0
-            ? "The deployment had collected nobody, so nothing was erased."
-            : $"Erased {Describe(erasure.ContactsErased, "contact", "contacts")} the deployment had collected, and {Describe(erasure.AddressesErased, "address", "addresses")}. Nothing in MailFathom can put them back.");
+            ? $"Mail account {accountId:D} had collected nobody, so nothing was erased."
+            : $"Erased {Describe(erasure.ContactsErased, "contact", "contacts")} mail account {accountId:D} had collected, and {Describe(erasure.AddressesErased, "address", "addresses")}. Nothing in MailFathom can put them back.");
 
         return CliExitCode.Success;
     }

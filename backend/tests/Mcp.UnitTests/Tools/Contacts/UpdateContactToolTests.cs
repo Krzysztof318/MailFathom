@@ -2,8 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Failures;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Mcp.Tools.Contacts;
 using MailFathom.Mcp.UnitTests.TestDoubles;
@@ -22,7 +22,7 @@ public sealed class UpdateContactToolTests
         // Arrange
         var held = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test");
         var book = new StubContactBook();
-        book.Directory.FindAsync(Arg.Any<MailUserId>(), held.Id, Arg.Any<CancellationToken>()).Returns(held);
+        book.Directory.FindAsync(Arg.Any<ContactBookScope>(), held.Id, Arg.Any<CancellationToken>()).Returns(held);
 
         var tool = new UpdateContactTool(book.Writer);
 
@@ -56,7 +56,7 @@ public sealed class UpdateContactToolTests
             StubContactBook.Now);
 
         var book = new StubContactBook();
-        book.Directory.FindAsync(Arg.Any<MailUserId>(), held.Id, Arg.Any<CancellationToken>()).Returns(held);
+        book.Directory.FindAsync(Arg.Any<ContactBookScope>(), held.Id, Arg.Any<CancellationToken>()).Returns(held);
 
         var tool = new UpdateContactTool(book.Writer);
 
@@ -80,7 +80,7 @@ public sealed class UpdateContactToolTests
         // Arrange
         var held = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test");
         var book = new StubContactBook();
-        book.Directory.FindAsync(Arg.Any<MailUserId>(), held.Id, Arg.Any<CancellationToken>()).Returns(held);
+        book.Directory.FindAsync(Arg.Any<ContactBookScope>(), held.Id, Arg.Any<CancellationToken>()).Returns(held);
 
         var tool = new UpdateContactTool(book.Writer);
 
@@ -105,7 +105,7 @@ public sealed class UpdateContactToolTests
         // Arrange
         var collected = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test", ContactOrigin.Collected);
         var book = new StubContactBook();
-        book.Directory.FindAsync(Arg.Any<MailUserId>(), collected.Id, Arg.Any<CancellationToken>()).Returns(collected);
+        book.Directory.FindAsync(Arg.Any<ContactBookScope>(), collected.Id, Arg.Any<CancellationToken>()).Returns(collected);
 
         var tool = new UpdateContactTool(book.Writer);
 
@@ -160,6 +160,6 @@ public sealed class UpdateContactToolTests
             cancellationToken: TestContext.Current.CancellationToken));
 
         await book.Directory.DidNotReceiveWithAnyArgs()
-            .FindAsync(default, default, TestContext.Current.CancellationToken);
+            .FindAsync(default!, default!, TestContext.Current.CancellationToken);
     }
 }

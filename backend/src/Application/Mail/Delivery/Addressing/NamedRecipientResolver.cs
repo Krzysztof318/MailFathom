@@ -29,11 +29,12 @@ namespace MailFathom.Application.Mail.Delivery.Addressing;
 /// amended, or promoted by being written to.
 /// </para>
 /// <para>
-/// It asks for no permission of its own, and that is deliberate rather than an omission. Every use case above it is
-/// reached under a principal — a caller holding a grant, or the process running work nobody requested — and only the
-/// first of those can hold one at all, so a grant demanded here would refuse a rule addressing a contact rather than
-/// authorize anything. Whether a caller may name people out of the book is therefore the boundary's question, asked
-/// where the caller is known and beside the grant that lets it send at all.
+/// It asks for no permission of its own, and that is deliberate rather than an omission: whether a caller may name
+/// people out of the book is the boundary's question, asked where the caller is known and beside the grant that lets it
+/// send at all. What it does require is a principal acting for a user, because the books it reads are that user's —
+/// <see cref="ContactBookOwnership" /> resolves them through the authorization and refuses a principal acting for
+/// nobody. So work running under the process identity cannot address a recipient by contact at all, and a rule written
+/// to do so is refused rather than answered out of somebody's book.
 /// </para>
 /// </remarks>
 /// <param name="contacts">Reads the book a named contact is resolved against.</param>
@@ -161,13 +162,14 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts, ContactBo
             .Distinct()
             .ToArray();
 
-        // Resolved once for the same reason the vouching does: every group of one act reads one book by construction.
-        var user = ownership.User;
+        // Resolved once for the same reason the vouching does: every group of one act reads one set of books by
+        // construction.
+        var scope = ownership.Scope;
         var held = new Dictionary<ContactId, Contact>();
 
         foreach (var group in identities.Chunk(ContactQuery.MaximumPageSize))
         {
-            foreach (var (contactId, contact) in await contacts.FindAllAsync(user, group, cancellationToken))
+            foreach (var (contactId, contact) in await contacts.FindAllAsync(scope, group, cancellationToken))
             {
                 held[contactId] = contact;
             }
@@ -188,13 +190,13 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts, ContactBo
             .Distinct()
             .ToArray();
 
-        var user = ownership.User;
+        var scope = ownership.Scope;
         var matches = new Dictionary<ContactDisplayName, ContactMatch>();
 
         foreach (var group in contactNames.Chunk(ContactQuery.MaximumPageSize))
         {
             foreach (var (contactName, match) in await contacts.MatchDisplayNamesAsync(
-                user,
+                scope,
                 group,
                 cancellationToken))
             {

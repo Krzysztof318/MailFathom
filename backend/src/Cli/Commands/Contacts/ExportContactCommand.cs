@@ -5,6 +5,7 @@
 using System.CommandLine;
 using System.Text.Json;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
@@ -32,16 +33,19 @@ internal static class ExportContactCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
+        var userOption = UserOptions.User();
         var identityOption = ContactOptions.Identity();
 
-        Command command = new("export", "Produce everything the deployment holds about one person, as JSON.")
+        Command command = new("export", "Produce everything the books a user reads hold about one person, as JSON.")
         {
+            userOption,
             identityOption,
             endpointOption,
         };
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
+            result.GetValue(userOption),
             result.GetValue(identityOption),
             CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
@@ -51,6 +55,7 @@ internal static class ExportContactCommand
 
     private static async Task<int> RunAsync(
         CliContext context,
+        Guid? requestedUser,
         Guid contactId,
         string? requestedDeployment,
         CancellationToken cancellationToken)
@@ -58,13 +63,15 @@ internal static class ExportContactCommand
         var profile = await context.Deployment().ReachAsync(requestedDeployment, cancellationToken);
 
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
-        var export = await new AdminApiClient(transport, context.Console)
-            .ExportContactAsync(profile.Token, contactId, cancellationToken);
+        var deployment = new AdminApiClient(transport, context.Console);
+
+        var user = await UserOptions.ResolveUserAsync(deployment, profile.Token, requestedUser, cancellationToken);
+        var export = await deployment.ExportContactAsync(profile.Token, contactId, user, cancellationToken);
 
         if (export.Contact is null)
         {
             context.Console.WriteError(
-                $"The deployment's contact book holds no contact {contactId:D}, so there was nothing to export.");
+                $"The books that user reads hold no contact {contactId:D}, so there was nothing to export.");
 
             return CliExitCode.Failure;
         }

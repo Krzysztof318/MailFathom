@@ -33,11 +33,17 @@ namespace MailFathom.Application.Contacts.Collection;
 /// having addressed somebody is exactly the evidence a count of their messages is standing in for.
 /// </para>
 /// <para>
-/// <b>An address the book already holds is left alone</b> — under either origin and without collection ever reading the
-/// record. That is the collision rule the issue behind this feature asked for, and it is a refusal rather than a merge:
-/// an address that turns out to belong to somebody the user asserted is already answered for by that record, and
-/// adding it there would be collection editing what a user wrote down. A user who wants the address on that person
-/// puts it there themselves, which is one amendment rather than a rule guessing on their behalf.
+/// <b>What it writes goes into the book of the account it is synchronizing</b>, which is the one book it may write and
+/// the one it asks about. A mailbox is one mailbox however many people are assigned it, so a correspondent it picks up
+/// is recorded once and every assigned user reads that record; nothing here reaches a user, and there is no user for it
+/// to reach — collection runs under this process's own identity and acts for nobody in particular.
+/// </para>
+/// <para>
+/// <b>An address that account's own book already holds is left alone</b>, without collection ever reading the record.
+/// That is the collision rule the issue behind this feature asked for, and it is a refusal rather than a merge. What a
+/// user of the mailbox happens to have written down in their own book is not asked about at all: their record wins at
+/// the read instead, so the same person is shown once and under the name they chose, and collection stays unable to
+/// learn what any user wrote down.
 /// </para>
 /// <para>
 /// Nothing here logs, and nothing it hands to an instrument names a person. What it reports is which of six conclusions
@@ -166,7 +172,7 @@ public sealed class MailContactCollector
             return true;
         }
 
-        if (await this.book.HoldsAddressAsync(address, cancellationToken))
+        if (await this.book.HoldsAddressAsync(account, address, cancellationToken))
         {
             this.telemetry.RecordOutcome(ContactCollectionOutcome.AlreadyHeld);
 
@@ -192,6 +198,7 @@ public sealed class MailContactCollector
         }
 
         var written = await this.book.CollectAsync(
+            account,
             new NewContact
             {
                 DisplayName = displayName,

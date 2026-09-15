@@ -5,13 +5,16 @@
 using System.CommandLine;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Contacts;
+using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
-/// <summary>Records a person the deployment's contact book does not yet hold.</summary>
+/// <summary>Records a person one user's own book does not yet hold.</summary>
 /// <remarks>
-/// A contact written from here is asserted: somebody wrote this person down. That is what distinguishes it from a record
-/// the deployment collected out of arriving mail, and it is what makes it amendable from here afterwards.
+/// A contact written from here is asserted and goes into one user's own book: somebody wrote this person down. That is
+/// what distinguishes it from a record a mail account collected out of the mail that arrived on it, and it is what makes
+/// it amendable from here afterwards. It also takes precedence: where the user's own record and a collected one hold one
+/// address, every read of theirs answers with the one they wrote.
 /// </remarks>
 internal static class CreateContactCommand
 {
@@ -24,6 +27,7 @@ internal static class CreateContactCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
+        var userOption = UserOptions.User();
 
         Option<string> nameOption = new("--name")
         {
@@ -49,8 +53,9 @@ internal static class CreateContactCommand
             Description = "What you want recorded about the person beyond their name and addresses.",
         };
 
-        Command command = new("create", "Record a person in the deployment's contact book.")
+        Command command = new("create", "Record a person in one user's own contact book.")
         {
+            userOption,
             nameOption,
             addressOption,
             preferredOption,
@@ -60,6 +65,7 @@ internal static class CreateContactCommand
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
+            result.GetValue(userOption),
             result.GetValue(nameOption) ?? string.Empty,
             result.GetValue(addressOption) ?? [],
             result.GetValue(preferredOption),
@@ -72,6 +78,7 @@ internal static class CreateContactCommand
 
     private static async Task<int> RunAsync(
         CliContext context,
+        Guid? requestedUser,
         string name,
         IReadOnlyList<string> addresses,
         string? preferred,
@@ -84,8 +91,10 @@ internal static class CreateContactCommand
         var profile = await context.Deployment().ReachAsync(requestedDeployment, cancellationToken);
 
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
-        var written = await new AdminApiClient(transport, context.Console)
-            .RecordContactAsync(profile.Token, record, cancellationToken);
+        var deployment = new AdminApiClient(transport, context.Console);
+
+        var user = await UserOptions.ResolveUserAsync(deployment, profile.Token, requestedUser, cancellationToken);
+        var written = await deployment.RecordContactAsync(profile.Token, user, record, cancellationToken);
 
         return ContactOutput.ReportWrite(context, written, "Recorded");
     }

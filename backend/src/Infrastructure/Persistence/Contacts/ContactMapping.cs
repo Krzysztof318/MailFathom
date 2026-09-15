@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
+using MailFathom.Application.Contacts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -18,22 +18,37 @@ namespace MailFathom.Infrastructure.Persistence.Contacts;
 /// </para>
 /// <para>
 /// Whose book a contact is written into travels beside the contact rather than on it. A contact is the person and what
-/// the user recorded about them, and which book that record sits in is the store's question — resolved once per act
-/// and handed down — so the domain type stays free of a column that names a caller's own scope.
+/// was recorded about them, and which book that record sits in is the store's question — resolved once per act and
+/// handed down — so the domain type stays free of a column that names a caller's own scope.
+/// </para>
+/// <para>
+/// The holder decides three columns rather than one: the key the row and its addresses are filed under, and whichever
+/// of the user and the mail account the book belongs to. They are written together here so the check constraint
+/// beneath them has nothing to refuse.
 /// </para>
 /// </remarks>
 internal static class ContactMapping
 {
     /// <summary>Builds the rows one contact is kept as.</summary>
-    /// <param name="user">The user whose book the contact is written into.</param>
+    /// <param name="holder">The book the contact is written into.</param>
     /// <param name="contact">The contact to keep.</param>
     /// <returns>The row to insert, with its address rows already attached.</returns>
-    internal static ContactEntity ToEntity(MailUserId user, Contact contact)
+    /// <exception cref="ArgumentException">Thrown when the contact's origin is not the one that book holds.</exception>
+    internal static ContactEntity ToEntity(ContactBookHolder holder, Contact contact)
     {
+        if (contact.Origin != holder.Origin)
+        {
+            throw new ArgumentException(
+                "A contact is written into the book that holds its origin and no other.",
+                nameof(contact));
+        }
+
         var entity = new ContactEntity
         {
             Id = contact.Id.Value,
-            UserId = user.Value,
+            BookHolderId = holder.Key,
+            UserId = holder.User?.Value,
+            MailboxAccountId = holder.Account?.Value,
             DisplayName = contact.DisplayName.Value,
             DisplayNameSortKey = contact.DisplayName.SortKey,
             PreferredNormalizedAddress = contact.PreferredAddress.NormalizedAddress,
@@ -45,18 +60,21 @@ internal static class ContactMapping
 
         foreach (var address in contact.Addresses)
         {
-            entity.Addresses.Add(ToAddressEntity(user, contact, address));
+            entity.Addresses.Add(ToAddressEntity(holder, contact, address));
         }
 
         return entity;
     }
 
     /// <summary>Builds the row one of a contact's addresses is kept as.</summary>
-    /// <param name="user">The user whose book the contact is in, which the row repeats because the uniqueness rule spans this table alone.</param>
+    /// <param name="holder">The book the contact is in, which the row repeats because the uniqueness rule spans this table alone.</param>
     /// <param name="contact">The contact the address belongs to.</param>
     /// <param name="address">The address to keep.</param>
     /// <returns>The address row.</returns>
-    internal static ContactAddressEntity ToAddressEntity(MailUserId user, Contact contact, EmailAddress address) =>
+    internal static ContactAddressEntity ToAddressEntity(
+        ContactBookHolder holder,
+        Contact contact,
+        EmailAddress address) =>
         new()
         {
             // Version 7 over the instant this record was written rather than a random value, so address rows are
@@ -66,7 +84,7 @@ internal static class ContactMapping
             // Nothing reads the ordering between them.
             Id = Guid.CreateVersion7(contact.AmendedAt),
             ContactId = contact.Id.Value,
-            UserId = user.Value,
+            BookHolderId = holder.Key,
             Address = address.Address,
             NormalizedAddress = address.NormalizedAddress,
         };

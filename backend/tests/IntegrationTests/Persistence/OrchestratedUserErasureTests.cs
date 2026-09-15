@@ -2,9 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Contacts;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
@@ -84,6 +86,13 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
 
     /// <summary>The one address this test adds to the surviving user's book, which stays behind with the rest of it.</summary>
     private const string SurvivingUserContactAddress = "correspondent@user-erasure-bystander.contacts.test";
+
+    /// <summary>The one address in the collected book of the mailbox the erasure takes with the user.</summary>
+    /// <remarks>
+    /// Filed under the account rather than under the user, which is the half of the contact book no cascade from the
+    /// user record reaches: it leaves through the mailbox instead, and only because the mailbox leaves with them.
+    /// </remarks>
+    private const string ErasedAccountCollectedAddress = "collected@user-erasure.contacts.test";
 
     // The comparison form the domain derives and the column therefore holds, stated once so a row is sought by what a
     // deployment would have written rather than by the form a literal happens to be typed in.
@@ -660,9 +669,11 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
             FolderAliases = ["inbox"],
         });
 
-        // The contact book records no mail account, so no statement of the seam's names it and the counts above never
-        // see it. It hangs off the user directly, which is the whole of what takes it.
+        // Both halves of the contact book, which leave by two different routes. The person the user wrote down hangs off
+        // the user record and no statement of the seam's names it, while the one the mailbox collected names the account
+        // and is therefore counted beside the mail — so the counts below state it as a table that has to reach zero.
         AddContact(context, userId, "Erased Correspondent", ErasedUserContactAddress);
+        AddCollectedContact(context, ErasedAccount, "Erased Correspondent Collected", ErasedAccountCollectedAddress);
 
         await context.SaveChangesAsync(cancellationToken);
 
@@ -731,11 +742,42 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         });
     }
 
+    private static void AddCollectedContact(
+        MailFathomDbContext context,
+        string accountId,
+        string displayName,
+        string address)
+    {
+        var contact = new ContactEntity
+        {
+            Id = Guid.CreateVersion7(),
+            BookHolderId = ContactBookHolder.Of(MailAccountId.Create(accountId)).Key,
+            MailboxAccountId = accountId,
+            DisplayName = displayName,
+            DisplayNameSortKey = displayName.ToUpperInvariant(),
+            PreferredNormalizedAddress = address.ToUpperInvariant(),
+            Origin = ContactOrigin.Collected,
+            RecordedAt = DateTimeOffset.UnixEpoch,
+            AmendedAt = DateTimeOffset.UnixEpoch,
+        };
+
+        context.Contacts.Add(contact);
+        context.ContactAddresses.Add(new ContactAddressEntity
+        {
+            Id = Guid.CreateVersion7(),
+            ContactId = contact.Id,
+            BookHolderId = contact.BookHolderId,
+            Address = address,
+            NormalizedAddress = address.ToUpperInvariant(),
+        });
+    }
+
     private static void AddContact(MailFathomDbContext context, Guid userId, string displayName, string address)
     {
         var contact = new ContactEntity
         {
             Id = Guid.CreateVersion7(),
+            BookHolderId = ContactBookHolder.Of(MailUserId.Create(userId)).Key,
             UserId = userId,
             DisplayName = displayName,
             DisplayNameSortKey = displayName.ToUpperInvariant(),
@@ -750,7 +792,7 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         {
             Id = Guid.CreateVersion7(),
             ContactId = contact.Id,
-            UserId = userId,
+            BookHolderId = ContactBookHolder.Of(MailUserId.Create(userId)).Key,
             Address = address,
             NormalizedAddress = address.ToUpperInvariant(),
         });

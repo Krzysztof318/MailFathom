@@ -251,9 +251,9 @@ second identical call writes what the first one already wrote — and destructiv
 the whole record removes an address the caller left out and clears a note it omitted. `delete_contact` is idempotent
 too and destructive all the same: erasing somebody twice leaves the state the caller asked for, and the first call
 removed a record nothing here can bring back. `create_contact` is the one write that is neither, because it mints a
-record where none was held and so has nothing to drop. `promote_contact` is idempotent and not destructive: nothing
-about the person is rewritten, what moves is which half of the book they are in, and the second call answers
-`alreadyAsserted`. `set_mail_flags` is idempotent because each value it writes is stated rather than adjusted, so a
+record where none was held and so has nothing to drop. `promote_contact` is idempotent and not destructive: nothing about the
+person is rewritten, what it adds is the caller's own copy of a record the mail account keeps, and a second call finds
+that copy already answering for the address and so leaves the book as the first one left it. `set_mail_flags` is idempotent because each value it writes is stated rather than adjusted, so a
 second identical call asks for exactly what the first one asked for. It is destructive in the sense the protocol
 gives that word — whether the tool performs only additive updates — and it does not: a keyword replacement states the
 whole set and so removes a label the caller never listed, a removal takes named labels off, and clearing `\Seen` or
@@ -1910,14 +1910,18 @@ Six tools reach MailFathom's own contact book: `list_contacts` and `get_contact`
 a writer of it obeys — what identifies a person, when two addresses are the same address, who may amend what, and what
 an erasure removes. Nothing of that is restated here; what this section holds is what the tools publish and refuse.
 
-**A caller reads and writes the book of the user it was admitted to act for**, and no argument of any of the six names
-another. A person another user wrote down is answered as somebody this book does not hold, and an address another
-user's contact holds is free for this one.
+**A caller reads the books of the user it was admitted to act for** — that user's own, holding the people they wrote
+down, beside the collected book of each mail account assigned to them — and no argument of any of the six names another
+user. Its writes reach the user's own book alone. A person another user wrote down is answered as somebody these books
+do not hold, and an address another user's contact holds is free for this one; an address a mail account collected is
+answered once even where two of the caller's accounts picked it up, and the user's own contact is what answers where
+both books carry the address.
 
 The book is why an agent can answer "who is this from" without being handed a list in a prompt, and the reason the write
 half exists rather than only the read half is that a book nobody can add to is one that stays empty. A caller writes as
-**asserted** — somebody writing a person down — so a record this deployment collected from arriving mail is not an
-agent's to amend in place; `promote_contact` is what it does instead.
+**asserted** — somebody writing a person down — so a record a mail account collected is not an agent's to amend in
+place: it is the mailbox's, and the account's other users read the same record. `promote_contact` is what it does
+instead, and it copies rather than moves.
 
 **Everything these tools return is personal data about third parties**, and a note is free text somebody typed about
 somebody else. A client passes a name, an address, and a note into a model as data, exactly as it does message content.
@@ -1945,9 +1949,15 @@ as `54001`, since a use case does not know what a protocol calls an unknown tool
 
 Returns a bounded page of the contact book, ordered by name, with the addresses each person uses.
 
-It is the tool for reading the book as a book — who is in it, what this deployment picked up, who matches a fragment of
-a name. Resolving one address to the person using it is `get_contact`, which is an index lookup rather than a page of
-the book.
+It is the tool for reading the book as a book — who is in it, what the caller's mailboxes picked up, who matches a
+fragment of a name. Resolving one address to the person using it is `get_contact`, which is an index lookup rather than
+a page of the book.
+
+The page is read over every book the caller reads at once, in the order [contacts](contacts.md#two-books-and-a-read-of-both)
+documents: the user's own book first, then the collected book of each of their mail accounts by the account's
+identifier. An address two of those books hold is served once, from the first of them, and that hiding is applied as
+the page is read rather than to a page already served — so **a page holds the size asked for until the walk runs out**,
+and `nextCursor` rather than the count is what says whether more is waiting.
 
 ### Arguments
 
@@ -2055,10 +2065,12 @@ The same shape `create_contact` answers with, and two more states it can carry:
 | `written` | The book holds the record, published in `contact` |
 | `notFound` | No contact of that identifier is in the book |
 | `addressHeldByAnotherContact` | One of the addresses belongs to somebody else, named by `addressHolderContactId` |
-| `contactWasCollected` | The record came from mail that arrived rather than from somebody writing it down |
+| `contactWasCollected` | The record is one of the caller's mail accounts' rather than one somebody wrote down |
 
-`contactWasCollected` is the origin rule rather than a failure: the record is taken on first — with `promote_contact`
-here, or `mfctl contact promote` at a terminal — and is amendable afterwards.
+`contactWasCollected` is the origin rule rather than a failure: the record belongs to a mailbox's book, which the
+account's other users read too, so it is taken on first — with `promote_contact` here, or `mfctl contact promote` at a
+terminal — and the **copy** that produces is what is amendable afterwards, under an identity of its own. A contact
+outside the books the caller reads is `notFound` as it always was.
 
 ## `delete_contact`
 
@@ -2068,6 +2080,12 @@ It is destructive and the annotation says so, as `update_contact`'s does for the
 What is different here is that nothing of the person survives: the record is deleted rather than marked, and nothing
 here brings it back. It removes the contact record alone: no mail is deleted, and no mail server is
 contacted.
+
+It reaches every book the caller reads rather than their own alone, because no origin gates an erasure — somebody asking
+to be taken out of a contact book is not answered with which book they happen to be in. So **erasing a collected record
+takes it out of the mail account's book for every user assigned that account**, the record having been one record rather
+than a copy each. Emptying a whole account's collected book is `mfctl contact delete-collected`, which no tool here
+publishes.
 
 ### Arguments
 
@@ -2089,13 +2107,20 @@ error would only say whether somebody had already erased that person.
 
 ## `promote_contact`
 
-Takes on one person MailFathom collected from arriving mail, so the record becomes one the user asserted.
+Takes on one person a mail account collected from arriving mail, by writing the caller's own asserted copy of the
+record.
 
-It is the only path between the two origins and it runs one way. It is also what unlocks `update_contact` on a record
-that answered `contactWasCollected`: an agent that read the book and found somebody the deployment picked up takes the
-record on for the same user an operator at a terminal would, and a promotion reachable from only one of the two
-surfaces would leave an amendment permanently refused here for every record collection produced. Nothing about the
-person is rewritten, and no mail server is contacted.
+**It copies rather than moves.** The collected record is the mail account's, and the account's other users go on reading
+it, so the promotion writes a second record — in the caller's own book, under an identity of its own — and leaves the
+first where it is. A read for the caller then answers with their own copy in place of the collected one, and a read for
+anybody else assigned that account is unchanged. A caller who wants the collected record gone as well erases it, which
+is the act that reaches the mailbox's book.
+
+It is the only path between the two books and it runs one way. It is also what unlocks `update_contact` on a record
+that answered `contactWasCollected`: an agent that read the book and found somebody a mailbox picked up takes the record
+on for the same user an operator at a terminal would, and a promotion reachable from only one of the two surfaces would
+leave an amendment permanently refused here for every record collection produced. Nothing about the person is rewritten,
+and no mail server is contacted.
 
 ### Arguments
 
@@ -2103,9 +2128,15 @@ person is rewritten, and no mail server is contacted.
 
 ### Result
 
-The same shape `create_contact` answers with, and it carries the state alone. `written` means the record is now under
-the `asserted` origin; `notFound` means the book holds no contact of that identifier; `alreadyAsserted` means the
-promotion had nothing left to do, which is the state a first call left the record in.
+The same shape `create_contact` answers with, and it carries the state alone. `written` means the caller's own book now
+holds their copy; `notFound` means none of the books the caller reads holds a contact of that identifier — which is also
+what a second call on a record already promoted answers, the caller's own copy having taken over the address the
+collected record was answering for; `alreadyAsserted` means the identifier named a record the caller had already written
+down, so there was nothing to take on.
+
+The new record's identity is not answered here, for the reason the record is not: a caller holding
+`mailfathom.mail.contacts.write` alone reads nothing from this surface. A caller that also holds the reading grant finds
+the copy with `get_contact` by one of the person's addresses.
 
 **No record comes back, deliberately.** The caller supplied an identifier rather than a person, so answering with the
 promoted contact would hand the whole of what `get_contact` serves — the name, every address, the note — to a caller

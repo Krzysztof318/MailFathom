@@ -2,11 +2,15 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
@@ -35,6 +39,12 @@ namespace MailFathom.Host.UnitTests.Api;
 public sealed class ContactEndpointsTests
 {
     private static readonly Guid Identity = new("11111111-2222-3333-4444-555555555555");
+
+    /// <summary>The user whose books the routes here are asked about, as the query names one.</summary>
+    private static readonly Guid User = SyntheticMailUser.Deployment.Value;
+
+    /// <summary>The account whose collected book the erasure route is asked about.</summary>
+    private static readonly string Account = SyntheticMailAccount.Deployment.Value;
 
     private readonly IContactStore store = Substitute.For<IContactStore>();
     private readonly IContactDirectory directory = Substitute.For<IContactDirectory>();
@@ -65,8 +75,10 @@ public sealed class ContactEndpointsTests
 
         // Act
         var result = await ContactEndpoints.RecordAsync(
+            User,
             new ContactRecordRequest("Anna Kowalska", ["anna@example.test"], "anna@example.test", Note: null),
             this.Book(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -76,7 +88,7 @@ public sealed class ContactEndpointsTests
 
         await this.store.Received(1).AddAsync(
             Arg.Any<IPersistenceSession>(),
-            Arg.Any<MailUserId>(),
+            Arg.Any<ContactBookHolder>(),
             Arg.Is<Contact>(contact => contact != null && contact.Origin == ContactOrigin.Asserted),
             Arg.Any<CancellationToken>());
     }
@@ -91,8 +103,11 @@ public sealed class ContactEndpointsTests
         // Act
         var result = await ContactEndpoints.AmendAsync(
             Identity,
+            User,
             new ContactRecordRequest("Anna Nowak", ["anna@example.test"], "anna@example.test", Note: null),
             this.Book(),
+            this.Scopes(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -101,7 +116,7 @@ public sealed class ContactEndpointsTests
 
         await this.store.DidNotReceive().ReplaceAsync(
             Arg.Any<IPersistenceSession>(),
-            Arg.Any<MailUserId>(),
+            Arg.Any<ContactBookHolder>(),
             Arg.Any<Contact>(),
             Arg.Any<CancellationToken>());
     }
@@ -121,8 +136,11 @@ public sealed class ContactEndpointsTests
         // Act
         var result = await ContactEndpoints.AmendAsync(
             Identity,
+            User,
             new ContactRecordRequest("Anna Nowak", ["anna@example.test"], "anna@example.test", Note: null),
             this.Book(),
+            this.Scopes(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -141,7 +159,10 @@ public sealed class ContactEndpointsTests
         // Act
         var result = await ContactEndpoints.PromoteAsync(
             Identity,
+            User,
             this.Book(),
+            this.Scopes(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -176,12 +197,14 @@ public sealed class ContactEndpointsTests
 
         // Act
         var result = await ContactEndpoints.RecordAsync(
+            User,
             new ContactRecordRequest(
                 displayName,
                 address.Length == 0 ? [] : [address],
                 preferredAddress,
                 note),
             this.Book(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -197,21 +220,25 @@ public sealed class ContactEndpointsTests
 
         // Act
         var longName = await ContactEndpoints.RecordAsync(
+            User,
             new ContactRecordRequest(
                 new string('A', ContactDisplayName.MaximumLength + 1),
                 ["anna@example.test"],
                 "anna@example.test",
                 Note: null),
             this.Book(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         var longNote = await ContactEndpoints.RecordAsync(
+            User,
             new ContactRecordRequest(
                 "Anna Kowalska",
                 ["anna@example.test"],
                 "anna@example.test",
                 new string('n', ContactNote.MaximumLength + 1)),
             this.Book(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -225,9 +252,11 @@ public sealed class ContactEndpointsTests
     {
         // Act
         var result = await ContactEndpoints.RecordAsync(
+            User,
             request: null,
-            this.Book(),
-            TestContext.Current.CancellationToken);
+            book: this.Book(),
+            users: this.Roster(),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         await this.AssertRefusedWithoutWriting(result, "carries no contact record");
@@ -247,8 +276,10 @@ public sealed class ContactEndpointsTests
 
         // Act
         var result = await ContactEndpoints.RecordAsync(
+            User,
             new ContactRecordRequest("Anna Kowalska", addresses, addresses[0], Note: null),
             this.Book(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -267,12 +298,14 @@ public sealed class ContactEndpointsTests
     public async Task FindAsync_AContactTheBookDoesNotHold_AnswersWithNoContactRatherThanNotFound()
     {
         // Arrange
-        this.directory.FindAsync(Arg.Any<MailUserId>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>()).Returns((Contact?)null);
+        this.directory.FindAsync(Arg.Any<ContactBookScope>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>()).Returns((Contact?)null);
 
         // Act
         var result = await ContactEndpoints.FindAsync(
             Identity,
+            User,
             this.Book(),
+            this.Scopes(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -287,14 +320,16 @@ public sealed class ContactEndpointsTests
         // Act
         var result = await ContactEndpoints.FindAsync(
             Guid.Empty,
+            User,
             this.Book(),
+            this.Scopes(),
             TestContext.Current.CancellationToken);
 
         // Assert
         var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
 
-        await this.directory.DidNotReceive().FindAsync(Arg.Any<MailUserId>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>());
+        await this.directory.DidNotReceive().FindAsync(Arg.Any<ContactBookScope>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>An address that is not one is refused without being written into the answer.</summary>
@@ -313,8 +348,10 @@ public sealed class ContactEndpointsTests
     {
         // Act
         var result = await ContactEndpoints.FindByAddressAsync(
+            User,
             address,
             this.Book(),
+            this.Scopes(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -330,16 +367,18 @@ public sealed class ContactEndpointsTests
         // Arrange
         var held = Asserted("Anna Kowalska", "anna@example.test");
         var cursor = ContactCursor.After(held.DisplayName, held.Id);
-        this.directory.ReadPageAsync(Arg.Any<MailUserId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
+        this.directory.ReadPageAsync(Arg.Any<ContactBookScope>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
             .Returns(new ContactPage([held], cursor));
 
         // Act
         var result = await ContactEndpoints.ListAsync(
+            User,
             origin: null,
             pageSize: null,
             cursor: null,
-            this.Book(),
-            TestContext.Current.CancellationToken);
+            book: this.Book(),
+            scopes: this.Scopes(),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         var page = Assert.IsType<Ok<ContactPageResponse>>(result.Result);
@@ -352,20 +391,22 @@ public sealed class ContactEndpointsTests
     public async Task ListAsync_AnOriginNamedInAnyCasing_NarrowsTheQueryToIt()
     {
         // Arrange
-        this.directory.ReadPageAsync(Arg.Any<MailUserId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
+        this.directory.ReadPageAsync(Arg.Any<ContactBookScope>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
             .Returns(new ContactPage([], NextCursor: null));
 
         // Act
         await ContactEndpoints.ListAsync(
+            User,
             "collected",
             pageSize: null,
             cursor: null,
-            this.Book(),
-            TestContext.Current.CancellationToken);
+            book: this.Book(),
+            scopes: this.Scopes(),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         await this.directory.Received(1).ReadPageAsync(
-            Arg.Any<MailUserId>(),
+            Arg.Any<ContactBookScope>(),
             Arg.Is<ContactQuery>(query => query != null && query.Origin == ContactOrigin.Collected),
             Arg.Any<CancellationToken>());
     }
@@ -384,10 +425,12 @@ public sealed class ContactEndpointsTests
     {
         // Act
         var result = await ContactEndpoints.ListAsync(
+            User,
             origin,
             pageSize,
             cursor,
             this.Book(),
+            this.Scopes(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -395,7 +438,7 @@ public sealed class ContactEndpointsTests
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
         Assert.Contains(expectedFragment, refusal.ProblemDetails.Detail, StringComparison.Ordinal);
 
-        await this.directory.DidNotReceive().ReadPageAsync(Arg.Any<MailUserId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>());
+        await this.directory.DidNotReceive().ReadPageAsync(Arg.Any<ContactBookScope>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>An erasure says what it removed, and says nothing about who it was.</summary>
@@ -403,13 +446,16 @@ public sealed class ContactEndpointsTests
     public async Task EraseAsync_AContactTheBookHolds_AnswersWithTheCountsAndNothingAboutThePerson()
     {
         // Arrange
-        this.store.EraseAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailUserId>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>())
+        this.store.EraseAsync(Arg.Any<IPersistenceSession>(), Arg.Any<ContactBookScope>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>())
             .Returns(new ContactErasure(ContactId.Create(Identity), WasHeld: true, AddressesErased: 3));
 
         // Act
         var result = await ContactEndpoints.EraseAsync(
             Identity,
+            User,
             this.Book(),
+            this.Scopes(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -425,11 +471,15 @@ public sealed class ContactEndpointsTests
     public async Task EraseCollectedAsync_ABookHoldingCollectedRecords_AnswersWithWhatItRemoved()
     {
         // Arrange
-        this.store.EraseCollectedAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+        this.store.EraseCollectedAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
             .Returns(new CollectedContactErasure(ContactsErased: 12, AddressesErased: 17));
 
         // Act
-        var result = await ContactEndpoints.EraseCollectedAsync(this.Book(), TestContext.Current.CancellationToken);
+        var result = await ContactEndpoints.EraseCollectedAsync(
+            Account,
+            this.Book(),
+            CatalogServing(SyntheticMailAccount.Deployment),
+            TestContext.Current.CancellationToken);
 
         // Assert
         var erasure = Assert.IsType<Ok<CollectedContactErasureResponse>>(result.Result);
@@ -441,15 +491,131 @@ public sealed class ContactEndpointsTests
     public async Task EraseCollectedAsync_ABookThatCollectedNobody_AnswersThatNothingWasRemoved()
     {
         // Arrange
-        this.store.EraseCollectedAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
+        this.store.EraseCollectedAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
             .Returns(new CollectedContactErasure(ContactsErased: 0, AddressesErased: 0));
 
         // Act
-        var result = await ContactEndpoints.EraseCollectedAsync(this.Book(), TestContext.Current.CancellationToken);
+        var result = await ContactEndpoints.EraseCollectedAsync(
+            Account,
+            this.Book(),
+            CatalogServing(SyntheticMailAccount.Deployment),
+            TestContext.Current.CancellationToken);
 
         // Assert
         var erasure = Assert.IsType<Ok<CollectedContactErasureResponse>>(result.Result);
         Assert.Equal((0, 0), (erasure.Value!.ContactsErased, erasure.Value.AddressesErased));
+    }
+
+    /// <summary>A write names the user it writes under, so a user nobody holds is refused rather than committed.</summary>
+    /// <remarks>
+    /// The foreign key onto the user record would refuse it anyway, as a fault rather than as one of this surface's own
+    /// refusals — which is what makes the check worth having above the store rather than under it.
+    /// </remarks>
+    [Fact]
+    public async Task RecordAsync_AUserThisDeploymentHoldsNoRecordFor_RefusesWithoutWriting()
+    {
+        // Arrange
+        this.HoldsNoAddresses();
+
+        // Act
+        var result = await ContactEndpoints.RecordAsync(
+            SyntheticMailUser.Another.Value,
+            new ContactRecordRequest("Anna Kowalska", ["anna@example.test"], "anna@example.test", Note: null),
+            this.Book(),
+            this.Roster(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await this.AssertRefusedWithoutWriting(result, "holds no user");
+    }
+
+    /// <summary>The three routes that act under a named user refuse one this deployment holds no record for.</summary>
+    /// <remarks>
+    /// Each answers the same shape for a user nobody holds as it would for a person the books do not carry — nothing
+    /// erased, nothing exported, nothing promoted — so a mistyped identifier would otherwise read exactly like the act
+    /// having run against the person who was meant. A plain read is deliberately not here: an empty book is the honest
+    /// answer to a reader nobody holds, which is what <c>ContactBookScopes.Of</c> documents.
+    /// </remarks>
+    [Fact]
+    public async Task TheActingRoutes_AUserThisDeploymentHoldsNoRecordFor_RefuseWithoutReachingTheBook()
+    {
+        // Arrange
+        var stranger = SyntheticMailUser.Another.Value;
+        this.Holds(Asserted("Anna Kowalska", "anna@example.test"));
+
+        // Act
+        var erasure = await ContactEndpoints.EraseAsync(
+            Identity,
+            stranger,
+            this.Book(),
+            this.Scopes(),
+            this.Roster(),
+            TestContext.Current.CancellationToken);
+
+        var export = await ContactEndpoints.ExportAsync(
+            Identity,
+            stranger,
+            this.Book(),
+            this.Scopes(),
+            this.Roster(),
+            TestContext.Current.CancellationToken);
+
+        var promotion = await ContactEndpoints.PromoteAsync(
+            Identity,
+            stranger,
+            this.Book(),
+            this.Scopes(),
+            this.Roster(),
+            TestContext.Current.CancellationToken);
+
+        var amendment = await ContactEndpoints.AmendAsync(
+            Identity,
+            stranger,
+            new ContactRecordRequest("Anna Nowak", ["anna@example.test"], "anna@example.test", Note: null),
+            this.Book(),
+            this.Scopes(),
+            this.Roster(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(erasure.Result).StatusCode);
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(export.Result).StatusCode);
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(promotion.Result).StatusCode);
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(amendment.Result).StatusCode);
+
+        await this.store.DidNotReceive().EraseAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<ContactBookScope>(),
+            Arg.Any<ContactId>(),
+            Arg.Any<CancellationToken>());
+
+        await this.store.DidNotReceive().ReplaceAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<ContactBookHolder>(),
+            Arg.Any<Contact>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>An erasure cannot be undone, so an account nothing serves is refused rather than answered with nothing removed.</summary>
+    [Fact]
+    public async Task EraseCollectedAsync_AnAccountThisDeploymentDoesNotServe_RefusesWithoutErasing()
+    {
+        // Act
+        var result = await ContactEndpoints.EraseCollectedAsync(
+            "not-an-account-this-deployment-serves",
+            this.Book(),
+            CatalogServing(SyntheticMailAccount.Deployment),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+
+        await this.store.DidNotReceive().EraseCollectedAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailAccountId>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>Exporting somebody the book does not hold produces no document rather than an empty one.</summary>
@@ -457,12 +623,15 @@ public sealed class ContactEndpointsTests
     public async Task ExportAsync_AContactTheBookDoesNotHold_AnswersWithNeitherRecordNorInstant()
     {
         // Arrange
-        this.directory.FindAsync(Arg.Any<MailUserId>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>()).Returns((Contact?)null);
+        this.directory.FindAsync(Arg.Any<ContactBookScope>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>()).Returns((Contact?)null);
 
         // Act
         var result = await ContactEndpoints.ExportAsync(
             Identity,
+            User,
             this.Book(),
+            this.Scopes(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -481,7 +650,10 @@ public sealed class ContactEndpointsTests
         // Act
         var result = await ContactEndpoints.ExportAsync(
             Identity,
+            User,
             this.Book(),
+            this.Scopes(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -531,22 +703,57 @@ public sealed class ContactEndpointsTests
 
         await this.store.DidNotReceive().AddAsync(
             Arg.Any<IPersistenceSession>(),
-            Arg.Any<MailUserId>(),
+            Arg.Any<ContactBookHolder>(),
             Arg.Any<Contact>(),
             Arg.Any<CancellationToken>());
     }
 
     private void Holds(Contact contact)
     {
-        this.directory.FindAsync(Arg.Any<MailUserId>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>()).Returns(contact);
+        this.directory.FindAsync(Arg.Any<ContactBookScope>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>()).Returns(contact);
         this.HoldsNoAddresses();
     }
 
     /// <summary>States that no other contact claims the addresses a write is about, which is the ordinary case.</summary>
     private void HoldsNoAddresses() =>
         this.directory
-            .FindHoldersOfAsync(Arg.Any<MailUserId>(), Arg.Any<IReadOnlyCollection<EmailAddress>>(), Arg.Any<CancellationToken>())
+            .FindHoldersOfAsync(Arg.Any<ContactBookHolder>(), Arg.Any<IReadOnlyCollection<EmailAddress>>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<EmailAddress, ContactId>());
+
+    /// <summary>Reports the accounts a deployment serves, which is what an administrative route resolves one against.</summary>
+    private static IDeploymentMailAccountCatalog CatalogServing(params MailAccountId[] accounts)
+    {
+        var catalog = Substitute.For<IDeploymentMailAccountCatalog>();
+
+        catalog.ServedAccounts.Returns(
+        [
+            .. accounts.Select(account => new ServedMailAccount(
+                account,
+                MailAccountDisplayName.Create(account.Value),
+                MailSynchronizationMode.Polling)),
+        ]);
+
+        return catalog;
+    }
+
+    /// <summary>Holds a record for the one user these routes are asked about, and for nobody else.</summary>
+    private IMailUserDirectory Roster()
+    {
+        var users = Substitute.For<IMailUserDirectory>();
+
+        users.ReadUserAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns((MailUserRecord?)null);
+        users.ReadUserAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>())
+            .Returns(new MailUserRecord(SyntheticMailUser.Deployment, "The deployment's user"));
+
+        return users;
+    }
+
+    /// <summary>Composes the books a named user reads, over a deployment that has assigned them no account.</summary>
+    /// <remarks>
+    /// What a scope adds beyond the user's own book is covered where the composition is; the routes are asked whether
+    /// they resolve one at all and hand it on rather than reaching the store with a user.
+    /// </remarks>
+    private ContactBookScopes Scopes() => new(new StubMailAccountAssignments());
 
     /// <summary>Builds the book the handlers write through, over substituted ports and a session that commits.</summary>
     private ContactBook Book()
@@ -557,7 +764,6 @@ public sealed class ContactEndpointsTests
         return new ContactBook(
             this.store,
             this.directory,
-            ContactBookOwnerships.For(AdministrativeGrant.WholeSurface),
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), this.clock),
             this.clock,
             AdministrativeGrant.WholeSurface);

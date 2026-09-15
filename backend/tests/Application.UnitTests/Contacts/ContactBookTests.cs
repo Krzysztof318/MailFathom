@@ -7,6 +7,7 @@ using MailFathom.Application.Contacts;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
@@ -20,6 +21,13 @@ public sealed class ContactBookTests
 {
     private static readonly DateTimeOffset Now = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
 
+    private static readonly MailUserId User = SyntheticMailUser.Deployment;
+
+    private static readonly MailAccountId Account = SyntheticMailAccount.Deployment;
+
+    /// <summary>The books this suite's user reads: their own, then the collected book of the account they are assigned.</summary>
+    private static readonly ContactBookScope Scope = ContactBookScope.Of(User, [Account]);
+
     /// <summary>A recorded person is held with the identity the book minted and the instant it minted it at.</summary>
     [Fact]
     public async Task RecordAsync_APersonTheBookDoesNotHold_HoldsThemUnderAnIdentityOfItsOwn()
@@ -30,6 +38,7 @@ public sealed class ContactBookTests
 
         // Act
         var result = await contactBook.RecordAsync(
+            User,
             NewContactOf("Anna Kowalska", ["anna@example.test", "anna.kowalska@work.test"]),
             TestContext.Current.CancellationToken);
 
@@ -53,11 +62,13 @@ public sealed class ContactBookTests
         var book = new InMemoryContactBookStore();
         var contactBook = BookOver(book);
         var first = await contactBook.RecordAsync(
+            User,
             NewContactOf("Anna Kowalska", ["anna@example.test"]),
             TestContext.Current.CancellationToken);
 
         // Act
         var second = await contactBook.RecordAsync(
+            User,
             NewContactOf("Anna K.", ["ANNA@EXAMPLE.TEST"]),
             TestContext.Current.CancellationToken);
 
@@ -67,28 +78,51 @@ public sealed class ContactBookTests
         Assert.Equal(1, book.ContactCount);
     }
 
-    /// <summary>Collection never edits what a user wrote down, and a user never edits a collected record in place.</summary>
-    [Theory]
-    [InlineData(ContactOrigin.Asserted, ContactOrigin.Collected)]
-    [InlineData(ContactOrigin.Collected, ContactOrigin.Asserted)]
-    public async Task AmendAsync_AWriterOfTheOtherOrigin_IsRefusedAndHandedTheRecordThatRefusedIt(
-        ContactOrigin held,
-        ContactOrigin writer)
+    /// <summary>Collection never edits what a user wrote down, whichever book it reaches for.</summary>
+    [Fact]
+    public async Task AmendAsync_AWriterCollectingMail_IsRefusedTheRecordTheUserWroteDown()
     {
         // Arrange
         var book = new InMemoryContactBookStore();
-        var contact = ContactOf("Anna Kowalska", ["anna@example.test"], held);
+        var contact = ContactOf("Anna Kowalska", ["anna@example.test"], ContactOrigin.Asserted);
         book.Hold(contact);
 
         // Act
         var result = await BookOver(book).AmendAsync(
-            AmendmentOf(contact, writer, "Anna Nowak", ["anna@example.test"]),
+            Scope,
+            AmendmentOf(contact, ContactOrigin.Collected, "Anna Nowak", ["anna@example.test"]),
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(ContactWriteOutcome.OriginRefusesWriter, result.Outcome);
-        Assert.Equal(held, result.Contact?.Origin);
+        Assert.Equal(ContactOrigin.Asserted, result.Contact?.Origin);
         Assert.Equal("Anna Kowalska", result.Contact?.DisplayName.Value);
+    }
+
+    /// <summary>A record the mailbox collected is refused as collected rather than amended in place.</summary>
+    /// <remarks>
+    /// The record is a mailbox's rather than this user's, and several users may be reading it, so amending it in place
+    /// would let one of them rewrite what the others see. The refusal names the origin rather than reporting a contact
+    /// nobody holds, because promotion is the act that makes a copy the user may amend and the caller has to be told so.
+    /// </remarks>
+    [Fact]
+    public async Task AmendAsync_ACollectedContactOfTheAccountsBook_IsRefusedRatherThanAmendedInPlace()
+    {
+        // Arrange
+        var book = new InMemoryContactBookStore();
+        var contact = ContactOf("Anna Kowalska", ["anna@example.test"], ContactOrigin.Collected);
+        book.Hold(Account, contact);
+
+        // Act
+        var result = await BookOver(book).AmendAsync(
+            Scope,
+            AmendmentOf(contact, ContactOrigin.Asserted, "Anna Nowak", ["anna@example.test"]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ContactWriteOutcome.OriginRefusesWriter, result.Outcome);
+        Assert.Equal(ContactOrigin.Collected, result.Contact?.Origin);
+        Assert.Equal("Anna Kowalska", Assert.Single(book.ContactsOf(Account)).DisplayName.Value);
     }
 
     /// <summary>An amendment states the whole record, so keeping an address the contact already holds is no clash with itself.</summary>
@@ -105,6 +139,7 @@ public sealed class ContactBookTests
 
         // Act
         var result = await BookOver(book, clock).AmendAsync(
+            Scope,
             AmendmentOf(contact, ContactOrigin.Asserted, "Anna Nowak", ["anna@example.test", "anna@personal.test"]),
             TestContext.Current.CancellationToken);
 
@@ -129,6 +164,7 @@ public sealed class ContactBookTests
 
         // Act
         var result = await BookOver(book).AmendAsync(
+            Scope,
             AmendmentOf(anna, ContactOrigin.Asserted, "Anna Kowalska", ["anna@example.test", "marek@example.test"]),
             TestContext.Current.CancellationToken);
 
@@ -147,6 +183,7 @@ public sealed class ContactBookTests
 
         // Act
         var result = await BookOver(book).AmendAsync(
+            Scope,
             AmendmentOf(absent, ContactOrigin.Asserted, "Anna Kowalska", ["anna@example.test"]),
             TestContext.Current.CancellationToken);
 
@@ -155,17 +192,22 @@ public sealed class ContactBookTests
         Assert.Equal(0, book.ContactCount);
     }
 
-    /// <summary>Promotion is the act that makes a collected record the user's, and it keeps everything else.</summary>
+    /// <summary>Promotion writes the user's own copy of a collected record and leaves the mailbox's where it is.</summary>
+    /// <remarks>
+    /// The record belongs to the account rather than to this user, and whoever else is assigned that account goes on
+    /// reading it — so the act produces a second record under an identity of its own rather than moving the first.
+    /// </remarks>
     [Fact]
-    public async Task PromoteAsync_ACollectedContact_BecomesAsserted()
+    public async Task PromoteAsync_ACollectedContact_CopiesItIntoTheCallersOwnBook()
     {
         // Arrange
         var book = new InMemoryContactBookStore();
         var contact = ContactOf("Anna Kowalska", ["anna@example.test"], ContactOrigin.Collected);
-        book.Hold(contact);
+        book.Hold(Account, contact);
 
         // Act
         var result = await BookOver(book).PromoteAsync(
+            Scope,
             contact.Id,
             ContactOrigin.Asserted,
             TestContext.Current.CancellationToken);
@@ -174,6 +216,9 @@ public sealed class ContactBookTests
         Assert.Equal(ContactWriteOutcome.Written, result.Outcome);
         Assert.Equal(ContactOrigin.Asserted, result.Contact?.Origin);
         Assert.Equal(contact.DisplayName.Value, result.Contact?.DisplayName.Value);
+        Assert.NotEqual(contact.Id, result.Contact?.Id);
+        Assert.Equal(result.Contact?.Id, Assert.Single(book.ContactsOf(User)).Id);
+        Assert.Equal(contact, Assert.Single(book.ContactsOf(Account)));
     }
 
     /// <summary>Asking again after a promotion says nothing was left to do rather than writing the record twice.</summary>
@@ -187,6 +232,7 @@ public sealed class ContactBookTests
 
         // Act
         var result = await BookOver(book).PromoteAsync(
+            Scope,
             contact.Id,
             ContactOrigin.Asserted,
             TestContext.Current.CancellationToken);
@@ -203,16 +249,17 @@ public sealed class ContactBookTests
         // Arrange
         var book = new InMemoryContactBookStore();
         var contact = ContactOf("Anna Kowalska", ["anna@example.test"], ContactOrigin.Collected);
-        book.Hold(contact);
+        book.Hold(Account, contact);
 
         // Act
         var result = await BookOver(book).PromoteAsync(
+            Scope,
             contact.Id,
             ContactOrigin.Collected,
             TestContext.Current.CancellationToken);
 
         // Assert
-        var stillHeld = await book.FindAsync(SyntheticMailUser.Deployment, contact.Id, TestContext.Current.CancellationToken);
+        var stillHeld = await book.FindAsync(Scope, contact.Id, TestContext.Current.CancellationToken);
 
         Assert.Equal(ContactWriteOutcome.OriginRefusesWriter, result.Outcome);
         Assert.Equal(ContactOrigin.Collected, stillHeld?.Origin);
@@ -233,8 +280,8 @@ public sealed class ContactBookTests
         var contactBook = BookOver(book);
 
         // Act
-        var erasure = await contactBook.EraseAsync(contact.Id, TestContext.Current.CancellationToken);
-        var afterwards = await contactBook.ExportAsync(contact.Id, TestContext.Current.CancellationToken);
+        var erasure = await contactBook.EraseAsync(Scope, contact.Id, TestContext.Current.CancellationToken);
+        var afterwards = await contactBook.ExportAsync(Scope, contact.Id, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(new ContactErasure(contact.Id, WasHeld: true, AddressesErased: 3), erasure);
@@ -251,7 +298,7 @@ public sealed class ContactBookTests
         var contactId = ContactId.Create(Guid.CreateVersion7(Now));
 
         // Act
-        var erasure = await BookOver(book).EraseAsync(contactId, TestContext.Current.CancellationToken);
+        var erasure = await BookOver(book).EraseAsync(Scope, contactId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(new ContactErasure(contactId, WasHeld: false, AddressesErased: 0), erasure);
@@ -265,18 +312,20 @@ public sealed class ContactBookTests
         var book = new InMemoryContactBookStore();
         var contactBook = BookOver(book);
         var recorded = await contactBook.RecordAsync(
+            User,
             new NewContact
             {
                 DisplayName = ContactDisplayName.Create("Anna Kowalska"),
                 Addresses = [Address("anna@example.test"), Address("anna@personal.test")],
                 PreferredAddress = Address("anna@personal.test"),
                 Note = ContactNote.Create("Owes an answer about the contract."),
-                Origin = ContactOrigin.Collected,
+                Origin = ContactOrigin.Asserted,
             },
             TestContext.Current.CancellationToken);
 
         // Act
         var export = await contactBook.ExportAsync(
+            Scope,
             recorded.Contact!.Id,
             TestContext.Current.CancellationToken);
 
@@ -285,7 +334,7 @@ public sealed class ContactBookTests
         Assert.Equal(Now, export.ProducedAt);
         Assert.Equal("Anna Kowalska", export.Contact.DisplayName.Value);
         Assert.Equal("Owes an answer about the contract.", export.Contact.Note?.Value);
-        Assert.Equal(ContactOrigin.Collected, export.Contact.Origin);
+        Assert.Equal(ContactOrigin.Asserted, export.Contact.Origin);
         Assert.Equal(Address("anna@personal.test"), export.Contact.PreferredAddress);
         Assert.Equal(
             ["ANNA@EXAMPLE.TEST", "ANNA@PERSONAL.TEST"],
@@ -301,6 +350,7 @@ public sealed class ContactBookTests
 
         // Act
         var export = await BookOver(book).ExportAsync(
+            Scope,
             ContactId.Create(Guid.CreateVersion7(Now)),
             TestContext.Current.CancellationToken);
 
@@ -319,7 +369,7 @@ public sealed class ContactBookTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
-            book.ReadPageAsync(ContactQuery.Create(origin: null, search: null, pageSize: null, cursor: null), TestContext.Current.CancellationToken));
+            book.ReadPageAsync(Scope, ContactQuery.Create(origin: null, search: null, pageSize: null, cursor: null), TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFathomPermission.AdminAuditRead, refusal.RequiredPermission);
@@ -337,6 +387,7 @@ public sealed class ContactBookTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => book.RecordAsync(
+            User,
             NewContactOf("Ada Lovelace", ["ada@example.test"]),
             TestContext.Current.CancellationToken));
 
@@ -355,7 +406,7 @@ public sealed class ContactBookTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
-            book.EraseAsync(ContactId.Create(Guid.CreateVersion7(Now)), TestContext.Current.CancellationToken));
+            book.EraseAsync(Scope, ContactId.Create(Guid.CreateVersion7(Now)), TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFathomPermission.AdminErase, refusal.RequiredPermission);
@@ -377,6 +428,7 @@ public sealed class ContactBookTests
 
         // Act
         var result = await book.RecordAsync(
+            User,
             NewContactOf("Ada Lovelace", ["ada@example.test"]),
             TestContext.Current.CancellationToken);
 
@@ -395,7 +447,7 @@ public sealed class ContactBookTests
 
         // Act
         var refusal = await Record.ExceptionAsync(() =>
-            book.EraseAsync(ContactId.Create(Guid.CreateVersion7(Now)), TestContext.Current.CancellationToken));
+            book.EraseAsync(Scope, ContactId.Create(Guid.CreateVersion7(Now)), TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Null(refusal);
@@ -413,6 +465,7 @@ public sealed class ContactBookTests
                 store,
                 authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate))
             .PromoteAsync(
+                Scope,
                 ContactId.Create(Guid.CreateVersion7(Now)),
                 ContactOrigin.Asserted,
                 TestContext.Current.CancellationToken);
@@ -420,6 +473,7 @@ public sealed class ContactBookTests
                 store,
                 authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailContactsWrite))
             .PromoteAsync(
+                Scope,
                 ContactId.Create(Guid.CreateVersion7(Now)),
                 ContactOrigin.Asserted,
                 TestContext.Current.CancellationToken);
@@ -436,7 +490,7 @@ public sealed class ContactBookTests
         // Arrange
         var store = new InMemoryContactBookStore();
         var collected = ContactOf("Anna Kowalska", ["anna@example.test"], ContactOrigin.Collected);
-        store.Hold(collected);
+        store.Hold(Account, collected);
 
         var book = BookOver(
             store,
@@ -444,6 +498,7 @@ public sealed class ContactBookTests
 
         // Act
         var promoted = await book.PromoteAsync(
+            Scope,
             collected.Id,
             ContactOrigin.Collected,
             TestContext.Current.CancellationToken);
@@ -463,6 +518,7 @@ public sealed class ContactBookTests
 
         // Act
         var recorded = await book.CollectAsync(
+            Account,
             NewContactOf("Anna Kowalska", ["anna@example.test"]) with { Origin = ContactOrigin.Collected },
             TestContext.Current.CancellationToken);
 
@@ -484,6 +540,7 @@ public sealed class ContactBookTests
 
         // Act & Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => book.CollectAsync(
+            Account,
             NewContactOf("Anna Kowalska", ["anna@example.test"]) with { Origin = ContactOrigin.Collected },
             TestContext.Current.CancellationToken));
     }
@@ -498,6 +555,7 @@ public sealed class ContactBookTests
 
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(() => book.CollectAsync(
+            Account,
             NewContactOf("Anna Kowalska", ["anna@example.test"]),
             TestContext.Current.CancellationToken));
         Assert.Equal(0, store.ContactCount);
@@ -505,38 +563,87 @@ public sealed class ContactBookTests
 
     /// <summary>Collection asks whether an address is spoken for; handing it the record would put a person in reach of work that may not touch them.</summary>
     [Fact]
-    public async Task HoldsAddressAsync_AnAddressTheBookHolds_AnswersWithoutProducingTheRecord()
+    public async Task HoldsAddressAsync_AnAddressTheAccountsBookHolds_AnswersWithoutProducingTheRecord()
     {
         // Arrange
         var store = new InMemoryContactBookStore();
-        store.Hold(ContactOf("Anna Kowalska", ["anna@example.test"], ContactOrigin.Asserted));
+        store.Hold(Account, ContactOf("Anna Kowalska", ["anna@example.test"], ContactOrigin.Collected));
 
         var book = BookOver(store, authorization: AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
 
         // Act & Assert
-        Assert.True(await book.HoldsAddressAsync(Address("ANNA@example.test"), TestContext.Current.CancellationToken));
-        Assert.False(await book.HoldsAddressAsync(Address("marek@example.test"), TestContext.Current.CancellationToken));
+        Assert.True(await book.HoldsAddressAsync(Account, Address("ANNA@example.test"), TestContext.Current.CancellationToken));
+        Assert.False(await book.HoldsAddressAsync(Account, Address("marek@example.test"), TestContext.Current.CancellationToken));
     }
 
-    /// <summary>Everything collection built is a contact of its own origin, so a user reversing their mind takes exactly that out.</summary>
+    /// <summary>The question is about the account's own book, so what a user of that mailbox wrote down does not answer it.</summary>
+    /// <remarks>
+    /// Collection may not read a user at all, and a user's own record is one of several books over one mailbox — so
+    /// letting one of them suppress the collected record would make what the account holds depend on which user had
+    /// written whom down.
+    /// </remarks>
     [Fact]
-    public async Task EraseCollectedAsync_ABookOfBothOrigins_RemovesOnlyWhatWasCollected()
+    public async Task HoldsAddressAsync_AnAddressOnlyAUsersOwnBookHolds_AnswersThatTheAccountHoldsNone()
     {
         // Arrange
         var store = new InMemoryContactBookStore();
-        store.Hold(ContactOf("Anna Kowalska", ["anna@example.test"], ContactOrigin.Asserted));
-        store.Hold(ContactOf("Marek Nowak", ["marek@example.test", "m.nowak@work.test"], ContactOrigin.Collected));
-        store.Hold(ContactOf("Ewa Lis", ["ewa@example.test"], ContactOrigin.Collected));
+        store.Hold(User, ContactOf("Anna Kowalska", ["anna@example.test"], ContactOrigin.Asserted));
+
+        var book = BookOver(store, authorization: AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
+
+        // Act
+        var held = await book.HoldsAddressAsync(
+            Account,
+            Address("anna@example.test"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(held);
+    }
+
+    /// <summary>Everything collection built is in the account's own book, so emptying it leaves every user's own alone.</summary>
+    [Fact]
+    public async Task EraseCollectedAsync_AnAccountsBookBesideAUsersOwn_RemovesOnlyWhatWasCollected()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        store.Hold(User, ContactOf("Anna Kowalska", ["anna@example.test"], ContactOrigin.Asserted));
+        store.Hold(
+            Account,
+            ContactOf("Marek Nowak", ["marek@example.test", "m.nowak@work.test"], ContactOrigin.Collected));
+        store.Hold(Account, ContactOf("Ewa Lis", ["ewa@example.test"], ContactOrigin.Collected));
 
         var book = BookOver(store, authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminErase));
 
         // Act
-        var erasure = await book.EraseCollectedAsync(TestContext.Current.CancellationToken);
+        var erasure = await book.EraseCollectedAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(2, erasure.ContactsErased);
         Assert.Equal(3, erasure.AddressesErased);
         Assert.Equal(ContactOrigin.Asserted, Assert.Single(store.Contacts).Origin);
+    }
+
+    /// <summary>Collection is switched on per account, so emptying one mailbox's book leaves another mailbox's where it is.</summary>
+    [Fact]
+    public async Task EraseCollectedAsync_TwoAccountsThatEachCollected_RemovesOnlyTheNamedAccountsBook()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        store.Hold(Account, ContactOf("Marek Nowak", ["marek@example.test"], ContactOrigin.Collected));
+        store.Hold(
+            SyntheticMailAccount.Another,
+            ContactOf("Ewa Lis", ["ewa@example.test"], ContactOrigin.Collected));
+
+        var book = BookOver(store, authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminErase));
+
+        // Act
+        var erasure = await book.EraseCollectedAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, erasure.ContactsErased);
+        Assert.Empty(store.ContactsOf(Account));
+        Assert.Equal("Ewa Lis", Assert.Single(store.ContactsOf(SyntheticMailAccount.Another)).DisplayName.Value);
     }
 
     /// <summary>Erasing a book that had collected nobody is the state the user asked for rather than a failure.</summary>
@@ -549,7 +656,7 @@ public sealed class ContactBookTests
             authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminErase));
 
         // Act
-        var erasure = await book.EraseCollectedAsync(TestContext.Current.CancellationToken);
+        var erasure = await book.EraseCollectedAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(0, erasure.ContactsErased);
@@ -567,7 +674,7 @@ public sealed class ContactBookTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
-            book.EraseCollectedAsync(TestContext.Current.CancellationToken));
+            book.EraseCollectedAsync(Account, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFathomPermission.AdminErase, refusal.RequiredPermission);
@@ -586,7 +693,6 @@ public sealed class ContactBookTests
         return new ContactBook(
             book,
             book,
-            ContactBookOwnerships.ForTheServedUser(),
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), timeProvider),
             timeProvider,
             authorization ?? AccessAuthorizations.ForCallerGranted(

@@ -200,15 +200,15 @@ what it was never granted is what the record exists to make visible.
 | `GET /api/admin/content/release` | `mailfathom.admin.read` | Reports how much of this deployment's database is a copy of what its bucket already holds, and how much the move has not yet carried. This is what [`mfctl content release`](#freeing-the-copies-the-move-left-behind) reads first, and what `mfctl content move-status` reports beside the backlog. |
 | `POST /api/admin/content/release` | `mailfathom.admin.erase` | Frees one bounded batch of those copies, leaving the object the only place that mail is held. Refused with `409` while any payload is still waiting to be carried. |
 | `POST /api/admin/folders/erasure` | `mailfathom.admin.erase` | Erases one bounded pass of the mail stored for a folder the account no longer mirrors. **This is the one route that disposes of mail.** |
-| `GET /api/admin/contacts` | `mailfathom.admin.audit.read` | Reads one bounded, keyset-paginated page of the [contact book](../features/contacts.md), optionally narrowed to one origin. |
-| `POST /api/admin/contacts` | `mailfathom.admin.operate` | Records a person the book does not yet hold, as a contact this deployment's user asserted. |
-| `GET /api/admin/contacts/by-address` | `mailfathom.admin.audit.read` | Reads whoever uses one address, in whichever casing the book recorded it. |
-| `GET /api/admin/contacts/{id}` | `mailfathom.admin.audit.read` | Reads one contact by the identity the book gave it. |
-| `PUT /api/admin/contacts/{id}` | `mailfathom.admin.operate` | Amends one contact to the whole record the body states. |
-| `POST /api/admin/contacts/{id}/promotion` | `mailfathom.admin.operate` | Takes on a contact the deployment collected, so it becomes one the user asserted. |
-| `DELETE /api/admin/contacts/{id}` | `mailfathom.admin.erase` | Erases one person and everything the book derived from them. **This is the one route that disposes of a contact, and it cannot be undone.** |
-| `DELETE /api/admin/contacts/collected` | `mailfathom.admin.erase` | Erases every contact this deployment collected from arriving mail, leaving every one its user asserted. **This cannot be undone either.** |
-| `GET /api/admin/contacts/{id}/export` | `mailfathom.admin.audit.read` | Produces everything the book holds about one person, as of the instant it was taken. |
+| `GET /api/admin/contacts` | `mailfathom.admin.audit.read` | Reads one bounded, keyset-paginated page of the books `user` reads — their own beside the collected book of each mail account assigned to them — optionally narrowed to one origin. [The contact book](../features/contacts.md) holds which book answers where two of them carry one address. |
+| `POST /api/admin/contacts` | `mailfathom.admin.operate` | Records a person into the own book of `user`, as a contact they asserted. It never writes a mail account's collected book. A `user` this deployment holds no record for is refused with `400`, as it is on every contact route that acts under the user the request names. |
+| `GET /api/admin/contacts/by-address` | `mailfathom.admin.audit.read` | Reads whoever uses one address across the books `user` reads, in whichever casing the book that answers recorded it. |
+| `GET /api/admin/contacts/{id}` | `mailfathom.admin.audit.read` | Reads one contact by the identity its book gave it, from the books `user` reads. |
+| `PUT /api/admin/contacts/{id}` | `mailfathom.admin.operate` | Amends one contact of the own book of `user` to the whole record the body states. A collected record is not amended in place; it is promoted first. A `user` this deployment holds no record for is refused with `400` rather than answered that the books hold no such contact. |
+| `POST /api/admin/contacts/{id}/promotion` | `mailfathom.admin.operate` | Writes an asserted copy of a collected contact into the own book of `user`, under a new identity. The mail account's own record stays where it is, because the account's other users still read it. A `user` this deployment holds no record for is refused with `400`. |
+| `DELETE /api/admin/contacts/{id}` | `mailfathom.admin.erase` | Erases one person, from whichever of the books `user` reads holds them, and everything that book derived from them. A collected record leaves for every user assigned that mail account. A `user` this deployment holds no record for is refused with `400` rather than answered that nothing was erased. **This is the one route that disposes of a contact, and it cannot be undone.** |
+| `DELETE /api/admin/contacts/collected` | `mailfathom.admin.erase` | Erases the whole collected book of the mail account `account` names, leaving every user's own book where it is. It names an account rather than a user, because collection is switched on per account. An `account` this deployment does not serve is refused with `400` rather than answered with nothing erased, which would read exactly like a mistyped identifier succeeding. **This cannot be undone either.** |
+| `GET /api/admin/contacts/{id}/export` | `mailfathom.admin.audit.read` | Produces everything the books `user` reads hold about one person, as of the instant it was taken. A `user` this deployment holds no record for is refused with `400` rather than answered that the books hold nobody. |
 | `GET /api/admin/configuration` | `mailfathom.admin.read` | Reports the settings at or beneath a path as this deployment reads them, each with the layer that decided it, and the persisted version they were composed over. Secret-bearing values read back as the redaction marker. This is what [`mfctl config get` and `mfctl config show`](#reading-and-changing-the-deployments-own-configuration) ask. |
 | `POST /api/admin/configuration` | `mailfathom.admin.configuration.write` | Applies keyed changes to the persisted configuration document, together or not at all, over the version the body states. |
 | `GET /api/admin/configuration/document` | `mailfathom.admin.read` | Hands over the persisted document itself, secrets redacted, with the version it was read at. This is what an editing session opens. |
@@ -1081,9 +1081,18 @@ each one cannot be undone from.
 what you recorded about them. The book's own rules — what identifies a person, when two addresses are the same address,
 who may change what — are that page's; this is the command group over them.
 
-A book belongs to one user, and this surface acts for none: it is the deployment's administrator rather than somebody
-whose mail is being served, so every command here reaches the book of the user this deployment serves — which it can
-supply only while it serves exactly one.
+**Every command here names the book it reaches.** There are two kinds of book — a user's own, holding the people they
+wrote down, and a mail account's, holding the addresses its mail picked up — and this surface acts for nobody in
+particular: it is the deployment's administrator rather than somebody whose mail is being served, so nothing about the
+credential says whose book is meant. Every command but one therefore takes `--user` and acts on what that user reads,
+their own book beside the collected book of each mail account assigned to them; `contact delete-collected` takes
+`--account` instead, because emptying what one mailbox picked up is not emptying what another did. `--user` is optional
+where the deployment holds one person — the command asks which users exist and acts on the single one — and an
+invocation on a deployment holding several without it is refused with the identifiers to choose between rather than
+answered for whichever user came first. Asking which users exist is a read of the roster, which is published under
+`mailfathom.admin.read` rather than under the grants the contact routes carry — so a credential provisioned for the
+contact surface alone is refused there rather than at the command's own act. Pass `--user` to skip that read, or grant
+`mailfathom.admin.read` beside it.
 
 ```console
 $ mfctl contact create --name "Anna Kowalska" --address anna@example.test --note "Met at the conference."
@@ -1099,37 +1108,41 @@ Amended:    2026-08-16 09:00:00Z
 
 | Command | What it does |
 | --- | --- |
-| `contact create` | Records a person. `--address` is repeated for each address they use, and `--preferred` says which to use by default — required as soon as there is more than one, because that is your choice rather than an ordering accident |
-| `contact show` | Shows one person, by `--id` or by `--address`. Naming both, or neither, is refused |
-| `contact list` | Reads one page, optionally narrowed with `--origin`. `--page-size` bounds it and `--cursor` continues it |
-| `contact update` | Corrects `--name`, `--note`, `--preferred`, or the whole `--address` set. What you do not name is kept; `--clear-note` holds no note afterwards |
+| `contact create` | Records a person into `--user`'s own book. `--address` is repeated for each address they use, and `--preferred` says which to use by default — required as soon as there is more than one, because that is your choice rather than an ordering accident |
+| `contact show` | Shows one person out of the books `--user` reads, by `--id` or by `--address`. Naming both, or neither, is refused |
+| `contact list` | Reads one page of the books `--user` reads, optionally narrowed with `--origin`. `--page-size` bounds it and `--cursor` continues it |
+| `contact update` | Corrects `--name`, `--note`, `--preferred`, or the whole `--address` set, in `--user`'s own book. What you do not name is kept; `--clear-note` holds no note afterwards |
 | `contact add-address` | Adds one address, keeping the rest. `--preferred` names which address to use by default afterwards |
 | `contact remove-address` | Takes one address off. `--preferred` is required when the one being removed is the default |
-| `contact promote` | Takes on a contact the deployment collected, so it becomes one you asserted. It reports that the promotion happened rather than the record, because it sent none and reading the book is a permission of its own; `contact show` is how you look at the person afterwards |
-| `contact delete` | Erases the person. **This cannot be undone**; see below |
-| `contact delete-collected` | Erases every contact the deployment collected from arriving mail, keeping the ones you entered. **This cannot be undone**; see below |
-| `contact export` | Writes everything held about the person to standard output, as JSON |
+| `contact promote` | Writes an asserted copy of a collected contact into `--user`'s own book, leaving the mail account's record for the account's other users. It reports that the promotion happened rather than the record, because it sent none and reading the book is a permission of its own; `contact show` is how you look at the person afterwards |
+| `contact delete` | Erases the person from whichever of the books `--user` reads holds them. **This cannot be undone**; see below |
+| `contact delete-collected` | Erases the whole collected book of the mail account `--account` names, keeping every user's own. **This cannot be undone**; see below |
+| `contact export` | Writes everything the books `--user` reads hold about the person to standard output, as JSON |
 
 **Amendments state the whole record.** The book replaces what it is given rather than merging a difference, so
 `update`, `add-address`, and `remove-address` each read the contact first and send back what it is to become. Two
 operators editing one contact at once are therefore last-writer-wins; an edit racing an erasure is not, and is answered
 as a contact the book does not hold rather than putting the person back.
 
-**A contact the deployment collected is not amended in place.** Collection writes into its own origin and a user does
-not edit those records directly — `contact promote` is the act of taking one on, after which every other command here
-works on it. Amending one without promoting it is refused, and the refusal says so. An agent over the MCP endpoint
-reaches the same act as `promote_contact`, under the writing grant it already holds.
+**A collected contact is not amended in place.** It belongs to the mail account's book rather than to a user's own, and
+a mailbox's other users read the same record — so `contact promote` is the act of taking one on, and it writes an
+asserted **copy** into `--user`'s own book under a new identity, leaving the account's record where it is. Every command
+here then works on the copy, and the user's own record is what answers a read for them from that point on. Amending a
+collected record without promoting it is refused, and the refusal says so. An agent over the MCP endpoint reaches the
+same act as `promote_contact`, under the writing grant it already holds.
 
-**`mfctl contact delete-collected` is the way out of collection.** Everything
-[collection](../features/contacts.md#collecting-contacts-from-arriving-mail) built is a contact of its own origin, so
-this takes the whole of what the deployment inferred and nothing of what you entered. It asks first, `--yes` is how a
-scripted erasure states the agreement, and an invocation with nobody at the terminal and no flag is refused — the same
-rule the erasure of one person follows. What it asks names nobody, and what it answers is two counts. It cannot be
-undone, and switching collection off is a separate act in configuration: with it still on, the book fills again from
-the mail that arrives next.
+**`mfctl contact delete-collected` is the way out of collection, for one mail account.** Everything
+[collection](../features/contacts.md#collecting-contacts-from-arriving-mail) built for the account `--account` names
+goes, what another account collected stays, and nothing anybody wrote down is in that book to go with it. It asks first,
+`--yes` is how a scripted erasure states the agreement, and an invocation with nobody at the terminal and no flag is
+refused — the same rule the erasure of one person follows. What it asks names nobody, and what it answers is two counts.
+It cannot be undone, and switching collection off is a separate act in configuration: with it still on, the book fills
+again from the mail that arrives next.
 
 **`mfctl contact delete` is the contact book's erasure path.** It removes the person and their addresses from the
-database rather than marking them, and nothing in MailFathom can put the record back. The command shows the record and
+database rather than marking them, and nothing in MailFathom can put the record back. It reaches whichever of the books
+`--user` reads holds them, so erasing a collected record takes it out of the mail account's book for every user assigned
+that account rather than only for the one the command named. The command shows the record and
 then asks, and `--yes` is how a scripted erasure states the agreement instead; an invocation with nobody at the terminal
 and no flag is refused rather than having an agreement read out of whatever was piped in. It answers with what went —
 the identity and how many addresses — and never with the person. Erasing somebody the book does not hold succeeds
@@ -1142,7 +1155,9 @@ everything else the command prints goes to standard error.
 **The listing is bounded and there is no command that prints the whole book.** A page holds 50 contacts unless you ask
 for fewer and never more than 200, ordered by the name's comparison form and then by identity. That order is total, so
 walking a page at a time serves every contact exactly once. A page that has more behind it prints the cursor the next
-one is asked with.
+one is asked with — and it is the cursor rather than the count that says so, because a page read over several books
+serves an address held in two of them once, and applies that as the page is read rather than to a page already served,
+so a page holds the size asked for until the walk runs out.
 
 Every refusal names the rule rather than the value: a malformed address is reported as an address that is not usable and
 never echoed, and no name, address, or note reaches a log line, a problem document, a trace, or a failing command's
@@ -1356,17 +1371,18 @@ surfaces admit is a record naming the user it belongs to, whichever method prese
 deliberately not part of that check: it is the surface an operator is holding while they correct the others, and its
 credentials never name a user in the first place.
 
-That leaves the reads with nobody to act for on such a deployment. The contact book is read for one person, and an
-administrator's credential names no user, which leaves the deployment to supply one — which it can do only where it
-holds a single user. Those routes answer `409` on a deployment serving several, with a sentence naming the credential that would have
-been answered, rather than reporting the deployment as broken. Every route that names the user in its own path is
-unaffected, which is every route in the table above, and so is every mailbox read: which accounts a caller owns is
-resolved from the user each served account carries rather than from a sole one.
+No route in the table above leaves a read with nobody to act for, because none of them asks the deployment who its user
+is: every user-scoped route names the user it acts for, in its own path or in a `user` query parameter, and the one
+route that reaches a mail account's own book names the account instead. The contact book was the last of them to be read
+for whoever the deployment served, and it is now read for the user the request names — their own book beside the
+collected book of each mail account assigned to them. Every mailbox read is in the same position: which accounts a
+caller owns is resolved from the user each served account carries rather than from a sole one.
 
-The attachment download the client endpoint serves is in the first group rather than the second. Its capability is a
-signed ticket rather than a credential, so nothing in the URL names a user and the deployment supplies one; on a
-deployment serving several it therefore answers `409` instead of the file. Recording the user in the ticket is what
-ends that, and it changes the capability's own format.
+One read still asks the deployment who its user is, and it is not on this surface: the attachment download the client
+endpoint serves. Its capability is a signed ticket rather than a credential, so nothing in the URL names a user and the
+deployment supplies one; on a deployment serving several it therefore answers `409` instead of the file, with a sentence
+naming the credential that would have been answered rather than reporting the deployment as broken. Recording the user
+in the ticket is what ends that, and it changes the capability's own format.
 
 **Nothing imports a mailbox a file used to declare.** A deployment upgrading from a release that stated its own mail
 accounts does not start until `MailSynchronization:Accounts` is removed, and the refusal names these commands: record

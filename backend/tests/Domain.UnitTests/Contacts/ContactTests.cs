@@ -202,36 +202,6 @@ public sealed class ContactTests
             RecordedAt.AddDays(1)));
     }
 
-    /// <summary>Promotion is the one crossing between origins, and it is the act of taking the record on.</summary>
-    [Fact]
-    public void PromotedToAsserted_ACollectedContact_BecomesAssertedAndKeepsEverythingElse()
-    {
-        // Arrange
-        var contact = ContactOf([Address("anna@example.test")], origin: ContactOrigin.Collected);
-        var promotedAt = RecordedAt.AddDays(5);
-
-        // Act
-        var promoted = contact.PromotedToAsserted(promotedAt);
-
-        // Assert
-        Assert.Equal(ContactOrigin.Asserted, promoted.Origin);
-        Assert.Equal(contact.Id, promoted.Id);
-        Assert.Equal(contact.Addresses, promoted.Addresses);
-        Assert.Equal(contact.RecordedAt, promoted.RecordedAt);
-        Assert.Equal(promotedAt, promoted.AmendedAt);
-    }
-
-    /// <summary>Nothing can unsay that somebody wrote a person down, so an asserted contact has no promotion left.</summary>
-    [Fact]
-    public void PromotedToAsserted_AnAssertedContact_IsRefused()
-    {
-        // Arrange
-        var contact = ContactOf([Address("anna@example.test")]);
-
-        // Act, Assert
-        Assert.Throws<InvalidOperationException>(() => contact.PromotedToAsserted(RecordedAt.AddDays(1)));
-    }
-
     /// <summary>A writer amends the contacts of its own origin and no others, in both directions.</summary>
     [Theory]
     [InlineData(ContactOrigin.Asserted, ContactOrigin.Asserted, true)]

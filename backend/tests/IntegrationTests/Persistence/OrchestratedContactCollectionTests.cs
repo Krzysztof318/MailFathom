@@ -110,11 +110,10 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
             ContactOrigin.Asserted,
             cancellationToken);
 
-        var collected = await RecordAsync(
+        var collected = await CollectAsync(
             services,
             "Erasure Collected",
             ["picked-up@collected.contacts.test", "picked-up.too@collected.contacts.test"],
-            ContactOrigin.Collected,
             cancellationToken);
 
         var assertedId = asserted.Contact!.Id;
@@ -123,7 +122,7 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
         // Act
         var erasure = await AsOperatorAsync(
             services,
-            (book, token) => book.EraseCollectedAsync(token),
+            (book, token) => book.EraseCollectedAsync(SyntheticMailAccount.Account, token),
             cancellationToken);
 
         var collectedRowsLeft = await CountCollectedRowsAsync(services, cancellationToken);
@@ -133,10 +132,11 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
         var gone = await FindByAddressAsync(services, "picked-up@collected.contacts.test", cancellationToken);
 
         // Assert
-        // At least this test's own record and its two addresses: the served user's book is shared by every class in
-        // this collection, so another class's collected rows are erased by the same statement and counting them exactly
-        // would assert about somebody else's arrangement. The counts below are scoped to that user rather than to the
-        // table, because the erasure is scoped to it and a foreign user's collected rows are outside what it promises.
+        // At least this test's own record and its two addresses: the served account's collected book is shared by every
+        // class in this collection, so another class's collected rows are erased by the same statement and counting
+        // them exactly would assert about somebody else's arrangement. The counts below are scoped to that account
+        // rather than to the table, because the erasure is scoped to it and another mailbox's book is outside what it
+        // promises.
         Assert.True(erasure.ContactsErased >= 1);
         Assert.True(erasure.AddressesErased >= 2);
         Assert.Equal(0, collectedRowsLeft);
@@ -214,6 +214,29 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
                 token),
             cancellationToken);
 
+    /// <summary>Collects a person into the served account's book, as MailFathom's own work rather than as a caller.</summary>
+    private static async Task<ContactWriteResult> CollectAsync(
+        OrchestratedMailFathomServices services,
+        string displayName,
+        IReadOnlyList<string> addresses,
+        CancellationToken cancellationToken)
+    {
+        await OrchestratedMailboxAccountRows.HoldAsync(services, [SyntheticMailAccount.Account], cancellationToken);
+
+        return await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<ContactBook>().CollectAsync(
+                SyntheticMailAccount.Account,
+                new NewContact
+                {
+                    DisplayName = ContactDisplayName.Create(displayName),
+                    Addresses = [.. addresses.Select(Address)],
+                    PreferredAddress = Address(addresses[0]),
+                    Origin = ContactOrigin.Collected,
+                },
+                token),
+            cancellationToken);
+    }
+
     private static Task<ContactWriteResult> RecordAsync(
         OrchestratedMailFathomServices services,
         string displayName,
@@ -222,6 +245,7 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
         CancellationToken cancellationToken) => AsOperatorAsync(
             services,
             (book, token) => book.RecordAsync(
+                services.ServedUser,
                 new NewContact
                 {
                     DisplayName = ContactDisplayName.Create(displayName),
@@ -237,7 +261,7 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
         string address,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IContactDirectory>().FindByAddressAsync(
-                services.ServedUser,
+                ContactBookScope.Of(services.ServedUser, [SyntheticMailAccount.Account]),
                 Address(address),
                 token),
             cancellationToken);
@@ -248,8 +272,7 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
             (scope, token) => scope.GetRequiredService<MailFathomDbContext>()
                 .Contacts
                 .AsNoTracking()
-                .Where(contact =>
-                    contact.UserId == services.ServedUser.Value && contact.Origin == ContactOrigin.Collected)
+                .Where(contact => contact.MailboxAccountId == SyntheticMailAccount.Account.Value)
                 .CountAsync(token),
             cancellationToken);
 

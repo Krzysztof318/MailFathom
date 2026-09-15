@@ -297,21 +297,29 @@ internal static class PersistenceConstraintNames
     /// <summary>The index that answers why one message was filed, which is the history's first question.</summary>
     internal const string MailRuleExecutionEmailIndexName = "ix_mail_rule_executions_email_evaluated";
 
-    /// <summary>The order one user's contact book is listed and paginated in.</summary>
+    /// <summary>The order one contact book is listed and paginated in.</summary>
     /// <remarks>
-    /// The user leads it because a listing is always of one person's book: leading with the name would make a page of
-    /// a small book a walk of every book on the deployment, filtered afterwards.
+    /// The holder leads it because a listing is read over a handful of named books: leading with the name would make a
+    /// page of a small book a walk of every book on the deployment, filtered afterwards.
     /// </remarks>
-    internal const string ContactListingIndexName = "ix_contacts_user_display_name_sort_key_id";
+    internal const string ContactListingIndexName = "ix_contacts_book_holder_display_name_sort_key_id";
 
-    /// <summary>The constraint that keeps one address in one person's hands, within one user's book.</summary>
+    /// <summary>The constraint that keeps one address in one person's hands, within one book.</summary>
     /// <remarks>
     /// Named because a losing writer is recognized by the constraint its insert violated: two callers claiming one
     /// address is a race to resolve into the answer that names its holder, not a failure to report. It is also what the
-    /// lookup from an address to a person is answered from. It leads with the user, which is what lets two users each
-    /// hold their own contact for one address while neither book holds it twice.
+    /// lookup from an address to a person is answered from. It leads with the book, which is what lets a user's own
+    /// book and a mailbox's collected book each hold a record for one address while neither holds it twice.
     /// </remarks>
-    internal const string ContactAddressUniqueIndexName = "ix_contact_addresses_user_normalized_address";
+    internal const string ContactAddressUniqueIndexName = "ix_contact_addresses_book_holder_normalized_address";
+
+    /// <summary>The constraint that keeps a contact's book holder, its origin, and the key it is filed under agreeing.</summary>
+    /// <remarks>
+    /// A contact belongs either to a user or to a mail account, and which it is decides its origin. Stating both in
+    /// columns leaves three ways for them to disagree, so the database refuses a row where they do rather than every
+    /// reader having to decide what such a row means.
+    /// </remarks>
+    internal const string ContactBookHolderCheckConstraintName = "ck_contacts_book_holder";
 
     /// <summary>The constraint an outgoing email's idempotency identity is enforced by, and which a losing writer is recognized from.</summary>
     /// <remarks>

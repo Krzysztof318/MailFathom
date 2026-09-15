@@ -3,12 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 
 namespace MailFathom.Application.Contacts;
 
-/// <summary>Keeps one user's contact book, and erases a record of it completely when they ask.</summary>
+/// <summary>Keeps the contact books, and erases a record of one completely when somebody asks.</summary>
 /// <remarks>
 /// <para>
 /// The two staging operations write through the caller's session and commit nothing, as
@@ -19,11 +19,17 @@ namespace MailFathom.Application.Contacts;
 /// pass any such check.
 /// </para>
 /// <para>
-/// Every operation names the user whose book it acts on, and the store applies it rather than trusting the record it
-/// was handed: an identifier that names a contact of somebody else's book is a book that holds no such contact, so a
-/// write cannot cross from one user into another by naming a row it read elsewhere. Which contact may hold an address
-/// is therefore a rule within a book rather than across the table, and the unique constraint underneath leads with the
-/// user to say so.
+/// Every write names the book it acts on and the store applies it rather than trusting the record it was handed: an
+/// identifier that names a contact of another book is a book that holds no such contact, so a write cannot cross from
+/// one book into another by naming a row it read elsewhere. Which contact may hold an address is therefore a rule
+/// within a book rather than across the table, and the unique constraint underneath leads with the book to say so.
+/// </para>
+/// <para>
+/// Erasure is the one act stated over a whole scope rather than over one book, because a person asking to be taken out
+/// is asking about everything the user in front of them can see: the record may be one they wrote down or one a mailbox
+/// of theirs collected, and answering "which book was that in" is not the data subject's problem. Erasing a collected
+/// record takes it out of the account's book, which is to say for every user assigned that account — the record was
+/// always one record rather than a copy each.
 /// </para>
 /// <para>
 /// Erasure joins a session for the same reason the other two do, and for one of its own: what it reports having removed
@@ -34,26 +40,26 @@ namespace MailFathom.Application.Contacts;
 /// </remarks>
 public interface IContactStore
 {
-    /// <summary>Stages a contact the user's book does not yet hold.</summary>
+    /// <summary>Stages a contact the book does not yet hold.</summary>
     /// <param name="session">The session the write joins.</param>
-    /// <param name="user">The user whose book the contact is written into.</param>
+    /// <param name="holder">The book the contact is written into.</param>
     /// <param name="contact">The contact to add.</param>
     /// <param name="cancellationToken">Cancels the staging.</param>
     /// <returns>A task that completes once the insert is staged; nothing is committed here.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when the session cannot supply this store's persistence context.</exception>
+    /// <exception cref="ArgumentException">Thrown when the session cannot supply this store's persistence context, or the contact's origin is not the one that book holds.</exception>
     Task AddAsync(
         IPersistenceSession session,
-        MailUserId user,
+        ContactBookHolder holder,
         Contact contact,
         CancellationToken cancellationToken);
 
     /// <summary>Stages the held record being replaced by the one supplied, address rows included.</summary>
     /// <param name="session">The session the write joins.</param>
-    /// <param name="user">The user whose book holds the record being replaced.</param>
+    /// <param name="holder">The book holding the record being replaced.</param>
     /// <param name="contact">The contact as it is to stand, identified by its own identity.</param>
     /// <param name="cancellationToken">Cancels the staging.</param>
-    /// <returns><see langword="true" /> when that user's book held the contact and the replacement was staged; <see langword="false" /> when it holds none.</returns>
+    /// <returns><see langword="true" /> when that book held the contact and the replacement was staged; <see langword="false" /> when it holds none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the session cannot supply this store's persistence context.</exception>
     /// <remarks>
@@ -65,45 +71,46 @@ public interface IContactStore
     /// </remarks>
     Task<bool> ReplaceAsync(
         IPersistenceSession session,
-        MailUserId user,
+        ContactBookHolder holder,
         Contact contact,
         CancellationToken cancellationToken);
 
-    /// <summary>Erases one contact and everything derived from it.</summary>
+    /// <summary>Erases one contact and everything derived from it, from whichever book of the scope holds it.</summary>
     /// <param name="session">The session the erasure joins.</param>
-    /// <param name="user">The user whose book the contact is erased from.</param>
+    /// <param name="scope">The books the erasure may reach.</param>
     /// <param name="contactId">The contact to erase.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>
-    /// <returns>What the erasure removed, including a book that held no such contact.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <returns>What the erasure removed, including a scope that showed no such contact.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the session cannot supply this store's persistence context.</exception>
     /// <remarks>
-    /// Answering for a contact the book does not hold is a completed erasure rather than a failure: the state a user
-    /// asked for is the state the book is in, and reporting it as an error would only tell them whether somebody had
-    /// already erased that person.
+    /// Answering for a contact no book of the scope holds is a completed erasure rather than a failure: the state the
+    /// caller asked for is the state the books are in, and reporting it as an error would only tell them whether
+    /// somebody had already erased that person.
     /// </remarks>
     Task<ContactErasure> EraseAsync(
         IPersistenceSession session,
-        MailUserId user,
+        ContactBookScope scope,
         ContactId contactId,
         CancellationToken cancellationToken);
 
-    /// <summary>Erases every contact of the collected origin in one user's book, and everything derived from them.</summary>
+    /// <summary>Erases the whole of one mail account's collected book, and everything derived from it.</summary>
     /// <param name="session">The session the erasure joins.</param>
-    /// <param name="user">The user whose collected half is erased.</param>
+    /// <param name="account">The account whose book is erased.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>
     /// <returns>What the erasure removed.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the session cannot supply this store's persistence context.</exception>
     /// <remarks>
-    /// The asserted half is untouched, which is the whole point of the act: a user who changed their mind about
-    /// collection is undoing what their instance inferred rather than what they wrote. It is a set-based delete rather
-    /// than a walk, because the alternative is loading a book of collected people into memory to remove it, and both
-    /// counts are read in the same transaction that removes the rows so the answer is a fact rather than a number that
-    /// was true a moment earlier.
+    /// What a user asks for when they change their mind about collection, and it is scoped to one account because
+    /// collection is switched on per account: an operator disposing of what one mailbox picked up is not disposing of
+    /// what another did. Nothing anybody wrote down goes with it, because nothing anybody wrote down is in this book.
+    /// It is a set-based delete rather than a walk, because the alternative is loading a book of collected people into
+    /// memory to remove it, and both counts are read in the same transaction that removes the rows so the answer is a
+    /// fact rather than a number that was true a moment earlier.
     /// </remarks>
     Task<CollectedContactErasure> EraseCollectedAsync(
         IPersistenceSession session,
-        MailUserId user,
+        MailAccountId account,
         CancellationToken cancellationToken);
 }

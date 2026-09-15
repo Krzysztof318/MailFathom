@@ -4,10 +4,11 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Administration.Contacts;
+using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
-/// <summary>Takes one address off a person the deployment's book holds.</summary>
+/// <summary>Takes one address off a person one user's own book holds.</summary>
 /// <remarks>
 /// The address is removed from the record rather than marked, which is also what frees it for another contact to claim.
 /// A contact holds at least one address, so the last one cannot be removed: what removes a person from the book is
@@ -24,6 +25,7 @@ internal static class RemoveContactAddressCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
+        var userOption = UserOptions.User();
         var identityOption = ContactOptions.Identity();
         var addressOption = ContactOptions.Address("The address to take off the contact.");
 
@@ -33,8 +35,9 @@ internal static class RemoveContactAddressCommand
                 "The address to use by default afterwards. Required when the one being removed is the preferred one.",
         };
 
-        Command command = new("remove-address", "Take one address off a contact the book holds.")
+        Command command = new("remove-address", "Take one address off a contact the user's own book holds.")
         {
+            userOption,
             identityOption,
             addressOption,
             preferredOption,
@@ -43,6 +46,7 @@ internal static class RemoveContactAddressCommand
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
+            result.GetValue(userOption),
             result.GetValue(identityOption),
             result.GetValue(addressOption) ?? string.Empty,
             result.GetValue(preferredOption),
@@ -54,6 +58,7 @@ internal static class RemoveContactAddressCommand
 
     private static Task<int> RunAsync(
         CliContext context,
+        Guid? requestedUser,
         Guid contactId,
         string address,
         string? preferred,
@@ -62,6 +67,7 @@ internal static class RemoveContactAddressCommand
         ContactRecordEdit.AmendAsync(
             context,
             contactId,
+            requestedUser,
             requestedDeployment,
             held => Without(held, address, preferred),
             "Took an address off",

@@ -2286,9 +2286,6 @@ public sealed class MailboxSynchronizerTests
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(AuthorizedPrincipal.Process);
 
-        // One authorization, so the ownership resolves through the branch collection actually takes: the process
-        // identity carries no user, so ActingUser is null and the deployment's user answers. A second, synthetic
-        // caller acting for a user of its own would answer from that instead and leave the fallback unexercised.
         var collecting = new AccessAuthorization(principals);
         var book = new InMemoryContactBookStore();
 
@@ -2296,7 +2293,6 @@ public sealed class MailboxSynchronizerTests
             new ContactBook(
                 book,
                 book,
-                ContactBookOwnerships.For(collecting),
                 new OptimisticConcurrencyRetryPolicy(
                     persistenceSessionFactory,
                     new PersistenceConcurrencyOptions(),
@@ -2344,14 +2340,12 @@ public sealed class MailboxSynchronizerTests
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(AuthorizedPrincipal.Process);
 
-        // One authorization, for the reason the sibling factory above states.
         var collecting = new AccessAuthorization(principals);
 
         return new MailContactCollector(
             new ContactBook(
                 book,
                 book,
-                ContactBookOwnerships.For(collecting),
                 new OptimisticConcurrencyRetryPolicy(
                     persistenceSessionFactory,
                     new PersistenceConcurrencyOptions(),

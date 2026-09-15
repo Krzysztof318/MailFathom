@@ -64,16 +64,17 @@ internal sealed class CreateContactTool(ContactBookWriter contactBookWriter)
         OpenWorld = false,
         UseStructuredContent = true)]
     [Description(
-        "Records a person in MailFathom's own contact book: their name, every address they use, which one is preferred, "
-        + "and an optional note. Writes to local state only — nothing is sent to a mail server or to anybody else, and "
-        + "no mail is touched. Calling twice with the same person records them once and then answers "
-        + "addressHeldByAnotherContact, because one address belongs to one contact across the whole book; look that "
-        + "contact up with get_contact rather than writing a second record. Ask the person you are acting for before "
-        + "writing somebody down.")]
+        "Records a person in your own contact book: their name, every address they use, which one is preferred, "
+        + "and an optional note. It writes your own book and never a mail account's collected one. Writes to local "
+        + "state only — nothing is sent to a mail server or to anybody else, and no mail is touched. Calling twice with "
+        + "the same person records them once and then answers addressHeldByAnotherContact, because one address belongs "
+        + "to one contact within a book; look that contact up with get_contact rather than writing a second record. An "
+        + "address one of your mail accounts collected is free here, and your record is what answers for it afterwards. "
+        + "Ask the person you are acting for before writing somebody down.")]
     public async Task<ContactWriteToolResult> CreateContactAsync(
         [Description("The name to record for this person, as it should be read back, up to 256 characters. Characters that render as nothing are refused.")]
         string displayName,
-        [Description("Every mail address this person uses, at most 32 entries of at most 320 characters each. Two spellings of one address are stored once and the first spelling is the one kept, but both still count towards the 32. An address another contact already holds refuses the write.")]
+        [Description("Every mail address this person uses, at most 32 entries of at most 320 characters each. Two spellings of one address are stored once and the first spelling is the one kept, but both still count towards the 32. An address another contact in your own book already holds refuses the write, while one a mail account collected is free here.")]
         IReadOnlyList<string> addresses,
         [Description("The address to use when addressing this person without naming which of theirs to use. Must be one of addresses; state it even where the record names a single address, because nothing picks one for the user.")]
         string preferredAddress,

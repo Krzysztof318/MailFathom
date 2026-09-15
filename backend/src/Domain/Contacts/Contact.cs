@@ -223,33 +223,6 @@ public sealed class Contact
             this.RecordedAt,
             amendedAt);
 
-    /// <summary>Produces this contact as one the user has taken responsibility for.</summary>
-    /// <param name="promotedAt">When the promotion happened.</param>
-    /// <returns>The same contact, asserted.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the contact is already asserted.</exception>
-    /// <remarks>
-    /// The one transition between origins, and it runs one way. Promoting is an act somebody performs, so an asserted
-    /// contact drifting back to collected is not a transition this type declines to make but one that has no meaning:
-    /// nothing can unsay that somebody wrote a person down.
-    /// </remarks>
-    public Contact PromotedToAsserted(DateTimeOffset promotedAt)
-    {
-        if (this.Origin == ContactOrigin.Asserted)
-        {
-            throw new InvalidOperationException("An asserted contact cannot be promoted again.");
-        }
-
-        return new Contact(
-            this.Id,
-            this.DisplayName,
-            this.Addresses,
-            this.PreferredAddress,
-            this.Note,
-            ContactOrigin.Asserted,
-            this.RecordedAt,
-            promotedAt);
-    }
-
     /// <summary>Keeps the addr-spec alone, because the person's name is the contact's rather than one sender's spelling of it.</summary>
     /// <remarks>
     /// An address arriving with the display name a message carried would let the book hold two names for one person, one

@@ -4,14 +4,17 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
-/// <summary>Takes on a contact the deployment collected from arriving mail.</summary>
+/// <summary>Writes one user's own copy of a contact one of their mail accounts collected.</summary>
 /// <remarks>
-/// The one act that changes an origin, and it runs one way. A collected record is an address that appeared in mail
-/// rather than a person somebody wrote down, so it is not amended in place; promoting it is the user saying this is
-/// their record now, after which every other command here works on it. Nothing turns an asserted contact back.
+/// The one crossing between the two books, and it copies rather than moves. A collected record is an address that
+/// appeared in mail rather than a person somebody wrote down, and it belongs to the account it arrived on — so
+/// promoting leaves it there for whoever else is assigned that account, and what this user gains is a record of their
+/// own, under a new identity, which every other command here then works on and which hides the collected one from their
+/// reads. Nothing turns an asserted contact back.
 /// </remarks>
 internal static class PromoteContactCommand
 {
@@ -24,16 +27,19 @@ internal static class PromoteContactCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
+        var userOption = UserOptions.User();
         var identityOption = ContactOptions.Identity();
 
-        Command command = new("promote", "Take on a contact the deployment collected, so it becomes one you asserted.")
+        Command command = new("promote", "Write a user's own copy of a contact one of their mail accounts collected.")
         {
+            userOption,
             identityOption,
             endpointOption,
         };
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
+            result.GetValue(userOption),
             result.GetValue(identityOption),
             CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
@@ -43,6 +49,7 @@ internal static class PromoteContactCommand
 
     private static async Task<int> RunAsync(
         CliContext context,
+        Guid? requestedUser,
         Guid contactId,
         string? requestedDeployment,
         CancellationToken cancellationToken)
@@ -50,8 +57,10 @@ internal static class PromoteContactCommand
         var profile = await context.Deployment().ReachAsync(requestedDeployment, cancellationToken);
 
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
-        var promoted = await new AdminApiClient(transport, context.Console)
-            .PromoteContactAsync(profile.Token, contactId, cancellationToken);
+        var deployment = new AdminApiClient(transport, context.Console);
+
+        var user = await UserOptions.ResolveUserAsync(deployment, profile.Token, requestedUser, cancellationToken);
+        var promoted = await deployment.PromoteContactAsync(profile.Token, contactId, user, cancellationToken);
 
         return ContactOutput.ReportOutcome(context, promoted, contactId, "Took on");
     }

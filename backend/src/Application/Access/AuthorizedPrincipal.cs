@@ -20,9 +20,9 @@ namespace MailFathom.Application.Access;
 /// the work may do and the user says whose mail it may do it to, so ownership adds no name to the published permission
 /// set and a grant however broad still reaches one user's mail. A principal acting for nobody is not a principal
 /// acting for everybody: the deployment administrator and this process's own identity carry no user, and every use
-/// case that reads or writes one user's mail refuses them. A record that belongs to a user without being mail — the
-/// contact book is the one — may resolve the absent user instead of refusing, and where it does it says what it
-/// resolves it to; <see cref="AccessAuthorization.ActingUser" /> is the only reading that permits it.
+/// case that reads or writes one user's mail refuses them. That holds for a record which belongs to a user without
+/// being mail as well — the contact book is the one — so a surface reaching such a record for somebody who is not the
+/// caller names the user it is for rather than resolving an absent one.
 /// </para>
 /// <para>
 /// It is an ordinary class rather than a record, because two principals are never compared. A record's generated

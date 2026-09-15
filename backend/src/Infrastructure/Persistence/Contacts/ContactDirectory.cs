@@ -4,7 +4,6 @@
 
 using MailFathom.Application.Contacts;
 using MailFathom.CodeCoverage;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -12,25 +11,41 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Contacts;
 
-/// <summary>Reads the contact books from PostgreSQL, one user's at a time.</summary>
+/// <summary>Reads the contact books from PostgreSQL, one reader's set of them at a time.</summary>
 /// <remarks>
 /// <para>
 /// Every read uses the scoped context and joins no transaction, and every one of them is bounded: a contact carries at
 /// most the addresses the domain admits, and a page carries at most what the query asked for. Every lookup is answered
-/// from an index — the primary key, the unique index the user and the address comparison form lead, and the listing
-/// index the user and the name's comparison form lead — rather than from a scan.
+/// from an index — the primary key, the unique index the book and the address comparison form lead, and the listing
+/// index the book and the name's comparison form lead — rather than from a scan.
 /// </para>
 /// <para>
-/// The user is the leading column of both of those indexes, so a read of one book is a walk of that book rather than
-/// of every book the deployment holds narrowed afterwards. The identity lookups carry it as a predicate beside the key
-/// rather than for a plan's sake: a contact of another user's book is answered as one this book does not hold, which
-/// is what keeps an identifier learned elsewhere from reading somebody else's record.
+/// The book is the leading column of both of those indexes, so a read is a seek into each of the handful of books the
+/// reader holds rather than a walk of every book the deployment has, narrowed afterwards. The identity lookups carry
+/// the scope as a predicate beside the key rather than for a plan's sake: a contact of a book outside it is answered as
+/// one this reader does not hold, which is what keeps an identifier learned elsewhere from reading somebody else's
+/// record.
+/// </para>
+/// <para>
+/// <b>One person is answered once.</b> A user's own book and the collected book of each of their mailboxes may all hold
+/// a record for one address, so every read that serves people is taken over <see cref="VisibleIn" />, which hides a
+/// record whose address a book earlier in the scope already holds. The precedence is the scope's own order and it
+/// reaches the database as the position of a book in that list, so the same record wins on a listing and on a name
+/// match. A scope of one book skips the test altogether, because no earlier book exists for anything to be hidden by.
+/// </para>
+/// <para>
+/// <see cref="FindByAddressAsync" /> is the one read that takes the same precedence over the address instead of over
+/// the record, and the difference is only visible where one person's records disagree about which addresses they hold.
+/// A record hidden from a listing because an earlier book holds one of its addresses may hold another the earlier book
+/// does not, and a caller resolving that second address has it in hand already — so answering nothing would deny an
+/// address this deployment holds and the reader is assigned. It is not hidden the other way either: the record a
+/// listing does show is the one that answers for the address they share.
 /// </para>
 /// <para>
 /// A page narrowed by a search is the one read no index answers, because a contained match has no prefix to seek on. It
-/// stays bounded by the page size like every other page, and the book it scans is an assembled record of the people one
-/// user wrote down rather than a table that grows with the mail. A book large enough for the scan to matter is what
-/// would earn a trigram index and the migration that comes with it, which no deployment has asked for.
+/// stays bounded by the page size like every other page, and the books it scans are assembled records of people rather
+/// than tables that grow with the mail. A book large enough for the scan to matter is what would earn a trigram index
+/// and the migration that comes with it, which no deployment has asked for.
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
@@ -38,29 +53,28 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
 {
     /// <inheritdoc />
     public async Task<Contact?> FindAsync(
-        MailUserId user,
+        ContactBookScope scope,
         ContactId contactId,
         CancellationToken cancellationToken)
     {
-        var contactValue = contactId.Value;
-        var userValue = user.Value;
+        ArgumentNullException.ThrowIfNull(scope);
 
-        var entity = await readContext.Contacts
-            .AsNoTracking()
+        var contactValue = contactId.Value;
+
+        var entity = await this.VisibleIn(scope)
             .Include(record => record.Addresses)
-            .FirstOrDefaultAsync(
-                record => record.Id == contactValue && record.UserId == userValue,
-                cancellationToken);
+            .FirstOrDefaultAsync(record => record.Id == contactValue, cancellationToken);
 
         return entity is null ? null : ContactMapping.ToContact(entity);
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyDictionary<ContactId, Contact>> FindAllAsync(
-        MailUserId user,
+        ContactBookScope scope,
         IReadOnlyCollection<ContactId> contactIds,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(contactIds);
 
         // The bound the contract states, enforced here rather than trusted: the identities become the elements of one
@@ -77,12 +91,10 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
         }
 
         var contactValues = contactIds.Select(contactId => contactId.Value).Distinct().ToArray();
-        var userValue = user.Value;
 
-        var entities = await readContext.Contacts
-            .AsNoTracking()
+        var entities = await this.VisibleIn(scope)
             .Include(record => record.Addresses)
-            .Where(record => record.UserId == userValue && contactValues.Contains(record.Id))
+            .Where(record => contactValues.Contains(record.Id))
             .ToArrayAsync(cancellationToken);
 
         return entities.ToDictionary(entity => ContactId.Create(entity.Id), ContactMapping.ToContact);
@@ -90,24 +102,30 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
 
     /// <inheritdoc />
     public async Task<Contact?> FindByAddressAsync(
-        MailUserId user,
+        ContactBookScope scope,
         EmailAddress address,
         CancellationToken cancellationToken)
     {
-        var normalizedAddress = address.NormalizedAddress;
-        var userValue = user.Value;
+        ArgumentNullException.ThrowIfNull(scope);
 
-        // The inner predicate carries the user as well, so the address rows are sought on the unique index the user
-        // leads rather than on the whole table's worth of that address; the outer one keeps the book's own scope even
-        // if the two ever disagreed.
-        var entity = await readContext.Contacts
-            .AsNoTracking()
+        var normalizedAddress = address.NormalizedAddress;
+        var books = scope.Keys.ToArray();
+
+        // The precedence is taken over the address rather than over the record, which is the one read where the two
+        // differ. A listing hides a whole record whose address an earlier book holds, because a person is listed once;
+        // here the caller already has the address, so the earliest book holding *it* answers even where that record is
+        // one a listing would hide for a different address of the same person. Within a book the address is unique, so
+        // the order over the scope settles the answer outright.
+        //
+        // The book is stated inside the address subquery as well as outside it, so the correlated read leads with the
+        // unique index the book and the address form rather than probing the addresses of every contact in the scope.
+        var entity = await readContext.Contacts.AsNoTracking()
+            .Where(record => books.Contains(record.BookHolderId)
+                && record.Addresses.Any(held =>
+                    books.Contains(held.BookHolderId) && held.NormalizedAddress == normalizedAddress))
+            .OrderBy(record => Array.IndexOf(books, record.BookHolderId))
             .Include(record => record.Addresses)
-            .FirstOrDefaultAsync(
-                record => record.UserId == userValue
-                    && record.Addresses.Any(held =>
-                        held.UserId == userValue && held.NormalizedAddress == normalizedAddress),
-                cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken);
 
         return entity is null ? null : ContactMapping.ToContact(entity);
     }
@@ -121,10 +139,11 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
     /// addresses of the people a shared name matched are never loaded at all.
     /// </remarks>
     public async Task<IReadOnlyDictionary<ContactDisplayName, ContactMatch>> MatchDisplayNamesAsync(
-        MailUserId user,
+        ContactBookScope scope,
         IReadOnlyCollection<ContactDisplayName> displayNames,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(displayNames);
 
         // The bound the contract states, enforced here rather than trusted, for the reason the identity lookup above
@@ -140,11 +159,9 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
         }
 
         var sortKeys = displayNames.Select(displayName => displayName.SortKey).Distinct().ToArray();
-        var userValue = user.Value;
 
-        var carrierCounts = await readContext.Contacts
-            .AsNoTracking()
-            .Where(record => record.UserId == userValue && sortKeys.Contains(record.DisplayNameSortKey))
+        var carrierCounts = await this.VisibleIn(scope)
+            .Where(record => sortKeys.Contains(record.DisplayNameSortKey))
             .GroupBy(record => record.DisplayNameSortKey)
             .Select(carriers => new { SortKey = carriers.Key, CarrierCount = carriers.Count() })
             .ToArrayAsync(cancellationToken);
@@ -155,7 +172,7 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
             StringComparer.Ordinal);
 
         var carriersBySortKey = await this.ReadCarriersOfAsync(
-            user,
+            scope,
             [.. carrierCounts.Where(row => row.CarrierCount == 1).Select(row => row.SortKey)],
             cancellationToken);
 
@@ -170,53 +187,77 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
 
     /// <inheritdoc />
     public async Task<IReadOnlyDictionary<EmailAddress, ContactId>> FindHoldersOfAsync(
-        MailUserId user,
+        ContactBookHolder holder,
         IReadOnlyCollection<EmailAddress> addresses,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(holder);
         ArgumentNullException.ThrowIfNull(addresses);
 
-        // The bound the contract states, enforced here rather than trusted: the parameter list becomes one query
-        // parameter per address, so a caller asking about more addresses than a person may hold would decide the cost
-        // of this read.
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(addresses.Count, Contact.MaximumAddressCount, nameof(addresses));
+        var supplied = SuppliedByNormalizedAddress(addresses);
 
-        if (addresses.Count == 0)
+        if (supplied.Count == 0)
         {
             return new Dictionary<EmailAddress, ContactId>();
         }
 
-        var suppliedByNormalizedAddress = new Dictionary<string, EmailAddress>(StringComparer.Ordinal);
-
-        foreach (var address in addresses)
-        {
-            suppliedByNormalizedAddress.TryAdd(address.NormalizedAddress, address);
-        }
-
-        var normalizedAddresses = suppliedByNormalizedAddress.Keys.ToArray();
-        var userValue = user.Value;
+        var normalizedAddresses = supplied.Keys.ToArray();
+        var bookHolderId = holder.Key;
 
         var held = await readContext.ContactAddresses
             .AsNoTracking()
             .Where(address =>
-                address.UserId == userValue && normalizedAddresses.Contains(address.NormalizedAddress))
+                address.BookHolderId == bookHolderId && normalizedAddresses.Contains(address.NormalizedAddress))
             .Select(address => new { address.NormalizedAddress, address.ContactId })
             .ToArrayAsync(cancellationToken);
 
         return held.ToDictionary(
-            row => suppliedByNormalizedAddress[row.NormalizedAddress],
+            row => supplied[row.NormalizedAddress],
             row => ContactId.Create(row.ContactId));
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlySet<EmailAddress>> FindHeldAddressesAsync(
+        ContactBookScope scope,
+        IReadOnlyCollection<EmailAddress> addresses,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        ArgumentNullException.ThrowIfNull(addresses);
+
+        var supplied = SuppliedByNormalizedAddress(addresses);
+
+        if (supplied.Count == 0)
+        {
+            return new HashSet<EmailAddress>();
+        }
+
+        var normalizedAddresses = supplied.Keys.ToArray();
+        var books = scope.Keys.ToArray();
+
+        // No visibility test, because being held in any of the books is the whole of the question: which of two records
+        // for one address the reader is shown does not change that they know the address.
+        var held = await readContext.ContactAddresses
+            .AsNoTracking()
+            .Where(address =>
+                books.Contains(address.BookHolderId) && normalizedAddresses.Contains(address.NormalizedAddress))
+            .Select(address => address.NormalizedAddress)
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+
+        return held.Select(normalized => supplied[normalized]).ToHashSet();
+    }
+
+    /// <inheritdoc />
     public async Task<ContactPage> ReadPageAsync(
-        MailUserId user,
+        ContactBookScope scope,
         ContactQuery query,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(query);
 
-        var entities = await this.Filter(user, query)
+        var entities = await this.Filter(scope, query)
             .Include(record => record.Addresses)
             .OrderBy(record => record.DisplayNameSortKey)
             .ThenBy(record => record.Id)
@@ -264,13 +305,54 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
         };
     }
 
+    /// <summary>Indexes the supplied addresses by their comparison form, keeping the first spelling of a repeated one.</summary>
+    /// <remarks>
+    /// The bound the contract states, enforced here rather than trusted: the parameter list becomes one query parameter
+    /// per address, so a caller asking about more addresses than a person may hold would decide the cost of the read.
+    /// </remarks>
+    private static Dictionary<string, EmailAddress> SuppliedByNormalizedAddress(
+        IReadOnlyCollection<EmailAddress> addresses)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(addresses.Count, Contact.MaximumAddressCount, nameof(addresses));
+
+        var supplied = new Dictionary<string, EmailAddress>(StringComparer.Ordinal);
+
+        foreach (var address in addresses)
+        {
+            supplied.TryAdd(address.NormalizedAddress, address);
+        }
+
+        return supplied;
+    }
+
+    /// <summary>Narrows to the records a scope shows, hiding one whose address a book earlier in the scope already holds.</summary>
+    /// <remarks>
+    /// The precedence reaches PostgreSQL as the position of each book in the scope's list, which is what lets one
+    /// predicate state both halves of the rule at once — a record the user wrote down beats anything a mailbox
+    /// collected, and two mailboxes that collected one address are settled by the order the deployment serves them.
+    /// A scope holding one book skips the test: there is no earlier book for anything to be hidden by, and the
+    /// alternative would put a correlated subquery on every read a caller makes of their own book alone.
+    /// </remarks>
+    private IQueryable<ContactEntity> VisibleIn(ContactBookScope scope)
+    {
+        var books = scope.Keys.ToArray();
+        var records = readContext.Contacts.AsNoTracking().Where(record => books.Contains(record.BookHolderId));
+
+        return books.Length == 1
+            ? records
+            : records.Where(record => !record.Addresses.Any(own => readContext.ContactAddresses.Any(other =>
+                other.NormalizedAddress == own.NormalizedAddress
+                && books.Contains(other.BookHolderId)
+                && Array.IndexOf(books, other.BookHolderId) < Array.IndexOf(books, record.BookHolderId))));
+    }
+
     /// <summary>Reads the contacts carrying each of the names exactly one person was counted under.</summary>
     /// <remarks>
     /// A name is grouped by its comparison form rather than read as one row, because the read is what decides whether the
     /// count still holds and a second carrier has to be visible to it.
     /// </remarks>
     private async Task<IReadOnlyDictionary<string, ContactEntity[]>> ReadCarriersOfAsync(
-        MailUserId user,
+        ContactBookScope scope,
         string[] sortKeys,
         CancellationToken cancellationToken)
     {
@@ -279,12 +361,9 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
             return new Dictionary<string, ContactEntity[]>(StringComparer.Ordinal);
         }
 
-        var userValue = user.Value;
-
-        var entities = await readContext.Contacts
-            .AsNoTracking()
+        var entities = await this.VisibleIn(scope)
             .Include(record => record.Addresses)
-            .Where(record => record.UserId == userValue && sortKeys.Contains(record.DisplayNameSortKey))
+            .Where(record => sortKeys.Contains(record.DisplayNameSortKey))
             .ToArrayAsync(cancellationToken);
 
         return entities
@@ -292,15 +371,10 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
             .ToDictionary(carriers => carriers.Key, carriers => carriers.ToArray(), StringComparer.Ordinal);
     }
 
-    /// <summary>Narrows to one user's book, applies the filter and the boundary a query names, and leaves the ordering to the caller.</summary>
-    /// <remarks>
-    /// The user is applied first because it is the leading column of the listing index the ordering is taken from, so
-    /// a page is a walk of one book from the boundary rather than a walk of the table.
-    /// </remarks>
-    private IQueryable<ContactEntity> Filter(MailUserId user, ContactQuery query)
+    /// <summary>Narrows to the records a scope shows, applies the filter and the boundary a query names, and leaves the ordering to the caller.</summary>
+    private IQueryable<ContactEntity> Filter(ContactBookScope scope, ContactQuery query)
     {
-        var userValue = user.Value;
-        var records = readContext.Contacts.AsNoTracking().Where(record => record.UserId == userValue);
+        var records = this.VisibleIn(scope);
 
         if (query.Origin is { } origin)
         {

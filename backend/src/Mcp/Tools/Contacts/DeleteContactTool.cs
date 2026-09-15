@@ -63,11 +63,13 @@ internal sealed class DeleteContactTool(ContactBookWriter contactBookWriter)
         OpenWorld = false,
         UseStructuredContent = true)]
     [Description(
-        "Erases one person from MailFathom's own contact book and removes every address recorded with them. This cannot "
-        + "be undone: the record is deleted rather than marked, and nothing here can bring it back. It removes only the "
-        + "contact record — no mail is deleted and no mail server is contacted. Erasing somebody the book does not hold "
-        + "is reported as a completed erasure rather than as an error, so repeating the call is safe. Confirm with the "
-        + "person you are acting for before calling it.")]
+        "Erases one person from the contact books you read and removes every address recorded with them. This cannot "
+        + "be undone: the record is deleted rather than marked, and nothing here can bring it back. It reaches a "
+        + "collected record as well as one you wrote down, and erasing a collected one takes it out of that mail "
+        + "account's book for every user assigned the account. It removes only the contact record — no mail is deleted "
+        + "and no mail server is contacted. Erasing somebody the books do not hold is reported as a completed erasure "
+        + "rather than as an error, so repeating the call is safe. Confirm with the person you are acting for before "
+        + "calling it.")]
     public async Task<DeleteContactToolResult> DeleteContactAsync(
         [Description("The contactId of the person to erase, as a listing or an earlier write returned it. Read them with get_contact first if you need to be sure who this is: the answer afterwards carries no name, address, or note.")]
         string contactId,

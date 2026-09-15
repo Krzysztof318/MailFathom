@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Contacts;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Mcp.Tools.Contacts;
 using MailFathom.Mcp.UnitTests.TestDoubles;
@@ -79,7 +78,7 @@ public sealed class ListContactsToolTests
         var cursor = ContactCursor.After(contact.DisplayName, contact.Id);
         var book = new StubContactBook();
         book.Directory
-            .ReadPageAsync(Arg.Any<MailUserId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
+            .ReadPageAsync(Arg.Any<ContactBookScope>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
             .Returns(new ContactPage([contact], cursor));
 
         var tool = new ListContactsTool(book.Reader);
@@ -133,7 +132,7 @@ public sealed class ListContactsToolTests
     {
         var book = new StubContactBook();
         book.Directory
-            .ReadPageAsync(Arg.Any<MailUserId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
+            .ReadPageAsync(Arg.Any<ContactBookScope>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
             .Returns(new ContactPage([], NextCursor: null));
 
         return book;

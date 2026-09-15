@@ -3,7 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Contacts;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -46,32 +48,64 @@ public sealed class ContactBookOwnershipsTests
         Assert.Equal(SyntheticMailUser.Deployment, ownership.User);
     }
 
+    /// <summary>The accounts a user is assigned decide which collected books they read, and in which order.</summary>
+    /// <remarks>
+    /// The order is what the precedence between two books rests on, so a helper that handed the accounts over in the
+    /// order a test happened to name them would leave every suite asserting a precedence its own arrangement decided.
+    /// </remarks>
     [Fact]
-    public void For_TheDeploymentAdministrator_ResolvesToTheUserTheDeploymentServes()
+    public void For_AUserAssignedTwoAccounts_ReadsTheirOwnBookFirstAndTheAccountsInTheDocumentedOrder()
     {
         // Arrange
-        var authorization = AccessAuthorizations.ForAdministratorGranted(MailFathomPermission.AdminAuditRead);
+        var authorization = AccessAuthorizations.ForUserGranted(
+            SyntheticMailUser.Another,
+            MailFathomPermission.MailContactsRead);
 
         // Act
-        var ownership = ContactBookOwnerships.For(authorization, SyntheticMailUser.Another);
+        var ownership = ContactBookOwnerships.For(
+            authorization,
+            MailAccountId.Create("second-account"),
+            MailAccountId.Create("first-account"));
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Another, ownership.User);
+        Assert.Equal(
+            [
+                ContactBookHolder.UserKeyPrefix + SyntheticMailUser.Another.Value.ToString("D"),
+                ContactBookHolder.AccountKeyPrefix + "first-account",
+                ContactBookHolder.AccountKeyPrefix + "second-account",
+            ],
+            ownership.Scope.Keys);
     }
 
-    [Fact]
-    public void For_TheProcessIdentity_ResolvesToTheUserTheDeploymentServes()
+    /// <summary>The two principals that reach the books by naming one, which is why neither may be attributed to a user.</summary>
+    /// <remarks>
+    /// Both once resolved to the single user a deployment served, and a deployment now holds several. What replaced
+    /// that is a refusal rather than a choice: the administrative surface names the user or the account whose book it
+    /// reaches, and collection names the account it is synchronizing, so a principal arriving here acting for nobody
+    /// is a caller that lost its user rather than one to attribute.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(PrincipalsActingForNobody))]
+    public void For_APrincipalActingForNoUser_RefusesRatherThanNamingOne(AuthorizedPrincipal principal)
     {
         // Arrange
-        var authorization = AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process);
+        var ownership = ContactBookOwnerships.For(AccessAuthorizations.ForPrincipal(principal));
 
         // Act
-        var ownership = ContactBookOwnerships.For(authorization);
+        var refusal = Record.Exception(() => ownership.User);
 
         // Assert
-        Assert.Equal(SyntheticMailUser.Deployment, ownership.User);
+        Assert.IsType<PrincipalNotAuthorizedException>(refusal);
     }
 
+    /// <summary>The principals the theory above states, each of which reaches a use case acting for no user.</summary>
+    public static TheoryData<AuthorizedPrincipal> PrincipalsActingForNobody() =>
+    [
+        AuthorizedPrincipal.Caller("test-administrator", [MailFathomPermission.AdminAuditRead]),
+        AuthorizedPrincipal.Process,
+    ];
+
+    /// <summary>An entrypoint that stated no principal at all, which is the case the refusal above was written for.</summary>
     [Fact]
     public void For_WorkReachedUnderNoPrincipal_RefusesRatherThanNamingTheDeploymentsUser()
     {

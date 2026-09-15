@@ -4,14 +4,17 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Administration.Contacts;
+using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
-/// <summary>Adds one more address to a person the deployment's book already holds.</summary>
+/// <summary>Adds one more address to a person one user's own book already holds.</summary>
 /// <remarks>
 /// A convenience over the amendment beneath it rather than an operation of its own: the book takes the whole record, so
-/// this reads the contact, appends the address, and sends the result. An address a different contact already holds is
-/// refused by the deployment naming which contact holds it, because one address belongs to one person across the book.
+/// this reads the contact, appends the address, and sends the result. An address another contact of that user's own
+/// book already holds is refused by the deployment naming which contact holds it, because one address belongs to one
+/// person within one book. An address one of their mailboxes collected is not a conflict: the two books may both hold
+/// it, and the user's own record is the one their reads answer with.
 /// </remarks>
 internal static class AddContactAddressCommand
 {
@@ -24,6 +27,7 @@ internal static class AddContactAddressCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
+        var userOption = UserOptions.User();
         var identityOption = ContactOptions.Identity();
         var addressOption = ContactOptions.Address("The address to add to the contact.");
 
@@ -33,8 +37,9 @@ internal static class AddContactAddressCommand
                 "The address to use by default afterwards, which is the one being added or one the contact already holds.",
         };
 
-        Command command = new("add-address", "Add one address to a contact the book already holds.")
+        Command command = new("add-address", "Add one address to a contact the user's own book already holds.")
         {
+            userOption,
             identityOption,
             addressOption,
             preferredOption,
@@ -43,6 +48,7 @@ internal static class AddContactAddressCommand
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
+            result.GetValue(userOption),
             result.GetValue(identityOption),
             result.GetValue(addressOption) ?? string.Empty,
             result.GetValue(preferredOption),
@@ -54,6 +60,7 @@ internal static class AddContactAddressCommand
 
     private static Task<int> RunAsync(
         CliContext context,
+        Guid? requestedUser,
         Guid contactId,
         string address,
         string? preferred,
@@ -62,6 +69,7 @@ internal static class AddContactAddressCommand
         ContactRecordEdit.AmendAsync(
             context,
             contactId,
+            requestedUser,
             requestedDeployment,
             held => Extend(held, address, preferred),
             "Added an address to",

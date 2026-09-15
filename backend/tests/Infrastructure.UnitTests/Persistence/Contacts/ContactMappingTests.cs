@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Buffers.Binary;
+using MailFathom.Application.Contacts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Contacts;
@@ -14,6 +15,13 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Contacts;
 public sealed class ContactMappingTests
 {
     private static readonly DateTimeOffset RecordedAt = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
+
+    /// <summary>The book of the user every asserted record here is written into.</summary>
+    private static readonly ContactBookHolder OwnBook = ContactBookHolder.Of(SyntheticMailUser.Deployment);
+
+    /// <summary>The book of the mail account every collected record here is written into.</summary>
+    private static readonly ContactBookHolder AccountBook =
+        ContactBookHolder.Of(SyntheticMailAccount.Deployment);
 
     /// <summary>What the rows hold is what the record stated, comparison forms and the chosen default included.</summary>
     [Fact]
@@ -27,7 +35,7 @@ public sealed class ContactMappingTests
             note: "Owes an answer.");
 
         // Act
-        var entity = ContactMapping.ToEntity(SyntheticMailUser.Deployment, contact);
+        var entity = ContactMapping.ToEntity(OwnBook, contact);
 
         // Assert
         Assert.Equal("Anna Kowalska", entity.DisplayName);
@@ -50,7 +58,7 @@ public sealed class ContactMappingTests
         var contact = ContactOf("Anna Kowalska", ["anna@example.test", "anna@personal.test"]);
 
         // Act
-        var entity = ContactMapping.ToEntity(SyntheticMailUser.Deployment, contact);
+        var entity = ContactMapping.ToEntity(OwnBook, contact);
 
         // Assert
         Assert.All(entity.Addresses, address => Assert.Equal(contact.Id.Value, address.ContactId));
@@ -59,24 +67,64 @@ public sealed class ContactMappingTests
 
     /// <summary>Whose book a record belongs to is written onto the contact and onto every address row of it.</summary>
     /// <remarks>
-    /// The address row carries the user as well as the contact it hangs from, because uniqueness is over the user and
-    /// the address and an index cannot reach through a foreign key to read one. An address row written under nobody
-    /// would take an address out of every other user's book.
+    /// The address row carries the book key as well as the contact it hangs from, because uniqueness is over the book
+    /// and the address and an index cannot reach through a foreign key to read one. An address row written under no
+    /// book would take an address out of every other book.
     /// </remarks>
     [Fact]
     public void ToEntity_AContactOfOneUsersBook_WritesThatUserOntoTheRecordAndItsAddresses()
     {
         // Arrange
         var contact = ContactOf("Anna Kowalska", ["anna@example.test", "anna@personal.test"]);
+        var holder = ContactBookHolder.Of(SyntheticMailUser.Another);
 
         // Act
-        var entity = ContactMapping.ToEntity(SyntheticMailUser.Another, contact);
+        var entity = ContactMapping.ToEntity(holder, contact);
 
         // Assert
         Assert.Equal(SyntheticMailUser.Another.Value, entity.UserId);
-        Assert.All(
-            entity.Addresses,
-            address => Assert.Equal(SyntheticMailUser.Another.Value, address.UserId));
+        Assert.Null(entity.MailboxAccountId);
+        Assert.Equal(holder.Key, entity.BookHolderId);
+        Assert.All(entity.Addresses, address => Assert.Equal(holder.Key, address.BookHolderId));
+    }
+
+    /// <summary>A collected record is filed under the mail account it arrived on rather than under any user.</summary>
+    /// <remarks>
+    /// The column is what enrols the collected book in the account's own erasure walk, so a record written with the
+    /// account left blank would outlive the mailbox it was derived from.
+    /// </remarks>
+    [Fact]
+    public void ToEntity_AContactOfOneAccountsBook_WritesThatAccountAndNoUser()
+    {
+        // Arrange
+        var contact = ContactOf("Anna Kowalska", ["anna@example.test"], origin: ContactOrigin.Collected);
+
+        // Act
+        var entity = ContactMapping.ToEntity(AccountBook, contact);
+
+        // Assert
+        Assert.Null(entity.UserId);
+        Assert.Equal(SyntheticMailAccount.Deployment.Value, entity.MailboxAccountId);
+        Assert.Equal(AccountBook.Key, entity.BookHolderId);
+        Assert.All(entity.Addresses, address => Assert.Equal(AccountBook.Key, address.BookHolderId));
+    }
+
+    /// <summary>The kind of book decides the origin of what it holds, so a record of the other origin is refused rather than filed.</summary>
+    /// <remarks>
+    /// The check constraint underneath refuses the row, and answering here names the record rather than the column —
+    /// which is what a caller can act on. Collection writing into a user's book is exactly what it stops.
+    /// </remarks>
+    [Theory]
+    [InlineData(ContactOrigin.Collected, false)]
+    [InlineData(ContactOrigin.Asserted, true)]
+    public void ToEntity_ARecordOfTheOriginTheOtherBookHolds_IsRefused(ContactOrigin origin, bool intoAccountBook)
+    {
+        // Arrange
+        var contact = ContactOf("Anna Kowalska", ["anna@example.test"], origin: origin);
+        var holder = intoAccountBook ? AccountBook : OwnBook;
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ContactMapping.ToEntity(holder, contact));
     }
 
     /// <summary>A stored contact reads back as the record it was written from.</summary>
@@ -92,7 +140,7 @@ public sealed class ContactMappingTests
             origin: ContactOrigin.Collected);
 
         // Act
-        var rebuilt = ContactMapping.ToContact(ContactMapping.ToEntity(SyntheticMailUser.Deployment, contact));
+        var rebuilt = ContactMapping.ToContact(ContactMapping.ToEntity(AccountBook, contact));
 
         // Assert
         Assert.Equal(contact.Id, rebuilt.Id);
@@ -113,7 +161,7 @@ public sealed class ContactMappingTests
         var contact = ContactOf("Anna Kowalska", ["anna@example.test"]);
 
         // Act
-        var rebuilt = ContactMapping.ToContact(ContactMapping.ToEntity(SyntheticMailUser.Deployment, contact));
+        var rebuilt = ContactMapping.ToContact(ContactMapping.ToEntity(OwnBook, contact));
 
         // Assert
         Assert.Null(rebuilt.Note);
@@ -124,7 +172,7 @@ public sealed class ContactMappingTests
     public void ToContact_ARowNamingAPreferredAddressTheContactDoesNotHold_IsRefused()
     {
         // Arrange
-        var entity = ContactMapping.ToEntity(SyntheticMailUser.Deployment, ContactOf("Anna Kowalska", ["anna@example.test"]));
+        var entity = ContactMapping.ToEntity(OwnBook, ContactOf("Anna Kowalska", ["anna@example.test"]));
         entity.PreferredNormalizedAddress = "SOMEBODY.ELSE@EXAMPLE.TEST";
 
         // Act, Assert
@@ -136,7 +184,7 @@ public sealed class ContactMappingTests
     public void ToContact_ARowWithNoAddress_IsRefused()
     {
         // Arrange
-        var entity = ContactMapping.ToEntity(SyntheticMailUser.Deployment, ContactOf("Anna Kowalska", ["anna@example.test"]));
+        var entity = ContactMapping.ToEntity(OwnBook, ContactOf("Anna Kowalska", ["anna@example.test"]));
         entity.Addresses.Clear();
 
         // Act, Assert
@@ -157,12 +205,12 @@ public sealed class ContactMappingTests
             amendedAt);
 
         // Act
-        var row = ContactMapping.ToAddressEntity(SyntheticMailUser.Deployment, amended, Address("anna@personal.test"));
+        var row = ContactMapping.ToAddressEntity(OwnBook, amended, Address("anna@personal.test"));
 
         // Assert
         Assert.Equal(amendedAt, TimestampOf(row.Id));
         Assert.NotEqual(RecordedAt, TimestampOf(row.Id));
-        Assert.Equal(SyntheticMailUser.Deployment.Value, row.UserId);
+        Assert.Equal(OwnBook.Key, row.BookHolderId);
     }
 
     /// <summary>Reads back the instant a version 7 identifier was minted over, which is its leading 48 bits.</summary>

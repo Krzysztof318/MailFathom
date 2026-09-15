@@ -635,6 +635,12 @@ A contact is a *person* rather than an address, which is why the third command a
 match: one person uses a work address, a personal one, and an old one they still receive on, and the book knows those
 are the same person. [Contacts](../features/contacts.md) is what the record holds and every rule it obeys.
 
+**Every one of those commands but `mfctl contact delete-collected` acts for one user**, because a book belongs to
+somebody rather than to the deployment. `--user` is how you say which, and you can leave it off while the deployment
+holds one person — the command asks and acts on the single one. On a deployment holding several it refuses rather than
+guessing, and prints the identifiers to choose between. `delete-collected` is the exception because the book it empties
+belongs to a mail account rather than to a person: it takes `--account` and no `--user` at all.
+
 Two of the commands are not conveniences. **`mfctl contact delete` erases somebody** — the record and their addresses go
 from the database and nothing can put them back, so the command shows you the record and asks first. **`mfctl contact
 export` writes everything held about a person** as JSON on standard output, which is what you redirect into a file and
@@ -648,10 +654,14 @@ option, and refusal.
 
 **The book can also fill itself, and it does not until you say so.** Switching
 [contact collection](../features/contacts.md#collecting-contacts-from-arriving-mail) on for an account records the
-people that account corresponds with as its mail is synchronized. Those records are the deployment's rather than yours:
-`mfctl contact promote` is how you take one on, and every other command works on it afterwards. If you change your mind
-about the whole thing, `mfctl contact delete-collected` erases everything it collected and keeps everything you entered
-— and switching collection off in configuration is the separate act that stops the book filling again.
+people that account corresponds with as its mail is synchronized. Those records belong to the **mailbox** rather than to
+any one person, and everybody assigned that mailbox reads them, so they are read beside a user's own book rather than
+mixed into it: where both hold one address, the record somebody wrote down is the one served.
+`mfctl contact promote` is how a user takes one on, and it writes their own copy — the mailbox's record stays where it
+is, for whoever else is assigned it. If you change your mind about a mailbox filling the book,
+`mfctl contact delete-collected --account <id>` erases everything that one account collected, keeps everything anybody
+entered, and leaves what another account collected alone — and switching collection off in configuration is the separate
+act that stops that account filling the book again.
 
 ## The people this deployment serves
 

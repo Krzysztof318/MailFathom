@@ -257,7 +257,9 @@ already serving:
   rewrite, since a nullable column with no default is a catalog change.
   `MakeStoredEmailOccurrenceOptional` adds `ck_stored_emails_occurrence_complete` to `stored_emails`, so the message
   table is scanned under `ACCESS EXCLUSIVE` once; dropping `NOT NULL` from `uid_validity` and `uid` beside it is a
-  catalog change.
+  catalog change. `SplitContactBooksByHolder` adds `ck_contacts_book_holder` to `contacts` and rebuilds both contact
+  indexes, so each of those two tables is scanned under `ACCESS EXCLUSIVE` — both are proportional to how many people
+  the books hold rather than to how much mail is stored, which is the smallest thing on this page.
 
 - **A foreign key added to a table that already holds rows is validated by scanning it.** `AddLocalMailFolders` adds
   `FK_stored_emails_local_mail_folders_LocalMailFolderId` to `stored_emails`, so the message table is read once under a
@@ -283,7 +285,7 @@ carrying *more* migrations than a build defines has no pending migration for tha
 version keeps serving. What it does not do is use the new columns, which is why the window is a rollout rather than a
 resting state.
 
-**Three migrations narrow that window rather than closing it.** `AddUserAccounts` makes the user of a mail account a
+**Four migrations narrow that window rather than closing it.** `AddUserAccounts` makes the user of a mail account a
 required column, and a build older than the release carrying it does not know the column exists — so against this
 schema such a build serves the mail already stored and still fails the moment it has to bind a folder for an account it
 has never synchronized, because the row it writes states no user. `AddContactUser` does the same for the contact
@@ -292,8 +294,37 @@ an address, because the row it writes states no user either. `KeyMailAccountByUs
 seven primary keys, and the one an older build writes through by name is the sealed OAuth refresh token: its upsert
 names the account identifier as the conflict target, no unique constraint matches that column alone any more, and the
 statement is refused — so a rotation an older build receives against this schema is logged as a failure to store rather
-than stored. Keep the middle of the rollout short on these releases, and do not treat a previous image as something
-that can be left running against them.
+than stored. `SplitContactBooksByHolder` is `AddContactUser`'s shape a second time: which book holds a contact becomes a
+required column that a check constraint governs, and an older build states neither side of it — so such a build reads and
+amends the contacts already stored and fails the moment it records a new person or an address, and the contact collection
+of every mailbox it synchronizes fails with it. Keep the middle of the rollout short on these releases, and do not treat
+a previous image as something that can be left running against them.
+
+**`SplitContactBooksByHolder` is the one migration that deletes rows it cannot carry over.** A contact book stops being
+one user's and becomes either a user's own or a mail account's, and every row has to say which. A contact somebody wrote
+down carries over unchanged, filed under the user it was already filed under. A collected one has no mailbox recorded
+against it — nothing in the old schema recorded which one picked the address up — so it carries over only where the
+deployment answers that on its own: where the user it was filed under is assigned exactly one mailbox and that mailbox
+is assigned exactly that one user, the mailbox it arrived on is the only one it can have arrived on, and the row moves
+into that account's book. **Everything else collected is deleted** rather than attributed to a mailbox the migration
+would have to guess, because a wrong guess would publish one user's correspondents to everybody else assigned a shared
+mailbox. So a deployment where each person has their own mailbox loses nothing, and one that already shares a mailbox,
+or assigns somebody several, loses what those accounts had collected. **Nothing an operator or a user wrote down is
+touched either way**, and collection rebuilds what was deleted from the mail that arrives next, exactly as it does after
+`mfctl contact delete-collected`. There is no way back to them afterwards, so an operator who wants them kept reads
+them **before** the upgrade — and which reading is available depends on the deployment being upgraded from, because on
+the release being upgraded from, every `mfctl contact` command still reaches the book of the one user that deployment
+serves. A deployment serving one user reads them with `mfctl contact list --origin Collected` and exports each with
+`mfctl contact export`. A deployment serving several — which is exactly the shape that loses rows — cannot, so it reads
+them from the database instead, before the migration runs:
+
+```sql
+SELECT c."Id", c."UserId", c."DisplayName", c."Note", a."Address"
+FROM contacts c
+JOIN contact_addresses a ON a."ContactId" = c."Id"
+WHERE c."Origin" = 'Collected'
+ORDER BY c."UserId", c."DisplayName";
+```
 
 **The release carrying `MakeStoredEmailOccurrenceOptional` leaves queued classifications alone.** Arriving mail is
 now classified under a job type of its own, `classify-stored-email-spam`, which names the stored email; a replica of
@@ -410,6 +441,12 @@ That leaves two answers, and which one applies is decided before the upgrade rat
   because the row it writes states no user. Rolling the image back leaves a deployment whose contact book can be read
   and not written — including by the collection pass, which writes a contact per correspondent it recognizes — so
   restoring from the backup is the way back there too.
+
+  **Nor for the release that carries `SplitContactBooksByHolder`.** A build older than that release writes a contact row
+  stating only a user, which the check constraint on `contacts` now refuses, so its contact book can be read and not
+  written — and the collection pass, which writes a contact per correspondent it recognizes, fails with it. The rows
+  that migration deleted are gone whichever image is running, so restoring from the backup is the only way back to them
+  as well as to a writable book.
 
   **`AddContentStorageBackendAndObjectLocator` narrows it conditionally**, and which way depends on what the deployment
   did rather than on the migration. A build older than that release reads a payload column it expects to be filled, and

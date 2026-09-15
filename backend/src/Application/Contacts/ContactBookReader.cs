@@ -20,9 +20,10 @@ namespace MailFathom.Application.Contacts;
 /// reach the book by arriving another way.
 /// </para>
 /// <para>
-/// Which book is read is <see cref="ContactBookOwnership" />'s answer rather than an argument of the request, so a
-/// caller reads the book of the user they were admitted to act for and no request of theirs can name another. A
-/// contact of somebody else's book is answered as one this book does not hold.
+/// Which books are read is <see cref="ContactBookOwnership" />'s answer rather than an argument of the request, so a
+/// caller reads the book of the user they were admitted to act for beside the collected book of each mail account
+/// assigned to them, and no request of theirs can name another. A contact outside that scope is answered as one these
+/// books do not hold.
 /// </para>
 /// <para>
 /// There is no unbounded read. A caller naming no page size is served the book's default rather than everything, and one
@@ -73,7 +74,7 @@ public sealed class ContactBookReader
 
         this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
 
-        return this.directory.ReadPageAsync(this.ownership.User, QueryFrom(request), cancellationToken);
+        return this.directory.ReadPageAsync(this.ownership.Scope, QueryFrom(request), cancellationToken);
     }
 
     /// <summary>Reads one contact by the identity the book gave it.</summary>
@@ -85,24 +86,26 @@ public sealed class ContactBookReader
     {
         this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
 
-        return this.directory.FindAsync(this.ownership.User, contactId, cancellationToken);
+        return this.directory.FindAsync(this.ownership.Scope, contactId, cancellationToken);
     }
 
     /// <summary>Reads the person who uses one address.</summary>
     /// <param name="address">The address to resolve.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The contact holding that address, or <see langword="null" /> when nobody in the book does.</returns>
+    /// <returns>The contact holding that address, or <see langword="null" /> when no book in the scope does.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the reading grant.</exception>
     /// <remarks>
-    /// The lookup a caller reaches for once it has an address out of mail, answered from the unique index over the
-    /// user and the address comparison form rather than from a search over the book. At most one contact of that
-    /// user's book can answer, which is the book's own uniqueness rule rather than a property of this method.
+    /// The lookup a caller reaches for once it has an address out of mail, answered from the address index leading
+    /// with the book rather than from a search over one. Several books of the scope may each hold the address, and the
+    /// earliest of them is the one that answers — the scope's own precedence rather than a uniqueness rule the database
+    /// keeps. It is taken over the address here rather than over the record, so an address only a record a listing
+    /// hides holds still resolves.
     /// </remarks>
     public Task<Contact?> FindByAddressAsync(EmailAddress address, CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
 
-        return this.directory.FindByAddressAsync(this.ownership.User, address, cancellationToken);
+        return this.directory.FindByAddressAsync(this.ownership.Scope, address, cancellationToken);
     }
 
     /// <summary>Reads the query a request states, refusing every part of it the book does not serve.</summary>

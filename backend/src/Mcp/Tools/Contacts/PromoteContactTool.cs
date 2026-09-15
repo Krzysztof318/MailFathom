@@ -26,8 +26,10 @@ namespace MailFathom.Mcp.Tools.Contacts;
 /// </para>
 /// <para>
 /// It changes state, reaches nothing outside this process, and is not destructive: nothing about the person is
-/// rewritten, and what moves is which half of the book they are in. Asking twice is asking once — the second call
-/// answers <c>alreadyAsserted</c>, which is the state the first call left the record in.
+/// rewritten and nothing is taken from anybody. What it writes is the caller's own copy, and the mail account's record
+/// stays where the account's other users go on reading it. A second call therefore answers <c>notFound</c> rather than
+/// repeating the first: the copy is what answers for that address in the caller's scope, so the collected record the
+/// identifier named is no longer the one a read of theirs reaches.
 /// </para>
 /// <para>
 /// <b>It answers with the outcome and never with the record.</b> The caller supplied an identifier rather than a
@@ -71,12 +73,14 @@ internal sealed class PromoteContactTool(ContactBookWriter contactBookWriter)
         OpenWorld = false,
         UseStructuredContent = true)]
     [Description(
-        "Takes on one person MailFathom collected from arriving mail, so the record becomes one the user asserted "
-        + "rather than one the deployment inferred. This is the only path between the two origins and it runs one way; "
-        + "it is also what unlocks update_contact on a record that answered contactWasCollected. Nothing about the "
-        + "person is rewritten. Writes to local state only, and touches no mail. A contact that was already asserted "
-        + "answers alreadyAsserted. The answer carries the outcome alone and never the record; read the person with "
-        + "get_contact.")]
+        "Takes on one person a mail account collected from arriving mail, by writing your own asserted copy of the "
+        + "record under an identity of its own. It copies rather than moves: the mail account's record stays where it "
+        + "is, because the other users assigned that account read it too, and your reads answer with your copy in its "
+        + "place. This is the only path between the two books and it runs one way; it is also what unlocks "
+        + "update_contact on a record that answered contactWasCollected. Nothing about the person is rewritten. Writes "
+        + "to local state only, and touches no mail. A contact you had already written down answers alreadyAsserted, "
+        + "and one you have already promoted answers notFound because your own copy now answers for the address. The "
+        + "answer carries the outcome alone and never the record; read the person with get_contact.")]
     public async Task<ContactWriteToolResult> PromoteContactAsync(
         [Description("The contactId of the collected person to take on, as a listing or an earlier read returned it.")]
         string contactId,

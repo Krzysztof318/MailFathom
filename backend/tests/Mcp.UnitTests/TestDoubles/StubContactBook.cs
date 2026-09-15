@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
@@ -28,29 +29,42 @@ internal sealed class StubContactBook
 
     private readonly FakeTimeProvider timeProvider = new(Now);
 
+    /// <summary>The mail account this caller's user is assigned, whose collected book they therefore read beside their own.</summary>
+    /// <remarks>
+    /// One rather than none, so the scope a tool reads through is the two-book one a deployment composes: a tool that
+    /// started answering from the caller's own book alone would otherwise pass here and hide a person the mailbox
+    /// collected from every agent asking for them.
+    /// </remarks>
+    private static readonly MailAccountId AssignedAccount = SyntheticMailAccount.Deployment;
+
     /// <summary>The one caller both use cases and the ownership beside them read.</summary>
     /// <remarks>
     /// One instance rather than one per site, for the reason <c>AuthoredSendGovernors.Governing</c> states: production
     /// composes one scoped authorization that the use case and the ownership both read. Two of them here would let the
-    /// ownership answer from a caller the use cases never saw — this one carries no user, so the resolution falls back
-    /// to the deployment's, and a change that made it read the use case's own principal would land on the same answer
-    /// and leave every tool suite green.
+    /// ownership answer from a caller the use cases never saw, which is the one thing a tool suite could not notice —
+    /// the books are resolved from the principal rather than from an argument, so a resolution reading somebody else's
+    /// principal answers a plausible scope and every assertion here still holds.
     /// </remarks>
     private readonly AccessAuthorization authorization = new(
-        new StubAuthorizedPrincipalSource(StubAuthorizedPrincipalSource.CallerHolding(
+        new StubAuthorizedPrincipalSource(AuthorizedPrincipal.CallerActingFor(
+            SyntheticMailUser.Deployment,
+            "stub-caller",
             MailFathomPermission.PublishedFor(ProtectedSurface.Mail))));
 
     /// <summary>Initializes the ports with the answers a write needs before it can reach an outcome.</summary>
     public StubContactBook()
     {
         this.Directory
-            .FindHoldersOfAsync(Arg.Any<MailUserId>(), Arg.Any<IReadOnlyCollection<EmailAddress>>(), Arg.Any<CancellationToken>())
+            .FindHoldersOfAsync(
+                Arg.Any<ContactBookHolder>(),
+                Arg.Any<IReadOnlyCollection<EmailAddress>>(),
+                Arg.Any<CancellationToken>())
             .Returns(new Dictionary<EmailAddress, ContactId>());
 
         this.Store
             .ReplaceAsync(
                 Arg.Any<IPersistenceSession>(),
-                Arg.Any<MailUserId>(),
+                Arg.Any<ContactBookHolder>(),
                 Arg.Any<Contact>(),
                 Arg.Any<CancellationToken>())
             .Returns(true);
@@ -62,19 +76,22 @@ internal sealed class StubContactBook
     /// <summary>Gets the writing port every write is staged against.</summary>
     public IContactStore Store { get; } = Substitute.For<IContactStore>();
 
+    /// <summary>Gets the books this caller reads, which is what a tool test asserts a read was scoped to.</summary>
+    public ContactBookScope Scope => ContactBookScope.Of(SyntheticMailUser.Deployment, [AssignedAccount]);
+
     /// <summary>Gets the use case the read tools call.</summary>
     public ContactBookReader Reader =>
-        new(this.Directory, ContactBookOwnerships.For(this.authorization), this.authorization);
+        new(this.Directory, this.Ownership(), this.authorization);
 
     /// <summary>Gets the use case the write tools call.</summary>
     public ContactBookWriter Writer => new(
         new ContactBook(
             this.Store,
             this.Directory,
-            ContactBookOwnerships.For(this.authorization),
             this.CommitPolicy(),
             this.timeProvider,
             this.authorization),
+        this.Ownership(),
         this.authorization);
 
     /// <summary>Builds a contact the book could be holding.</summary>
@@ -107,6 +124,8 @@ internal sealed class StubContactBook
 
         return emailAddress;
     }
+
+    private ContactBookOwnership Ownership() => ContactBookOwnerships.For(this.authorization, AssignedAccount);
 
     private OptimisticConcurrencyRetryPolicy CommitPolicy()
     {

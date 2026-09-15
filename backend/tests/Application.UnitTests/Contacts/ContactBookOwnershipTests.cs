@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Persistence;
@@ -17,18 +18,18 @@ using Xunit;
 
 namespace MailFathom.Application.UnitTests.Contacts;
 
-/// <summary>Covers that a book belongs to one user, over every way a use case reaches one.</summary>
+/// <summary>Covers which books one caller reads and which one their writes go into, over every way a use case reaches them.</summary>
 /// <remarks>
-/// Each test arranges two books and reaches one, because a scope is only observable where there is something outside it
-/// to leak: a suite holding one user's contacts would pass identically against a book that scopes nothing. The books
-/// are the real in-memory one rather than a substitute, so what is asserted is which user the use case asked for and
-/// what a book keyed that way answers, rather than an answer a test arranged.
+/// Each test arranges more than one book and reaches one caller, because a scope is only observable where there is
+/// something outside it to leak: a suite holding one user's contacts would pass identically against a read that scoped
+/// nothing. The books are the real in-memory ones rather than a substitute, so what is asserted is which books the use
+/// case asked for and what books keyed that way answer, rather than an answer a test arranged.
 /// </remarks>
 public sealed class ContactBookOwnershipTests
 {
     private static readonly DateTimeOffset Now = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
 
-    /// <summary>A listing is one user's own, so nobody else's correspondents are served with it.</summary>
+    /// <summary>A listing is one user's own books, so nobody else's correspondents are served with it.</summary>
     [Fact]
     public async Task ReadPageAsync_ABookEachOfTwoUsersHolds_ServesTheCallersOwnAndNoOther()
     {
@@ -66,6 +67,131 @@ public sealed class ContactBookOwnershipTests
 
         // Assert
         Assert.Null(found);
+    }
+
+    /// <summary>A mailbox two people are assigned holds one collected record, and each of them reads that one record.</summary>
+    /// <remarks>
+    /// The whole point of the collected book belonging to the account: the day an administrator assigns a second user,
+    /// nothing is copied and nothing is collected again — the record that was already there is in both of their scopes.
+    /// </remarks>
+    [Fact]
+    public async Task ReadPageAsync_AnAccountTwoUsersShare_ServesTheOneCollectedRecordToEachOfThem()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment);
+
+        var collected = CollectedContactOf("Anna Kowalska", "anna@example.test");
+        store.Hold(SyntheticMailAccount.Deployment, collected);
+
+        // Act
+        var first = await ReaderOf(store, SyntheticMailUser.Deployment, assignments)
+            .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
+        var second = await ReaderOf(store, SyntheticMailUser.Another, assignments)
+            .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(collected.Id, Assert.Single(first.Contacts).Id);
+        Assert.Equal(collected.Id, Assert.Single(second.Contacts).Id);
+        Assert.Equal(1, store.ContactCount);
+    }
+
+    /// <summary>A contact the user wrote down hides the collected record carrying the same address, and hides it for that user alone.</summary>
+    /// <remarks>
+    /// Their own name and their own note are what they see, which is the point of writing somebody down. The other user
+    /// of that mailbox never wrote anything, so what they read is unchanged — which is what makes this a precedence
+    /// between books rather than an edit to the record both of them read.
+    /// </remarks>
+    [Fact]
+    public async Task ReadPageAsync_AUsersOwnContactCarryingACollectedAddress_HidesTheCollectedOneForThatUserAlone()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment);
+
+        var collected = CollectedContactOf("anna@example.test", "anna@example.test");
+        var written = ContactOf("Anna Kowalska", "anna@example.test");
+        store.Hold(SyntheticMailAccount.Deployment, collected);
+        store.Hold(SyntheticMailUser.Deployment, written);
+
+        // Act
+        var wroteItDown = await ReaderOf(store, SyntheticMailUser.Deployment, assignments)
+            .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
+        var didNot = await ReaderOf(store, SyntheticMailUser.Another, assignments)
+            .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(written.Id, Assert.Single(wroteItDown.Contacts).Id);
+        Assert.Equal(collected.Id, Assert.Single(didNot.Contacts).Id);
+    }
+
+    /// <summary>An address only a hidden record holds still resolves, because a lookup takes the order over the address.</summary>
+    /// <remarks>
+    /// The record a listing hides is hidden for one of its addresses, and a mailbox that collected somebody under two
+    /// of them holds the other one alone. Answering that nobody uses it would deny an address this deployment holds and
+    /// this reader is assigned, so the precedence is taken over the address here rather than over the record — and the
+    /// address the two records share still answers from the one the listing shows.
+    /// </remarks>
+    [Fact]
+    public async Task FindByAddressAsync_AnAddressHeldOnlyByARecordTheListingHides_AnswersFromTheBookHoldingIt()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+
+        var collected = CollectedContactOf("Anna Kowalska", "anna@work.test", "anna@home.test");
+        var written = ContactOf("Anna Kowalska", "anna@work.test");
+        store.Hold(SyntheticMailAccount.Deployment, collected);
+        store.Hold(SyntheticMailUser.Deployment, written);
+
+        var reader = ReaderOf(store, SyntheticMailUser.Deployment, assignments);
+
+        // Act
+        var byTheHiddenAddress = await reader.FindByAddressAsync(
+            Address("anna@home.test"),
+            TestContext.Current.CancellationToken);
+        var byTheSharedAddress = await reader.FindByAddressAsync(
+            Address("anna@work.test"),
+            TestContext.Current.CancellationToken);
+        var page = await reader.ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(collected.Id, byTheHiddenAddress?.Id);
+        Assert.Equal(written.Id, byTheSharedAddress?.Id);
+        Assert.Equal(written.Id, Assert.Single(page.Contacts).Id);
+    }
+
+    /// <summary>An address two of a user's mailboxes both collected is answered once, from the account the order names first.</summary>
+    /// <remarks>
+    /// The order is the accounts' own identifiers rather than anything either user's record declared, so the same
+    /// person is served the same record on every read and two users of one pair of mailboxes are served the same one.
+    /// </remarks>
+    [Fact]
+    public async Task ReadPageAsync_AnAddressCollectedOnTwoOfTheirAccounts_IsAnsweredOnceFromTheFirstOfThem()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var assignments = new StubMailAccountAssignments().Assigning(
+            SyntheticMailUser.Deployment,
+            SyntheticMailAccount.Another,
+            SyntheticMailAccount.Deployment);
+
+        var onTheFirst = CollectedContactOf("Anna Kowalska", "anna@example.test");
+        var onTheSecond = CollectedContactOf("Anna Kowalska", "anna@example.test");
+        store.Hold(SyntheticMailAccount.Deployment, onTheFirst);
+        store.Hold(SyntheticMailAccount.Another, onTheSecond);
+
+        // Act
+        var page = await ReaderOf(store, SyntheticMailUser.Deployment, assignments)
+            .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(onTheFirst.Id, Assert.Single(page.Contacts).Id);
     }
 
     /// <summary>A name two users each wrote down is not ambiguous, because only one of the two books is being read.</summary>
@@ -139,6 +265,7 @@ public sealed class ContactBookOwnershipTests
 
         // Act
         var result = await book.RecordAsync(
+            SyntheticMailUser.Another,
             NewContactOf("Anna Kowalska", "anna@example.test"),
             TestContext.Current.CancellationToken);
 
@@ -147,6 +274,72 @@ public sealed class ContactBookOwnershipTests
         Assert.NotEqual(theirs.Id, result.Contact?.Id);
         Assert.Equal(theirs, Assert.Single(store.ContactsOf(SyntheticMailUser.Deployment)));
         Assert.Equal(result.Contact?.Id, Assert.Single(store.ContactsOf(SyntheticMailUser.Another)).Id);
+    }
+
+    /// <summary>Collection writes into the account's book alone, whichever users happen to be assigned it.</summary>
+    /// <remarks>
+    /// Collection files under the account without consulting the relation at all, so the sharing is asserted through
+    /// the reads rather than through the write: the one record is answered to both people assigned the mailbox, while
+    /// neither of their own books holds anything. Two empty own books on their own would prove nothing, since they hold
+    /// just as well where nobody was assigned anything.
+    /// </remarks>
+    [Fact]
+    public async Task CollectAsync_AnAccountTwoUsersShare_WritesOneRecordIntoTheAccountsBook()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment);
+
+        var book = CollectingBookOf(store);
+
+        // Act
+        var collected = await book.CollectAsync(
+            SyntheticMailAccount.Deployment,
+            NewContactOf("Anna Kowalska", "anna@example.test") with { Origin = ContactOrigin.Collected },
+            TestContext.Current.CancellationToken);
+
+        var read = await ReaderOf(store, SyntheticMailUser.Deployment, assignments)
+            .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
+        var readByTheOther = await ReaderOf(store, SyntheticMailUser.Another, assignments)
+            .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ContactWriteOutcome.Written, collected.Outcome);
+        Assert.Equal(1, store.ContactCount);
+        Assert.Equal(collected.Contact?.Id, Assert.Single(store.ContactsOf(SyntheticMailAccount.Deployment)).Id);
+        Assert.Empty(store.ContactsOf(SyntheticMailUser.Deployment));
+        Assert.Empty(store.ContactsOf(SyntheticMailUser.Another));
+        Assert.Equal(collected.Contact?.Id, Assert.Single(read.Contacts).Id);
+        Assert.Equal(collected.Contact?.Id, Assert.Single(readByTheOther.Contacts).Id);
+    }
+
+    /// <summary>A user not assigned a mailbox reads none of what it collected, which is the whole of what the split is for.</summary>
+    /// <remarks>
+    /// The positive half — two assigned users reading one record — holds just as well under a scope that put every
+    /// served account's book into everybody's, and that scope is exactly the disclosure this change closed. So the
+    /// relation is asserted from its negative end as well, where an assignment nobody made is what has to be absent.
+    /// </remarks>
+    [Fact]
+    public async Task ReadPageAsync_AUserAssignedNoneOfTheAccount_ReadsNothingItCollected()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+
+        store.Hold(SyntheticMailAccount.Deployment, CollectedContactOf("Anna Kowalska", "anna@example.test"));
+
+        // Act
+        var assigned = await ReaderOf(store, SyntheticMailUser.Deployment, assignments)
+            .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
+        var unassigned = await ReaderOf(store, SyntheticMailUser.Another, assignments)
+            .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Single(assigned.Contacts);
+        Assert.Empty(unassigned.Contacts);
     }
 
     /// <summary>Erasing a contact of somebody else's book erases nothing, and reads as a book that never held them.</summary>
@@ -161,63 +354,81 @@ public sealed class ContactBookOwnershipTests
         var book = BookOf(store, SyntheticMailUser.Another, MailFathomPermission.AdminErase);
 
         // Act
-        var erasure = await book.EraseAsync(theirs.Id, TestContext.Current.CancellationToken);
+        var erasure = await book.EraseAsync(
+            ContactBookScope.OfOwnBookAlone(SyntheticMailUser.Another),
+            theirs.Id,
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(erasure.WasHeld);
         Assert.Equal(theirs, Assert.Single(store.ContactsOf(SyntheticMailUser.Deployment)));
     }
 
-    /// <summary>Giving up on collection gives up on one book's collected half, and leaves every other book's alone.</summary>
+    /// <summary>Erasing a collected record takes it out of the account's book, which is to say for every user assigned it.</summary>
     /// <remarks>
-    /// The one act over the book that deletes a set of rows rather than a row somebody named, which is what makes the
-    /// user predicate load-bearing here in a way it is not elsewhere: losing it would turn one user switching
-    /// collection off into an erasure of everything every other user's mail had been read into, with nothing naming a
-    /// row for the failure to be about.
+    /// The record was one record rather than a copy each, so a data-subject erasure that left it standing for the other
+    /// users of that mailbox would not be an erasure at all.
     /// </remarks>
     [Fact]
-    public async Task EraseCollectedAsync_ACollectedContactInEachOfTwoBooks_ErasesTheCallersOwnAndLeavesTheOther()
+    public async Task EraseAsync_ACollectedContactOfASharedAccount_TakesItOutForEveryAssignedUser()
     {
         // Arrange
         var store = new InMemoryContactBookStore();
-        var theirs = CollectedContactOf("Anna Kowalska", "anna@example.test");
-        var mine = CollectedContactOf("Piotr Nowak", "piotr@example.test");
-        store.Hold(SyntheticMailUser.Deployment, theirs);
-        store.Hold(SyntheticMailUser.Another, mine);
+        var assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment);
 
-        var book = BookOf(store, SyntheticMailUser.Another, MailFathomPermission.AdminErase);
+        var collected = CollectedContactOf("Anna Kowalska", "anna@example.test");
+        store.Hold(SyntheticMailAccount.Deployment, collected);
+
+        var book = BookOf(store, SyntheticMailUser.Deployment, MailFathomPermission.AdminErase);
 
         // Act
-        var erasure = await book.EraseCollectedAsync(TestContext.Current.CancellationToken);
+        var erasure = await book.EraseAsync(
+            new ContactBookScopes(assignments).Of(SyntheticMailUser.Deployment),
+            collected.Id,
+            TestContext.Current.CancellationToken);
+        var theOther = await ReaderOf(store, SyntheticMailUser.Another, assignments)
+            .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(1, erasure.ContactsErased);
-        Assert.Empty(store.ContactsOf(SyntheticMailUser.Another));
-        Assert.Equal(theirs, Assert.Single(store.ContactsOf(SyntheticMailUser.Deployment)));
+        Assert.True(erasure.WasHeld);
+        Assert.Empty(theOther.Contacts);
     }
 
-    private static ContactBookReader ReaderOf(InMemoryContactBookStore store, MailUserId user)
+    private static ContactBookReader ReaderOf(
+        InMemoryContactBookStore store,
+        MailUserId user,
+        StubMailAccountAssignments? assignments = null)
     {
         var authorization = AccessAuthorizations.ForUserGranted(user, MailFathomPermission.MailContactsRead);
 
-        return new ContactBookReader(store, ContactBookOwnerships.For(authorization), authorization);
+        return new ContactBookReader(
+            store,
+            ContactBookOwnerships.For(authorization, assignments ?? new StubMailAccountAssignments()),
+            authorization);
     }
 
     private static ContactBook BookOf(
         InMemoryContactBookStore store,
         MailUserId user,
-        params MailFathomPermission[] grantedPermissions)
+        params MailFathomPermission[] grantedPermissions) =>
+        BookOf(store, AccessAuthorizations.ForUserGranted(user, grantedPermissions));
+
+    /// <summary>Builds the book for work MailFathom performs for nobody, which is what collection is reached as.</summary>
+    private static ContactBook CollectingBookOf(InMemoryContactBookStore store) =>
+        BookOf(store, AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
+
+    private static ContactBook BookOf(InMemoryContactBookStore store, AccessAuthorization authorization)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
         var timeProvider = new FakeTimeProvider(Now);
-        var authorization = AccessAuthorizations.ForUserGranted(user, grantedPermissions);
 
         return new ContactBook(
             store,
             store,
-            ContactBookOwnerships.For(authorization),
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), timeProvider),
             timeProvider,
             authorization);
@@ -237,6 +448,18 @@ public sealed class ContactBookOwnershipTests
 
     private static Contact CollectedContactOf(string displayName, string address) =>
         ContactOf(displayName, address, ContactOrigin.Collected);
+
+    /// <summary>Builds a collected contact holding several addresses, the first of which it prefers.</summary>
+    private static Contact CollectedContactOf(string displayName, params string[] addresses) =>
+        Contact.Create(
+            ContactId.Create(Guid.CreateVersion7(Now)),
+            ContactDisplayName.Create(displayName),
+            [.. addresses.Select(Address)],
+            Address(addresses[0]),
+            note: null,
+            ContactOrigin.Collected,
+            Now,
+            Now);
 
     private static Contact ContactOf(string displayName, string address, ContactOrigin origin) =>
         Contact.Create(

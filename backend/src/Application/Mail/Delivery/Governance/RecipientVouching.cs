@@ -80,16 +80,16 @@ public sealed class RecipientVouching(
             return 0;
         }
 
-        // Resolved once, so every group of one send is answered about one book by construction rather than by each
-        // read happening to reach the same principal — and so the resolution is not repeated per chunk.
-        var user = ownership.User;
+        // Resolved once, so every group of one send is answered about one set of books by construction rather than by
+        // each read happening to reach the same principal — and so the resolution is not repeated per chunk.
+        var scope = ownership.Scope;
         var count = 0;
 
         foreach (var group in unvouched.Chunk(Contact.MaximumAddressCount))
         {
-            var held = await contacts.FindHoldersOfAsync(user, group, cancellationToken);
+            var held = await contacts.FindHeldAddressesAsync(scope, group, cancellationToken);
 
-            count += group.Count(address => !held.ContainsKey(address));
+            count += group.Count(address => !held.Contains(address));
         }
 
         return count;

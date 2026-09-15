@@ -841,9 +841,10 @@ internal sealed class AdminApiClient
                 CliJsonContext.Default.MailFolderErasureRequest));
     }
 
-    /// <summary>Reads one bounded page of the deployment's contact book.</summary>
+    /// <summary>Reads one bounded page of the books one user reads.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="origin">The origin to narrow to, or <see langword="null" /> for the whole book.</param>
+    /// <param name="user">The user whose books are read: their own, and the collected book of each account assigned to them.</param>
+    /// <param name="origin">The origin to narrow to, or <see langword="null" /> for the whole of both books.</param>
     /// <param name="pageSize">How many contacts the page may hold, or <see langword="null" /> for the deployment's default.</param>
     /// <param name="cursor">The cursor a previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
@@ -852,19 +853,21 @@ internal sealed class AdminApiClient
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a page.</exception>
     internal Task<ContactPage> ReadContactPageAsync(
         string token,
+        Guid user,
         string? origin,
         int? pageSize,
         string? cursor,
         CancellationToken cancellationToken) =>
         this.RequestAsync(
             HttpMethod.Get,
-            $"{AdminEndpointRoutes.ContactsPath}{new AdminQueryString().Add("origin", origin).Add("pageSize", pageSize).Add("cursor", cursor)}",
+            $"{AdminEndpointRoutes.ContactsPath}{ForUser(user).Add("origin", origin).Add("pageSize", pageSize).Add("cursor", cursor)}",
             token,
             CliJsonContext.Default.ContactPage,
             cancellationToken);
 
-    /// <summary>Asks the deployment to record a person its contact book does not yet hold.</summary>
+    /// <summary>Asks the deployment to record a person one user's own book does not yet hold.</summary>
     /// <param name="token">The bearer credential to present.</param>
+    /// <param name="user">The user whose own book the record is written into.</param>
     /// <param name="record">The record to write.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>The record as written, or the outcome that refused it.</returns>
@@ -872,6 +875,7 @@ internal sealed class AdminApiClient
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
     internal Task<ContactWriteAnswer> RecordContactAsync(
         string token,
+        Guid user,
         ContactRecordRequest record,
         CancellationToken cancellationToken)
     {
@@ -879,40 +883,44 @@ internal sealed class AdminApiClient
 
         return this.RequestAsync(
             HttpMethod.Post,
-            AdminEndpointRoutes.ContactsPath,
+            $"{AdminEndpointRoutes.ContactsPath}{ForUser(user)}",
             token,
             CliJsonContext.Default.ContactWriteAnswer,
             cancellationToken,
             JsonContent.Create(record, CliJsonContext.Default.ContactRecordRequest));
     }
 
-    /// <summary>Reads one contact by the identity the deployment's book gave it.</summary>
+    /// <summary>Reads one contact by the identity the book gave it, out of the books one user reads.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="contactId">The contact to read.</param>
+    /// <param name="user">The user whose books are read.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>The contact, or an answer carrying none where the book holds no such person.</returns>
+    /// <returns>The contact, or an answer carrying none where those books hold no such person.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a lookup.</exception>
     internal Task<ContactLookup> ReadContactAsync(
         string token,
         Guid contactId,
+        Guid user,
         CancellationToken cancellationToken) =>
         this.RequestAsync(
             HttpMethod.Get,
-            AdminEndpointRoutes.ContactPath(contactId),
+            $"{AdminEndpointRoutes.ContactPath(contactId)}{ForUser(user)}",
             token,
             CliJsonContext.Default.ContactLookup,
             cancellationToken);
 
-    /// <summary>Reads the person who uses one address.</summary>
+    /// <summary>Reads the person who uses one address, out of the books one user reads.</summary>
     /// <param name="token">The bearer credential to present.</param>
+    /// <param name="user">The user whose books are read.</param>
     /// <param name="address">The address to resolve.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>The contact, or an answer carrying none where nobody in the book holds it.</returns>
+    /// <returns>The contact, or an answer carrying none where nobody in those books holds it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a lookup.</exception>
     internal Task<ContactLookup> ReadContactByAddressAsync(
         string token,
+        Guid user,
         string address,
         CancellationToken cancellationToken)
     {
@@ -920,15 +928,16 @@ internal sealed class AdminApiClient
 
         return this.RequestAsync(
             HttpMethod.Get,
-            $"{AdminEndpointRoutes.ContactByAddressPath}?address={Uri.EscapeDataString(address)}",
+            $"{AdminEndpointRoutes.ContactByAddressPath}{ForUser(user).Add("address", address)}",
             token,
             CliJsonContext.Default.ContactLookup,
             cancellationToken);
     }
 
-    /// <summary>Asks the deployment to amend one contact to the record stated.</summary>
+    /// <summary>Asks the deployment to amend one contact of a user's own book to the record stated.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="contactId">The contact to amend.</param>
+    /// <param name="user">The user whose own book holds the contact.</param>
     /// <param name="record">The record the contact is to have afterwards.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>The amended record, or the outcome that refused it.</returns>
@@ -937,10 +946,15 @@ internal sealed class AdminApiClient
     /// <remarks>
     /// The whole record rather than the difference, which is what the deployment's book takes: a command changing one
     /// field reads the contact first and sends what it is to become.
+    /// <para>
+    /// An amendment reaches that user's own book alone, so a record one of their mailboxes collected is answered as one
+    /// the book does not hold. Promotion is what puts a copy of it in reach.
+    /// </para>
     /// </remarks>
     internal Task<ContactWriteAnswer> AmendContactAsync(
         string token,
         Guid contactId,
+        Guid user,
         ContactRecordRequest record,
         CancellationToken cancellationToken)
     {
@@ -948,86 +962,116 @@ internal sealed class AdminApiClient
 
         return this.RequestAsync(
             HttpMethod.Put,
-            AdminEndpointRoutes.ContactPath(contactId),
+            $"{AdminEndpointRoutes.ContactPath(contactId)}{ForUser(user)}",
             token,
             CliJsonContext.Default.ContactWriteAnswer,
             cancellationToken,
             JsonContent.Create(record, CliJsonContext.Default.ContactRecordRequest));
     }
 
-    /// <summary>Asks the deployment to promote a collected contact to one the user has taken responsibility for.</summary>
+    /// <summary>Asks the deployment to write a user's own copy of a contact one of their mailboxes collected.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="contactId">The contact to promote.</param>
+    /// <param name="user">The user whose own book the copy is written into.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>The promoted record, or the outcome that refused it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    /// <remarks>
+    /// A copy rather than a record changed in place: the collected one belongs to the mailbox and stays there for
+    /// whoever else is assigned it, and what this user gains is a record of their own that they may then amend.
+    /// </remarks>
     internal Task<ContactWriteAnswer> PromoteContactAsync(
         string token,
         Guid contactId,
+        Guid user,
         CancellationToken cancellationToken) =>
         this.RequestAsync(
             HttpMethod.Post,
-            AdminEndpointRoutes.ContactPromotionPath(contactId),
+            $"{AdminEndpointRoutes.ContactPromotionPath(contactId)}{ForUser(user)}",
             token,
             CliJsonContext.Default.ContactWriteAnswer,
             cancellationToken);
 
-    /// <summary>Asks the deployment to erase one person and everything its book derived from them.</summary>
+    /// <summary>Asks the deployment to erase one person and everything the books derived from them.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="contactId">The contact to erase.</param>
+    /// <param name="user">The user whose books the erasure may reach.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>What the erasure removed, including a book that held no such contact.</returns>
+    /// <returns>What the erasure removed, including books that held no such contact.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an erasure.</exception>
     /// <remarks>
-    /// The erasure removes rather than marks, and the answer says what went. Erasing somebody the book does not hold is
-    /// a completed erasure rather than a failure, so this reports it as an answer instead of raising.
+    /// The erasure removes rather than marks, and the answer says what went. Erasing somebody the books do not hold is
+    /// a completed erasure rather than a failure, so this reports it as an answer instead of raising. A collected
+    /// record erased this way goes for every user assigned that mailbox, because it was one record rather than a copy
+    /// each — which is what a person asking to be taken out of a contact book is owed.
     /// </remarks>
     internal Task<ContactErasure> EraseContactAsync(
         string token,
         Guid contactId,
+        Guid user,
         CancellationToken cancellationToken) =>
         this.RequestAsync(
             HttpMethod.Delete,
-            AdminEndpointRoutes.ContactPath(contactId),
+            $"{AdminEndpointRoutes.ContactPath(contactId)}{ForUser(user)}",
             token,
             CliJsonContext.Default.ContactErasure,
             cancellationToken);
 
-    /// <summary>Asks the deployment to erase every contact it collected from arriving mail.</summary>
+    /// <summary>Asks the deployment to erase everything one mail account collected from the mail that arrived on it.</summary>
     /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The mail account whose collected book is erased.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>What the erasure removed, including a book that had collected nobody.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an erasure.</exception>
+    /// <remarks>
+    /// One account rather than the deployment, because collection is switched on per account: emptying what one mailbox
+    /// picked up is not emptying what another did, and nothing anybody wrote down is in this book to go with it.
+    /// </remarks>
     internal Task<CollectedContactErasure> EraseCollectedContactsAsync(
         string token,
-        CancellationToken cancellationToken) =>
-        this.RequestAsync(
+        string account,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return this.RequestAsync(
             HttpMethod.Delete,
-            AdminEndpointRoutes.CollectedContactsPath,
+            $"{AdminEndpointRoutes.CollectedContactsPath}{new AdminQueryString().Add("account", account)}",
             token,
             CliJsonContext.Default.CollectedContactErasure,
             cancellationToken);
+    }
 
-    /// <summary>Asks the deployment for everything its book holds about one person.</summary>
+    /// <summary>Asks the deployment for everything the books one user reads hold about one person.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="contactId">The contact to export.</param>
+    /// <param name="user">The user whose books are read.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>The export, or an answer carrying none where the book holds no such person.</returns>
+    /// <returns>The export, or an answer carrying none where those books hold no such person.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an export.</exception>
     internal Task<ContactExport> ExportContactAsync(
         string token,
         Guid contactId,
+        Guid user,
         CancellationToken cancellationToken) =>
         this.RequestAsync(
             HttpMethod.Get,
-            AdminEndpointRoutes.ContactExportPath(contactId),
+            $"{AdminEndpointRoutes.ContactExportPath(contactId)}{ForUser(user)}",
             token,
             CliJsonContext.Default.ContactExport,
             cancellationToken);
+
+    /// <summary>Opens the query string of a contact request with the user whose books it acts on.</summary>
+    /// <remarks>
+    /// Every contact route but the collected erasure names a user, and it leads the query string because it decides
+    /// which books the request reaches rather than narrowing what they answer with — so it is written here once rather
+    /// than repeated at each of the seven call sites.
+    /// </remarks>
+    private static AdminQueryString ForUser(Guid user) => new AdminQueryString().Add("user", user);
 
     /// <summary>Asks the deployment what its settings say at or beneath a path, and where each value is decided.</summary>
     /// <param name="token">The bearer credential to present.</param>

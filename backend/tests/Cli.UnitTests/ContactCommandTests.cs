@@ -28,6 +28,9 @@ public sealed class ContactCommandTests : IDisposable
 
     private static readonly string Identity = FakeContactDeployment.ContactIdentity.ToString("D");
 
+    /// <summary>The mail account whose collected book the erasure of what was collected is aimed at.</summary>
+    private static readonly string Account = new Guid("cccccccc-dddd-eeee-ffff-000000000000").ToString("D");
+
     /// <summary>One page of the book holding a contact the deployment reports nothing optional about.</summary>
     /// <remarks>Written here rather than through the fixture, whose builder supplies a name, an address, and an origin for every contact it makes.</remarks>
     private const string SparseContactPage =
@@ -274,7 +277,9 @@ public sealed class ContactCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Equal("?origin=Collected&pageSize=25", deployment.LastListingQuery());
+        Assert.Equal(
+            $"?user={FakeContactDeployment.UserIdentity:D}&origin=Collected&pageSize=25",
+            deployment.LastListingQuery());
     }
 
     /// <summary>
@@ -692,7 +697,7 @@ public sealed class ContactCommandTests : IDisposable
 
     /// <summary>The way out for a user who changed their mind, so what it removed is stated in both figures.</summary>
     [Fact]
-    public async Task DeleteCollected_WithTheFlag_ErasesWhatTheDeploymentCollectedWithoutAsking()
+    public async Task DeleteCollected_WithTheFlag_ErasesWhatTheAccountCollectedWithoutAsking()
     {
         // Arrange
         using var deployment = FakeContactDeployment.Holding(
@@ -700,7 +705,7 @@ public sealed class ContactCommandTests : IDisposable
         this.harness.Console.AnswersQuestions = false;
 
         // Act
-        var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--yes", "--endpoint", Endpoint);
+        var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--account", Account, "--yes", "--endpoint", Endpoint);
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
@@ -720,7 +725,7 @@ public sealed class ContactCommandTests : IDisposable
         this.harness.Console.AnswerToGive = true;
 
         // Act
-        var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--endpoint", Endpoint);
+        var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--account", Account, "--endpoint", Endpoint);
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
@@ -737,7 +742,7 @@ public sealed class ContactCommandTests : IDisposable
         this.harness.Console.AnswerToGive = false;
 
         // Act
-        var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--endpoint", Endpoint);
+        var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--account", Account, "--endpoint", Endpoint);
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
@@ -754,7 +759,7 @@ public sealed class ContactCommandTests : IDisposable
         this.harness.Console.AnswersQuestions = false;
 
         // Act
-        var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--endpoint", Endpoint);
+        var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--account", Account, "--endpoint", Endpoint);
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
@@ -762,16 +767,45 @@ public sealed class ContactCommandTests : IDisposable
         Assert.Contains(this.harness.Console.Errors, line => line.Contains("--yes", StringComparison.Ordinal));
     }
 
-    /// <summary>A deployment that collected nobody is the state the operator asked for rather than a failure.</summary>
+    /// <summary>A collected book belongs to one mail account, so the erasure names it rather than reaching every book.</summary>
+    /// <remarks>
+    /// The one statement here whose blast radius would be every mailbox the deployment serves: collection is switched
+    /// on per account, and an erasure that named none would empty what a colleague's mailbox picked up because
+    /// somebody changed their mind about their own.
+    /// </remarks>
     [Fact]
-    public async Task DeleteCollected_ADeploymentThatCollectedNobody_SaysSoAndSucceeds()
+    public async Task DeleteCollected_AnAccountNamed_AsksTheDeploymentForThatAccountsBookAlone()
+    {
+        // Arrange
+        using var deployment = FakeContactDeployment.Holding(
+            erasure: FakeContactDeployment.CollectedErasure(contactsErased: 2, addressesErased: 2));
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "contact",
+            "delete-collected",
+            "--account",
+            Account,
+            "--yes",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Equal($"?account={Account}", deployment.LastCollectedErasureQuery());
+    }
+
+    /// <summary>An account that collected nobody is the state the operator asked for rather than a failure.</summary>
+    [Fact]
+    public async Task DeleteCollected_AnAccountThatCollectedNobody_SaysSoAndSucceeds()
     {
         // Arrange
         using var deployment = FakeContactDeployment.Holding(
             erasure: FakeContactDeployment.CollectedErasure(contactsErased: 0, addressesErased: 0));
 
         // Act
-        var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--yes", "--endpoint", Endpoint);
+        var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--account", Account, "--yes", "--endpoint", Endpoint);
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
@@ -836,6 +870,41 @@ public sealed class ContactCommandTests : IDisposable
         Assert.Equal(0, deployment.ContactRequestCount(HttpMethod.Get));
     }
 
+    /// <summary>Every command acting on one person names the user whose books the route is answered for.</summary>
+    /// <remarks>
+    /// The per-contact routes bind <c>user</c> as a required query parameter and refuse a request stating none, so a
+    /// command that dropped it would be answered <c>400</c> by a real deployment while this double, which answers
+    /// whatever arrives, reported nothing at all. The listing is covered where it is asked for a page; these are the
+    /// five that act on somebody.
+    /// </remarks>
+    [Fact]
+    public async Task ContactCommands_ActingOnOnePerson_NameTheUserTheRouteIsAnsweredFor()
+    {
+        // Arrange
+        var named = $"user={FakeContactDeployment.UserIdentity:D}";
+
+        // Act
+        var record = await this.QueryOfAsync(
+            HttpMethod.Post,
+            "contact",
+            "create",
+            "--name",
+            "Anna Kowalska",
+            "--address",
+            "anna@example.test");
+        var amendment = await this.QueryOfAsync(HttpMethod.Put, "contact", "update", "--id", Identity, "--name", "Anna Nowak");
+        var promotion = await this.QueryOfAsync(HttpMethod.Post, "contact", "promote", "--id", Identity);
+        var erasure = await this.QueryOfAsync(HttpMethod.Delete, "contact", "delete", "--id", Identity, "--yes");
+        var export = await this.QueryOfAsync(HttpMethod.Get, "contact", "export", "--id", Identity);
+
+        // Assert
+        Assert.Contains(named, record, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(named, amendment, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(named, promotion, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(named, erasure, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(named, export, StringComparison.OrdinalIgnoreCase);
+    }
+
     public void Dispose() => this.harness.Dispose();
 
     /// <summary>Reads the record a write carried, as the deployment would.</summary>
@@ -856,4 +925,18 @@ public sealed class ContactCommandTests : IDisposable
 
     private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>
         this.harness.RunAsync(deployment, args);
+
+    /// <summary>Runs one command against a deployment answering every route, and reads the query it reached one with.</summary>
+    private async Task<string> QueryOfAsync(HttpMethod method, params string[] arguments)
+    {
+        using var deployment = FakeContactDeployment.Holding(
+            lookup: FakeContactDeployment.Lookup(),
+            write: FakeContactDeployment.Written(),
+            erasure: FakeContactDeployment.Erasure(wasHeld: true, addressesErased: 1),
+            export: FakeContactDeployment.Export());
+
+        Assert.Equal(CliExitCode.Success, await this.RunAsync(deployment, [.. arguments, "--endpoint", Endpoint]));
+
+        return deployment.LastContactQuery(method) ?? string.Empty;
+    }
 }

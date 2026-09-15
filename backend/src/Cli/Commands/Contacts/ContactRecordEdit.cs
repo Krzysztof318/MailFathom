@@ -4,6 +4,7 @@
 
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Contacts;
+using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
@@ -20,12 +21,18 @@ namespace MailFathom.Cli.Commands.Contacts;
 /// as the book's own amendment rule states. What is not left to that is an amendment racing an erasure: the deployment
 /// answers such a write as a contact it does not hold rather than putting the person back.
 /// </para>
+/// <para>
+/// The read covers every book that user reads and the write reaches their own alone, which is deliberate rather than an
+/// oversight: a record one of their mailboxes collected is shown by the read and then refused by the write, so an
+/// operator is told to promote it instead of having a mailbox's record quietly amended under every other user of it.
+/// </para>
 /// </remarks>
 internal static class ContactRecordEdit
 {
     /// <summary>Reads one contact, applies a change to it, and asks the deployment to hold the result.</summary>
     /// <param name="context">What the command needs from its surroundings.</param>
     /// <param name="contactId">The contact to amend.</param>
+    /// <param name="requestedUser">The user whose own book holds the contact, or <see langword="null" /> where the invocation named none.</param>
     /// <param name="requestedDeployment">The deployment the operator named for this invocation, or <see langword="null" />.</param>
     /// <param name="change">Produces the record the contact is to have, from the one it has.</param>
     /// <param name="performed">What the command did, as a sentence's opening.</param>
@@ -36,6 +43,7 @@ internal static class ContactRecordEdit
     internal static async Task<int> AmendAsync(
         CliContext context,
         Guid contactId,
+        Guid? requestedUser,
         string? requestedDeployment,
         Func<ContactRecord, ContactRecordRequest> change,
         string performed,
@@ -49,17 +57,20 @@ internal static class ContactRecordEdit
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
         var deployment = new AdminApiClient(transport, context.Console);
 
-        var lookup = await deployment.ReadContactAsync(profile.Token, contactId, cancellationToken);
+        var user = await UserOptions.ResolveUserAsync(deployment, profile.Token, requestedUser, cancellationToken);
+
+        var lookup = await deployment.ReadContactAsync(profile.Token, contactId, user, cancellationToken);
 
         if (lookup.Contact is not { } held)
         {
             throw new CliFailure(
-                $"The deployment's contact book holds no contact {contactId:D}, so there was nothing to amend.");
+                $"The books that user reads hold no contact {contactId:D}, so there was nothing to amend.");
         }
 
         var amended = await deployment.AmendContactAsync(
             profile.Token,
             contactId,
+            user,
             change(held),
             cancellationToken);
 
