@@ -9,6 +9,7 @@ using MailFathom.Cli.Administration.Configuration;
 using MailFathom.Cli.Administration.Contacts;
 using MailFathom.Cli.Administration.Content;
 using MailFathom.Cli.Administration.Embeddings;
+using MailFathom.Cli.Administration.Exports;
 using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Jobs;
 using MailFathom.Cli.Administration.Mailboxes;
@@ -51,6 +52,11 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(MailboxRederivationState))]
 [JsonSerializable(typeof(ContentMoveReport))]
 [JsonSerializable(typeof(ContentMoveRun))]
+[JsonSerializable(typeof(MailboxExport))]
+[JsonSerializable(typeof(MailboxExportListing))]
+[JsonSerializable(typeof(MailboxExportMeasurement))]
+[JsonSerializable(typeof(MailboxExportRequest))]
+[JsonSerializable(typeof(MailboxExportStart))]
 [JsonSerializable(typeof(ContentReleaseReport))]
 [JsonSerializable(typeof(AdminProblem))]
 [JsonSerializable(typeof(EmbeddingStatus))]

@@ -794,6 +794,15 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode MailDraftNotAddressed { get; } = new(53010);
 
+    /// <summary>Gets subcategory 3, access and existence: no export of the named account is held under the identity a request carried.</summary>
+    /// <remarks>
+    /// One code covers an identity this deployment never minted and one minted for another account, because a caller
+    /// acts on both identically and telling them apart would report that an export exists for a mailbox the caller was
+    /// refused. An export whose archive has since gone is a different answer and has a code of its own, because the
+    /// record is still here and still says what became of it.
+    /// </remarks>
+    public static MailFathomErrorCode MailboxExportNotFound { get; } = new(53011);
+
     /// <summary>Gets subcategory 4, undiagnosed failure: a tool call failed for a reason the boundary deliberately does not describe.</summary>
     /// <remarks>
     /// This is the one code every failure that is not already an allocated one collapses into, so a client learns that
@@ -812,6 +821,16 @@ public readonly record struct MailFathomErrorCode
     /// caller can act on it: the local copy is being repaired, so the request is worth repeating.
     /// </remarks>
     public static MailFathomErrorCode EmailContentUnavailable { get; } = new(55001);
+
+    /// <summary>Gets subcategory 5, local consistency: an export's archive could not be written whole, so nothing of it was left downloadable.</summary>
+    /// <remarks>
+    /// It sits beside the unreadable message rather than among the capability failures because it says the same kind of
+    /// thing: the deployment is working and the request was admitted, and one piece of what it holds could not be
+    /// produced. What an operator does about it is read the job's recorded failure and ask for the export again, so the
+    /// partial object is deleted rather than kept — an archive missing a message is worse than no archive at all for
+    /// somebody carrying away the only copy of their mail.
+    /// </remarks>
+    public static MailFathomErrorCode MailboxExportArchiveIncomplete { get; } = new(55002);
 
     /// <summary>Gets subcategory 6, capability: a request asked for something this deployment does not currently serve.</summary>
     /// <remarks>
@@ -843,6 +862,15 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode MailSendingNotEnabled { get; } = new(56003);
 
+    /// <summary>Gets subcategory 6, capability: this deployment writes stored content to its database, so it has nowhere to keep an export's archive.</summary>
+    /// <remarks>
+    /// An archive is a whole mailbox in one object, which the database backend cannot hold and was never meant to: a
+    /// <c>bytea</c> column stops at one gigabyte and a payload is held whole in memory to reach it. So the export is a
+    /// capability of the object backend rather than of every deployment, and the refusal names the configuration key
+    /// that would turn it on rather than describing the limit it met. Nothing is enqueued and nothing is written.
+    /// </remarks>
+    public static MailFathomErrorCode MailboxExportUnavailable { get; } = new(56004);
+
     /// <summary>Gets subcategory 7, spend ceilings: answering a question would exceed a ceiling this deployment configured on what it spends.</summary>
     /// <remarks>
     /// Separate from the capability failure above because the deployment is working and nothing is degraded: the
@@ -865,6 +893,15 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode OutgoingMailCeilingReached { get; } = new(57002);
 
+    /// <summary>Gets subcategory 7, ceilings: an export would produce more than the configured export limit, or more than the deployment's storage ceiling has room for.</summary>
+    /// <remarks>
+    /// One code covers the measurement that refused before a job existed and the writing job that met the same limit
+    /// part-way, because the remedy is one: export one folder at a time, or raise the limit. The message names the
+    /// measured size and the limit it exceeded, which are two figures about this deployment's own storage and nothing
+    /// derived from a message.
+    /// </remarks>
+    public static MailFathomErrorCode MailboxExportTooLarge { get; } = new(57003);
+
     /// <summary>Gets subcategory 8, a state already passed: a queued send can no longer be withdrawn, because it is being transmitted or has been.</summary>
     /// <remarks>
     /// <para>
@@ -880,6 +917,23 @@ public readonly record struct MailFathomErrorCode
     /// </para>
     /// </remarks>
     public static MailFathomErrorCode OutgoingEmailNoLongerCancellable { get; } = new(58001);
+
+    /// <summary>Gets subcategory 8, a state already passed: an export's archive cannot be downloaded, because it failed, was cancelled, expired, or was deleted.</summary>
+    /// <remarks>
+    /// One code covers the four for the reason the withdrawal above covers three: nothing is downloadable and nothing
+    /// will be, and which of them it was reads from the state the same call answers with. It is separate from an export
+    /// nobody here holds, because this one is held and its record is exactly what says the bytes are gone.
+    /// </remarks>
+    public static MailFathomErrorCode MailboxExportNoLongerDownloadable { get; } = new(58002);
+
+    /// <summary>Gets subcategory 8, a state the act cannot be taken in: the account already has an export being written, and it writes one at a time.</summary>
+    /// <remarks>
+    /// The bound is one export in flight per account, because an export reads every stored payload of a mailbox once
+    /// and two of them would double that against one account's storage for no reader's benefit. Asking for the export
+    /// already under way answers with it rather than refusing, so this refuses only a second scope — and the remedy is
+    /// to follow the one running, or cancel it and ask again.
+    /// </remarks>
+    public static MailFathomErrorCode MailboxExportAlreadyRunning { get; } = new(58003);
 
     /// <summary>Gets subcategory 9, content policy: a message carries material this deployment screens outgoing mail for, so the act was refused rather than the text rewritten.</summary>
     /// <remarks>
@@ -1157,14 +1211,20 @@ public readonly record struct MailFathomErrorCode
         MailDraftNotFound,
         OutgoingRecipientUnvouched,
         MailDraftNotAddressed,
+        MailboxExportNotFound,
         McpToolFailedUnexpectedly,
         EmailContentUnavailable,
+        MailboxExportArchiveIncomplete,
         MailAnsweringUnavailable,
         MailSendingUnavailable,
         MailSendingNotEnabled,
+        MailboxExportUnavailable,
         MailAnsweringBudgetExhausted,
         OutgoingMailCeilingReached,
+        MailboxExportTooLarge,
         OutgoingEmailNoLongerCancellable,
+        MailboxExportNoLongerDownloadable,
+        MailboxExportAlreadyRunning,
         OutgoingMailContentRefused,
         OutgoingMailNotFullyScanned,
         OutgoingMailAttachmentNotRead,

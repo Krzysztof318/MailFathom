@@ -29,6 +29,7 @@ public sealed class JobTypeTests
             JobType.ReclaimContentObjects,
             JobType.EraseLocalMailFolderMail,
             JobType.EraseWithdrawnMailFolderMail,
+            JobType.ExportMailbox,
         ];
 
         // Act

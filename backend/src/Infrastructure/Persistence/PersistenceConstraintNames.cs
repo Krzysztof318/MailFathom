@@ -647,4 +647,28 @@ internal static class PersistenceConstraintNames
     /// a session lives thirty days, so the table it walks is the deployment's whole signed-in population.
     /// </remarks>
     internal const string ClientSessionExpiryIndexName = "ix_client_sessions_expires_at";
+
+    /// <summary>The key one export of a mailbox is written under.</summary>
+    internal const string MailboxExportPrimaryKeyConstraintName = "pk_mailbox_exports";
+
+    /// <summary>The foreign key that removes an account's exports with the account.</summary>
+    /// <remarks>
+    /// Stated because of what it disposes of: an export's record is what says an archive of somebody's whole mailbox
+    /// exists and where it is kept, so an account erased while an export of it is downloadable must not leave that
+    /// record behind. The object the row pointed at is removed by the erasure path, and anything that path misses is an
+    /// orphan the content reclamation sweeps.
+    /// </remarks>
+    internal const string MailboxExportAccountForeignKeyName = "fk_mailbox_exports_mailbox_accounts";
+
+    /// <summary>The order one account's exports are listed in, newest first.</summary>
+    internal const string MailboxExportAccountTimelineIndexName = "ix_mailbox_exports_account_requested";
+
+    /// <summary>The order the archives past their retention are deleted through.</summary>
+    /// <remarks>
+    /// Stated for the reason the session expiry index is: nothing queries an export by when its archive expires except
+    /// the pass that deletes what has come due, and the index is what makes that pass proportional to what has expired
+    /// rather than to every export the deployment has ever been asked for. It is partial because only an archive that
+    /// exists has an expiry at all.
+    /// </remarks>
+    internal const string MailboxExportExpiryIndexName = "ix_mailbox_exports_expires_at";
 }

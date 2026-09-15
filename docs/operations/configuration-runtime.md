@@ -252,6 +252,29 @@ mailbox this deployment reads are governed by the account's own
 [rule action permissions](configuration-mail.md#one-account--a-mailbox-in-a-users-record) and by the grant a caller holds.
 
 
+## `MailboxExport`
+
+What an operator may carry a mailbox out of this deployment as, and for how long the deployment holds the result. The
+export is [the archive of a drained mailbox](mailbox-export.md), and that page is the operation; what these three settle
+is the two bounds the operation is judged against and how often the deployment looks for an archive that has come due.
+
+They are judged on every deployment, and a deployment that selected the database backend still validates them — the
+export itself is refused there, with the setting that would turn it on named in the refusal, because an archive is a
+second full copy of the mailbox and a database row is the wrong place for one.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `MailboxExport:MaximumArchiveByteLength` | long | `68719476736` | 1 MiB – 1 TiB, in bytes of stored mail rather than of the archive produced. Measured before any job exists and enforced again while the archive is written | restart |
+| `MailboxExport:Retention` | TimeSpan | `48:00:00` | 5 min – 7 d. The length of time this deployment's storage holds that mailbox twice | restart |
+| `MailboxExport:ExpirySweepInterval` | TimeSpan | `00:15:00` | 1 min – 24 h; how often one replica looks for archives whose retention has run out. The interval is the deployment's rather than each replica's, because the sweep runs under a lease | restart |
+
+**The retention period is a storage decision, not a convenience one.** For as long as an archive is kept, the bucket
+holds the whole mailbox a second time, so a week of retention on a deployment whose mailboxes fill the bucket is a
+deployment that runs out of room rather than one that is generous. The size limit is the other half of the same
+reasoning: it is measured against the stored mail an export would carry, because that figure is knowable in seconds
+before anything is read and the archive's own length is not.
+
+
 ## `Jobs`
 
 The queue of durable background work, and the worker that runs it. A root of its own rather than a block inside any

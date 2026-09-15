@@ -241,6 +241,25 @@ public readonly record struct MailFathomPermission
     /// </remarks>
     public static MailFathomPermission AdminErase { get; } = new("mailfathom.admin.erase", ProtectedSurface.Administration);
 
+    /// <summary>Gets the permission covering carrying a whole mailbox out of this deployment: measuring an export, starting one, following it, downloading its archive, and deleting it.</summary>
+    /// <remarks>
+    /// <para>
+    /// A name of its own that no reading grant confers, because reading a message and carrying a whole mailbox away are
+    /// different acts with different consequences: the second produces one file holding every message an account has,
+    /// on whatever disk the caller runs on, outside every retention and erasure path this deployment has. It is on the
+    /// administrative surface because that is the surface the routes are served on, and
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md">ADR 0012</see>
+    /// refuses a <c>mailfathom.mail.*</c> name written there.
+    /// </para>
+    /// <para>
+    /// One name covers all six acts. Measuring reports how many messages and bytes an account holds, which is already
+    /// the shape of what the archive would carry; and a caller who may download an archive is not meaningfully withheld
+    /// the count of what is in it. See
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+    /// </para>
+    /// </remarks>
+    public static MailFathomPermission AdminExport { get; } = new("mailfathom.admin.export", ProtectedSurface.Administration);
+
     /// <summary>Gets the permission covering changing the deployment's own persisted configuration.</summary>
     /// <remarks>
     /// A name of its own rather than a route under the operating one, because a persisted setting decides what the
@@ -275,6 +294,7 @@ public readonly record struct MailFathomPermission
         AdminCredentialsWrite,
         AdminSpend,
         AdminErase,
+        AdminExport,
         AdminConfigurationWrite,
     ];
 

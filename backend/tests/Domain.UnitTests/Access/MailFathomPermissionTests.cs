@@ -58,7 +58,8 @@ public sealed class MailFathomPermissionTests
     /// the commands that change a persisted setting did, the mail-account permission when the client surface began
     /// letting a user declare which mailboxes this deployment reads for them, and the moving permission when that
     /// surface began serving folder moves, and the deleting permission when it began letting somebody empty their
-    /// own trash.
+    /// own trash. The export permission was allocated when the archive of a drained mailbox became something an operator
+    /// could ask this deployment for.
     /// </remarks>
     [Fact]
     public void All_CarriesThePublishedNames() =>
@@ -81,6 +82,7 @@ public sealed class MailFathomPermissionTests
                 "mailfathom.admin.credentials.write",
                 "mailfathom.admin.spend",
                 "mailfathom.admin.erase",
+                "mailfathom.admin.export",
                 "mailfathom.admin.configuration.write",
             ],
             MailFathomPermission.All.Select(permission => permission.Name));

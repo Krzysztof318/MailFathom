@@ -69,6 +69,7 @@ using MailFathom.Application.Mail.Delivery.Scheduling;
 using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Mail.Delivery.Tracking;
+using MailFathom.Application.Mail.Export;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -137,6 +138,7 @@ using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Emails.Threads;
 using MailFathom.Infrastructure.Persistence.Embeddings;
 using MailFathom.Infrastructure.Persistence.Enrichment;
+using MailFathom.Infrastructure.Persistence.Exports;
 using MailFathom.Infrastructure.Persistence.Folders;
 using MailFathom.Infrastructure.Persistence.Jobs;
 using MailFathom.Infrastructure.Persistence.Mutations;
@@ -432,6 +434,14 @@ public static class ServiceCollectionExtensions
         // what it reads. Nothing resolves it where no endpoint is configured, since the sweep that asks it is what
         // AddObjectStorage registers.
         services.AddScoped<IContentObjectReferenceReader, ContentObjectReferenceReader>();
+        // An export's four adapters, registered together because nothing resolves one of them without the others. The
+        // two reads are scoped like every other query; the archive store is a singleton holding no state of its own,
+        // and it is registered whatever backend the deployment selected — it reports having nowhere to write rather
+        // than being absent, because the job handler and the expiry sweep take it whichever backend was chosen.
+        services.AddScoped<IMailboxExportStore, MailboxExportStore>();
+        services.AddScoped<IMailboxExportReader, MailboxExportReader>();
+        services.AddSingleton<IMailboxExportArchiveStore, S3MailboxExportArchiveStore>();
+        services.AddScoped<IMailboxExportAuditor, LoggedMailboxExportAuditor>();
         services.AddScoped<IPersistenceSessionFactory, PersistenceSessionFactory>();
         services.AddScoped<ISynchronizationCheckpointStore, SynchronizationCheckpointStore>();
         // Registered here rather than beside the chunker it calls, because what it is is a table: it decides which

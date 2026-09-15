@@ -7,6 +7,7 @@ using MailFathom.Cli.Commands.Accounts;
 using MailFathom.Cli.Commands.Configuration;
 using MailFathom.Cli.Commands.Contacts;
 using MailFathom.Cli.Commands.Content;
+using MailFathom.Cli.Commands.Exports;
 using MailFathom.Cli.Commands.Folders;
 using MailFathom.Cli.Commands.Jobs;
 using MailFathom.Cli.Commands.Organizations;
@@ -141,6 +142,21 @@ internal static class CliRootCommand
             ReleaseContentCommand.Create(context),
         };
 
+        // The way a mailbox leaves the product, which is why it is a group of its own rather than a verb on the folder
+        // or the content command: a drained account has no server behind it, so this is the only copy of somebody's
+        // mail and the only way out of MailFathom. Six steps, because measuring, asking, following, fetching,
+        // cancelling, and freeing the storage are separate decisions and a flag getting one of them wrong would be the
+        // difference between reading a figure and writing a second copy of a whole mailbox.
+        Command exportCommand = new("export", "Export a mailbox, and manage the archives that produces.")
+        {
+            MeasureExportCommand.Create(context),
+            StartExportCommand.Create(context),
+            ExportStatusCommand.Create(context),
+            DownloadExportCommand.Create(context),
+            CancelExportCommand.Create(context),
+            DeleteExportCommand.Create(context),
+        };
+
         // The one group that writes something a person, rather than a mail server, put there. It is also the only place
         // outside "folder erase" where a command disposes of data for good: "delete" is the contact book's data-subject
         // erasure path and says so, and "export" is its access path, both commands rather than seams nothing invokes.
@@ -248,6 +264,7 @@ internal static class CliRootCommand
             outboxCommand,
             folderCommand,
             contentCommand,
+            exportCommand,
             contactCommand,
             configCommand,
             userCommand,

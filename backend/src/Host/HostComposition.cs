@@ -29,6 +29,7 @@ using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Scheduling;
+using MailFathom.Application.Mail.Export;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -153,6 +154,7 @@ internal static class HostComposition
         var embedsMail = AddPersistenceAndProviders(builder);
 
         AddContentStorage(builder);
+        AddMailboxExport(builder);
         AddBackgroundWork(builder, spamScannerIsConfigured, embedsMail);
 
         // Ahead of the surfaces rather than inside one, because the document it generates describes two of them and
@@ -775,6 +777,10 @@ internal static class HostComposition
         // Its mirrored counterpart, enqueued when a folder a mirrored account declared is withdrawn and its mail goes
         // with it, and registered on the same reasoning.
         builder.Services.AddScoped<IJobHandler, WithdrawnMailFolderMailErasureHandler>();
+        // Registered on the same terms as the reclamation above: a deployment that stopped being able to write an
+        // archive still has to answer an export enqueued while it could, and the handler fails it with a code rather
+        // than leaving the queue holding work nothing claims.
+        builder.Services.AddScoped<IJobHandler, MailboxExportHandler>();
     }
 
     /// <summary>Declares the gates the startup probe waits on, and the validators that report before the workers run.</summary>
@@ -1196,6 +1202,33 @@ internal static class HostComposition
 
         builder.Services.AddSingleton(declaredRelease.ToReleaseOptions());
         builder.Services.AddScoped<RetainedContentRelease>();
+    }
+
+    /// <summary>Registers the export that hands a mailbox back, and the pass that deletes its archive when the retention ends.</summary>
+    /// <remarks>
+    /// <para>
+    /// Registered whichever backend the deployment stores content in, which is what tells an operator of a
+    /// database-backed deployment that the export exists and names the setting that would turn it on. The archive store
+    /// reports having nowhere to write rather than being absent, and the use case refuses before any job is enqueued.
+    /// </para>
+    /// <para>
+    /// The expiry worker is registered on the same terms and for a reason of its own: archives outlive the setting that
+    /// produced them, so a deployment that switched its backend away still has to delete the ones it already wrote.
+    /// </para>
+    /// </remarks>
+    private static void AddMailboxExport(WebApplicationBuilder builder)
+    {
+        builder.Services.AddSingleton(provider =>
+            provider.GetRequiredService<IOptions<MailboxExportOptions>>().Value.ToExportSettings());
+
+        builder.Services.AddScoped<MailboxExports>();
+        builder.Services.AddScoped<MailboxExportExpirySweep>();
+
+        builder.Services.AddSingleton<IHostedService>(provider => new MailboxExportExpiryWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            provider.GetRequiredService<IOptions<MailboxExportOptions>>().Value.ExpirySweepInterval,
+            provider.GetRequiredService<ILogger<MailboxExportExpiryWorker>>(),
+            provider.GetRequiredService<TimeProvider>()));
     }
 
     /// <summary>Registers the startup gates and the workers behind them, in the order a run may first touch mail.</summary>

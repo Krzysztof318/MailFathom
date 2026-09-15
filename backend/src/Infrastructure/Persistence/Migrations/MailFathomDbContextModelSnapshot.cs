@@ -1831,6 +1831,71 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("mailbox_accounts", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxExportEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("ArchiveByteLength")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("ByteCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("FailureCode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FolderPath")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("MailboxAccountId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<long>("MessageCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ObjectLocator")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id")
+                        .HasName("pk_mailbox_exports");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_mailbox_exports_expires_at")
+                        .HasFilter("\"ExpiresAt\" IS NOT NULL");
+
+                    b.HasIndex("MailboxAccountId", "RequestedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_mailbox_exports_account_requested");
+
+                    b.ToTable("mailbox_exports", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxMutationAuditEntryEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3688,6 +3753,18 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasForeignKey("StoredEmailId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxExportEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailboxAccountEntity", "MailboxAccount")
+                        .WithMany()
+                        .HasForeignKey("MailboxAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_mailbox_exports_mailbox_accounts");
+
+                    b.Navigation("MailboxAccount");
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxMutationEntity", b =>

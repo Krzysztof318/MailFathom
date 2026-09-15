@@ -531,6 +531,78 @@ period first, `ContentStorage:Release:SafetyInterval` is where you say how long,
 touch anything younger than that. [Moving stored content into the bucket](../operations/moving-stored-content.md) is the
 operator's reference — the order of the steps, what each one costs, and what each refusal is telling you.
 
+## Taking a mailbox out of MailFathom
+
+The mail MailFathom stores for you is yours to leave with. `mfctl export` writes one account's stored mail — or one
+folder of it — into a zip archive holding a Maildir tree: one directory per folder, one file per message holding the
+bytes exactly as they arrived, and the standard flags in the file names. Other mail software already reads that shape,
+so what comes out is mail rather than a MailFathom backup only MailFathom opens.
+
+It matters most when MailFathom is the **only** holder of that mailbox. An account you have drained has an empty server
+behind it by design, so this is the whole of how that mail leaves this installation — and the archive it hands you is
+what a backup of it is made from.
+
+| What you want | Command |
+| --- | --- |
+| See what an export would carry | `mfctl export measure --account work` |
+| Ask for one | `mfctl export start --account work` |
+| Follow it | `mfctl export status --account work` |
+| Fetch the finished archive | `mfctl export download --account work --export <id> --output mailbox.zip` |
+| Stop one part way | `mfctl export cancel --account work --export <id>` |
+| Delete the archive | `mfctl export delete --account work --export <id>` |
+
+`--folder <alias>` narrows measuring and exporting to one folder, and `--yes` agrees to `start` without being asked,
+which is what a scripted run needs.
+
+**It needs somewhere to put the archive.** An archive is a second full copy of the mailbox for as long as it is kept, so
+a deployment holding its message content in the database refuses the export and names the setting to change. [Moving
+your stored mail into object storage](#moving-your-stored-mail-into-object-storage) above is how you give it a bucket.
+
+Measuring reads no mail — the figures are summed from what the database already records, so they come back in seconds
+even for a mailbox of years:
+
+```console
+$ mfctl export measure --account work
+To export:  12,480 messages carrying 3,284,140,032 bytes of stored mail
+
+Folder   Messages  Bytes
+INBOX    8,240     2,147,483,648
+ARCHIVE  4,120     1,073,741,824
+Sent     120       62,914,560
+
+Nothing was written. Start the export with 'mfctl export start'.
+```
+
+The per-folder figures are there so you can see which folder holds the weight, which is the answer when a whole mailbox
+is more than your deployment's size limit allows in one piece. Starting an export shows the same figures again before it
+asks:
+
+```console
+$ mfctl export start --account work
+To export:  12,480 messages carrying 3,284,140,032 bytes of stored mail
+Export that mailbox? [y/N] y
+Export:   0199c3d0-0000-7000-8000-000000000003
+State:    queued
+Written:  0 messages carrying 0 bytes
+Archive:  no archive to keep
+Watch it with 'mfctl export status', and fetch it with 'mfctl export download' once it is finished.
+```
+
+The command returns straight away — the deployment writes the archive in the background, so closing your terminal stops
+nothing. `mfctl export status --account work` lists what the account has, newest first, with the counts advancing while
+one is being written. **One account writes one archive at a time**: asking again for the same thing answers with the
+export already running rather than starting a second, and `mfctl export cancel` stops one within a message and deletes
+whatever it had produced.
+
+**The archive does not stay forever.** A finished one is kept for two days and then deleted, which `MailboxExport:Retention`
+is where you change — the period is how long this deployment is holding that mailbox twice. Downloading writes the file
+as it arrives rather than holding it in memory, and it **refuses to write over a file that already exists**, leaving that
+file exactly as it was: for a drained account it is very likely the only copy of an earlier export. Delete the archive
+once it is safely somewhere else; deleting one already gone is not an error.
+
+[Carrying a mailbox out of this deployment](../operations/mailbox-export.md) is the operator's reference — what is
+inside the archive, what an export costs while it runs, and what holding the only copy of somebody's mail obliges you to.
+
 ## Background work that stopped
 
 MailFathom does most of what it does in the background: classifying a message, embedding a passage, carrying out what a
@@ -847,6 +919,8 @@ of what a write proves before it commits and every refusal it can answer with.
   `mfctl user`, and what each refusal names
 - [Contacts](../features/contacts.md) — what the contact book holds, and every rule a writer of it obeys
 - [Mail rules](../features/mail-rules.md) — every fact, operator, and action a rule can use
+- [Carrying a mailbox out of this deployment](../operations/mailbox-export.md) — what an export carries, what it
+  costs, and what holding the only copy of a mailbox obliges you to
 - [Mailbox OAuth](../operations/mailbox-oauth.md) — registering the application, and every mode of the sign-in above
 - [Changing the embedding model](../operations/embedding-profiles.md) — what activating, switching, and rolling back cost
 - [Endpoint configuration](../operations/configuration-endpoints.md#adminendpoint) — every `AdminEndpoint` key

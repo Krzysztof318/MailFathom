@@ -70,6 +70,33 @@ internal static class AdminEndpointRoutes
     /// </remarks>
     internal const string ContentReleasePath = $"{Prefix}/content/release";
 
+    /// <summary>Where the exports of a mailbox are listed and asked for.</summary>
+    /// <remarks>
+    /// One path listed with <c>GET</c> and asked for with <c>POST</c>, for the reason the move's is: an operator who
+    /// started an export comes back to the same place to find out what came of it.
+    /// </remarks>
+    internal const string MailboxExportsPath = $"{Prefix}/exports";
+
+    /// <summary>Where an export is measured without one being started.</summary>
+    /// <remarks>A path of its own rather than a flag on the one that starts an export, so a caller cannot measure and export by getting one field wrong.</remarks>
+    internal const string MailboxExportMeasurementPath = $"{MailboxExportsPath}/measurement";
+
+    /// <summary>Where one export is read, and where its archive is deleted.</summary>
+    /// <param name="exportId">The export the path names.</param>
+    /// <returns>The path, with the identity written the way a deployment's route constraint reads one.</returns>
+    internal static string MailboxExportPath(Guid exportId) => $"{MailboxExportsPath}/{exportId:D}";
+
+    /// <summary>Where an export still being written is stopped.</summary>
+    /// <param name="exportId">The export the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string MailboxExportCancellationPath(Guid exportId) =>
+        $"{MailboxExportPath(exportId)}/cancellation";
+
+    /// <summary>Where a finished archive is downloaded.</summary>
+    /// <param name="exportId">The export the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string MailboxExportArchivePath(Guid exportId) => $"{MailboxExportPath(exportId)}/archive";
+
     /// <summary>Where a deployment reports whether semantic search is working and how far behind it is.</summary>
     internal const string EmbeddingStatusPath = $"{Prefix}/embeddings";
 

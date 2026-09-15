@@ -1452,6 +1452,41 @@ Nothing in it is personal data. A constant, two instants, a state, a payload kin
 counts are MailFathom's own names for its own work. The resume position is the one value that names a row holding mail,
 which is why it is not served by the endpoint that reports the rest.
 
+## The exports a mailbox has been asked for
+
+`mailbox_exports` holds one row per export of one account's stored mail, keyed by a generated `Id` an operator
+follows, cancels, downloads, and deletes the export by. The row outlives the job that writes the archive, which is
+why it exists at all: a job is claimed, retried, and eventually forgotten, while an archive has to be findable by
+somebody holding nothing but the export's identity for as long as
+[`MailboxExport:Retention`](../operations/configuration-runtime.md#mailboxexport) allows.
+[Carrying a mailbox out](../operations/mailbox-export.md) is the operation.
+
+| Column | What it records |
+|---|---|
+| `MailboxAccountId` | The account whose mail the export carries. Every read is scoped by it, and the foreign key onto `mailbox_accounts` cascades, because an erased account must leave no record pointing at an archive of it |
+| `FolderPath` | The one folder the export covers, or null for the whole mailbox. It is the deployment's own local path rather than any server's, and it is what a second request is compared against to decide whether it names the same scope |
+| `State` | `Queued`, `Running`, `Completed`, `Failed`, `Cancelled`, `Expired`, or `Deleted`, written as its own name rather than an ordinal, so an operator reading the row sees what the export is doing |
+| `RequestedAt` | When it was asked for, and the order the listing reads in |
+| `MessageCount`, `ByteCount` | What has reached the archive so far, written about once every hundred messages while it runs and holding the final figures once it is finished |
+| `ArchiveByteLength` | How large the finished archive is, null while there is none |
+| `ObjectLocator` | This deployment's own key for the archive object, null once there is nothing to serve. **It never reaches a caller**, and it is one of the references the content reclamation asks about, so a live archive is never mistaken for an orphan |
+| `CompletedAt`, `ExpiresAt` | When the archive was written and when it goes if nobody deletes it first. Both are null until one exists, and both are cleared with the locator when it goes |
+| `FailureCode` | The stable five-digit code of what stopped a failed export, null for every other state |
+| `ConcurrencyVersion` | The `xmin` token. An operator cancelling and the writing job completing reach this row at the same moment, so every write states the state it expects to find and the token is what makes the losing one a conflict rather than a silent overwrite |
+
+Two indexes, and each serves exactly one read. `ix_mailbox_exports_account_requested` over the account and
+`RequestedAt` descending is the listing an operator asks for. `ix_mailbox_exports_expires_at` is the expiry pass, and it
+is partial on `ExpiresAt IS NOT NULL`, because the pass asks only about archives that exist: an export that failed, was
+cancelled, or has already gone carries no expiry.
+
+**The record is written before the object is removed**, in both the deletion path and the expiry sweep, which is the
+ordering every deletion here uses: a row saying the archive is gone while the object is still there leaves an orphan the
+reclamation removes, and the opposite order would leave a row offering a download of bytes that are not there.
+
+The folder path is the only column holding anything a person chose, and it is here rather than in a log for exactly that
+reason — a durable store holds it beside the mail it names, and the audit record of an export reports whether the whole
+mailbox was covered rather than which folder was.
+
 ## The outgoing messages waiting to be sent
 
 `outgoing_emails` holds one row per message MailFathom has been asked to send, written **before** the first SMTP
@@ -1811,6 +1846,8 @@ account reach these four tables through the same cascade every other table is re
 | `IX_client_sessions_CredentialId` | `(CredentialId)` | The foreign key onto the credential, which is what disabling or deleting one reaches its sessions by rather than scanning |
 | `ix_notifications_user_occurred` | `(UserId, OccurredAt, Id)` | The two ways the notification centre is worked: a page of one person's notifications newest first, and the retention sweep that erases the same person's oldest. The identifier is in the key because two notifications raised in one instant need a total order for a keyset page to continue from |
 | `IX_notifications_TargetStoredEmailId` | `(TargetStoredEmailId)` | The foreign key back to the message a notification leads to, which is what erasing that message reaches its notifications by rather than scanning |
+| `ix_mailbox_exports_account_requested` | `(MailboxAccountId, RequestedAt DESC)` | One account's exports newest first, which is the listing an operator asks for and the only order this table is read in |
+| `ix_mailbox_exports_expires_at` | `(ExpiresAt)` where it is not null | The archives the expiry pass has to delete. The filter is what keeps the index the size of the archives that exist rather than of every export the deployment has ever written: one that failed, was cancelled, or has already gone carries no expiry |
 | `IX_stored_content_claims_ExpiresAt` | `(ExpiresAt)` | The sweep every claim statement opens with, which is what keeps the table the size of the payloads currently in flight rather than of every claim a replica ever died holding. Unfiltered, because what an expiry divides the table into changes with the clock rather than with a row |
 
 The recipient, keyword, and search-vector indexes are GIN rather than B-tree because all of them serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.

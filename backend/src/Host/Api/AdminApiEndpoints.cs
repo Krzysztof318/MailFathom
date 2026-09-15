@@ -43,6 +43,13 @@ namespace MailFathom.Host.Api;
 /// rather than anything a model reasons over.
 /// </para>
 /// <para>
+/// The seven after those are the way a mailbox leaves the product, which <see cref="MailboxExportEndpoints" />
+/// describes: measuring what an export would carry, asking for one, listing and following them, cancelling one,
+/// downloading the archive, and deleting it. They are here because a drained account has no server behind it, so this
+/// is the only copy of somebody's mail and the only way out of it — and because ADR 0028 refuses the export in the
+/// client, where a copy of a whole mailbox would be one click away.
+/// </para>
+/// <para>
 /// The four after them carry the mail already stored into the object backend, which
 /// <see cref="ContentMoveEndpoints" /> describes: reading how much of it is still database-backed and what the
 /// current move has carried, asking for one, pausing it, and taking it up again. They are here because selecting the
@@ -174,6 +181,7 @@ internal static class AdminApiEndpoints
         api.MapMailboxRefreshToken();
         api.MapMailboxSynchronizationStatus();
         api.MapMailboxMaintenance();
+        api.MapMailboxExports();
         api.MapContentMove();
         api.MapContentRelease();
         api.MapMailboxMutationAudit();
