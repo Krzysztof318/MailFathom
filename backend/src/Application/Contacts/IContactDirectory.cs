@@ -17,11 +17,18 @@ namespace MailFathom.Application.Contacts;
 /// the listing — while the identity lookups carry the scope as a predicate beside the key they were already seeking on.
 /// </para>
 /// <para>
-/// <b>One address is answered once, from the first book of the scope that holds it.</b> Two books may hold a person
+/// <b>One person is answered once, from the first book of the scope that holds them.</b> Two books may hold a person
 /// under one address — the user wrote somebody down that a mailbox had already collected, or two of their mailboxes
 /// each collected the same correspondent — and every read here hides the later record rather than serving both. What
-/// "later" means is <see cref="ContactBookScope" />'s order and nothing else, so a listing, a lookup, and a name match
-/// never disagree about which of the two exists.
+/// "later" means is <see cref="ContactBookScope" />'s order and nothing else, so a listing and a name match never
+/// disagree about which of the two exists.
+/// </para>
+/// <para>
+/// That precedence is taken over the record on every read but <see cref="FindByAddressAsync" />, which takes it over
+/// the address: a caller there holds the address already, so the earliest book holding that address answers even where
+/// a listing hides that record for a different address of the same person. An identity that read hands back is
+/// therefore not one the record-level reads are obliged to answer for, and a caller that needs a record the whole
+/// surface agrees on reads the person rather than the address.
 /// </para>
 /// <para>
 /// The hiding happens in the query rather than over a page already read, so a page still holds exactly the size asked

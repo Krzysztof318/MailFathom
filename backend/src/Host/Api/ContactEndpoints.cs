@@ -336,6 +336,7 @@ internal static class ContactEndpoints
     /// <param name="request">The record the contact is to have afterwards.</param>
     /// <param name="book">Performs the write.</param>
     /// <param name="scopes">Composes the books that user reads.</param>
+    /// <param name="users">Answers whether this deployment holds a record for the named user.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the outcome, or <c>400</c> naming which rule the record broke.</returns>
     /// <remarks>
@@ -349,14 +350,21 @@ internal static class ContactEndpoints
         [FromBody] ContactRecordRequest? request,
         [FromServices] ContactBook book,
         [FromServices] ContactBookScopes scopes,
+        [FromServices] IMailUserDirectory users,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
         ArgumentNullException.ThrowIfNull(scopes);
+        ArgumentNullException.ThrowIfNull(users);
 
         if (!TryReadUser(user, out var writer))
         {
             return EmptyUser();
+        }
+
+        if (await users.ReadUserAsync(writer, cancellationToken) is null)
+        {
+            return UnknownUser(writer);
         }
 
         if (!TryReadContactId(contactId, out var identity))

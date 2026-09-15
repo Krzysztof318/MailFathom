@@ -8,7 +8,7 @@ using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
-/// <summary>Corrects what the deployment's book holds about one person.</summary>
+/// <summary>Corrects what one user's own book holds about one person.</summary>
 /// <remarks>
 /// <para>
 /// What is not named is kept. The book itself takes the whole record rather than the difference, so this command reads

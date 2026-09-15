@@ -74,7 +74,7 @@ internal sealed class CreateContactTool(ContactBookWriter contactBookWriter)
     public async Task<ContactWriteToolResult> CreateContactAsync(
         [Description("The name to record for this person, as it should be read back, up to 256 characters. Characters that render as nothing are refused.")]
         string displayName,
-        [Description("Every mail address this person uses, at most 32 entries of at most 320 characters each. Two spellings of one address are stored once and the first spelling is the one kept, but both still count towards the 32. An address another contact already holds refuses the write.")]
+        [Description("Every mail address this person uses, at most 32 entries of at most 320 characters each. Two spellings of one address are stored once and the first spelling is the one kept, but both still count towards the 32. An address another contact in your own book already holds refuses the write, while one a mail account collected is free here.")]
         IReadOnlyList<string> addresses,
         [Description("The address to use when addressing this person without naming which of theirs to use. Must be one of addresses; state it even where the record names a single address, because nothing picks one for the user.")]
         string preferredAddress,

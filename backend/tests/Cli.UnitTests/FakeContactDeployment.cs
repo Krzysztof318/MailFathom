@@ -178,6 +178,26 @@ internal static class FakeContactDeployment
             .RequestUri?.Query;
     }
 
+    /// <summary>Reports the query the command last reached a contact route with, using the verb given.</summary>
+    /// <param name="deployment">The deployment the command was pointed at.</param>
+    /// <param name="method">The verb the command reached the route with.</param>
+    /// <returns>The query string, or <see langword="null" /> where no such request was sent.</returns>
+    /// <remarks>
+    /// The routes acting on one person bind <c>user</c> as a required query parameter, so what a command puts in the
+    /// query is the difference between the act running and a real deployment answering <c>400</c>. This double answers
+    /// whatever arrives, which is why the query is published for a test to read rather than enforced here.
+    /// </remarks>
+    internal static string? LastContactQuery(this FakeHttpMessageHandler deployment, HttpMethod method)
+    {
+        ArgumentNullException.ThrowIfNull(deployment);
+
+        return deployment.RecordedRequests
+            .LastOrDefault(request =>
+                request.Method == method
+                && request.RequestUri?.AbsolutePath.StartsWith(AdminEndpointRoutes.ContactsPath, StringComparison.Ordinal) == true)?
+            .RequestUri?.Query;
+    }
+
     /// <summary>Reports the query the command last asked an erasure of what one account collected with.</summary>
     /// <param name="deployment">The deployment the command was pointed at.</param>
     /// <returns>The query string, or <see langword="null" /> where no such erasure was asked for.</returns>

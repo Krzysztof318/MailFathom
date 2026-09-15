@@ -8,7 +8,7 @@ using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
-/// <summary>Takes one address off a person the deployment's book holds.</summary>
+/// <summary>Takes one address off a person one user's own book holds.</summary>
 /// <remarks>
 /// The address is removed from the record rather than marked, which is also what frees it for another contact to claim.
 /// A contact holds at least one address, so the last one cannot be removed: what removes a person from the book is

@@ -9,7 +9,7 @@ using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
-/// <summary>Records a person the deployment's contact book does not yet hold.</summary>
+/// <summary>Records a person one user's own book does not yet hold.</summary>
 /// <remarks>
 /// A contact written from here is asserted and goes into one user's own book: somebody wrote this person down. That is
 /// what distinguishes it from a record a mail account collected out of the mail that arrived on it, and it is what makes

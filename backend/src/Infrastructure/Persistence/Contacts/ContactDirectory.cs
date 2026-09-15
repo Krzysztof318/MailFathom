@@ -116,9 +116,13 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
         // here the caller already has the address, so the earliest book holding *it* answers even where that record is
         // one a listing would hide for a different address of the same person. Within a book the address is unique, so
         // the order over the scope settles the answer outright.
+        //
+        // The book is stated inside the address subquery as well as outside it, so the correlated read leads with the
+        // unique index the book and the address form rather than probing the addresses of every contact in the scope.
         var entity = await readContext.Contacts.AsNoTracking()
             .Where(record => books.Contains(record.BookHolderId)
-                && record.Addresses.Any(held => held.NormalizedAddress == normalizedAddress))
+                && record.Addresses.Any(held =>
+                    books.Contains(held.BookHolderId) && held.NormalizedAddress == normalizedAddress))
             .OrderBy(record => Array.IndexOf(books, record.BookHolderId))
             .Include(record => record.Addresses)
             .FirstOrDefaultAsync(cancellationToken);

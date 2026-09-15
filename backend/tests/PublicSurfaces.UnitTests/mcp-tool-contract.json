@@ -362,7 +362,7 @@
     "inputSchema": {
       "properties": {
         "addresses": {
-          "description": "Every mail address this person uses, at most 32 entries of at most 320 characters each. Two spellings of one address are stored once and the first spelling is the one kept, but both still count towards the 32. An address another contact already holds refuses the write.",
+          "description": "Every mail address this person uses, at most 32 entries of at most 320 characters each. Two spellings of one address are stored once and the first spelling is the one kept, but both still count towards the 32. An address another contact in your own book already holds refuses the write, while one a mail account collected is free here.",
           "items": {
             "type": "string"
           },

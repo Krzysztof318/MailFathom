@@ -71,8 +71,10 @@ public sealed class ContactModelTests
             "\"BookHolderId\" = CASE WHEN \"UserId\" IS NULL THEN 'account:' || \"MailboxAccountId\" ELSE 'user:' || \"UserId\"::text END",
             constraint.Sql,
             StringComparison.Ordinal);
-        Assert.Contains("'Collected'", constraint.Sql, StringComparison.Ordinal);
-        Assert.Contains("'Asserted'", constraint.Sql, StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Origin\" = CASE WHEN \"UserId\" IS NULL THEN 'Collected' ELSE 'Asserted' END",
+            constraint.Sql,
+            StringComparison.Ordinal);
     }
 
     /// <summary>The order is the ordinal one the domain derived the sort key to produce, whatever collation the database was created with.</summary>

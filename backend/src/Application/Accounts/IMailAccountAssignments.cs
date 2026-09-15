@@ -12,9 +12,14 @@ namespace MailFathom.Application.Accounts;
 /// <para>
 /// An account is a record of its own and is assigned to however many users an administrator assigned it to, so which
 /// user reaches which mailbox is a relation rather than a column on either side. This is the one port that reads it,
-/// and the two directions have different callers. <see cref="AssignedMailAccountCatalog" /> is the only one to read
-/// the user-to-accounts direction, so every caller-facing resolution narrows to the accounts that catalog answers
-/// with and the mapping is read once rather than by each use case.
+/// and the two directions have different callers.
+/// </para>
+/// <para>
+/// Two read the user-to-accounts direction, and no third joins them without a reason of the same kind.
+/// <see cref="AssignedMailAccountCatalog" /> is what every resolution over stored mail narrows through, so a use case
+/// reading mail never asks the relation itself. <see cref="Contacts.ContactBookScopes" /> is the second, because the
+/// contact books a user reads are their own beside the collected book of each account assigned to them, which is a set
+/// of books rather than a set of mailboxes and is therefore not a question the catalog answers.
 /// </para>
 /// <para>
 /// The account-to-users direction is read by the work that has a mailbox in hand and needs the people it serves: the
@@ -24,8 +29,10 @@ namespace MailFathom.Application.Accounts;
 /// </para>
 /// <para>
 /// It answers about the account or the user it is asked about rather than about the caller, which is why it is not
-/// itself a caller-scoped port. A caller-facing read model reaching the user direction of it would be free to ask
-/// about somebody else; the catalog above is what binds that question to the user the work in hand is acting for.
+/// itself a caller-scoped port. A read model reaching the user direction of it is therefore free to ask about somebody
+/// else, and something above it has to bind the question to the user the work in hand is acting for: the catalog for
+/// mail, and <see cref="Contacts.ContactBookOwnership" /> for the books, which resolves the user from the principal
+/// and refuses a caller acting for nobody before a scope is composed at all.
 /// </para>
 /// </remarks>
 public interface IMailAccountAssignments

@@ -8,7 +8,7 @@ using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
-/// <summary>Reads one bounded page of the deployment's contact book.</summary>
+/// <summary>Reads one bounded page of the books one user reads.</summary>
 /// <remarks>
 /// <para>
 /// One page per invocation, and the operator asks for the next. There is deliberately no command that walks the whole

@@ -8,7 +8,7 @@ using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
-/// <summary>Adds one more address to a person the deployment's book already holds.</summary>
+/// <summary>Adds one more address to a person one user's own book already holds.</summary>
 /// <remarks>
 /// A convenience over the amendment beneath it rather than an operation of its own: the book takes the whole record, so
 /// this reads the contact, appends the address, and sends the result. An address another contact of that user's own

@@ -870,6 +870,41 @@ public sealed class ContactCommandTests : IDisposable
         Assert.Equal(0, deployment.ContactRequestCount(HttpMethod.Get));
     }
 
+    /// <summary>Every command acting on one person names the user whose books the route is answered for.</summary>
+    /// <remarks>
+    /// The per-contact routes bind <c>user</c> as a required query parameter and refuse a request stating none, so a
+    /// command that dropped it would be answered <c>400</c> by a real deployment while this double, which answers
+    /// whatever arrives, reported nothing at all. The listing is covered where it is asked for a page; these are the
+    /// five that act on somebody.
+    /// </remarks>
+    [Fact]
+    public async Task ContactCommands_ActingOnOnePerson_NameTheUserTheRouteIsAnsweredFor()
+    {
+        // Arrange
+        var named = $"user={FakeContactDeployment.UserIdentity:D}";
+
+        // Act
+        var record = await this.QueryOfAsync(
+            HttpMethod.Post,
+            "contact",
+            "create",
+            "--name",
+            "Anna Kowalska",
+            "--address",
+            "anna@example.test");
+        var amendment = await this.QueryOfAsync(HttpMethod.Put, "contact", "update", "--id", Identity, "--name", "Anna Nowak");
+        var promotion = await this.QueryOfAsync(HttpMethod.Post, "contact", "promote", "--id", Identity);
+        var erasure = await this.QueryOfAsync(HttpMethod.Delete, "contact", "delete", "--id", Identity, "--yes");
+        var export = await this.QueryOfAsync(HttpMethod.Get, "contact", "export", "--id", Identity);
+
+        // Assert
+        Assert.Contains(named, record, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(named, amendment, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(named, promotion, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(named, erasure, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(named, export, StringComparison.OrdinalIgnoreCase);
+    }
+
     public void Dispose() => this.harness.Dispose();
 
     /// <summary>Reads the record a write carried, as the deployment would.</summary>
@@ -890,4 +925,18 @@ public sealed class ContactCommandTests : IDisposable
 
     private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>
         this.harness.RunAsync(deployment, args);
+
+    /// <summary>Runs one command against a deployment answering every route, and reads the query it reached one with.</summary>
+    private async Task<string> QueryOfAsync(HttpMethod method, params string[] arguments)
+    {
+        using var deployment = FakeContactDeployment.Holding(
+            lookup: FakeContactDeployment.Lookup(),
+            write: FakeContactDeployment.Written(),
+            erasure: FakeContactDeployment.Erasure(wasHeld: true, addressesErased: 1),
+            export: FakeContactDeployment.Export());
+
+        Assert.Equal(CliExitCode.Success, await this.RunAsync(deployment, [.. arguments, "--endpoint", Endpoint]));
+
+        return deployment.LastContactQuery(method) ?? string.Empty;
+    }
 }

@@ -9,7 +9,7 @@ using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
-/// <summary>Erases one person from the deployment's contact book, and everything the book derived from them.</summary>
+/// <summary>Erases one person from whichever of the books a user reads holds them, and everything that book derived from them.</summary>
 /// <remarks>
 /// <para>
 /// The data-subject erasure path, reached by somebody who means it. It removes rather than marks and it cannot be

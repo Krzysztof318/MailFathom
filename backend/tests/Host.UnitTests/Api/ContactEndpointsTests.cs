@@ -107,6 +107,7 @@ public sealed class ContactEndpointsTests
             new ContactRecordRequest("Anna Nowak", ["anna@example.test"], "anna@example.test", Note: null),
             this.Book(),
             this.Scopes(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -139,6 +140,7 @@ public sealed class ContactEndpointsTests
             new ContactRecordRequest("Anna Nowak", ["anna@example.test"], "anna@example.test", Note: null),
             this.Book(),
             this.Scopes(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -566,15 +568,31 @@ public sealed class ContactEndpointsTests
             this.Roster(),
             TestContext.Current.CancellationToken);
 
+        var amendment = await ContactEndpoints.AmendAsync(
+            Identity,
+            stranger,
+            new ContactRecordRequest("Anna Nowak", ["anna@example.test"], "anna@example.test", Note: null),
+            this.Book(),
+            this.Scopes(),
+            this.Roster(),
+            TestContext.Current.CancellationToken);
+
         // Assert
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(erasure.Result).StatusCode);
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(export.Result).StatusCode);
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(promotion.Result).StatusCode);
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(amendment.Result).StatusCode);
 
         await this.store.DidNotReceive().EraseAsync(
             Arg.Any<IPersistenceSession>(),
             Arg.Any<ContactBookScope>(),
             Arg.Any<ContactId>(),
+            Arg.Any<CancellationToken>());
+
+        await this.store.DidNotReceive().ReplaceAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<ContactBookHolder>(),
+            Arg.Any<Contact>(),
             Arg.Any<CancellationToken>());
     }
 

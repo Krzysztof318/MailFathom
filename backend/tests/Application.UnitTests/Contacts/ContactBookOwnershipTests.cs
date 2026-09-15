@@ -278,9 +278,10 @@ public sealed class ContactBookOwnershipTests
 
     /// <summary>Collection writes into the account's book alone, whichever users happen to be assigned it.</summary>
     /// <remarks>
-    /// The sharing is arranged rather than assumed, because two empty user books prove nothing where nobody was
-    /// assigned anything: what is being asserted is that a write reached neither book of the two people who do read
-    /// this mailbox.
+    /// Collection files under the account without consulting the relation at all, so the sharing is asserted through
+    /// the reads rather than through the write: the one record is answered to both people assigned the mailbox, while
+    /// neither of their own books holds anything. Two empty own books on their own would prove nothing, since they hold
+    /// just as well where nobody was assigned anything.
     /// </remarks>
     [Fact]
     public async Task CollectAsync_AnAccountTwoUsersShare_WritesOneRecordIntoTheAccountsBook()
@@ -299,15 +300,19 @@ public sealed class ContactBookOwnershipTests
             NewContactOf("Anna Kowalska", "anna@example.test") with { Origin = ContactOrigin.Collected },
             TestContext.Current.CancellationToken);
 
+        var read = await ReaderOf(store, SyntheticMailUser.Deployment, assignments)
+            .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
+        var readByTheOther = await ReaderOf(store, SyntheticMailUser.Another, assignments)
+            .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
+
         // Assert
         Assert.Equal(ContactWriteOutcome.Written, collected.Outcome);
         Assert.Equal(1, store.ContactCount);
         Assert.Equal(collected.Contact?.Id, Assert.Single(store.ContactsOf(SyntheticMailAccount.Deployment)).Id);
         Assert.Empty(store.ContactsOf(SyntheticMailUser.Deployment));
         Assert.Empty(store.ContactsOf(SyntheticMailUser.Another));
-        Assert.Equal(
-            [SyntheticMailUser.Deployment, SyntheticMailUser.Another],
-            assignments.UsersAssignedTo(SyntheticMailAccount.Deployment));
+        Assert.Equal(collected.Contact?.Id, Assert.Single(read.Contacts).Id);
+        Assert.Equal(collected.Contact?.Id, Assert.Single(readByTheOther.Contacts).Id);
     }
 
     /// <summary>A user not assigned a mailbox reads none of what it collected, which is the whole of what the split is for.</summary>

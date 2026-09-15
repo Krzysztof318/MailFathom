@@ -107,6 +107,15 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
             return Task.FromResult(false);
         }
 
+        // The amendment inserts an address row per newly named address, so it meets the same unique index a first
+        // record does: a sibling of this book already holding one of them refuses the whole write in the database
+        // rather than overwriting it. Without this the pre-check in ContactBook would be the only thing keeping the
+        // suite and PostgreSQL in agreement, and a regression that dropped it would be reported by no test.
+        if (this.HolderOf(holder, contact) is { } held)
+        {
+            throw new InvalidOperationException($"The address is already held by contact {held}.");
+        }
+
         this.heldById[contact.Id] = new HeldContact(holder, contact);
 
         return Task.FromResult(true);

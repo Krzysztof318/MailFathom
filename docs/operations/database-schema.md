@@ -285,7 +285,7 @@ carrying *more* migrations than a build defines has no pending migration for tha
 version keeps serving. What it does not do is use the new columns, which is why the window is a rollout rather than a
 resting state.
 
-**Three migrations narrow that window rather than closing it.** `AddUserAccounts` makes the user of a mail account a
+**Four migrations narrow that window rather than closing it.** `AddUserAccounts` makes the user of a mail account a
 required column, and a build older than the release carrying it does not know the column exists — so against this
 schema such a build serves the mail already stored and still fails the moment it has to bind a folder for an account it
 has never synchronized, because the row it writes states no user. `AddContactUser` does the same for the contact
@@ -294,8 +294,11 @@ an address, because the row it writes states no user either. `KeyMailAccountByUs
 seven primary keys, and the one an older build writes through by name is the sealed OAuth refresh token: its upsert
 names the account identifier as the conflict target, no unique constraint matches that column alone any more, and the
 statement is refused — so a rotation an older build receives against this schema is logged as a failure to store rather
-than stored. Keep the middle of the rollout short on these releases, and do not treat a previous image as something
-that can be left running against them.
+than stored. `SplitContactBooksByHolder` is `AddContactUser`'s shape a second time: which book holds a contact becomes a
+required column that a check constraint governs, and an older build states neither side of it — so such a build reads and
+amends the contacts already stored and fails the moment it records a new person or an address, and the contact collection
+of every mailbox it synchronizes fails with it. Keep the middle of the rollout short on these releases, and do not treat
+a previous image as something that can be left running against them.
 
 **`SplitContactBooksByHolder` is the one migration that deletes rows it cannot carry over.** A contact book stops being
 one user's and becomes either a user's own or a mail account's, and every row has to say which. A contact somebody wrote
