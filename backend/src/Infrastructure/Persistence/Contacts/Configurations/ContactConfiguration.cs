@@ -70,11 +70,11 @@ internal sealed class ContactConfiguration : IEntityTypeConfiguration<ContactEnt
         entity.Property(contact => contact.ConcurrencyVersion).IsRowVersion();
 
         // The one order a book is walked in, and the one a keyset page continues from. The holder leads it because a
-        // page is read over a handful of named books, so each of them is seeked into rather than the table scanned and
-        // narrowed; the identity settles two people whose names compare equal, which is what makes the order total and
-        // the walk terminate. The sort key is pinned to the C collation so that order is the ordinal one the domain
-        // derived the key to produce, rather than whichever collation the database this runs on happens to have been
-        // created with.
+        // page is read over a handful of named books, so each of them is reached by a seek rather than the table
+        // scanned and narrowed; the identity settles two people whose names compare equal, which makes the order
+        // total and the walk terminate. The sort key is pinned to the C collation so that order is the ordinal one
+        // the domain derived the key to produce, rather than whichever collation the database this runs on happens
+        // to have been created with.
         entity.HasIndex(contact => new { contact.BookHolderId, contact.DisplayNameSortKey, contact.Id })
             .HasDatabaseName(PersistenceConstraintNames.ContactListingIndexName);
 

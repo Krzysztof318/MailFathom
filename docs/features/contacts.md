@@ -336,8 +336,8 @@ filters, so continuing a walk with a different search or a different origin is d
 The order is taken on a comparison form stored beside the name rather than on the name itself, and the column holding it
 is pinned to PostgreSQL's `C` collation, so the order is the ordinal one MailFathom derived the form to produce rather
 than whichever collation the database was created with. The index it is served from leads with the book and ends with
-the identity, which is what lets each of a reader's books be seeked into rather than the table scanned, and what makes
-the walk over them terminate.
+the identity, which is what lets each of a reader's books be reached by a seek rather than the table scanned, and
+what makes the walk over them terminate.
 
 ## Erasing and exporting a person
 
