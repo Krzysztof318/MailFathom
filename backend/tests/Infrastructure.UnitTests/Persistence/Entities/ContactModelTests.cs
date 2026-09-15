@@ -66,7 +66,7 @@ public sealed class ContactModelTests
         Assert.Contains("\"UserId\" IS NOT NULL", constraint.Sql, StringComparison.Ordinal);
         Assert.Contains("\"MailboxAccountId\" IS NOT NULL", constraint.Sql, StringComparison.Ordinal);
         Assert.Contains(
-            "\"BookHolderId\" = COALESCE(\"UserId\"::text, \"MailboxAccountId\")",
+            "\"BookHolderId\" = CASE WHEN \"UserId\" IS NULL THEN 'account:' || \"MailboxAccountId\" ELSE 'user:' || \"UserId\"::text END",
             constraint.Sql,
             StringComparison.Ordinal);
         Assert.Contains("'Collected'", constraint.Sql, StringComparison.Ordinal);

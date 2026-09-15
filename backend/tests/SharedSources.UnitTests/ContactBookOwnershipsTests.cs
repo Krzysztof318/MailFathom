@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Contacts;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
@@ -69,9 +70,9 @@ public sealed class ContactBookOwnershipsTests
         // Assert
         Assert.Equal(
             [
-                SyntheticMailUser.Another.Value.ToString("D"),
-                "first-account",
-                "second-account",
+                ContactBookHolder.UserKeyPrefix + SyntheticMailUser.Another.Value.ToString("D"),
+                ContactBookHolder.AccountKeyPrefix + "first-account",
+                ContactBookHolder.AccountKeyPrefix + "second-account",
             ],
             ownership.Scope.Keys);
     }
