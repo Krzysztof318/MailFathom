@@ -186,7 +186,7 @@ public sealed class ConfigurationConvergenceWorkerTests
         return new ConfigurationConvergenceWorker(
             new ConfigurationChangeAnnouncements(connect, new RecordingLogger<ConfigurationChangeAnnouncements>()),
             users,
-            rootSettings,
+            () => rootSettings,
             clock,
             logger ?? new RecordingLogger<ConfigurationConvergenceWorker>());
     }

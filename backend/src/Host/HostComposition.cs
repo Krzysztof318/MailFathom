@@ -1248,12 +1248,15 @@ internal static class HostComposition
 
         // Behind the gate above, because what it keeps current is the roster that gate settled, and what it reads is
         // settings and records rather than mail, so nothing behind it waits on it. The persisted layer's reloader is
-        // asked for rather than required: a host composed without that layer has only a roster to keep current.
+        // asked for rather than required: a host composed without that layer has only a roster to keep current. It is
+        // handed as the resolution rather than as the service, because that reloader reads through the connection pool
+        // and every hosted service is constructed before any is started — asking for it here would build the pool
+        // before startup composed the connection string it needs.
         builder.Services.AddSingleton<ServedMailUsersConvergence>();
         builder.Services.AddHostedService(provider => new ConfigurationConvergenceWorker(
             provider.GetRequiredService<ConfigurationChangeAnnouncements>(),
             provider.GetRequiredService<ServedMailUsersConvergence>(),
-            provider.GetService<RootSettingsReloader>(),
+            provider.GetService<RootSettingsReloader>,
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<ILogger<ConfigurationConvergenceWorker>>()));
 

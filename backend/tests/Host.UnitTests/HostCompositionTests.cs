@@ -10,10 +10,12 @@ using MailFathom.Application.Emails.Search.Phrasing;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Host.Signals;
+using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Mcp.Tools.Categories;
@@ -375,6 +377,33 @@ public sealed class HostCompositionTests
         {
             Assert.Fail(
                 $"The shipped defaults compose services that cannot be built:{Environment.NewLine}  "
+                + string.Join($"{Environment.NewLine}  ", unbuildable));
+        }
+    }
+
+    /// <summary>
+    /// The layer every other composition here composes without, because it exists only where the host read a document
+    /// out of PostgreSQL before <c>CreateBuilder</c> returned — which is every deployment and no test. What it adds is
+    /// a reloader reading through the connection pool, so a service asking for that reloader while the hosted services
+    /// are being constructed builds the pool before startup composed the connection string, and the process ends on
+    /// the composition rather than serving anything.
+    /// </summary>
+    [Fact]
+    public async Task Compose_OverAPersistedConfigurationLayer_ResolvesEveryServiceItRegistered()
+    {
+        // Arrange
+        var builder = ConfiguredBuilder("every capability at once");
+        builder.Configuration.AddRootSettings(new RootSettingsDocument("{}", Version: 1));
+        HostComposition.Compose(builder);
+
+        // Act
+        var unbuildable = await ReportUnbuildableAsync(builder.Services);
+
+        // Assert
+        if (unbuildable.Length > 0)
+        {
+            Assert.Fail(
+                $"A deployment reading persisted settings registered services it cannot build:{Environment.NewLine}  "
                 + string.Join($"{Environment.NewLine}  ", unbuildable));
         }
     }
