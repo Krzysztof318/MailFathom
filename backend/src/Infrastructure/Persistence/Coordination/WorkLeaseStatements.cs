@@ -169,4 +169,22 @@ internal static class WorkLeaseStatements
                   AND "ExpiresAt" > now()
                 """;
     }
+
+    /// <summary>Composes the statement that reads every scope held right now, whatever it names.</summary>
+    /// <param name="maximumLeases">The most rows to read.</param>
+    /// <returns>The statement, whose rows are the deployment's unexpired leases.</returns>
+    /// <remarks>
+    /// The same expiry comparison against the same clock as every other reading of this table, over no scope filter at
+    /// all: what asks is a refusal that turns on some replica the asking build has never heard of holding work, and a
+    /// filter composed from the scopes this build knows would miss exactly that. The bound is written into the
+    /// statement rather than applied to the answer, so a deployment whose lease table has grown reads one page instead
+    /// of all of it.
+    /// </remarks>
+    internal static FormattableString ComposeEveryHeldRead(int maximumLeases) =>
+        $"""
+         SELECT "Scope", "Holder", "Replica", "HeldSince", "ExpiresAt"
+         FROM work_leases
+         WHERE "ExpiresAt" > now()
+         LIMIT {maximumLeases}
+         """;
 }

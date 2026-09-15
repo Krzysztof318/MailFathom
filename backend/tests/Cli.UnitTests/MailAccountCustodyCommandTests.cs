@@ -1,0 +1,225 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Cli.Administration;
+using MailFathom.TestSupport;
+using Xunit;
+
+namespace MailFathom.Cli.UnitTests;
+
+/// <summary>Covers the two commands an account's custody is read and changed through.</summary>
+/// <remarks>
+/// One of these ends with a mail server no longer holding a copy of somebody's mailbox, which is what decides what is
+/// asserted: that an operator who does not agree leaves the deployment asked for nothing, that a custody the operator
+/// mistyped never reaches the deployment at all, and that every sentence a refusal carries is printed rather than
+/// collapsed into a status code an operator cannot act on.
+/// </remarks>
+public sealed class MailAccountCustodyCommandTests : IDisposable
+{
+    private const string Endpoint = CliCommandHarness.Endpoint;
+
+    private readonly CliCommandHarness harness = new(new DateTimeOffset(2026, 9, 15, 12, 0, 0, TimeSpan.Zero));
+
+    /// <summary>The drain is only ever visible as counts, so what the command prints is the whole of what an operator learns.</summary>
+    [Fact]
+    public async Task Show_AHeldAccount_ReportsItsCustodyAndWhatTheSourceStillHolds()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountCustodyDeployment.Answering();
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "account", "custody", "show", "--account", "work", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("HoldMailbox", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Held", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("4812", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Awaiting source removal: 7", StringComparison.Ordinal));
+    }
+
+    /// <summary>Reading which copy of a mailbox is the truth may never reach the route that empties a mail server.</summary>
+    [Fact]
+    public async Task Show_AnAccount_AsksTheReadRouteAndNeverTheOneThatSwitches()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountCustodyDeployment.Answering();
+
+        // Act
+        await this.RunAsync(deployment, "account", "custody", "show", "--account", "work", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(
+            1,
+            deployment.RequestCount(HttpMethod.Get, AdminEndpointRoutes.MailAccountCustodyPath));
+        Assert.Equal(
+            0,
+            deployment.RequestCount(HttpMethod.Post, AdminEndpointRoutes.MailAccountCustodySwitchPath));
+        Assert.Contains(
+            "account=work",
+            deployment.QuerySentTo(AdminEndpointRoutes.MailAccountCustodyPath),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>An account still moving towards what was asked for is told so, because the counts alone read as a stalled drain.</summary>
+    [Fact]
+    public async Task Show_AnAccountStillMovingTowardsWhatWasAsked_SaysTheSwitchIsUnderWay()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountCustodyDeployment.Answering(
+            FakeMailAccountCustodyDeployment.Held(phase: "Mirrored", isSwitchPending: true));
+
+        // Act
+        await this.RunAsync(deployment, "account", "custody", "show", "--account", "work", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains("switch is under way", StringComparison.Ordinal));
+    }
+
+    /// <summary>The question names what happens to the mail, and an operator who does not agree leaves the source untouched.</summary>
+    [Fact]
+    public async Task Switch_AnOperatorWhoDeclines_AsksTheDeploymentForNothing()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountCustodyDeployment.Answering();
+        this.harness.Console.AnswerToGive = false;
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account", "custody", "switch", "--account", "work", "--to", "HoldMailbox", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Equal(
+            0,
+            deployment.RequestCount(HttpMethod.Post, AdminEndpointRoutes.MailAccountCustodySwitchPath));
+        Assert.Contains(
+            this.harness.Console.Questions,
+            question => question.Contains("nothing puts those copies back", StringComparison.Ordinal));
+    }
+
+    /// <summary>An agreed switch sends the custody the operator named, whatever they cased it as.</summary>
+    [Fact]
+    public async Task Switch_AnAgreedSwitch_SendsTheDeclaredCustodyHoweverItWasCased()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountCustodyDeployment.Answering();
+        this.harness.Console.AnswerToGive = true;
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account", "custody", "switch", "--account", "work", "--to", "holdmailbox", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var sent = Assert.Single(
+            deployment.RecordedRequests,
+            request => request.RequestUri?.AbsolutePath == AdminEndpointRoutes.MailAccountCustodySwitchPath);
+
+        Assert.Contains("\"custody\": \"HoldMailbox\"", sent.ContentAsUtf8String(), StringComparison.Ordinal);
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains("empty the source", StringComparison.Ordinal));
+    }
+
+    /// <summary>Switching back is a phase rather than an undo, so the sentence may not promise the source gets its mail back.</summary>
+    [Fact]
+    public async Task Switch_BackToMirroringTheSource_SaysTheDrainStopsRatherThanThatTheMailReturns()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountCustodyDeployment.Answering(
+            outcome: FakeMailAccountCustodyDeployment.Accepted("MirrorSource", "Held"));
+
+        this.harness.Console.AnswerToGive = true;
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account", "custody", "switch", "--account", "work", "--to", "MirrorSource", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains("Restoring", StringComparison.Ordinal));
+        Assert.Contains(
+            this.harness.Console.Questions,
+            question => question.Contains(
+                "nothing the drain already removed returns to the source server",
+                StringComparison.Ordinal));
+    }
+
+    /// <summary>A custody the operator mistyped is refused here rather than sent, so nothing is asked of the deployment on a typo.</summary>
+    [Fact]
+    public async Task Switch_ACustodyThatNamesNeitherValue_IsRefusedWithoutReachingTheDeployment()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountCustodyDeployment.Answering();
+        this.harness.Console.AnswerToGive = true;
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account", "custody", "switch", "--account", "work", "--to", "HoldMailboxes", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Empty(deployment.RecordedRequests);
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("MirrorSource", StringComparison.Ordinal));
+    }
+
+    /// <summary>Every reason a deployment refuses is something an operator has to act on, so each one is printed.</summary>
+    [Fact]
+    public async Task Switch_ADeploymentThatRefuses_PrintsEveryReasonItGave()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountCustodyDeployment.Answering(
+            outcome: FakeMailAccountCustodyDeployment.Refused(
+                "Replica 'replica-2' holds a live work lease under a build that does not know this mode.",
+                "The account synchronizes a folder playing a virtual role."));
+
+        this.harness.Console.AnswerToGive = true;
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account", "custody", "switch", "--account", "work", "--to", "HoldMailbox", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("replica-2", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("virtual role", StringComparison.Ordinal));
+    }
+
+    /// <summary>The confirmation is the operator's, so a deployment asked without one was never agreed to.</summary>
+    [Fact]
+    public async Task Switch_ConfirmedUpFront_AsksNothingAndSwitchesAnyway()
+    {
+        // Arrange
+        using var deployment = FakeMailAccountCustodyDeployment.Answering();
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "account", "custody", "switch", "--account", "work", "--to", "HoldMailbox", "--yes", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Empty(this.harness.Console.Questions);
+        Assert.Equal(
+            1,
+            deployment.RequestCount(HttpMethod.Post, AdminEndpointRoutes.MailAccountCustodySwitchPath));
+    }
+
+    /// <inheritdoc />
+    public void Dispose() => this.harness.Dispose();
+
+    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>
+        this.harness.RunAsync(deployment, args);
+}

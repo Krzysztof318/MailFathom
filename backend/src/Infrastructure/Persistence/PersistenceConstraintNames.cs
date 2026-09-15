@@ -61,6 +61,14 @@ internal static class PersistenceConstraintNames
 
     internal const string StoredEmailAwaitingContentIndexName = "ix_stored_emails_awaiting_content";
 
+    /// <summary>The order a held account's source is emptied in, which is its oldest mail first.</summary>
+    /// <remarks>
+    /// Filtered to the rows a source still holds, which is what makes the read cost nothing on a mirrored account and
+    /// makes it shrink to nothing as a held account's source empties. Without the filter every run of every account
+    /// would walk the whole timeline to discover that no row qualifies.
+    /// </remarks>
+    internal const string StoredEmailAwaitingDrainIndexName = "ix_stored_emails_awaiting_drain";
+
     /// <summary>The order a requested whole-mailbox rule run walks an account's mail in.</summary>
     internal const string StoredEmailAccountIdentityIndexName = "ix_stored_emails_account_identity";
 
@@ -272,6 +280,12 @@ internal static class PersistenceConstraintNames
     internal const string MailboxMutationOutstandingIndexName = "ix_mailbox_mutations_outstanding";
 
     internal const string MailboxMutationPlacementIndexName = "ix_mailbox_mutations_placement";
+
+    /// <summary>The occurrence one erased message still occupies on its source, which is recorded once however often the erasure is attempted.</summary>
+    internal const string MailboxSourceRemovalOccurrenceUniqueIndexName = "ix_mailbox_source_removals_occurrence";
+
+    /// <summary>The order a held account's outstanding source removals are taken in.</summary>
+    internal const string MailboxSourceRemovalQueueIndexName = "ix_mailbox_source_removals_queue";
 
     /// <summary>The constraint that keeps one audit entry per mutation ending, whatever a repeated append attempts.</summary>
     internal const string MailboxMutationAuditEntryMutationUniqueIndexName =

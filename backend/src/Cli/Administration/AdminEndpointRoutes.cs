@@ -174,6 +174,16 @@ internal static class AdminEndpointRoutes
     /// </remarks>
     internal const string FolderErasurePath = $"{Prefix}/folders/erasure";
 
+    /// <summary>Where one account's custody is read.</summary>
+    internal const string MailAccountCustodyPath = $"{Prefix}/accounts/custody";
+
+    /// <summary>Where a change of one account's custody is asked for.</summary>
+    /// <remarks>
+    /// A route of its own rather than a field on the account record, because it is published under a grant of its own:
+    /// switching a mailbox into MailFathom's keeping ends with a mail server no longer holding a copy of it.
+    /// </remarks>
+    internal const string MailAccountCustodySwitchPath = $"{Prefix}/accounts/custody/switch";
+
     /// <summary>Where a deployment's contact book is listed and where a person is recorded in it.</summary>
     internal const string ContactsPath = $"{Prefix}/contacts";
 

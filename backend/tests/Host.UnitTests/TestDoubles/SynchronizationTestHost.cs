@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Accounts.Custody;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
@@ -45,6 +46,7 @@ using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Spam.Signals;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Application.Synchronization.Drain;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
@@ -228,6 +230,14 @@ internal static class SynchronizationTestHost
             provider.GetRequiredService<MailSynchronizationTelemetry>());
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
         services.AddScoped<MailboxMutationConverger>();
+
+        // Every account run ends by emptying the source of a held account, so a supervisor resolves the pass from its
+        // scope exactly as it resolves the converger. No account these tests configure is held: the custody store
+        // answers that every one of them mirrors its source, which is what makes the pass a read that issues nothing.
+        services.AddSingleton(CreateCustodyStoreThatMirrorsEveryAccount());
+        services.AddSingleton(Substitute.For<IMailboxDrainStore>());
+        services.AddSingleton(Substitute.For<IMailboxDrainTelemetry>());
+        services.AddScoped<MailboxDrainPass>();
         // The converger erases a held account's due deletes through the submission. No account these tests configure is
         // held, so the substituted state store is composed and never asked.
         services.AddSingleton(Substitute.For<ILocalEmailStateStore>());
@@ -641,6 +651,17 @@ internal static class SynchronizationTestHost
     /// answer every read with a null task the run then faults on, which surfaces as a supervision that never signals.
     /// </remarks>
     /// <summary>Answers a convergence pass that the account has asked for nothing that has not finished.</summary>
+    /// <summary>Answers that every account mirrors its source, which is what leaves the drain nothing to do.</summary>
+    private static IMailAccountCustodyStore CreateCustodyStoreThatMirrorsEveryAccount()
+    {
+        var custodyStore = Substitute.For<IMailAccountCustodyStore>();
+        custodyStore
+            .ReadAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<MailAccountCustodyState?>(MailAccountCustodyState.Mirrored));
+
+        return custodyStore;
+    }
+
     private static IMailboxMutationRecordStore CreateRecordStoreWithNothingOutstanding()
     {
         var recordStore = Substitute.For<IMailboxMutationRecordStore>();

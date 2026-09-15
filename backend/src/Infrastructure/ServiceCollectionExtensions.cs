@@ -7,6 +7,7 @@ using MailFathom.Application.Access.Credentials;
 using MailFathom.Application.Access.Organizations;
 using MailFathom.Application.Access.Sessions;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Accounts.Custody;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
@@ -104,10 +105,12 @@ using MailFathom.Application.StoredFiles;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Application.Synchronization.Drain;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails.Authorship;
+using MailFathom.Infrastructure.Accounts;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Documents;
@@ -933,6 +936,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMailFolderMappingChangeAuditor, LoggedMailFolderMappingChangeAuditor>();
         services.AddScoped<ILocalMailFolderStore, LocalMailFolderStore>();
         services.AddScoped<ILocalMailFolderChangeAuditor, LoggedLocalMailFolderChangeAuditor>();
+        services.AddScoped<IMailAccountCustodyStore, MailAccountCustodyStore>();
+        services.AddScoped<IMailAccountCustodyAuditor, LoggedMailAccountCustodyAuditor>();
+        services.AddScoped<MailAccountCustodySwitch>();
         services.AddScoped<LocalMailFolderEditor>();
         services.AddScoped<MirroredMailFolderEditor>();
         services.AddScoped<MailFolderEditor>();
@@ -1401,6 +1407,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IMailSynchronizationPhaseTelemetry>(provider =>
             provider.GetRequiredService<MailSynchronizationTelemetry>());
         services.AddScoped<MailboxMutationConverger>();
+        services.AddScoped<IMailboxDrainStore, MailboxDrainStore>();
+        services.AddScoped<MailboxDrainPass>();
+        // A singleton for the reason the convergence instruments are: the counters accumulate across every account and
+        // every run, and a second instance would publish a second set of them.
+        services.AddSingleton<IMailboxDrainTelemetry, MailboxDrainTelemetry>();
         services.AddScoped<MailboxDestinationResolver>();
         services.AddScoped<IRemoteFolderCatalog>(provider => new MailKitRemoteFolderCatalog(
             MailKitImapClientFactory.CreateWithoutProtocolLogging,

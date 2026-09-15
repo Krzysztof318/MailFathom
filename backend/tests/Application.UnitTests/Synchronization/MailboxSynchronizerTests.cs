@@ -3007,7 +3007,8 @@ public sealed class MailboxSynchronizerTests
         IJobStore? jobStore = null,
         MailContactCollector? contactCollector = null,
         IOutgoingMailFilingStore? filingStore = null,
-        LocalMailFolderArrivals? localFolderArrivals = null)
+        LocalMailFolderArrivals? localFolderArrivals = null,
+        InMemoryMailAccountCustodyStore? custodyStore = null)
     {
         var concurrencyRetryPolicy = new OptimisticConcurrencyRetryPolicy(
             persistenceSessionFactory,
@@ -3036,6 +3037,7 @@ public sealed class MailboxSynchronizerTests
                 reconciliationStore ?? CreateReconciliationStoreWithNothingToDo(),
                 mutations,
                 CreateDispositionReader(RemotelyDeletedEmailDisposition.RetainTombstone),
+                custodyStore ?? InMemoryMailAccountCustodyStore.Mirroring(ClassifiedAccount),
                 concurrencyRetryPolicy,
                 ClientSignalPublishers.ReachingNobody,
                 timeProvider,

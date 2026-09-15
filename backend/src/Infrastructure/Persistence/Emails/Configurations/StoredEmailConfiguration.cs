@@ -235,6 +235,18 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
             .HasFilter(
                 $"\"{nameof(StoredEmailEntity.ContentAvailability)}\" = '{nameof(StoredEmailContentAvailability.AwaitingStorageHeadroom)}'");
 
+        // The order a held account's source is emptied in: its oldest mail first, so a mailbox of years empties from
+        // the end nobody is reading. The filter is what keeps it proportionate to what a source still holds rather
+        // than to the mailbox — it holds nothing at all on a mirrored account, and shrinks to nothing as a held
+        // account finishes draining, which is why the drain can ask on every run of every account. The model name is
+        // given explicitly because the account timeline index above covers these same three properties, and without
+        // one this declaration would reconfigure that index rather than add one.
+        entity.HasIndex(
+                email => new { email.MailboxAccountId, email.ReceivedAt, email.Id },
+                PersistenceConstraintNames.StoredEmailAwaitingDrainIndexName)
+            .HasDatabaseName(PersistenceConstraintNames.StoredEmailAwaitingDrainIndexName)
+            .HasFilter($"\"{nameof(StoredEmailEntity.UidValidity)}\" IS NOT NULL");
+
         // The order a requested whole-mailbox rule run walks in. It is the identity rather than the timeline because a
         // walk that has to resume needs a total order no later write disturbs, and because the position it commits is
         // one column rather than a nullable timestamp paired with a tie-breaker.

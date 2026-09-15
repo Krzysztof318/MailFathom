@@ -6,6 +6,7 @@ using System.Reflection;
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Synchronization.Drain;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Mutations;
@@ -34,10 +35,18 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations;
 /// decided by the filing tier and filed by nothing yet, and the append itself is one type both filers call rather than
 /// a protocol each restates.
 /// </para>
+/// <para>
+/// It has grown a second time by a tier, and by the only other record allowed to open one:
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>
+/// gives a held account's drain a removal nobody authored message by message — an administrator switched the account
+/// into holding its own mailbox, and the pass empties the source of what MailFathom verifiably holds. It is a tier
+/// rather than a mutation because no user asked for any one of its expunges, and it reaches the source through the
+/// same session every other tier does so that one write connection per account stays the whole of the write surface.
+/// </para>
 /// </remarks>
 public sealed class MailboxWriteCapabilityBoundaryTests
 {
-    /// <summary>Four application types can obtain a session that writes, and each acts within a tier the decision record names.</summary>
+    /// <summary>Five application types can obtain a session that writes, and each acts within a tier a decision record names.</summary>
     /// <remarks>
     /// Failing here is not a reason to extend the expected set. A read path that needs to write is a read path that has
     /// acquired something
@@ -72,6 +81,7 @@ public sealed class MailboxWriteCapabilityBoundaryTests
             [
                 nameof(MailDraftFiler),
                 nameof(MailboxCopyAppender),
+                nameof(MailboxDrainPass),
                 nameof(MailboxMutationPerformer),
                 nameof(OutgoingMailFiler),
             ],

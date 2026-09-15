@@ -5,6 +5,7 @@
 using MailFathom.Application.Coordination;
 using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Coordination;
@@ -117,15 +118,33 @@ internal sealed class WorkLeaseStore(
             .AsNoTracking()
             .ToArrayAsync(cancellationToken);
 
-        return
-        [
-            .. held.Select(static row => new WorkLease(
-                WorkScope.Create(row.Scope),
-                WorkLeaseHolder.Create(row.Holder),
-                ReplicaIdentity.Create(row.Replica),
-                row.ExpiresAt)),
-        ];
+        return LeasesOf(held);
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<WorkLease>> ReadEveryHeldAsync(
+        int maximumLeases,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(maximumLeases, 0);
+
+        var held = await dbContext.WorkLeases
+            .FromSql(WorkLeaseStatements.ComposeEveryHeldRead(maximumLeases))
+            .AsNoTracking()
+            .ToArrayAsync(cancellationToken);
+
+        return LeasesOf(held);
+    }
+
+    /// <summary>Reads the rows a listing statement returned as the leases they describe.</summary>
+    private static IReadOnlyList<WorkLease> LeasesOf(IReadOnlyList<WorkLeaseEntity> held) =>
+    [
+        .. held.Select(static row => new WorkLease(
+            WorkScope.Create(row.Scope),
+            WorkLeaseHolder.Create(row.Holder),
+            ReplicaIdentity.Create(row.Replica),
+            row.ExpiresAt)),
+    ];
 
     /// <summary>Reads the lease a statement wrote, or reports that it wrote none.</summary>
     /// <remarks>

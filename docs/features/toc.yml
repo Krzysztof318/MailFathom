@@ -10,6 +10,9 @@
 - name: IMAP synchronization
   href: imap-synchronization.md
   description: How a mailbox is reconciled read-only — what starts a pass, how folder identity survives a rename, and what a remote deletion does locally.
+- name: Held mailboxes
+  href: held-mailboxes.md
+  description: What it means for MailFathom rather than a source server to hold a mailbox — what switching it on obliges you to, what a message must reach before its source copy is removed, and how to watch a source empty.
 - name: Mail delivery
   href: mail-delivery.md
   description: Where an account's mail would be submitted, and what opening a session against that server establishes — the transport rules it is judged by, what it reports the server will accept, and how a refusal is classified.

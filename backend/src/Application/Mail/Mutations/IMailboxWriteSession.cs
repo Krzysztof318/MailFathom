@@ -292,4 +292,41 @@ public interface IMailboxWriteSession : IAsyncDisposable
         ImapUidValidity uidValidity,
         ImapUid uid,
         CancellationToken cancellationToken);
+
+    /// <summary>Removes from this session's folder exactly the messages a drain selected, and no others.</summary>
+    /// <param name="uidValidity">The UIDVALIDITY the selected occurrences name, which must still be the folder's.</param>
+    /// <param name="uids">The UIDs to remove, which the drain gate selected from what MailFathom durably holds.</param>
+    /// <param name="cancellationToken">Cancels the removal.</param>
+    /// <returns>A task that completes when the folder no longer holds those messages.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="uids" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="uids" /> is empty.</exception>
+    /// <exception cref="MailboxMutationUnsupportedException">Thrown when the server advertises no <c>UIDPLUS</c>, so no message-scoped expunge exists.</exception>
+    /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the removal within its configured resilience budget.</exception>
+    /// <exception cref="MailboxFolderRecreatedException">Thrown when the folder no longer reports the UIDVALIDITY the occurrences name.</exception>
+    /// <remarks>
+    /// <para>
+    /// The fourth reopening of this surface, and the one act here nobody authored message by message: an administrator
+    /// switched the account into holding its own mailbox, and this empties the source of what MailFathom verifiably
+    /// holds. It is reached only from that mode's background pass, and every UID it names passed a gate that read the
+    /// stored payload back against its recorded length and digest first.
+    /// </para>
+    /// <para>
+    /// It is <c>UID STORE +FLAGS</c> adding <c>\Deleted</c> over exactly these UIDs, followed by <c>UID EXPUNGE</c>
+    /// naming exactly these UIDs. A bare <c>EXPUNGE</c> is never issued, so a message another client flagged
+    /// <c>\Deleted</c> and MailFathom never stored is not swept along with the batch, and a server without
+    /// <c>UID EXPUNGE</c> is refused rather than served. The UIDVALIDITY is compared as the folder reports it now,
+    /// because a folder recreated since the batch was selected renumbered every message in it and these UIDs would
+    /// name somebody else's mail.
+    /// </para>
+    /// <para>
+    /// Both commands are idempotent against the UIDs they name, so a batch whose answer never arrived is issued again
+    /// by the next pass rather than being settled from what the mailbox shows. A UID the folder no longer holds is not
+    /// an error: what was asked for is already true. See
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+    /// </para>
+    /// </remarks>
+    Task ExpungeDrainedAsync(
+        ImapUidValidity uidValidity,
+        IReadOnlyCollection<ImapUid> uids,
+        CancellationToken cancellationToken);
 }

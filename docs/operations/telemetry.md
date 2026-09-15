@@ -923,6 +923,38 @@ itself reaches none of it either: every IMAP client this deployment opens is con
 the commands, responses, and payloads of a session are written nowhere for a log level or a setting to expose, and no
 configuration key exists that could attach one.
 
+### Emptying a held account's source
+
+An account [holding its own mailbox](../features/held-mailboxes.md) has its source server emptied, message by message,
+by its own synchronization runs. That is the one operation here whose progress cannot be read off the mail: a message
+the drain removed looks exactly like a message that was never on the source, and one the gate is keeping looks exactly
+like one already drained. So these five counters are the operator's whole view of it, and they all carry
+`mailfathom.mail.account` and nothing else unless stated.
+
+`mailfathom.mailbox.drain.drained` counts messages whose source copy was removed once MailFathom verifiably held them,
+and `mailfathom.mailbox.drain.removed_erased` counts the source copies of messages an erasure had already taken
+locally. Both are additive: they are summed across replicas and read as a rate, which is how fast a source is emptying.
+
+`mailfathom.mailbox.drain.held_back` is the one that turns *nothing is moving* into an answer. It counts the messages
+the gate left on the source and breaks them down by `mailfathom.mailbox.drain.held_back_reason`, whose values are
+MailFathom's own names for why: the content is above the size limit, the store has no headroom for it yet, the payload
+was never stored, or the bytes read back did not match what the row recorded. The last of those is the reading worth
+alerting on outright — a stored payload that no longer matches its own digest is why the gate exists.
+
+`mailfathom.mailbox.drain.failed_batches` counts the batches whose commands the source did not serve, which the
+account's own backoff defers rather than retries; a figure that stays high means the source server is the thing to look
+at. `mailfathom.mailbox.drain.abandoned_batches` counts the batches abandoned before a command went out because the
+folder reported a `UIDVALIDITY` other than the one the occurrences named, which synchronization resolves rather than
+the drain. Both are additive.
+
+The three standing figures an operator reads beside them — how much of the source is still to go, what the gate is
+holding, and how many erased copies are still to be removed — are not instruments. They are counted from the database
+on request and served by `mfctl account custody show`, because they are a level of the shared state rather than of one
+replica's work, and a gauge per replica would invite a dashboard to sum four copies of the same number.
+
+Nothing here is derived from a message. The dimensions are the account alias and a closed set of MailFathom's own
+words, and the values are counts — no UID, no folder path, no address, and no subject.
+
 ### Contact collection
 
 An account that [collects contacts](../features/contacts.md#collecting-contacts-from-arriving-mail) writes personal data
