@@ -430,6 +430,80 @@ public sealed class UserRosterAdministrationTests
         Assert.True((await erasing).UserErased);
     }
 
+    /// <summary>
+    /// The accounts stopped are the ones the erasure disposes of and no others, and the user is off the roster while
+    /// the deletion runs — which is what has this replica's coordinator give their supervision back rather than write
+    /// into a mailbox being deleted. An account somebody else is also assigned stays running, because erasing this
+    /// user takes nothing of it.
+    /// </summary>
+    [Fact]
+    public async Task EraseAsync_AUserSharingOneOfTwoAccounts_StopsOnlyTheirOwnAndIsUnservedWhileItRuns()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminErase);
+        var ownAccount = new Guid("41d7b2e0-9c35-4a68-8f12-3b6d5e7a9c04");
+        var sharedAccount = new Guid("52e8c3f1-0d46-4b79-9023-4c7e6f8b0d15");
+        harness.Serving(SyntheticMailUser.Deployment);
+        harness.MailAccountRecords.HoldUser(
+            SyntheticMailUser.Deployment,
+            "{}",
+            1,
+            new MailAccountRecord(ownAccount, "own@roster.test", "own", "{}", 1),
+            new MailAccountRecord(sharedAccount, "shared@roster.test", "shared", "{}", 1));
+        harness.MailAccountRecords.HoldUser(
+            SyntheticMailUser.Another,
+            "{}",
+            1,
+            new MailAccountRecord(sharedAccount, "shared@roster.test", "shared", "{}", 1));
+
+        var servedWhileErasing = true;
+        harness.Erasure.EraseAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            servedWhileErasing = harness.ServedUsers.Users.Any(
+                candidate => candidate.User == SyntheticMailUser.Deployment);
+
+            return true;
+        });
+
+        // Act
+        var outcome = await harness.Roster.EraseAsync(
+            SyntheticMailUser.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome.UserErased);
+        Assert.False(servedWhileErasing);
+        Assert.Equal([ownAccount.ToString("D")], [.. harness.Quiescing.Quiesced.Select(account => account.Value)]);
+    }
+
+    /// <summary>
+    /// Work the deployment could not stop is a refusal rather than a partial erasure, and a person nothing erased goes
+    /// on being served: the roster they were taken off for the attempt has them back.
+    /// </summary>
+    [Fact]
+    public async Task EraseAsync_WorkBoundToTheirAccountsWillNotStop_ErasesNothingAndGoesOnServingThem()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminErase);
+        harness.Serving(SyntheticMailUser.Deployment);
+        harness.Erasing(SyntheticMailUser.Deployment);
+        harness.Quiescing.Refusal = "Mail account 41d7b2e0 is still being synchronized.";
+        var heard = await RosterAnnouncementListener.ListenAsync(harness.Backplane, harness.ServedUsers);
+
+        // Act
+        var outcome = await harness.Roster.EraseAsync(
+            SyntheticMailUser.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(outcome.UserErased);
+        Assert.False(outcome.IsQuiesced);
+        Assert.Equal(harness.Quiescing.Refusal, outcome.RefusalMessage);
+        await harness.Erasure.DidNotReceiveWithAnyArgs().EraseAsync(default, CancellationToken.None);
+        Assert.Contains(harness.ServedUsers.Users, candidate => candidate.User == SyntheticMailUser.Deployment);
+        Assert.Empty(heard);
+    }
+
     [Fact]
     public async Task EraseAsync_AUserThisDeploymentDoesNotHold_ReportsThatNothingWasRemoved()
     {
@@ -704,6 +778,8 @@ public sealed class UserRosterAdministrationTests
                 this.Directory,
                 this.Provisioning,
                 this.Erasure,
+                this.MailAccountRecords,
+                this.Quiescing,
                 this.Documents,
                 this.ServedUsers,
                 new SeveralUserAdmission(
@@ -727,6 +803,12 @@ public sealed class UserRosterAdministrationTests
         internal IMailUserErasure Erasure { get; }
 
         internal IUserSettingsDocumentWriter Documents { get; }
+
+        /// <summary>Gets the accounts and assignments an erasure reads the mailboxes it has to stop out of.</summary>
+        internal InMemoryMailAccountRecordStore MailAccountRecords { get; } = new();
+
+        /// <summary>Gets the quiescing an erasure runs under, which lets the work through unless a test refuses it.</summary>
+        internal RecordedMailAccountWorkQuiescing Quiescing { get; } = new();
 
         internal ServedMailUsers ServedUsers { get; } = new();
 

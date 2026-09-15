@@ -263,9 +263,113 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
         }
     }
 
+    /// <summary>Takes a user off the runtime roster while something decides whether to erase them, and puts them back unless it did.</summary>
+    /// <param name="user">The user whose erasure is being decided.</param>
+    /// <returns>The withholding, which restores the user when it is disposed without <see cref="Withholding.Erased" /> having been called.</returns>
+    /// <exception cref="ArgumentException">Thrown when the user is unspecified.</exception>
+    /// <remarks>
+    /// <para>
+    /// An erasure has to stop this process serving the user <em>before</em> it deletes anything: the accounts only they
+    /// are assigned leave the set this replica serves, which is what has the synchronization coordinator give their
+    /// supervision back so nothing is mid-write when the deletion runs. But an erasure can still be refused, and a
+    /// person nothing erased must go on being served rather than disappear until the next convergence reading.
+    /// </para>
+    /// <para>
+    /// Restoring is exact rather than re-read: the entry and the record version it was published at are the ones taken
+    /// off, so putting them back changes nothing about what this replica had bound. It is the same publication as any
+    /// other, so it signals a reload and the coordinator picks the accounts up again.
+    /// </para>
+    /// </remarks>
+    internal Withholding Withhold(MailUserId user)
+    {
+        if (!user.IsSpecified)
+        {
+            throw new ArgumentException("A withheld user is named.", nameof(user));
+        }
+
+        IReadOnlyList<ServedMailUser> withheldRoster;
+        long? withheldVersion;
+
+        lock (this.mutex)
+        {
+            var users = this.resolvedUsers
+                ?? throw new InvalidOperationException(
+                    "A user cannot be withheld from the runtime roster before the startup gate has established it.");
+
+            if (users.All(candidate => candidate.User != user))
+            {
+                return new Withholding(this, user, withheldRoster: null, withheldVersion: null);
+            }
+
+            withheldRoster = users;
+            withheldVersion = this.publishedDocumentVersions.TryGetValue(user, out var version) ? version : null;
+            this.resolvedUsers = [.. users.Where(candidate => candidate.User != user)];
+            this.publishedDocumentVersions.Remove(user);
+        }
+
+        this.SignalReload();
+
+        return new Withholding(this, user, withheldRoster, withheldVersion);
+    }
+
+    /// <summary>Puts a withheld user back exactly as they were published, in the place they were read in.</summary>
+    /// <remarks>
+    /// The whole roster is restored rather than the one entry appended, because its order is the order it was
+    /// established in and a caller reads it as that. Nothing else can have published in between: the caller holds the
+    /// roster publication for the whole of the decision this reverses.
+    /// </remarks>
+    private void Restore(MailUserId user, IReadOnlyList<ServedMailUser> withheldRoster, long? withheldVersion)
+    {
+        lock (this.mutex)
+        {
+            if (this.resolvedUsers is null)
+            {
+                return;
+            }
+
+            this.resolvedUsers = withheldRoster;
+
+            if (withheldVersion is { } version)
+            {
+                this.publishedDocumentVersions[user] = version;
+            }
+        }
+
+        this.SignalReload();
+    }
+
     private void SignalReload()
     {
         var changed = Interlocked.Exchange(ref this.reloadToken, new ConfigurationReloadToken());
         changed.OnReload();
+    }
+
+    /// <summary>One user held off the runtime roster while their erasure is decided.</summary>
+    /// <remarks>
+    /// Nested because what it holds is one entry of this roster and the decision to put it back, neither of which
+    /// another type has business naming. A withholding of a user this roster did not serve restores nothing, which is
+    /// the same no-op erasing them would have been.
+    /// </remarks>
+    internal sealed class Withholding(
+        ServedMailUsers roster,
+        MailUserId user,
+        IReadOnlyList<ServedMailUser>? withheldRoster,
+        long? withheldVersion) : IDisposable
+    {
+        private bool erased;
+
+        /// <summary>Says the user was erased, so nothing is put back.</summary>
+        internal void Erased() => this.erased = true;
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            if (this.erased || withheldRoster is null)
+            {
+                return;
+            }
+
+            roster.Restore(user, withheldRoster, withheldVersion);
+        }
     }
 }

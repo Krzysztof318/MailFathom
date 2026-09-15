@@ -114,9 +114,9 @@ internal static class RemoveUserCommand
         if (erasure.WasServed)
         {
             context.Console.WriteNotice(
-                "The replica this request reached has stopped serving this user. A synchronization run already in "
-                + "flight is allowed to finish what it started; no new run is scheduled. Other replicas pick up the "
-                + "change after their next user write or restart.");
+                "The replica this request reached has stopped serving this user. Their mailboxes were held stopped "
+                + "for the whole erasure, so nothing was still writing to them when it ran. Other replicas pick up "
+                + "the change after their next user write or restart.");
         }
 
         return CliExitCode.Success;

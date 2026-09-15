@@ -110,6 +110,8 @@ internal sealed class UserRecordDeployment
             this.Directory,
             this.Provisioning,
             this.Erasure,
+            this.MailAccountRecords,
+            this.Quiescing,
             this.Store,
             this.ServedUsers,
             admission,
@@ -181,6 +183,9 @@ internal sealed class UserRecordDeployment
 
     /// <summary>Gets the accounts the deployment holds and the user records they are assigned to.</summary>
     internal InMemoryMailAccountRecordStore MailAccountRecords { get; } = new();
+
+    /// <summary>Gets the quiescing an erasure runs under, which lets the work through unless a test refuses it.</summary>
+    internal RecordedMailAccountWorkQuiescing Quiescing { get; } = new();
 
     /// <summary>Gets the roster this process serves, which an account write converges before announcing.</summary>
     internal ServedMailUsers ServedUsers { get; } = new();

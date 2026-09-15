@@ -332,6 +332,29 @@ internal sealed class PersistedMailAccountRecordStore(
             cancellationToken);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The same predicate the erasure's own transaction narrows on, asked ahead of it so the work bound to those
+    /// accounts can be stopped first. Read outside any transaction, so it describes the assignment relation as it
+    /// stood rather than as the erasure will leave it: an assignment written between this read and the erasure makes
+    /// an account shared, and the erasure asks again under its own lock and leaves that account whole.
+    /// </remarks>
+    public async Task<IReadOnlyList<Guid>> ReadSolelyAssignedAsync(
+        MailUserId user,
+        CancellationToken cancellationToken)
+    {
+        var userId = RequireNamed(user);
+
+        return await dbContext.MailAccountAssignments
+            .AsNoTracking()
+            .Where(assignment => assignment.UserId == userId)
+            .Where(assignment => !dbContext.MailAccountAssignments
+                .Any(other => other.MailAccountId == assignment.MailAccountId && other.UserId != userId))
+            .Select(assignment => assignment.MailAccountId)
+            .OrderBy(accountId => accountId)
+            .ToListAsync(cancellationToken);
+    }
+
     /// <summary>Moves one user's record version where it still stands at the version a write was judged against.</summary>
     private static async Task<bool> StepUserVersionAsync(
         MailFathomDbContext context,

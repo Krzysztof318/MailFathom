@@ -293,6 +293,10 @@ internal static class HostComposition
         // authentication schemes were registered from: the startup gate and the provisioning ask the same instance so
         // the two cannot come to different answers about one deployment.
         builder.Services.AddSingleton<SeveralUserAdmission>();
+        // A singleton over the scope factory, because what it holds is the deployment's own lease on an account rather
+        // than anything the caller brought, and the holds it takes outlive the request scope's services by design: a
+        // renewal runs in a scope of its own for the whole of the erasure it guards.
+        builder.Services.AddSingleton<IMailAccountWorkQuiescing, MailAccountWorkQuiesce>();
         // Scoped for the reason PersistedSettingsAdministration is: each asks AccessAuthorization for the permission
         // its operations are published under, and that service is scoped to whatever admitted the caller.
         builder.Services.AddScoped<UserRosterAdministration>();

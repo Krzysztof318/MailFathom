@@ -3,8 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
+using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Hosting.Workers;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
@@ -12,6 +17,8 @@ using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Primitives;
 using Xunit;
 
 namespace MailFathom.IntegrationTests.Persistence;
@@ -214,6 +221,106 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
                 CancellationToken.None);
         }
     }
+
+    /// <summary>
+    /// The claim the quiescing exists to make, and only a real database can settle it: the exclusion is the lease
+    /// table's, so what stops an erasure running over a synchronization pass is a row another replica wrote rather
+    /// than anything either process knows about the other. A refusal has to leave every row where it was — half an
+    /// erasure is worse than none — and the same request has to go through once the pass has ended.
+    /// </summary>
+    [Fact]
+    public async Task RunQuiescedAsync_AccountSupervisedElsewhere_ErasesNothingUntilThatSupervisionEnds()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var erasedUserId = Guid.CreateVersion7();
+        var account = MailAccountId.Create(ErasedAccount);
+        var quiescing = Quiescing(services);
+
+        try
+        {
+            await services.CommitProducingAsync(
+                (_, session, token) => SeedUserAsync(session, erasedUserId, token),
+                cancellationToken);
+
+            var rowsBefore = await CountRowsNamingAccountAsync(services, ErasedAccount, cancellationToken);
+
+            // Another replica's supervisor, as the coordinator takes it: the same scope, from a service graph of its
+            // own over the one database.
+            await using var otherReplica = await OrchestratedMailFathomServices.StartAsync(
+                orchestration,
+                cancellationToken);
+            var supervising = await TakeSupervisionAsync(otherReplica, account, cancellationToken);
+
+            // Act
+            var refusal = await quiescing.RunQuiescedAsync(
+                [account],
+                token => EraseAsync(services, erasedUserId, token),
+                cancellationToken);
+
+            var rowsWhileSupervised = await CountRowsNamingAccountAsync(services, ErasedAccount, cancellationToken);
+
+            await supervising!.ReleaseAsync();
+            supervising.Dispose();
+
+            var refusalAfterTheRunEnded = await quiescing.RunQuiescedAsync(
+                [account],
+                token => EraseAsync(services, erasedUserId, token),
+                cancellationToken);
+
+            // Assert
+            Assert.DoesNotContain(0L, rowsBefore.Values);
+            Assert.NotNull(refusal);
+            Assert.Contains(ErasedAccount, refusal, StringComparison.Ordinal);
+
+            // Nothing at all was deleted while the account was still being written to.
+            Assert.Equal(rowsBefore, rowsWhileSupervised);
+
+            Assert.Null(refusalAfterTheRunEnded);
+
+            var rowsAfter = await CountRowsNamingAccountAsync(services, ErasedAccount, cancellationToken);
+            Assert.DoesNotContain(rowsAfter, table => table.Value != 0);
+        }
+        finally
+        {
+            await services.CommitProducingAsync(
+                (_, session, token) => UserAccountErasure.EraseAsync(session, erasedUserId, token),
+                CancellationToken.None);
+        }
+    }
+
+    /// <summary>Composes the quiescing with a bound this test states rather than waits out.</summary>
+    /// <remarks>
+    /// Zero, because what is asserted is which answer each state produces and never how long the wait before it took.
+    /// A bound a test sat through would prove the same thing half a minute later and put the suite's own clock in the
+    /// claim.
+    /// </remarks>
+    private static MailAccountWorkQuiesce Quiescing(OrchestratedMailFathomServices services) => new(
+        services.ScopeFactory,
+        new FixedMailSynchronizationSettings(),
+        NullLoggerFactory.Instance,
+        TimeProvider.System,
+        TimeSpan.Zero);
+
+    private static Task<WorkLeaseHold?> TakeSupervisionAsync(
+        OrchestratedMailFathomServices replica,
+        MailAccountId account,
+        CancellationToken cancellationToken) => WorkLeaseHold.TryTakeAsync(
+        MailAccountSupervisionScope.For(account),
+        TimeSpan.FromMinutes(10),
+        TimeSpan.FromMinutes(5),
+        replica.ScopeFactory,
+        NullLogger<WorkLeaseHold>.Instance,
+        TimeProvider.System,
+        cancellationToken);
+
+    private static Task<UserErasure> EraseAsync(
+        OrchestratedMailFathomServices services,
+        Guid userId,
+        CancellationToken cancellationToken) => services.CommitProducingAsync(
+        (_, session, token) => UserAccountErasure.EraseAsync(session, userId, token),
+        cancellationToken);
 
     private static Task<Guid> ReadSoleUserAsync(
         OrchestratedMailFathomServices services,
@@ -676,4 +783,17 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
 
     private static byte[] RepresentativeRawMime =>
         "From: sender@mailfathom.test\r\nSubject: user erasure\r\n\r\nBody.\r\n"u8.ToArray();
+
+    /// <summary>The shipped synchronization defaults, which is all the quiescing reads: how long a hold lasts and how often it is renewed.</summary>
+    /// <remarks>
+    /// Written here rather than resolved, because the orchestrated graph composes no published snapshot of this
+    /// section — nothing in the suite runs the coordinator that would read one — and the two durations are the
+    /// deployment's own defaults either way.
+    /// </remarks>
+    private sealed class FixedMailSynchronizationSettings : ISettingsSnapshot<MailSynchronizationOptions>
+    {
+        public MailSynchronizationOptions Current { get; } = new();
+
+        public IChangeToken GetReloadToken() => new CancellationChangeToken(CancellationToken.None);
+    }
 }

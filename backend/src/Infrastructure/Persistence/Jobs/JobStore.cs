@@ -336,6 +336,38 @@ internal sealed class JobStore(
         return releasedRows == 1;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The expiry is compared against the database's clock for the reason every other lease comparison here is: a
+    /// replica running fast would otherwise read a lease as live that every other replica has already let go, and the
+    /// caller waiting on this answer would wait out its whole bound for a job nobody is running.
+    /// </remarks>
+    public async Task<IReadOnlyList<string>> ReadAccountsWithWorkInFlightAsync(
+        IReadOnlyList<string> accountIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accountIds);
+
+        if (accountIds.Count == 0)
+        {
+            return [];
+        }
+
+        var asked = accountIds.ToArray();
+        var claimed = nameof(JobState.Claimed);
+
+        return await dbContext.Database
+            .SqlQuery<string>(
+                $"""
+                 SELECT DISTINCT "MailboxAccountId" AS "Value" FROM jobs
+                 WHERE "MailboxAccountId" = ANY({asked})
+                   AND "State" = {claimed}
+                   AND "LeaseExpiresAt" > now()
+                 ORDER BY "Value"
+                 """)
+            .ToListAsync(cancellationToken);
+    }
+
     /// <summary>Answers whether this job type already has as much waiting as the configured depth allows.</summary>
     /// <remarks>
     /// Waiting is the pending state alone. A job a worker holds is running, and what bounds that is the concurrency

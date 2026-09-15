@@ -39,9 +39,12 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// <para>
 /// The walk runs twice, once before the user row is deleted and once after. Deleting that row is what stops any
 /// further write keyed onto it, and nothing stops a writer that only names a mail account — so the second pass is what
-/// reaches the rows such a writer committed while the first was running. What it does not reach is one committed after
-/// it, which no statement here can bound: that is quiescing the account's synchronization and job work, and it belongs
-/// with whatever comes to own the running deployment's reconfiguration.
+/// reaches the rows such a writer committed while the first was running. A writer that committed after it is bounded
+/// by the caller rather than here: the operation that gives this seam a caller takes the accounts off the set this
+/// deployment serves and holds each one's supervision scope before it opens this transaction, so a synchronization run
+/// is over and no job is claimed against those accounts by the time the first statement below runs. That hold is a
+/// lease and therefore the deployment's rather than one replica's, which is what makes the second pass a belt over
+/// braces instead of the only thing standing between an erasure and a writer it never saw.
 /// </para>
 /// <para>
 /// The contact book is reached by the cascade rather than by the walk. <c>contacts</c> and <c>contact_addresses</c>
@@ -125,8 +128,8 @@ internal static class UserAccountErasure
         // user, and a row naming one of the accounts that went with them, which no lock taken here could have
         // stopped because such a writer touches neither the user row nor the account record. Rows the transaction
         // would otherwise leave behind for a user and a mailbox it reports as erased. It is one repeat rather than a
-        // loop: what remains after it is a writer that committed later still, and stopping that is quiescing the
-        // user's and the account's own work rather than deleting harder.
+        // loop: a writer that committed later still is one the caller's hold on each account's supervision scope has
+        // already stopped, which is stopping the work rather than deleting harder.
         rowsErasedBesideTheCascade += await EraseOrphanedAccountsAsync(
             session,
             orphanedAccounts,

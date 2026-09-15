@@ -160,4 +160,26 @@ public interface IJobStore
     /// a rolling restart would otherwise reach the attempt bound and be dead-lettered without ever having failed.
     /// </remarks>
     Task<bool> ReleaseAsync(JobId jobId, JobLeaseOwner user, CancellationToken cancellationToken);
+
+    /// <summary>Names which of a set of mail accounts a worker is holding a job for right now.</summary>
+    /// <param name="accountIds">The accounts asked about, as the text a job row names one by.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The accounts among them that a live claim still holds a job for, in ordinal order, and an empty answer when none does.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="accountIds" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// A claim rather than a queue depth, because what makes an account's work unfinished is a handler running against
+    /// it: a pending row writes nothing until somebody takes it, and a row whose lease has run out is held by nobody
+    /// even though the state still says it was claimed. Both are read as quiet here, which is why the expiry is part
+    /// of the predicate and the state alone is not.
+    /// </para>
+    /// <para>
+    /// It answers one question and belongs to whoever has to stop an account being written to — an erasure, above
+    /// all. It says nothing about whether a job <em>will</em> be claimed next, so a caller that needs the account to
+    /// stay quiet has to have stopped whatever enqueues for it first.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<string>> ReadAccountsWithWorkInFlightAsync(
+        IReadOnlyList<string> accountIds,
+        CancellationToken cancellationToken);
 }

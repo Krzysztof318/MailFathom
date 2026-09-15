@@ -209,6 +209,59 @@ public sealed class ServedMailUsersTests
         servedUsers.ReleaseRosterPublication();
     }
 
+    /// <summary>An erasure has to stop this replica serving the user before it deletes anything, which is what this is.</summary>
+    [Fact]
+    public void Withhold_AUserThisDeploymentServes_TakesThemOffTheRosterAndSignalsAReload()
+    {
+        // Arrange
+        var servedUsers = new ServedMailUsers();
+        servedUsers.Resolved([Serving(SyntheticMailUser.Deployment, "user"), Serving(SecondUser, "second")]);
+        var reloaded = false;
+        servedUsers.GetReloadToken().RegisterChangeCallback(_ => reloaded = true, state: null);
+
+        // Act
+        using var withheld = servedUsers.Withhold(SyntheticMailUser.Deployment);
+
+        // Assert
+        Assert.Equal([SecondUser], [.. servedUsers.Users.Select(static served => served.User)]);
+        Assert.True(reloaded);
+    }
+
+    /// <summary>A refused erasure removed nothing, so the person it was refused for goes on being served.</summary>
+    [Fact]
+    public void Withhold_DisposedWithoutTheUserBeingErased_PutsThemBackWhereTheyWere()
+    {
+        // Arrange
+        var servedUsers = new ServedMailUsers();
+        servedUsers.Resolved([Serving(SyntheticMailUser.Deployment, "user"), Serving(SecondUser, "second")]);
+
+        // Act
+        servedUsers.Withhold(SyntheticMailUser.Deployment).Dispose();
+
+        // Assert
+        Assert.Equal(
+            [SyntheticMailUser.Deployment, SecondUser],
+            [.. servedUsers.Users.Select(static served => served.User)]);
+    }
+
+    /// <summary>An erasure that committed leaves nobody to put back, whatever the withholding is disposed of after.</summary>
+    [Fact]
+    public void Withhold_TheUserWasErased_LeavesThemOffTheRoster()
+    {
+        // Arrange
+        var servedUsers = new ServedMailUsers();
+        servedUsers.Resolved([Serving(SyntheticMailUser.Deployment, "user"), Serving(SecondUser, "second")]);
+
+        // Act
+        using (var withheld = servedUsers.Withhold(SyntheticMailUser.Deployment))
+        {
+            withheld.Erased();
+        }
+
+        // Assert
+        Assert.Equal([SecondUser], [.. servedUsers.Users.Select(static served => served.User)]);
+    }
+
     private static ServedMailUser Serving(
         MailUserId user,
         string displayName,
