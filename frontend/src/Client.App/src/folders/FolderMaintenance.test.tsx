@@ -2,10 +2,10 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type { ReactNode } from 'react';
+import type { ClientRequest, ClientSession, MailFathomTransport, ManagedMailFolder } from '@mailfathom/client-backend';
 import { act, fireEvent, renderHook, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
-import type { ClientRequest, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { ToastsProvider } from '../toasts/Toasts';
 import { FolderMaintenanceProvider } from './FolderMaintenance';
@@ -13,13 +13,54 @@ import { useFolderMaintenance, type FolderMaintenance, type FolderMailbox } from
 
 const session: ClientSession = { baseAddress: 'https://mail.example.invalid', authorization: 'Basic dGVzdA==' };
 
-const work: FolderMailbox = { accountId: 'work', accountName: 'Work', declaredAliases: ['INBOX'] };
+const acts = ['rename', 'move', 'delete'] as const;
 
-/** A deployment answering the record's version and committing every write, recording what it was asked. */
-function deployment(
-    committed = true,
-    messages: readonly string[] = [],
-): {
+const inbox: ManagedMailFolder = { id: 'in', parentId: null, name: 'INBOX', role: 'Inbox', allowedActs: [] };
+const contracts: ManagedMailFolder = {
+    id: 'CONTRACTS',
+    parentId: null,
+    name: 'Contracts',
+    role: null,
+    allowedActs: [...acts],
+};
+const projects: ManagedMailFolder = {
+    id: 'PROJECTS',
+    parentId: null,
+    name: 'Projects',
+    role: null,
+    allowedActs: [...acts],
+};
+
+const work: FolderMailbox = {
+    accountId: 'work',
+    accountName: 'Work',
+    folders: [inbox, contracts, projects],
+    creatableRoles: ['Trash'],
+};
+
+interface Answer {
+    readonly status: number;
+    readonly body: string;
+}
+
+/** What the deployment answers an accepted act with, which is the change it made and the folder it left. */
+function changed(change: string, name = 'Contracts', mailErasureDeferred = false): Answer {
+    return {
+        status: 200,
+        body: JSON.stringify({
+            change,
+            folder: { id: 'CONTRACTS', parentId: null, name, role: null, allowedActs: [] },
+            mailErasureDeferred,
+        }),
+    };
+}
+
+/** What it answers an act one of its own rules turned away with. */
+function refusing(refusal: string): Answer {
+    return { status: 409, body: JSON.stringify({ title: 'Refused', refusal }) };
+}
+
+function deployment(answering: (request: ClientRequest) => Answer = () => changed('Created')): {
     requests: ClientRequest[];
     transport: MailFathomTransport;
 } {
@@ -30,12 +71,7 @@ function deployment(
         transport: (request) => {
             requests.push(request);
 
-            const body =
-                request.method === 'GET'
-                    ? JSON.stringify({ version: 7 })
-                    : JSON.stringify({ committed, version: committed ? 8 : 7, messages });
-
-            return Promise.resolve({ status: 200, headers: {}, body });
+            return Promise.resolve({ ...answering(request), headers: {} });
         },
     };
 }
@@ -66,14 +102,20 @@ function maintaining(
     return { held: () => drawn.result.current };
 }
 
-/** What was posted to the record, which is the whole of what the deployment was asked to write down. */
-function written(requests: readonly ClientRequest[]): { readonly path: string; readonly body: unknown }[] {
+/** What was asked of the managed-folder routes, which is the whole of what this client asked the mailbox to do. */
+function asked(requests: readonly ClientRequest[]): { readonly path: string; readonly body: unknown }[] {
     return requests
         .filter((request) => request.method === 'POST')
         .map((request) => ({ path: request.path, body: JSON.parse(request.body ?? '{}') as unknown }));
 }
 
+const route = 'https://mail.example.invalid/api/client/managed-folders';
+
 function typed(label: RegExp, value: string): void {
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+}
+
+function chose(label: RegExp, value: string): void {
     fireEvent.change(screen.getByLabelText(label), { target: { value } });
 }
 
@@ -96,69 +138,89 @@ describe('FolderMaintenanceProvider', () => {
         expect(screen.getByText('Work')).toBeDefined();
     });
 
-    it('fills the remote path in from the name and from the folder the act was invoked on', () => {
-        const { held } = maintaining(deployment().transport);
+    it('makes the folder where somebody named one, and says what was made', async () => {
+        const answering = deployment();
+        const { held } = maintaining(answering.transport);
 
         act(() => {
-            held().declare(work, { alias: 'PROJECTS', remotePath: ['INBOX', 'Projects'] });
-        });
-
-        typed(/Folder name/, 'Contracts');
-
-        expect(screen.getByLabelText(/Remote path/)).toHaveProperty('value', 'INBOX/Projects/Contracts');
-    });
-
-    it('declares the folder over the version the record stands at, and says what was made', async () => {
-        const asked = deployment();
-        const { held } = maintaining(asked.transport);
-
-        act(() => {
-            held().declare(work, null);
+            held().declare(work, { id: 'PROJECTS', name: 'Projects' });
         });
 
         typed(/Folder name/, 'Contracts');
         fireEvent.click(screen.getByRole('button', { name: 'Create folder' }));
 
         await waitFor(() => {
-            expect(written(asked.requests)).toEqual([
-                {
-                    path: 'https://mail.example.invalid/api/client/record/mail-accounts/folders',
-                    body: {
-                        version: 7,
-                        accountId: 'work',
-                        folder: JSON.stringify({
-                            Alias: 'Contracts',
-                            RemotePath: 'INBOX/Contracts',
-                            CreateIfMissing: true,
-                        }),
-                    },
-                },
+            expect(asked(answering.requests)).toEqual([
+                { path: route, body: { account: 'work', parentId: 'PROJECTS', name: 'Contracts' } },
             ]);
         });
 
-        expect(await screen.findByText('Created INBOX/Contracts in Work.')).toBeDefined();
+        expect(await screen.findByText('Created Contracts in Work.')).toBeDefined();
     });
 
-    it('refuses to save a name the mailbox already has, before the deployment has to say so', () => {
-        const asked = deployment();
-        const { held } = maintaining(asked.transport);
+    it('asks for a folder the mailbox files by with the role alone, nobody being asked to name their own trash', async () => {
+        const answering = deployment();
+        const { held } = maintaining(answering.transport);
 
         act(() => {
-            held().declare({ ...work, declaredAliases: ['CONTRACTS'] }, null);
+            held().declare(work, null);
         });
 
-        typed(/Folder name/, 'Contracts');
+        chose(/Kind of folder/, 'Trash');
 
-        expect(screen.getByText('This mailbox already has a folder of that name.')).toBeDefined();
-        expect(screen.getByRole('button', { name: 'Create folder' })).toHaveProperty('disabled', true);
+        expect(screen.queryByLabelText(/Folder name/)).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create folder' }));
+
+        await waitFor(() => {
+            expect(asked(answering.requests)).toEqual([{ path: route, body: { account: 'work', role: 'Trash' } }]);
+        });
     });
 
-    it('states a folder afresh in place of the alias it stands under, and says it was renamed', async () => {
-        const asked = deployment();
-        const { held } = maintaining(asked.transport);
+    it('says what it is creating while a role is being asked for, there being no typed name to say', async () => {
+        // A deployment that never answers, so what is asserted is the card standing while the act runs rather than
+        // whatever it settles to.
+        const { held } = maintaining(() => new Promise(() => undefined));
 
         act(() => {
-            held().revise(work, { alias: 'CONTRACTS', remotePath: ['INBOX', 'Contracts'] }, null);
+            held().declare(work, { id: 'PROJECTS', name: 'Projects' });
+        });
+
+        expect(screen.getByText('Work — inside “Projects”')).toBeDefined();
+
+        chose(/Kind of folder/, 'Trash');
+
+        // The folder goes where the service puts such a folder rather than inside the row the dialog was opened on,
+        // so the dialog stops naming that row the moment the role is chosen.
+        expect(screen.queryByText('Work — inside “Projects”')).toBeNull();
+        expect(screen.getByText('Work')).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create folder' }));
+
+        expect(await screen.findByText('Creating Trash in Work…')).toBeDefined();
+    });
+
+    it('refuses to save a name a sibling already carries, before the deployment has to say so', () => {
+        const answering = deployment();
+        const { held } = maintaining(answering.transport);
+
+        act(() => {
+            held().declare(work, null);
+        });
+
+        typed(/Folder name/, 'Projects');
+
+        expect(screen.getByText('This mailbox already has a folder of that name in the same place.')).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Create folder' })).toHaveProperty('disabled', true);
+        expect(asked(answering.requests)).toEqual([]);
+    });
+
+    it('renames the folder where only the name moved', async () => {
+        const answering = deployment(() => changed('Renamed', 'Contracts 2027'));
+        const { held } = maintaining(answering.transport);
+
+        act(() => {
+            held().revise(work, contracts);
         });
 
         expect(screen.getByRole('heading', { name: 'Edit folder' })).toBeDefined();
@@ -167,95 +229,207 @@ describe('FolderMaintenanceProvider', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
         await waitFor(() => {
-            expect(written(asked.requests)[0]).toEqual({
-                path: 'https://mail.example.invalid/api/client/record/mail-accounts/folders/replacement',
-                body: {
-                    version: 7,
-                    accountId: 'work',
-                    alias: 'CONTRACTS',
-                    folder: JSON.stringify({
-                        Alias: 'Contracts 2027',
-                        RemotePath: 'INBOX/Contracts',
-                        CreateIfMissing: true,
-                    }),
+            expect(asked(answering.requests)).toEqual([
+                {
+                    path: `${route}/renames`,
+                    body: { account: 'work', folderId: 'CONTRACTS', name: 'Contracts 2027' },
                 },
-            });
+            ]);
+        });
+
+        expect(await screen.findByText('Renamed to Contracts 2027 in Work.')).toBeDefined();
+    });
+
+    it('offers no name for a folder the mailbox files by, and still offers where it sits', async () => {
+        const answering = deployment(() => changed('Moved', 'INBOX'));
+        const { held } = maintaining(answering.transport);
+
+        act(() => {
+            held().revise(work, inbox);
+        });
+
+        expect(screen.queryByLabelText(/Folder name/)).toBeNull();
+
+        chose(/Inside/, 'PROJECTS');
+        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+        await waitFor(() => {
+            expect(asked(answering.requests)).toEqual([
+                { path: `${route}/moves`, body: { account: 'work', folderId: 'in', parentId: 'PROJECTS' } },
+            ]);
         });
     });
 
-    it('asks before it stops reading a folder, and says what stays behind rather than promising it goes', () => {
+    it('moves the folder where only its place moved', async () => {
+        const answering = deployment(() => changed('Moved'));
+        const { held } = maintaining(answering.transport);
+
+        act(() => {
+            held().revise(work, contracts);
+        });
+
+        chose(/Inside/, 'PROJECTS');
+        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+        await waitFor(() => {
+            expect(asked(answering.requests)).toEqual([
+                { path: `${route}/moves`, body: { account: 'work', folderId: 'CONTRACTS', parentId: 'PROJECTS' } },
+            ]);
+        });
+
+        expect(await screen.findByText('Moved Contracts in Work.')).toBeDefined();
+    });
+
+    it('asks for the rename first and the move behind it where both moved', async () => {
+        const answering = deployment((request) =>
+            request.path.endsWith('/renames') ? changed('Renamed', 'Deals') : changed('Moved', 'Deals'),
+        );
+        const { held } = maintaining(answering.transport);
+
+        act(() => {
+            held().revise(work, contracts);
+        });
+
+        typed(/Folder name/, 'Deals');
+        chose(/Inside/, 'PROJECTS');
+        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+        await waitFor(() => {
+            expect(asked(answering.requests).map((request) => request.path)).toEqual([
+                `${route}/renames`,
+                `${route}/moves`,
+            ]);
+        });
+
+        expect(await screen.findByText('Moved Deals in Work.')).toBeDefined();
+
+        // One save is one change however many requests it took: counting each of them would read the whole tree, and
+        // every account's report beside it, twice for one press.
+        expect(held().changed).toBe(1);
+    });
+
+    it('says the folder was renamed and not moved where the move behind the rename was refused', async () => {
+        const answering = deployment((request) =>
+            request.path.endsWith('/renames') ? changed('Renamed', 'Deals') : refusing('TooDeep'),
+        );
+        const { held } = maintaining(answering.transport);
+
+        act(() => {
+            held().revise(work, contracts);
+        });
+
+        typed(/Folder name/, 'Deals');
+        chose(/Inside/, 'PROJECTS');
+        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+        expect(
+            await screen.findByText('Renamed Deals, but it could not be moved. It is still where it was.'),
+        ).toBeDefined();
+
+        // Counted all the same: the rename committed, so a column still drawing the old name is a column reading
+        // something that is no longer true.
+        expect(held().changed).toBe(1);
+    });
+
+    it('refuses a save on a folder nobody changed, there being nothing to ask the deployment for', () => {
         const { held } = maintaining(deployment().transport);
 
         act(() => {
-            held().withdraw(work, {
-                alias: 'CONTRACTS',
-                remotePath: ['INBOX', 'Contracts'],
-                name: 'Contracts',
-                holdsNested: true,
-            });
+            held().revise(work, contracts);
+        });
+
+        expect(screen.getByRole('button', { name: 'Save changes' })).toHaveProperty('disabled', true);
+    });
+
+    it('asks before it removes a folder, and says what may become of the mail rather than guessing', () => {
+        const { held } = maintaining(deployment().transport);
+
+        act(() => {
+            held().remove(work, { id: 'CONTRACTS', name: 'Contracts', holdsNested: true });
         });
 
         expect(screen.getByRole('heading', { name: /Delete Contracts\?/ })).toBeDefined();
-        expect(screen.getByText('MailFathom stops reading Contracts in Work.')).toBeDefined();
-        expect(
-            screen.getByText('The mail already stored from it stays here, and the folder stays on your mail server.'),
-        ).toBeDefined();
-        expect(
-            screen.getByText('The folders inside it stay, and are read as folders of their own from now on.'),
-        ).toBeDefined();
+        expect(screen.getByText('Contracts leaves Work.')).toBeDefined();
+        expect(screen.getByText('The folders inside it go with it.')).toBeDefined();
+        expect(screen.getByText(/it may be moved to the trash, or erased here/)).toBeDefined();
     });
 
-    it('writes nothing where the question was left rather than answered', () => {
-        const asked = deployment();
-        const { held } = maintaining(asked.transport);
+    it('asks for nothing where the question was left rather than answered', () => {
+        const answering = deployment();
+        const { held } = maintaining(answering.transport);
 
         act(() => {
-            held().withdraw(work, { alias: 'C', remotePath: ['C'], name: 'C', holdsNested: false });
+            held().remove(work, { id: 'CONTRACTS', name: 'Contracts', holdsNested: false });
         });
 
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-        expect(written(asked.requests)).toEqual([]);
+        expect(asked(answering.requests)).toEqual([]);
     });
 
-    it('withdraws the folder once somebody answers, and says the deployment stopped reading it', async () => {
-        const asked = deployment();
-        const { held } = maintaining(asked.transport);
+    it.each([
+        ['MovedToTrash', 'Moved Contracts to the trash, with everything in it.'],
+        ['Erased', 'Erased Contracts. The mail it held is being removed.'],
+        ['Deleted', 'Deleted Contracts on your mail server. The mail stored from it was removed.'],
+        ['MarkedDeleted', 'Removed Contracts from MailFathom. Your mail server still holds it and its mail.'],
+    ])('says what became of the mail when a deletion answered %s', async (change, said) => {
+        const answering = deployment(() => changed(change));
+        const { held } = maintaining(answering.transport);
 
         act(() => {
-            held().withdraw(work, {
-                alias: 'CONTRACTS',
-                remotePath: ['INBOX', 'Contracts'],
-                name: 'Contracts',
-                holdsNested: false,
-            });
+            held().remove(work, { id: 'CONTRACTS', name: 'Contracts', holdsNested: false });
         });
 
         fireEvent.click(screen.getByRole('button', { name: 'Delete folder' }));
 
         await waitFor(() => {
-            expect(written(asked.requests)[0]).toEqual({
-                path: 'https://mail.example.invalid/api/client/record/mail-accounts/folders/removal',
-                body: { version: 7, accountId: 'work', alias: 'CONTRACTS' },
-            });
+            expect(asked(answering.requests)).toEqual([
+                { path: `${route}/deletions`, body: { account: 'work', folderId: 'CONTRACTS' } },
+            ]);
         });
 
-        expect(await screen.findByText('Stopped reading Contracts in Work.')).toBeDefined();
+        expect(await screen.findByText(said)).toBeDefined();
     });
 
-    it('reports a refusal in the deployment’s own words rather than as a change that happened', async () => {
-        const asked = deployment(false, ['That alias is already declared.']);
-        const { held } = maintaining(asked.transport);
+    it('says the mail is still stored where its erasure found the queue full', async () => {
+        const answering = deployment(() => changed('Deleted', 'Contracts', true));
+        const { held } = maintaining(answering.transport);
 
         act(() => {
-            held().declare(work, null);
+            held().remove(work, { id: 'CONTRACTS', name: 'Contracts', holdsNested: false });
         });
 
-        typed(/Folder name/, 'Contracts');
-        fireEvent.click(screen.getByRole('button', { name: 'Create folder' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delete folder' }));
+
+        expect(await screen.findByText(/The mail from Contracts is still stored/)).toBeDefined();
+    });
+
+    it('reports a rule that refused the act as a refusal rather than as a request that failed', async () => {
+        const answering = deployment(() => refusing('ProtectedRole'));
+        const { held } = maintaining(answering.transport);
+
+        act(() => {
+            held().remove(work, { id: 'CONTRACTS', name: 'Contracts', holdsNested: false });
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Delete folder' }));
 
         expect(
-            await screen.findByText('The deployment refused the change: That alias is already declared.'),
+            await screen.findByText(
+                'The change was refused. This is a folder the mailbox files by, and it stays as it is.',
+            ),
         ).toBeDefined();
+    });
+
+    it('reports a deployment that did not answer as a failure, which is a different sentence', async () => {
+        const { held } = maintaining(() => Promise.reject(new Error('no route to host')));
+
+        act(() => {
+            held().remove(work, { id: 'CONTRACTS', name: 'Contracts', holdsNested: false });
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Delete folder' }));
+
+        expect(await screen.findByText(/The folder could not be changed/)).toBeDefined();
     });
 });

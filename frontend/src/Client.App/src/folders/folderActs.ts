@@ -2,30 +2,48 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import type { ManagedMailFolderAct } from '@mailfathom/client-backend';
 import { admitsNesting, type FolderTreeRow } from './folderTreeRows';
 
 // What a row of the folder tree answers a press with, as a list of names rather than as a menu. It is a function over
-// one row because every one of the four rules is a property of that row, and because a rule read as a value is a rule
-// a test can hold the whole set against — which is what *this control is drawn on exactly these rows* needs.
+// one row and what the service said about it, because a rule read as a value is a rule a test can hold the whole set
+// against — which is what *this control is drawn on exactly these rows* needs.
 //
-// Four rules, and each is somebody's answer rather than this module's. **A row spanning every account offers
-// nothing**, because a folder is made, marked and removed inside one mailbox and a row standing for all of them
-// stands for no place to put one. **Nesting stops at the third segment of an alias**, which is the tree's ceiling
-// asked of the row a folder would be made under. **A folder playing a role is neither edited nor removed**, because
-// the role is what the deployment files mail by and a person renaming their inbox would be renaming the destination
-// of a rule. And **a level of an alias nothing is bound to is not a folder**, so the only act it carries is making
-// one inside it.
+// **Which acts a folder allows is the service's answer and never this client's.** An account's mail may be kept on its
+// mail server or by MailFathom itself, and which of the two decides what may be done to a folder — so a client working
+// it out from the row would offer acts the service is going to refuse, and would be wrong about the first account
+// whose storage changed under it. The report is read, and nothing here reconstructs it.
+//
+// What is left here is what the report has no opinion about, because it is about this *column* rather than about the
+// mailbox. **A row spanning every account offers nothing**, because a folder is made, marked and removed inside one
+// mailbox and a row standing for all of them stands for no place to put one. **Nesting stops at the third segment of
+// an alias**, which is the column's own ceiling. **A level of an alias nothing is bound to is not a folder**, so no act
+// that names one reaches it. And **marking everything read is a second grant**, asked of the credential rather than of
+// the folder.
 
 /** One thing a row of the folder tree offers, named by what it does rather than by the control that draws it. */
 export type FolderAct = 'newFolder' | 'newFolderInside' | 'markAllRead' | 'editFolder' | 'deleteFolder';
+
+/** What the service reported about the mailbox a row belongs to and about the row's own folder. */
+export interface ReportedFolderActs {
+    /** What the account itself allows, which is creating a folder or nothing. */
+    readonly account: readonly ManagedMailFolderAct[];
+
+    /** What this row's folder allows, or `null` where the report names no folder this row stands for. */
+    readonly folder: readonly ManagedMailFolderAct[] | null;
+}
+
+/** A row about which the service said nothing, which offers no act that would reach the managed surface. */
+export const nothingReported: ReportedFolderActs = { account: [], folder: null };
 
 /**
  * What one row offers, in the order the design project draws them.
  *
  * @param row The row the gesture happened on.
+ * @param reported What the service said the account and this row's folder allow.
  * @returns The acts, empty for a row that offers none — which is what says no menu opens at all.
  */
-export function actsOffered(row: FolderTreeRow): readonly FolderAct[] {
+export function actsOffered(row: FolderTreeRow, reported: ReportedFolderActs): readonly FolderAct[] {
     // Every act names one mailbox, so the two rows that span them all — the whole workspace, and a role across it —
     // carry none. That is the design project's *All accounts carries none*, and it falls out of the row rather than
     // being asked about the row's kind.
@@ -33,22 +51,28 @@ export function actsOffered(row: FolderTreeRow): readonly FolderAct[] {
         return [];
     }
 
+    const mayCreate = reported.account.includes('create');
+
     if (row.alias === null) {
-        return ['newFolder', 'markAllRead'];
+        return [...(mayCreate ? (['newFolder'] as const) : []), 'markAllRead'];
     }
+
+    // A folder can only be made beneath one the service named, since a creation names its parent by that folder's own
+    // identity. A level of an alias nothing is bound to has none, so it offers nothing at all.
+    const nestable = mayCreate && admitsNesting(row.alias) && reported.folder !== null;
 
     if (row.remotePath === null) {
-        return admitsNesting(row.alias) ? ['newFolderInside'] : [];
+        return nestable ? ['newFolderInside'] : [];
     }
 
-    return [
-        ...(admitsNesting(row.alias) ? (['newFolderInside'] as const) : []),
-        'markAllRead',
-        ...(row.role === null ? (['editFolder', 'deleteFolder'] as const) : []),
-    ];
-}
+    const allowed = reported.folder ?? [];
 
-/** Whether the folder a row stands for is one the person may rename or remove, which is the one they made themselves. */
-export function editable(row: FolderTreeRow): boolean {
-    return row.accountId !== null && row.alias !== null && row.remotePath !== null && row.role === null;
+    return [
+        ...(nestable ? (['newFolderInside'] as const) : []),
+        'markAllRead',
+        // Renaming and moving travel together on this surface and the dialog performs both, so one item is drawn for
+        // the pair and it is drawn where either is allowed.
+        ...(allowed.includes('rename') || allowed.includes('move') ? (['editFolder'] as const) : []),
+        ...(allowed.includes('delete') ? (['deleteFolder'] as const) : []),
+    ];
 }
