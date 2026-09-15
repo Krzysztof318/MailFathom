@@ -156,8 +156,12 @@ public sealed class AdminApiEndpointsTests
         // path, which is the listing and the creation, three times at one account's path for the reading, the saving,
         // and the erasure, and once at each of the assignment paths, because assigning an account and ending an
         // assignment are published under different grants.
+        // An account's custody is read at one path and changed at a path beneath it, because reading which copy of a
+        // mailbox is the truth and emptying a mail server of it are published under different grants.
         Assert.Equal(
             [
+                $"{AdminEndpointOptions.RoutePrefix}{MailAccountCustodyEndpoints.CustodyRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailAccountCustodyEndpoints.CustodySwitchRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailAnsweringAuditEndpoint.Route}",
                 $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactsRoute}",
@@ -287,6 +291,8 @@ public sealed class AdminApiEndpointsTests
                 $"POST {prefix}{MailboxMaintenanceEndpoints.RederivationRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"GET {prefix}{MailboxMaintenanceEndpoints.RederivationRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"GET {prefix}{MailboxMutationAuditEndpoint.Route} -> {MailFathomPermission.AdminAuditRead.Name}",
+                $"GET {prefix}{MailAccountCustodyEndpoints.CustodyRoute} -> {MailFathomPermission.AdminRead.Name}",
+                $"POST {prefix}{MailAccountCustodyEndpoints.CustodySwitchRoute} -> {MailFathomPermission.AdminCustodyWrite.Name}",
                 $"GET {prefix}{MailAnsweringAuditEndpoint.Route} -> {MailFathomPermission.AdminAuditRead.Name}",
                 $"GET {prefix}{EmbeddingProfileEndpoints.StatusRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"GET {prefix}{EmbeddingProfileEndpoints.ActivationRoute} -> {MailFathomPermission.AdminRead.Name}",

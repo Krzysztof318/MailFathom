@@ -57,6 +57,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
     private const string UidPlusCapabilityName = "UIDPLUS extension (RFC 4315)";
     private const string FileOperationName = "file-outgoing-copy";
     private const string WithdrawOperationName = "withdraw-outgoing-copy";
+    private const string DrainOperationName = "drain-held-mailbox";
     private const string PermanentKeywordsCapabilityName = "persistent keywords (RFC 9051 PERMANENTFLAGS)";
 
     private readonly MailboxWriteConnectionLease lease;
@@ -437,6 +438,79 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
 
                 scope.CommandIssued("UID EXPUNGE");
                 await openFolder.ExpungeAsync(targetUid, attemptToken);
+
+                return true;
+            },
+            cancellationToken);
+
+        scope.Completed();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Read from the capabilities the open connection already negotiated, so it costs no command and cannot itself
+    /// fail against a server that would refuse one.
+    /// </remarks>
+    public Task<bool> SupportsDrainAsync(CancellationToken cancellationToken) =>
+        this.lease.Connection.ExecuteMutationAsync(
+            static (client, _, _) => Task.FromResult(client.Capabilities.HasFlag(ImapCapabilities.UidPlus)),
+            cancellationToken);
+
+    public async Task ExpungeDrainedAsync(
+        ImapUidValidity uidValidity,
+        IReadOnlyCollection<ImapUid> uids,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(uids);
+
+        if (uids.Count == 0)
+        {
+            throw new ArgumentException("A drain batch names at least one UID.", nameof(uids));
+        }
+
+        using var scope = this.telemetry.BeginFiling(
+            DrainOperationName,
+            this.SessionAccountId,
+            this.folder.Alias,
+            cancellationToken);
+
+        // Materialized once, outside the attempt, so a retried attempt names exactly the UIDs the first one did rather
+        // than re-enumerating a sequence the caller may have composed lazily.
+        UniqueId[] batch = [.. uids.Select(static uid => new UniqueId(uid.Value))];
+
+        await this.lease.Connection.ExecuteMutationAsync(
+            async (client, openFolder, attemptToken) =>
+            {
+                // Compared as the folder reports it now rather than as it was when the batch was selected: a folder
+                // recreated in between renumbered every message in it, so these UIDs name mail MailFathom never stored
+                // and the batch is abandoned with no command reaching the source.
+                if (openFolder.UidValidity != uidValidity.Value)
+                {
+                    throw new MailboxFolderRecreatedException(
+                        this.SessionAccountId,
+                        this.folder.Alias,
+                        uidValidity,
+                        ImapUidValidity.Create(openFolder.UidValidity));
+                }
+
+                RequireCapability(
+                    client,
+                    ImapCapabilities.UidPlus,
+                    DrainOperationName,
+                    UidPlusCapabilityName,
+                    this.SessionAccountId,
+                    this.folder.Alias);
+
+                scope.CommandIssued("UID STORE +FLAGS (\\Deleted)");
+                await openFolder.StoreAsync(
+                    batch,
+                    new StoreFlagsRequest(StoreAction.Add, MessageFlags.Deleted) { Silent = true },
+                    attemptToken);
+
+                // Naming the batch is what makes this the drain rather than a sweep: a bare EXPUNGE would take every
+                // message anybody had flagged \Deleted, including mail MailFathom never stored.
+                scope.CommandIssued("UID EXPUNGE");
+                await openFolder.ExpungeAsync(batch, attemptToken);
 
                 return true;
             },

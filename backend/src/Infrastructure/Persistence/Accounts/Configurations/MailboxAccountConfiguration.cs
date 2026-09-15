@@ -50,6 +50,13 @@ internal sealed class MailboxAccountConfiguration : IEntityTypeConfiguration<Mai
             .HasConversion<string>()
             .HasMaxLength(64)
             .HasDefaultValueSql($"'{nameof(MailAccountCustodyPhase.Mirrored)}'");
+
+        // Defaulted the same way and for the same reason: an account nobody switched is one nobody asked anything of,
+        // and that is exactly what every account held before the column existed.
+        entity.Property(account => account.RequestedCustody)
+            .HasConversion<string>()
+            .HasMaxLength(64)
+            .HasDefaultValueSql($"'{nameof(MailAccountCustody.MirrorSource)}'");
         entity.Property(account => account.LocalMailFoldersRevision).IsConcurrencyToken();
     }
 }

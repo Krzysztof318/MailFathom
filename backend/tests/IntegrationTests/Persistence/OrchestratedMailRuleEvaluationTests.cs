@@ -474,6 +474,7 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
                         Disappeared: [],
                         RemovedByOwnMutation: [],
                         RemotelyDeletedEmailDisposition.RetainTombstone,
+                        AppliesRemoteDeletions: true,
                         EvaluatedAt),
                     token),
             cancellationToken);

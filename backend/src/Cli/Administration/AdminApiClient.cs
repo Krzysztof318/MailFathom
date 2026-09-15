@@ -1110,6 +1110,56 @@ internal sealed class AdminApiClient
                 CliJsonContext.Default.MailFolderErasureRequest));
     }
 
+    /// <summary>Reads which copy of one account's mailbox is the truth, and how far a switch under way has got.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account, as the deployment's configuration names it.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The account's custody and what its source still holds.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="account" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a custody.</exception>
+    internal Task<MailAccountCustodyState> ReadMailAccountCustodyAsync(
+        string token,
+        string account,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.MailAccountCustodyPath}{new AdminQueryString().Add("account", account)}",
+            token,
+            CliJsonContext.Default.MailAccountCustodyState,
+            cancellationToken);
+    }
+
+    /// <summary>Asks for one account's custody to become what was named.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account, as the deployment's configuration names it.</param>
+    /// <param name="custody">The custody asked for.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the request did, including every reason it was refused.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="account" /> or <paramref name="custody" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<MailAccountCustodySwitchOutcome> SwitchMailAccountCustodyAsync(
+        string token,
+        string account,
+        string custody,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(custody);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.MailAccountCustodySwitchPath,
+            token,
+            CliJsonContext.Default.MailAccountCustodySwitchOutcome,
+            cancellationToken,
+            JsonContent.Create(
+                new MailAccountCustodySwitchRequest(account, custody),
+                CliJsonContext.Default.MailAccountCustodySwitchRequest));
+    }
+
     /// <summary>Reads one bounded page of the books one user reads.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="user">The user whose books are read: their own, and the collected book of each account assigned to them.</param>

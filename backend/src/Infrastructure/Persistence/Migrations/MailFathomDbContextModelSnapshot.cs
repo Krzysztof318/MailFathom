@@ -1825,6 +1825,13 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("integer");
 
+                    b.Property<string>("RequestedCustody")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValueSql("'MirrorSource'");
+
                     b.HasKey("Id")
                         .HasName("PK_mailbox_accounts");
 
@@ -2124,6 +2131,40 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_mailbox_refresh_tokens_data_encryption_key");
 
                     b.ToTable("mailbox_refresh_tokens", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxSourceRemovalEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("MailFolderId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("MailboxAccountId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Uid")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UidValidity")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MailboxAccountId", "RecordedAt")
+                        .HasDatabaseName("ix_mailbox_source_removals_queue");
+
+                    b.HasIndex("MailFolderId", "UidValidity", "Uid")
+                        .IsUnique()
+                        .HasDatabaseName("ix_mailbox_source_removals_occurrence");
+
+                    b.ToTable("mailbox_source_removals", (string)null);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.NotificationEntity", b =>
@@ -2839,6 +2880,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<DateTimeOffset?>("ContentVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("DisplayedAuthorDomain")
                         .HasMaxLength(253)
                         .HasColumnType("character varying(253)");
@@ -3090,6 +3134,10 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "MailFolderId", "UidValidity", "Uid" }, "ix_stored_emails_awaiting_content")
                         .HasDatabaseName("ix_stored_emails_awaiting_content")
                         .HasFilter("\"ContentAvailability\" = 'AwaitingStorageHeadroom'");
+
+                    b.HasIndex(new[] { "MailboxAccountId", "ReceivedAt", "Id" }, "ix_stored_emails_awaiting_drain")
+                        .HasDatabaseName("ix_stored_emails_awaiting_drain")
+                        .HasFilter("\"UidValidity\" IS NOT NULL");
 
                     b.HasIndex(new[] { "MailboxAccountId", "Id" }, "ix_stored_emails_awaiting_rule_evaluation")
                         .HasDatabaseName("ix_stored_emails_awaiting_rule_evaluation")
@@ -3778,6 +3826,17 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("MailFolder");
 
                     b.Navigation("StoredEmail");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxSourceRemovalEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", "MailFolder")
+                        .WithMany()
+                        .HasForeignKey("MailFolderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MailFolder");
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.NotificationEntity", b =>

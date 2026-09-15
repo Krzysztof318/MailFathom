@@ -415,6 +415,25 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     [Range(1, 10000)]
     public int MaxReconciledEmailsPerRun { get; set; } = 500;
 
+    /// <summary>Gets or sets how many messages one run of an account holding its mailbox takes off its source server.</summary>
+    /// <remarks>
+    /// The drain runs at the end of a synchronization run, so this is what keeps emptying a mailbox of years from
+    /// crowding out the synchronization it sits behind: a run takes this many in hand once and ends, and the next run
+    /// takes the next lot. Raising it empties a source sooner and lengthens each run of that account. It bounds a
+    /// mirrored account's run at nothing at all, because such an account has nothing to drain.
+    /// </remarks>
+    [Range(1, 10000)]
+    public int MaxDrainedEmailsPerRun { get; set; } = 200;
+
+    /// <summary>Gets or sets how many UIDs one <c>UID STORE</c> and <c>UID EXPUNGE</c> pair names.</summary>
+    /// <remarks>
+    /// A separate bound from the one above because it bounds a different thing: not how much work a run does, but how
+    /// long one command's UID set is, which is what keeps a command inside what a server will accept on one line. Lower
+    /// it for a server that refuses a long UID set, and leave it alone otherwise.
+    /// </remarks>
+    [Range(1, 1000)]
+    public int MaxDrainedEmailsPerCommand { get; set; } = 50;
+
     /// <summary>Gets or sets the maximum number of MIME entities one message may declare before extraction abandons it.</summary>
     [Range(1, 100000)]
     public int MaxMimePartCount { get; set; } = 1000;
@@ -538,7 +557,7 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
         UnknownOutcomeGrace = this.UnknownMutationOutcomeGrace,
     };
 
-    /// <summary>Reads the five keys one synchronization run is bounded by.</summary>
+    /// <summary>Reads the seven keys one synchronization run is bounded by.</summary>
     /// <returns>The bounds the run stops at.</returns>
     internal MailboxSynchronizationOptions ToSynchronizationOptions() => new()
     {
@@ -547,6 +566,8 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
         MaxMetadataBatchesPerRun = this.MaxMetadataBatchesPerRun,
         MaxReconciledEmailsPerRun = this.MaxReconciledEmailsPerRun,
         MaxContentBytesPerRun = this.MaxContentBytesPerRun,
+        MaxDrainedEmailsPerRun = this.MaxDrainedEmailsPerRun,
+        MaxDrainedEmailsPerCommand = this.MaxDrainedEmailsPerCommand,
     };
 
     /// <summary>Reads the four keys a MIME walk is bounded by, and whether it verifies a signature for itself.</summary>

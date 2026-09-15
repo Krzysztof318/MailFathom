@@ -33,4 +33,19 @@ public sealed class MailboxSynchronizationOptions
     /// last observed and every observation moves an email to the back of that queue.
     /// </remarks>
     public int MaxReconciledEmailsPerRun { get; set; } = 500;
+
+    /// <summary>Gets or sets how many messages one run of a held account takes off its source server.</summary>
+    /// <remarks>
+    /// The drain runs at the end of a synchronization run, so this is what keeps emptying a mailbox of years from
+    /// crowding out the synchronization it sits behind: a run takes this many in hand once and ends, and the next run
+    /// takes the next lot. Two hundred is roughly a minute of a source server's work.
+    /// </remarks>
+    public int MaxDrainedEmailsPerRun { get; set; } = 200;
+
+    /// <summary>Gets or sets how many UIDs one <c>UID STORE</c> and <c>UID EXPUNGE</c> pair names.</summary>
+    /// <remarks>
+    /// A separate bound from the one above because it bounds a different thing: not how much work a run does, but how
+    /// long one command's UID set is, which is what keeps a command inside what a server will accept on one line.
+    /// </remarks>
+    public int MaxDrainedEmailsPerCommand { get; set; } = 50;
 }

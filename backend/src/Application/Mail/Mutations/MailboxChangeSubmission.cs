@@ -205,9 +205,8 @@ public sealed class MailboxChangeSubmission
                 cancellationToken);
         }
 
-        // ponytail: ADR 0034 has the erasing transaction write a source removal record naming the occurrence, so a later
-        // drain can still remove the message from the source once the cascade has taken the row; MailboxMutation has no
-        // such member yet, so until #1946 drains the source a held erasure leaves the message there unrecorded.
+        // The erasing transaction also writes the source removal record naming the occurrence, so a later drain can
+        // still remove the message from the source once this cascade has taken the row that said where it was.
         await this.states.EraseAsync(session, account, record.Request.StoredEmailId, cancellationToken);
 
         return new AppliedMailboxChange(account, state.SourceFolder.Alias, record.Request.StoredEmailId, Flags: null);

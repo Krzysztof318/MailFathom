@@ -315,6 +315,20 @@ internal sealed class StoredEmailEntity
     public DateTimeOffset StoredAt { get; set; }
 
     /// <summary>
+    /// Gets or sets when this message's stored payload was read back and matched the length and digest recorded for it,
+    /// or <see langword="null" /> where nothing has read it back.
+    /// </summary>
+    /// <remarks>
+    /// The last thing the drain establishes before it removes a message from the only other place it exists. ADR 0017
+    /// already makes a committed row point at a readable object as a design property; for the only copy of somebody's
+    /// mail that is verified rather than trusted, and the stamp is what keeps the verification to once per message
+    /// instead of once per abandoned batch. It is a fact about the bytes rather than a permission: the rest of the
+    /// drain gate is re-read immediately before every batch. See
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0034-holding-a-mailbox-mailfathom-alone-keeps.md">ADR 0034</see>.
+    /// </remarks>
+    public DateTimeOffset? ContentVerifiedAt { get; set; }
+
+    /// <summary>
     /// Gets or sets when the remote flags below were last read from the server, or <see langword="null" /> while they
     /// have never been read. The timestamp is what separates "the server reports none of these flags" from "nobody has
     /// looked yet", which no combination of the booleans can express on its own.

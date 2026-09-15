@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Coordination;
+using MailFathom.Versioning;
 
 namespace MailFathom.Host.Hosting.Workers;
 
@@ -100,7 +101,11 @@ internal sealed partial class WorkLeaseHold : IDisposable
     {
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(renewalInterval, leaseDuration);
 
-        var holder = WorkLeaseHolder.NewHold();
+        // The hold names the build taking it, which is how a refusal that must not run beside a replica on an older
+        // build recognizes one: a build that does not stamp its own leaves a holder that names none, and its takeover
+        // of a hold this build took replaces the whole value rather than leaving a stale build standing beside it.
+        var holder = WorkLeaseHolder.ForBuild(
+            StampedAssemblyVersion.ReadFrom(typeof(WorkLeaseHold).Assembly).Version);
         var askedAt = timeProvider.GetTimestamp();
 
         try

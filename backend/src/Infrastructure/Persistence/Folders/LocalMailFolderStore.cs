@@ -151,6 +151,8 @@ internal sealed class LocalMailFolderStore(MailFathomDbContext dbContext, TimePr
         var removed = emailsRemain ? batch[..maxEmails] : batch;
         Guid[] removedIds = [.. removed.Select(static email => email.Id)];
 
+        this.RecordSourceRemovals(sessionContext, removed);
+
         // The cascade one stored message's erasure runs, in the order the unmirrored folder's erasure states it: the
         // user's storage figure and the content objects are read from rows the removal below only stages.
         await AccountStoredContentLedger.RemoveAsync(sessionContext, removedIds, cancellationToken);
@@ -189,6 +191,8 @@ internal sealed class LocalMailFolderStore(MailFathomDbContext dbContext, TimePr
 
         Guid[] removedIds = [row.Id];
 
+        this.RecordSourceRemovals(sessionContext, [row]);
+
         // The same cascade an erased folder's mail runs, in the same order, for the same reason.
         await AccountStoredContentLedger.RemoveAsync(sessionContext, removedIds, cancellationToken);
         await ReleasedContentObjects.ReleaseForStoredEmailsAsync(session, removedIds, cancellationToken);
@@ -196,6 +200,10 @@ internal sealed class LocalMailFolderStore(MailFathomDbContext dbContext, TimePr
 
         return MailFolderAlias.Create(row.MailFolder.Alias);
     }
+
+    /// <summary>Records where the source still holds each message this erasure is about to remove locally.</summary>
+    private void RecordSourceRemovals(MailFathomDbContext sessionContext, IReadOnlyList<StoredEmailEntity> erased) =>
+        MailboxSourceRemovalRecords.Stage(sessionContext, erased, timeProvider.GetUtcNow());
 
     private static ValueTask<MailboxAccountEntity?> FindAccountAsync(
         MailFathomDbContext sessionContext,

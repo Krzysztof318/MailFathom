@@ -122,4 +122,25 @@ public interface IWorkLeaseStore
     Task<IReadOnlyList<WorkLease>> ReadHeldAsync(
         IReadOnlyCollection<WorkScope> scopes,
         CancellationToken cancellationToken);
+
+    /// <summary>Reads every scope the deployment is holding right now, whatever it names.</summary>
+    /// <param name="maximumLeases">The most rows to read, which bounds an answer nothing else bounds.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Every unexpired lease, up to the bound, in no particular order.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maximumLeases" /> is not positive.</exception>
+    /// <remarks>
+    /// <para>
+    /// The read above answers about scopes the caller can name; this answers about the deployment, which is the
+    /// question an act refused while any replica is running an older build has to ask. There is nothing to name there:
+    /// what the refusal turns on is whether some process the asking replica has never heard of is holding work, and a
+    /// set of scopes composed from what this build knows would miss exactly the holder it is looking for.
+    /// </para>
+    /// <para>
+    /// Like the read above it is a snapshot and reserves nothing, and a caller may do nothing with it but report it or
+    /// refuse on it. The table holds one row per held scope, so the bound is a ceiling against a deployment that has
+    /// grown past what one answer should carry rather than a page — a reading that hits it has already found whatever
+    /// it was looking for or is reading a table nothing is releasing.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<WorkLease>> ReadEveryHeldAsync(int maximumLeases, CancellationToken cancellationToken);
 }

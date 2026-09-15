@@ -82,6 +82,79 @@ public sealed class MailboxReconcilerTests
         Assert.Empty(store.TombstonedUids);
     }
 
+    /// <summary>
+    /// A held account's source is being emptied by MailFathom itself, so a UID that has gone is the drain's own work
+    /// completing. Both dispositions are proved because only one of them is destructive and only the other is the
+    /// default: consulting the setting here would destroy the only remaining copy of every message the drain removed
+    /// under one, and hide it behind a tombstone under the other. A restoring account is proved beside a held one
+    /// because the drain has already emptied part of its source, so the deletions it is still observing are its own.
+    /// </summary>
+    [Theory]
+    [InlineData(MailAccountCustodyPhase.Held, RemotelyDeletedEmailDisposition.EraseLocalCopy)]
+    [InlineData(MailAccountCustodyPhase.Held, RemotelyDeletedEmailDisposition.RetainTombstone)]
+    [InlineData(MailAccountCustodyPhase.Restoring, RemotelyDeletedEmailDisposition.EraseLocalCopy)]
+    [InlineData(MailAccountCustodyPhase.Restoring, RemotelyDeletedEmailDisposition.RetainTombstone)]
+    public async Task ReconcileAsync_MailFathomIsTheTruthAboutTheAccount_ClearsTheOccurrenceInsteadOfApplyingTheDisposition(
+        MailAccountCustodyPhase phase,
+        RemotelyDeletedEmailDisposition disposition)
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(10, 11));
+        await using var mailboxSession = CreateSessionHolding(10);
+        var reconciler = CreateReconciler(
+            store,
+            disposition,
+            custodyStore: InMemoryMailAccountCustodyStore.With(
+                Account,
+                new MailAccountCustodyState(RequestedIn(phase), phase)));
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.RemotelyDeletedEmailCount);
+        Assert.Equal(1, result.DrainCompletedEmailCount);
+        Assert.False(Assert.Single(store.AppliedOutcomes).AppliesRemoteDeletions);
+        Assert.Equal([11U], store.ClearedOccurrenceUids);
+        Assert.Empty(store.RemovedUids);
+        Assert.Empty(store.TombstonedUids);
+    }
+
+    /// <summary>The mirrored account is the control, so the reading above cannot pass by never applying anything.</summary>
+    [Fact]
+    public async Task ReconcileAsync_AccountMirrorsItsSource_AppliesTheDispositionAsItAlwaysHas()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(10, 11));
+        await using var mailboxSession = CreateSessionHolding(10);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.EraseLocalCopy,
+            custodyStore: InMemoryMailAccountCustodyStore.Mirroring(Account));
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.True(Assert.Single(store.AppliedOutcomes).AppliesRemoteDeletions);
+        Assert.Equal(1, result.RemotelyDeletedEmailCount);
+        Assert.Equal(0, result.DrainCompletedEmailCount);
+        Assert.Equal([11U], store.RemovedUids);
+        Assert.Empty(store.ClearedOccurrenceUids);
+    }
+
     /// <summary>An occurrence MailFathom moved or deleted itself left the folder because of that, not because somebody else deleted it.</summary>
     /// <remarks>
     /// The account erases local copies, which is the setting that makes the difference visible: without the record the
@@ -1686,13 +1759,20 @@ public sealed class MailboxReconcilerTests
         Assert.Empty(channel.Published);
     }
 
+    /// <summary>Names the custody an account in this phase was asked for, which is what the phase is on its way to.</summary>
+    private static MailAccountCustody RequestedIn(MailAccountCustodyPhase phase) =>
+        phase == MailAccountCustodyPhase.Restoring
+            ? MailAccountCustody.MirrorSource
+            : MailAccountCustody.HoldMailbox;
+
     private static MailboxReconciler CreateReconciler(
         FakeReconciliationStore store,
         RemotelyDeletedEmailDisposition disposition,
         int maxReconciledEmailsPerRun = 100,
         FakeTimeProvider? timeProvider = null,
         InMemoryMailboxMutationReconciliationStore? mutationStore = null,
-        ClientSignals? signals = null)
+        ClientSignals? signals = null,
+        InMemoryMailAccountCustodyStore? custodyStore = null)
     {
         var clock = timeProvider ?? new FakeTimeProvider(RunInstant);
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -1705,6 +1785,7 @@ public sealed class MailboxReconcilerTests
             store,
             mutationStore ?? new InMemoryMailboxMutationReconciliationStore(),
             dispositionReader,
+            custodyStore ?? InMemoryMailAccountCustodyStore.Mirroring(Account),
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), clock),
             signals ?? ClientSignalPublishers.ReachingNobody,
             clock,
@@ -1892,7 +1973,12 @@ public sealed class MailboxReconcilerTests
 
         public IReadOnlyList<uint> RemovedUids => [.. this.removedUids.Order()];
 
+        /// <summary>Gets the UIDs whose occurrence was dropped from a standing row, which is what a held account gets.</summary>
+        public IReadOnlyList<uint> ClearedOccurrenceUids => [.. this.clearedOccurrenceUids.Order()];
+
         private readonly List<uint> removedUids = [];
+
+        private readonly List<uint> clearedOccurrenceUids = [];
 
         public ReconciledRow RowOf(uint uid) => this.rowsById.Values.Single(row => row.Uid == uid);
 
@@ -1992,6 +2078,13 @@ public sealed class MailboxReconcilerTests
                 if (!this.rowsById.TryGetValue(storedEmailId, out var row)
                     || HasNewerObservationThan(row, outcome.ObservedAt))
                 {
+                    continue;
+                }
+
+                if (!outcome.AppliesRemoteDeletions)
+                {
+                    this.clearedOccurrenceUids.Add(row.Uid);
+
                     continue;
                 }
 

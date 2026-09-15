@@ -30,6 +30,7 @@ using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Drain;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
@@ -120,6 +121,9 @@ public sealed class TelemetrySurfaceContractTests
     private static readonly MailboxConvergenceTelemetry Convergence =
         new(NullLogger<MailboxConvergenceTelemetry>.Instance, Clock);
 
+    private static readonly MailboxDrainTelemetry Drain =
+        new(NullLogger<MailboxDrainTelemetry>.Instance);
+
     private static readonly MailboxMutationAuditTelemetry MutationAudit =
         new(NullLogger<MailboxMutationAuditTelemetry>.Instance);
 
@@ -160,6 +164,7 @@ public sealed class TelemetrySurfaceContractTests
         typeof(MailDeliveryTelemetry),
         typeof(MailboxContentVolumeTelemetry),
         typeof(MailboxConvergenceTelemetry),
+        typeof(MailboxDrainTelemetry),
         typeof(MailboxMutationAuditTelemetry),
         typeof(MailboxMutationTelemetry),
         typeof(MailboxReadTelemetry),
@@ -617,6 +622,21 @@ public sealed class TelemetrySurfaceContractTests
                         Count: 1,
                         OldestRecordedAt: Moment.AddMinutes(-5)),
                 ]));
+
+        Drain.Report(
+            Account,
+            new MailboxDrainReport(
+                DrainedCount: 1,
+                RemovedErasedCount: 1,
+                HeldBack: new Dictionary<MailboxDrainHoldBack, int>
+                {
+                    [MailboxDrainHoldBack.ContentAboveSizeLimit] = 1,
+                },
+                FailedBatches: new Dictionary<MailboxDrainFailure, int>
+                {
+                    [MailboxDrainFailure.SourceUnavailable] = 1,
+                },
+                AbandonedBatchCount: 1));
     }
 
     private static void DriveDelivery()
