@@ -252,11 +252,11 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             $"""
              INSERT INTO jobs (
                  "Id", "JobType", "IdempotencyKey", "Payload", "MailboxAccountId",
-                 "State", "AvailableAt", "EnqueuedAt", "StateChangedAt", "AttemptCount")
+                 "State", "AvailableAt", "TurnAt", "EnqueuedAt", "StateChangedAt", "AttemptCount")
              VALUES (
                  {laterBuildsJobId}, {laterBuildsJobType}, {laterBuildsJobKey},
                  CAST({emptyDocument} AS jsonb), NULL,
-                 {pending}, {enqueuedAt}, {enqueuedAt}, {enqueuedAt}, 0)
+                 {pending}, {enqueuedAt}, {enqueuedAt}, {enqueuedAt}, {enqueuedAt}, 0)
              """,
             cancellationToken);
 

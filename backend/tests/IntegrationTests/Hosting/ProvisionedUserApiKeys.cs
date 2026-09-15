@@ -52,12 +52,17 @@ internal static class ProvisionedUserApiKeys
     {
         ArgumentNullException.ThrowIfNull(provisioned);
 
+        // Composed once rather than per scope, because a substitute is configured through NSubstitute's ambient call
+        // context: building one while another request is building its own is what that context cannot carry, and the
+        // shape's answer holds for every request whichever scope asks.
+        var credentials = StoreHolding(provisioned);
+
         return builder =>
         {
             builder.Services.RemoveAll<IUserApiKeyMinter>();
             builder.Services.AddSingleton<IUserApiKeyMinter>(new KeyIsItsOwnLookup());
             builder.Services.RemoveAll<IUserCredentialStore>();
-            builder.Services.AddScoped(_ => StoreHolding(provisioned));
+            builder.Services.AddSingleton(credentials);
         };
     }
 

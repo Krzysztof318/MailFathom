@@ -95,7 +95,8 @@ public sealed class OrchestratedLocalEmailStateStoreTests(MailFathomOrchestratio
 
     /// <summary>
     /// A message is reachable only through the account that holds it: a write naming it under another account is refused
-    /// and leaves the row as it was, and a read under another account or another user answers as absent.
+    /// and leaves the row as it was, and a read under another account answers as absent. The account is the whole of
+    /// that reach — the mail graph is keyed by it alone — so there is no second axis to be refused by.
     /// </summary>
     [Fact]
     public async Task WriteAsync_ForAnAccountThatDoesNotHoldTheMessage_IsRefusedAndTheMessageReadsAsAbsentThere()
@@ -111,7 +112,6 @@ public sealed class OrchestratedLocalEmailStateStoreTests(MailFathomOrchestratio
             cancellationToken);
 
         var anotherAccount = MailAccountId.Create("local-email-state-elsewhere");
-        var anotherUser = SyntheticMailAccount.AccountId;
         var refusedState = new LocalEmailState(
             binding,
             Folder: null,
@@ -130,12 +130,10 @@ public sealed class OrchestratedLocalEmailStateStoreTests(MailFathomOrchestratio
             cancellationToken));
 
         var readUnderAnotherAccount = await ReadAsync(services, anotherAccount, storedEmailId, cancellationToken);
-        var readUnderAnotherUser = await ReadAsync(services, anotherUser, storedEmailId, cancellationToken);
         var readUnderItsOwnAccount = await ReadAsync(services, SyntheticMailAccount.Account, storedEmailId, cancellationToken);
 
         // Assert
         Assert.Null(readUnderAnotherAccount);
-        Assert.Null(readUnderAnotherUser);
 
         Assert.NotNull(readUnderItsOwnAccount);
         Assert.False(readUnderItsOwnAccount.IsSeen);

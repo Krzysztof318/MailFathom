@@ -42,9 +42,10 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// <see href="../../../docs/operations/database-schema.md">the schema documentation</see>: an installation that has
 /// never held the schema takes the complete chain and then satisfies the startup gate, one that already carries part of
 /// it takes only what it is missing without touching a row, and one that carries mail stored before the user axis
-/// existed is brought onto the user the same script provisions. The second is what makes the artifact safe to apply
-/// when nobody is certain which migrations a given database holds; the third is the only one of the three that cannot
-/// be written against the whole chain at once, because what it is about is the state between two of its migrations.
+/// existed applies the whole chain over it and comes out with the stored copy discarded. The second is what makes the
+/// artifact safe to apply when nobody is certain which migrations a given database holds; the third is the only one of
+/// the three that cannot be written against the whole chain at once, because what it is about is the state between two
+/// of its migrations.
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
@@ -79,9 +80,11 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         Assert.Equal(definedMigrations, await ReadAppliedMigrationsAsync(connectionString, cancellationToken));
         Assert.Empty(await inspector.ReadPendingMigrationIdentifiersAsync(cancellationToken));
 
-        // The one row the chain writes rather than creates a table for: a deployment brought to this release by the
-        // artifact alone holds the user every mailbox it goes on to synchronize is bound to.
-        Assert.Single(await scope.ServiceProvider
+        // No row of its own: a database that never held one comes out of the artifact holding no user either, and the
+        // first user is the one an administrator records. It is asserted rather than left unsaid because the migration
+        // that carries an existing deployment onto the user axis does write one, and a clean apply taking that branch
+        // would provision a user nobody recorded.
+        Assert.Empty(await scope.ServiceProvider
             .GetRequiredService<MailFathomDbContext>()
             .UserAccounts
             .AsNoTracking()
@@ -145,17 +148,23 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         await host.StopAsync(cancellationToken);
     }
 
-    /// <summary>Proves a mailbox stored before the user axis existed comes out of the whole chain keyed by its identifier alone.</summary>
+    /// <summary>Proves a mailbox stored before the user axis existed is discarded with the accounts that moved, and the chain still applies over it.</summary>
     /// <remarks>
     /// The one claim in this class that a whole-chain apply cannot make: the row has to exist while the user column is
     /// added, filled, made required, and then dropped again by the migration that keys the mail graph by the account's
-    /// generated identifier. A database that never held a mailbox row through that stretch exercises neither the
-    /// filling step nor the rekeying, and both are what an installation of an earlier release meets on the day it
-    /// takes this one. So the chain is applied in two parts with the row written between them, and what this catches is
-    /// a generated shape that drops the row, duplicates it, or leaves it keyed by a column the release no longer holds.
+    /// generated identifier. A database that never held a mailbox row through that stretch exercises none of those
+    /// steps, and every one of them is what an installation of an earlier release meets on the day it takes this one.
+    /// So the chain is applied in two parts with the row written between them, and what this catches is a generated
+    /// shape that fails over real data rather than over an empty schema.
+    /// <para>
+    /// What comes out is no mailbox at all, and that is the intended outcome rather than a loss this catches: the
+    /// migration moving mail accounts into records of their own discards the stored copy instead of rewriting it,
+    /// because a mailbox is resynchronized from the server it was read from. So the assertion is that the row is gone
+    /// and the history is complete, which is what an operator's upgrade actually produces.
+    /// </para>
     /// </remarks>
     [Fact]
-    public async Task SchemaArtifact_AppliedOverAMailboxStoredBeforeTheUserMigration_LeavesItKeyedByItsIdentifierAlone()
+    public async Task SchemaArtifact_AppliedOverAMailboxStoredBeforeTheUserMigration_DiscardsItAndRecordsTheWholeChain()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -178,11 +187,7 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         await ApplyAsync(connectionString, GenerateSchemaArtifact(scope.ServiceProvider), cancellationToken);
 
         // Assert
-        var carriedMailbox = await context.MailboxAccounts
-            .AsNoTracking()
-            .SingleAsync(account => account.Id == CarriedAccount, cancellationToken);
-
-        Assert.Equal(CarriedAccount, carriedMailbox.Id);
+        Assert.Empty(await context.MailboxAccounts.AsNoTracking().ToListAsync(cancellationToken));
         Assert.Equal(
             context.Database.GetMigrations(),
             await ReadAppliedMigrationsAsync(connectionString, cancellationToken));
@@ -312,9 +317,6 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         MailFathomDbContext context,
         CancellationToken cancellationToken)
     {
-        // The user the artifact provisioned, rather than one written here: a mailbox belongs to somebody, and this
-        // database has held exactly one user record since the script that created it ran.
-        var userId = await context.UserAccounts.Select(user => user.Id).SingleAsync(cancellationToken);
         var account = new MailboxAccountEntity { Id = "artifact-upgrade", };
         var folder = new MailFolderEntity
         {

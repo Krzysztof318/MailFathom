@@ -48,7 +48,14 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
     private const int DrainBatchSize = 200;
 
     /// <summary>Bounds every paging loop. A walk that has not ended by then is a defect rather than a slow database.</summary>
-    private const int MaximumBatches = 200;
+    /// <remarks>
+    /// Read as more mail than this suite will ever hold rather than as what this class seeds. The walk pages two rows
+    /// at a time deliberately and it pages over the whole of the shared account, which every other class here stores
+    /// into — so a ceiling sized to this class's own messages fails as an endless walk the moment somebody else's test
+    /// stores a few hundred. Nothing pays for the room: a loop ends on the first empty batch, so the cost follows the
+    /// mail rather than the ceiling.
+    /// </remarks>
+    private const int MaximumBatches = 5_000;
 
     private static readonly DateTimeOffset EvaluatedAt = new(2026, 6, 1, 9, 0, 0, TimeSpan.Zero);
 

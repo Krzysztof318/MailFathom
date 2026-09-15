@@ -129,11 +129,16 @@ public sealed class OrchestratedEmbeddingGenerationLifecycleTests(MailFathomOrch
 
         // And the refusal reaches an application writer as a conflict rather than as a provider exception: two
         // activations of different geometries collide on this index, and the session is what classifies that.
-        await RegisterAsync(services, "generation-first-to-build", cancellationToken);
+        var firstToBuild = await RegisterAsync(services, "generation-first-to-build", cancellationToken);
 
         Assert.Equal(
             PersistenceCommitResult.ConcurrencyConflict,
             await TryRegisterAsync(services, "generation-second-to-build", cancellationToken));
+
+        // Abandoned rather than left where it is, because the index this case exists to prove admits one building
+        // generation for the whole instance: a row left building here is a refusal every later registration in the
+        // suite meets, reported against whatever test the order happened to put next.
+        await AbandonAsync(services, firstToBuild.Id, cancellationToken);
     }
 
     private static EmbeddingProfileIdentity IdentityOf(string modelIdentifier) => EmbeddingProfileIdentity.Create(

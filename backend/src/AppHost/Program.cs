@@ -94,9 +94,16 @@ if (runsEphemeralServers)
     // The host port is stated only for the end-to-end client run, which reaches this server from outside the app model
     // to apply the schema artifact — the operator's own path, and one that needs an address written down rather than
     // allocated. The integration suite reads its connection string out of the orchestration it started and needs none.
+    //
+    // The connection ceiling is raised above the image's hundred because this topology is several MailFathom processes
+    // against one server rather than one: the suite composes a service graph per test class, the composed host serves
+    // requests that each resolve a credential row, and every one of them holds a pool of its own. At the shipped
+    // default the server starts refusing with `too many clients`, which reaches a test as a request answered with a
+    // fault rather than as a server that ran out of room.
     postgres
         .WithContainerName($"{ephemeralResourceNamePrefix}-postgres")
         .WithVolume($"{ephemeralResourceNamePrefix}-postgres-data", postgresDataDirectory)
+        .WithArgs("-c", "max_connections=400")
         .WithHostPort(runsEndToEndClient ? OrchestrationContract.EndToEndClientPostgresPort : null);
 }
 else

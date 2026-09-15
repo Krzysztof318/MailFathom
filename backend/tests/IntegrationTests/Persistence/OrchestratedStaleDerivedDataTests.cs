@@ -421,7 +421,13 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
                 SyntheticEmail.ExtractionOf(
                     SyntheticEmail.OccurrenceIn(binding, uid),
                     term,
-                    SyntheticEmail.BodyTextContaining(term, wordCount: 12)),
+                    SyntheticEmail.BodyTextContaining(term, wordCount: 12)) with
+                {
+                    // The stamp travels on the extraction rather than being taken at the write, because it names what
+                    // the text was redacted under: the reader that produced this metadata is where redaction happens,
+                    // so a synthetic extraction states the posture this class's store is composed against.
+                    RedactedUnder = CurrentStamp,
+                },
                 token),
             cancellationToken);
 

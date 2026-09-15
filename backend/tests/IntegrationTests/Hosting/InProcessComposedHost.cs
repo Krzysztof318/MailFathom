@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Xml.Linq;
 using MailFathom.Host;
+using MailFathom.Infrastructure.Persistence.Connections;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
@@ -17,6 +18,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Xunit;
 
 namespace MailFathom.IntegrationTests.Hosting;
 
@@ -125,6 +127,12 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
         builder.Configuration.AddInMemoryCollection(Database);
         builder.Configuration.AddInMemoryCollection(configuration);
         builder.Logging.ClearProviders();
+
+        // Put one provider back, at the levels a shape only ever produces when something went wrong. A pipeline that
+        // answers a fault says why in its log and nowhere else, so a shape whose host writes nowhere fails as a bare
+        // status code with the exception behind it lost — which is a failure nobody can read without running the suite
+        // again with a patch applied.
+        builder.Logging.Services.AddSingleton<ILoggerProvider, ShapeLogsToTestOutput>();
         builder.Services.Configure<KeyManagementOptions>(
             keyManagement => keyManagement.XmlRepository = new KeysHeldInMemory());
 
@@ -143,6 +151,13 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
         {
             builder.Services.Remove(composedWorker);
         }
+
+        // One of them goes back, because it is not a worker: it composes the connection string every persistence
+        // registration resolves through, and it reads the shape's own settings rather than dialling anything. Without
+        // it a shape pointing at the orchestrated database reaches a provider that never composed one, and fails as a
+        // request that could not be served rather than as a shape that was never given a database.
+        builder.Services.AddHostedService(
+            static provider => provider.GetRequiredService<PostgresConnectionStringProvider>());
 
         var server = overRealSockets ? null : new PipelineCapturingServer();
 
@@ -253,6 +268,61 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
     {
         await this.app.StopAsync();
         await this.app.DisposeAsync();
+    }
+
+    /// <summary>Writes what a shape's host logged into the output of the test driving it.</summary>
+    /// <remarks>
+    /// Only from <see cref="LogLevel.Warning" /> up, because what this exists for is the exception behind a status
+    /// code rather than a record of the requests a shape answered. The helper is read per entry rather than held,
+    /// since one shape is driven by one test and a host that logs after its test has finished has nowhere to write;
+    /// that case is swallowed rather than thrown, because a logger that fails a test by logging would report the
+    /// diagnosis as the defect.
+    /// </remarks>
+    [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The host materializes the provider it resolves from the container.")]
+    private sealed class ShapeLogsToTestOutput : ILoggerProvider
+    {
+        public ILogger CreateLogger(string categoryName) => new ShapeLog(categoryName);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class ShapeLog(string category) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Warning;
+
+            public void Log<TState>(
+                LogLevel logLevel,
+                EventId eventId,
+                TState state,
+                Exception? exception,
+                Func<TState, Exception?, string> formatter)
+            {
+                ArgumentNullException.ThrowIfNull(formatter);
+
+                if (!this.IsEnabled(logLevel) || TestContext.Current.TestOutputHelper is not { } output)
+                {
+                    return;
+                }
+
+                try
+                {
+                    output.WriteLine($"{logLevel}: {category}: {formatter(state, exception)}");
+
+                    if (exception is not null)
+                    {
+                        output.WriteLine(exception.ToString());
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    // The test this shape belongs to has already finished, so there is nowhere to write.
+                }
+            }
+        }
     }
 
     /// <summary>Starts and stops the host without touching the console or the process's signal handlers.</summary>

@@ -669,6 +669,30 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
             FolderAliases = ["inbox"],
         });
 
+        // The three tables a mailbox acquired after the rest of this arrangement was written: what its stored payloads
+        // occupy, what a synchronization pass has reserved room for, and the folders it holds locally rather than on a
+        // server. They are seeded for the same reason as everything above — a table naming an account and holding no
+        // row proves nothing about whether the erasure reaches it.
+        context.AccountStoredContent.Add(new AccountStoredContentEntity
+        {
+            MailboxAccountId = account.Id,
+            StoredContentByteCount = RepresentativeRawMime.Length,
+        });
+        context.StoredContentClaims.Add(new StoredContentClaimEntity
+        {
+            Id = Guid.CreateVersion7(),
+            MailboxAccountId = account.Id,
+            ClaimedByteCount = RepresentativeRawMime.Length,
+            ExpiresAt = now,
+        });
+        context.LocalMailFolders.Add(new LocalMailFolderEntity
+        {
+            Id = Guid.CreateVersion7(),
+            MailboxAccountId = account.Id,
+            Name = "Kept here",
+            NameKey = "KEPT HERE",
+        });
+
         // Both halves of the contact book, which leave by two different routes. The person the user wrote down hangs off
         // the user record and no statement of the seam's names it, while the one the mailbox collected names the account
         // and is therefore counted beside the mail — so the counts below state it as a table that has to reach zero.
