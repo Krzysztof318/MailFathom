@@ -10,6 +10,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Exports;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Hosting.Workers;
@@ -675,10 +676,10 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
             FolderAliases = ["inbox"],
         });
 
-        // The three tables a mailbox acquired after the rest of this arrangement was written: what its stored payloads
-        // occupy, what a synchronization pass has reserved room for, and the folders it holds locally rather than on a
-        // server. They are seeded for the same reason as everything above — a table naming an account and holding no
-        // row proves nothing about whether the erasure reaches it.
+        // The four tables a mailbox acquired after the rest of this arrangement was written: what its stored payloads
+        // occupy, what a synchronization pass has reserved room for, the folders it holds locally rather than on a
+        // server, and an archive somebody asked for of it. They are seeded for the same reason as everything above — a
+        // table naming an account and holding no row proves nothing about whether the erasure reaches it.
         context.AccountStoredContent.Add(new AccountStoredContentEntity
         {
             MailboxAccountId = account.Id,
@@ -697,6 +698,17 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
             MailboxAccountId = account.Id,
             Name = "Kept here",
             NameKey = "KEPT HERE",
+        });
+
+        // Recorded as one nobody has downloaded and that wrote no archive, because what the erasure owes is the row
+        // rather than the object: an export holding a locator would name a payload in the content store that this
+        // arrangement never put there.
+        context.MailboxExports.Add(new MailboxExportEntity
+        {
+            Id = Guid.CreateVersion7(),
+            MailboxAccountId = account.Id,
+            State = MailboxExportState.Queued,
+            RequestedAt = now,
         });
 
         // Both halves of the contact book, which leave by two different routes. The person the user wrote down hangs off
