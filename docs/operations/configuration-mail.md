@@ -409,6 +409,10 @@ and a deployment reading a work mailbox and a personal one decides separately fo
 the author of mail arriving in its ordinary folders and the primary recipients of mail in the folder mapped as `Sent`,
 as those messages are synchronized.
 
+**What it records goes into that account's own book**, which every user assigned the account reads beside their own, and
+which `mfctl contact delete-collected --account <id>` empties. So switching it on for a mailbox two people share is a
+decision about what both of them see, and switching it off for one account says nothing about another.
+
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `…:ContactCollection:Enabled` | bool | `false` | Whether this account records the people it corresponds with as its mail is synchronized | reload; the next folder run collects under it |
@@ -439,8 +443,8 @@ the start of an account this feature never touches. That is the deliberate half 
 is the bound switching collection on tomorrow adopts, and startup is the last moment anybody is looking at it.
 
 [Contacts § Collecting contacts from arriving mail](../features/contacts.md#collecting-contacts-from-arriving-mail)
-states which header each folder contributes, what is never collected, and how a user takes back everything a
-deployment collected.
+states which header each folder contributes, what is never collected, and how a user takes back everything one account
+collected.
 
 ### OAuth — `…:OAuth`
 

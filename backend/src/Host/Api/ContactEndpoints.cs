@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Contacts;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Security.Endpoints;
@@ -24,6 +25,15 @@ namespace MailFathom.Host.Api;
 /// They are here rather than on the MCP surface because the book is the most concentrated personal data this system
 /// holds, and what bounds administrative access is what should bound who may add to it, correct it, read it out, or
 /// erase somebody from it. The MCP tools over the book are a separate surface with separate reasoning.
+/// </para>
+/// <para>
+/// <strong>Every route names the book it reaches.</strong> There are two kinds — a user's own, holding the people they
+/// wrote down, and a mail account's, holding the people its mail says it corresponds with — so a route that named
+/// neither would have to guess, and on a deployment serving several people a guess is one person's correspondents
+/// handed to another. Everything but the collected erasure therefore takes <c>user</c> and acts on what that user
+/// reads: their own book beside the collected book of each account assigned to them, the same set the user sees for
+/// themselves. The collected erasure takes <c>account</c> instead, because emptying what one mailbox picked up is an
+/// act about that mailbox rather than about whoever reads it.
 /// </para>
 /// <para>
 /// These routes postdate ADR 0012's table and are allocated under its rule, which separates reading what was derived
@@ -133,10 +143,12 @@ internal static class ContactEndpoints
     }
 
     /// <summary>Serves one bounded page of the book, or reports what was wrong with the request.</summary>
+    /// <param name="user">The user whose books are read.</param>
     /// <param name="origin">The origin to narrow to, or <see langword="null" /> for the whole book.</param>
     /// <param name="pageSize">How many contacts the page may hold, or <see langword="null" /> for the default.</param>
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="book">Reads the page, for a caller the book's own grant admits.</param>
+    /// <param name="scopes">Composes the books that user reads.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the page, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -145,13 +157,21 @@ internal static class ContactEndpoints
     /// which is what stops a request from deciding how much of a person's correspondents leave the database at once.
     /// </remarks>
     internal static async Task<Results<Ok<ContactPageResponse>, ProblemHttpResult>> ListAsync(
+        [FromQuery] Guid user,
         [FromQuery] string? origin,
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
         [FromServices] ContactBook book,
+        [FromServices] ContactBookScopes scopes,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
+        ArgumentNullException.ThrowIfNull(scopes);
+
+        if (!TryReadUser(user, out var reader))
+        {
+            return EmptyUser();
+        }
 
         if (!TryReadOrigin(origin, out var narrowedOrigin))
         {
@@ -176,24 +196,31 @@ internal static class ContactEndpoints
             return Refused($"A contact page holds between 1 and {ContactQuery.MaximumPageSize} contacts.");
         }
 
-        var page = await book.ReadPageAsync(query, cancellationToken);
+        var page = await book.ReadPageAsync(scopes.Of(reader), query, cancellationToken);
 
         return TypedResults.Ok(new ContactPageResponse(
             [.. page.Contacts.Select(ContactResponse.For)],
             page.NextCursor?.Encode()));
     }
 
-    /// <summary>Records a person the book does not yet hold.</summary>
+    /// <summary>Records a person one user's own book does not yet hold.</summary>
+    /// <param name="user">The user whose book the person is written into.</param>
     /// <param name="request">The record to write.</param>
     /// <param name="book">Performs the write.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the outcome, or <c>400</c> naming which rule the record broke.</returns>
     internal static async Task<Results<Ok<ContactWriteResponse>, ProblemHttpResult>> RecordAsync(
+        [FromQuery] Guid user,
         [FromBody] ContactRecordRequest? request,
         [FromServices] ContactBook book,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
+
+        if (!TryReadUser(user, out var writer))
+        {
+            return EmptyUser();
+        }
 
         var read = ReadRecord(request);
 
@@ -203,6 +230,7 @@ internal static class ContactEndpoints
         }
 
         var written = await book.RecordAsync(
+            writer,
             new NewContact
             {
                 DisplayName = record.DisplayName,
@@ -218,29 +246,41 @@ internal static class ContactEndpoints
 
     /// <summary>Reads one contact by the identity the book gave it.</summary>
     /// <param name="contactId">The contact to read.</param>
+    /// <param name="user">The user whose books are read.</param>
     /// <param name="book">Answers what the book holds, for a caller the book's own grant admits.</param>
+    /// <param name="scopes">Composes the books that user reads.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the contact, or <c>200</c> with none where the book holds no such person.</returns>
+    /// <returns><c>200</c> with the contact, or <c>200</c> with none where those books hold no such person.</returns>
     internal static async Task<Results<Ok<ContactLookupResponse>, ProblemHttpResult>> FindAsync(
         Guid contactId,
+        [FromQuery] Guid user,
         [FromServices] ContactBook book,
+        [FromServices] ContactBookScopes scopes,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
+        ArgumentNullException.ThrowIfNull(scopes);
+
+        if (!TryReadUser(user, out var reader))
+        {
+            return EmptyUser();
+        }
 
         if (!TryReadContactId(contactId, out var identity))
         {
             return EmptyIdentity();
         }
 
-        var held = await book.FindAsync(identity, cancellationToken);
+        var held = await book.FindAsync(scopes.Of(reader), identity, cancellationToken);
 
         return TypedResults.Ok(new ContactLookupResponse(held is null ? null : ContactResponse.For(held)));
     }
 
     /// <summary>Reads the person who uses one address.</summary>
+    /// <param name="user">The user whose books are read.</param>
     /// <param name="address">The address to resolve.</param>
     /// <param name="book">Answers what the book holds, for a caller the book's own grant admits.</param>
+    /// <param name="scopes">Composes the books that user reads.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the contact, <c>200</c> with none where nobody holds it, or <c>400</c> where the address is not one.</returns>
     /// <remarks>
@@ -249,26 +289,36 @@ internal static class ContactEndpoints
     /// somebody's address.
     /// </remarks>
     internal static async Task<Results<Ok<ContactLookupResponse>, ProblemHttpResult>> FindByAddressAsync(
+        [FromQuery] Guid user,
         [FromQuery] string? address,
         [FromServices] ContactBook book,
+        [FromServices] ContactBookScopes scopes,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
+        ArgumentNullException.ThrowIfNull(scopes);
+
+        if (!TryReadUser(user, out var reader))
+        {
+            return EmptyUser();
+        }
 
         if (!TryReadAddress(address, out var resolved))
         {
             return Refused("The lookup names no usable address.");
         }
 
-        var held = await book.FindByAddressAsync(resolved, cancellationToken);
+        var held = await book.FindByAddressAsync(scopes.Of(reader), resolved, cancellationToken);
 
         return TypedResults.Ok(new ContactLookupResponse(held is null ? null : ContactResponse.For(held)));
     }
 
-    /// <summary>Amends one contact to the record the caller states.</summary>
+    /// <summary>Amends one contact of a user's own book to the record the caller states.</summary>
     /// <param name="contactId">The contact to amend.</param>
+    /// <param name="user">The user whose book holds the contact.</param>
     /// <param name="request">The record the contact is to have afterwards.</param>
     /// <param name="book">Performs the write.</param>
+    /// <param name="scopes">Composes the books that user reads.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the outcome, or <c>400</c> naming which rule the record broke.</returns>
     /// <remarks>
@@ -278,11 +328,19 @@ internal static class ContactEndpoints
     /// </remarks>
     internal static async Task<Results<Ok<ContactWriteResponse>, ProblemHttpResult>> AmendAsync(
         Guid contactId,
+        [FromQuery] Guid user,
         [FromBody] ContactRecordRequest? request,
         [FromServices] ContactBook book,
+        [FromServices] ContactBookScopes scopes,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
+        ArgumentNullException.ThrowIfNull(scopes);
+
+        if (!TryReadUser(user, out var writer))
+        {
+            return EmptyUser();
+        }
 
         if (!TryReadContactId(contactId, out var identity))
         {
@@ -297,6 +355,7 @@ internal static class ContactEndpoints
         }
 
         var amended = await book.AmendAsync(
+            scopes.Of(writer),
             new ContactAmendment
             {
                 ContactId = identity,
@@ -313,7 +372,9 @@ internal static class ContactEndpoints
 
     /// <summary>Promotes a collected contact to one the user has taken responsibility for.</summary>
     /// <param name="contactId">The contact to promote.</param>
+    /// <param name="user">The user taking the record on, whose own book the copy is written into.</param>
     /// <param name="book">Performs the write.</param>
+    /// <param name="scopes">Composes the books that user reads.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the outcome and no record, including for a contact that was already asserted.</returns>
     /// <remarks>
@@ -324,43 +385,67 @@ internal static class ContactEndpoints
     /// </remarks>
     internal static async Task<Results<Ok<ContactWriteResponse>, ProblemHttpResult>> PromoteAsync(
         Guid contactId,
+        [FromQuery] Guid user,
         [FromServices] ContactBook book,
+        [FromServices] ContactBookScopes scopes,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
+        ArgumentNullException.ThrowIfNull(scopes);
+
+        if (!TryReadUser(user, out var writer))
+        {
+            return EmptyUser();
+        }
 
         if (!TryReadContactId(contactId, out var identity))
         {
             return EmptyIdentity();
         }
 
-        var promoted = await book.PromoteAsync(identity, AdministrativeWriter, cancellationToken);
+        var promoted = await book.PromoteAsync(
+            scopes.Of(writer),
+            identity,
+            AdministrativeWriter,
+            cancellationToken);
 
         return TypedResults.Ok(ContactWriteResponse.OutcomeOf(promoted));
     }
 
     /// <summary>Erases one person and everything the book derived from them.</summary>
     /// <param name="contactId">The contact to erase.</param>
+    /// <param name="user">The user whose books the erasure reaches.</param>
     /// <param name="book">Performs the erasure.</param>
+    /// <param name="scopes">Composes the books that user reads.</param>
     /// <param name="cancellationToken">Cancels the erasure when the client disconnects.</param>
-    /// <returns><c>200</c> with what was removed, including a book that held no such contact.</returns>
+    /// <returns><c>200</c> with what was removed, including books that held no such contact.</returns>
     /// <remarks>
     /// The data-subject erasure path, so it removes rather than marks and no origin gates it: somebody asking to be
-    /// taken out of a contact book is not answered with which half of the book they happen to be in.
+    /// taken out of a contact book is not answered with which book they happen to be in. It therefore reaches what that
+    /// user reads, a record one of their mailboxes collected included — and erasing one of those takes it out for every
+    /// user assigned that mailbox, because the record was one record rather than a copy each.
     /// </remarks>
     internal static async Task<Results<Ok<ContactErasureResponse>, ProblemHttpResult>> EraseAsync(
         Guid contactId,
+        [FromQuery] Guid user,
         [FromServices] ContactBook book,
+        [FromServices] ContactBookScopes scopes,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
+        ArgumentNullException.ThrowIfNull(scopes);
+
+        if (!TryReadUser(user, out var reader))
+        {
+            return EmptyUser();
+        }
 
         if (!TryReadContactId(contactId, out var identity))
         {
             return EmptyIdentity();
         }
 
-        var erasure = await book.EraseAsync(identity, cancellationToken);
+        var erasure = await book.EraseAsync(scopes.Of(reader), identity, cancellationToken);
 
         return TypedResults.Ok(new ContactErasureResponse(
             erasure.ContactId.Value,
@@ -368,48 +453,65 @@ internal static class ContactEndpoints
             erasure.AddressesErased));
     }
 
-    /// <summary>Erases every contact this deployment collected, leaving the ones the user asserted where they are.</summary>
+    /// <summary>Erases the whole of one mail account's collected book, leaving every user's own book where it is.</summary>
+    /// <param name="account">The mail account whose book is erased.</param>
     /// <param name="book">Performs the erasure.</param>
     /// <param name="cancellationToken">Cancels the erasure when the client disconnects.</param>
     /// <returns><c>200</c> with what was removed, including a book that had collected nobody.</returns>
     /// <remarks>
-    /// The answer to a user who changed their mind about collection. Everything collection produced is a contact of
-    /// its own origin, so taking that origin out is taking out the whole of what it built and nothing of what the user
-    /// entered. It is behind the erasing grant rather than the operating one, because what it removes cannot be written
-    /// back: switching collection on again rebuilds the book from mail that arrives afterwards rather than restoring
-    /// what went.
+    /// The answer to a user who changed their mind about collection, and it names one account because collection is
+    /// switched on per account: emptying what one mailbox picked up is not emptying what another did, and nothing
+    /// anybody wrote down is in this book to go with it. It is behind the erasing grant rather than the operating one,
+    /// because what it removes cannot be written back: switching collection on again rebuilds the book from mail that
+    /// arrives afterwards rather than restoring what went.
     /// </remarks>
     internal static async Task<Results<Ok<CollectedContactErasureResponse>, ProblemHttpResult>> EraseCollectedAsync(
+        [FromQuery] string? account,
         [FromServices] ContactBook book,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
 
-        var erasure = await book.EraseCollectedAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(account))
+        {
+            return Refused("The erasure names no mail account, and a collected book belongs to one.");
+        }
+
+        var erasure = await book.EraseCollectedAsync(MailAccountId.Create(account), cancellationToken);
 
         return TypedResults.Ok(new CollectedContactErasureResponse(
             erasure.ContactsErased,
             erasure.AddressesErased));
     }
 
-    /// <summary>Produces everything the book holds about one person.</summary>
+    /// <summary>Produces everything the books hold about one person.</summary>
     /// <param name="contactId">The contact to export.</param>
+    /// <param name="user">The user whose books are read.</param>
     /// <param name="book">Produces the export.</param>
+    /// <param name="scopes">Composes the books that user reads.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the export, or <c>200</c> with none where the book holds no such person.</returns>
     internal static async Task<Results<Ok<ContactExportResponse>, ProblemHttpResult>> ExportAsync(
         Guid contactId,
+        [FromQuery] Guid user,
         [FromServices] ContactBook book,
+        [FromServices] ContactBookScopes scopes,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
+        ArgumentNullException.ThrowIfNull(scopes);
+
+        if (!TryReadUser(user, out var reader))
+        {
+            return EmptyUser();
+        }
 
         if (!TryReadContactId(contactId, out var identity))
         {
             return EmptyIdentity();
         }
 
-        var export = await book.ExportAsync(identity, cancellationToken);
+        var export = await book.ExportAsync(scopes.Of(reader), identity, cancellationToken);
 
         return TypedResults.Ok(export is null
             ? new ContactExportResponse(Contact: null, ProducedAt: null)
@@ -438,6 +540,30 @@ internal static class ContactEndpoints
 
     /// <summary>States that the route named the one identifier no contact can carry.</summary>
     private static ProblemHttpResult EmptyIdentity() => Refused("A contact identifier cannot be empty.");
+
+    /// <summary>Reads the user a request named, refusing the one value the binder still admits.</summary>
+    /// <remarks>
+    /// A request naming no user binds the all-zero UUID rather than failing, and so does one naming an unset script
+    /// variable, so both arrive here as a value no user record can carry. Refusing it is what keeps such a request from
+    /// reading an empty book and being answered that the deployment holds nobody.
+    /// </remarks>
+    private static bool TryReadUser(Guid user, out MailUserId identity)
+    {
+        identity = default;
+
+        if (user == Guid.Empty)
+        {
+            return false;
+        }
+
+        identity = MailUserId.Create(user);
+
+        return true;
+    }
+
+    /// <summary>States that the request named no user, and every route but the collected erasure reaches one user's books.</summary>
+    private static ProblemHttpResult EmptyUser() =>
+        Refused("The request names no user, and a contact book belongs to one.");
 
     /// <summary>Reads the origin a listing was narrowed to, refusing a value naming no origin.</summary>
     /// <remarks>

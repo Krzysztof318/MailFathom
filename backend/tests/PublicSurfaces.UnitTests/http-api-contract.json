@@ -9424,6 +9424,15 @@
         "parameters": [
           {
             "in": "query",
+            "name": "user",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "origin",
             "schema": {
               "type": "string"
@@ -9471,6 +9480,17 @@
         ]
       },
       "post": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "user",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -9514,6 +9534,15 @@
         "parameters": [
           {
             "in": "query",
+            "name": "user",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "address",
             "schema": {
               "type": "string"
@@ -9544,6 +9573,15 @@
     },
     "/api/admin/contacts/collected": {
       "delete": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -9572,6 +9610,15 @@
           {
             "in": "path",
             "name": "contactId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user",
             "required": true,
             "schema": {
               "format": "uuid",
@@ -9610,6 +9657,15 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "user",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9638,6 +9694,15 @@
           {
             "in": "path",
             "name": "contactId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user",
             "required": true,
             "schema": {
               "format": "uuid",
@@ -9694,6 +9759,15 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "user",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9724,6 +9798,15 @@
           {
             "in": "path",
             "name": "contactId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user",
             "required": true,
             "schema": {
               "format": "uuid",

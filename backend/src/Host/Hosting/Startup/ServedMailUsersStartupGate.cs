@@ -360,9 +360,8 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// <para>
     /// The administrative surface is deliberately outside it, which is what makes a second user reachable at all. An
     /// administrator's acts are the deployment's rather than one person's, so they carry no user and each of their
-    /// user-scoped routes names the user it is for. What that costs is the administrative routes which still resolve
-    /// <see cref="IDeploymentMailUserSource.User" /> — the contact book above all — and those have no answer on a
-    /// roster of several rather than a wrong one.
+    /// user-scoped routes names the user or the mail account it is for rather than resolving
+    /// <see cref="IDeploymentMailUserSource.User" />.
     /// </para>
     /// </remarks>
     private void RefuseSeveralUsersOnAUserFacingSurface(IReadOnlyList<ServedMailUser> served)

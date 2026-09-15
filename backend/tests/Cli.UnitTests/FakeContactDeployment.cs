@@ -20,6 +20,14 @@ internal static class FakeContactDeployment
     /// <summary>The identity every scripted contact carries, so a test names one contact in one place.</summary>
     internal static readonly Guid ContactIdentity = new("11111111-2222-3333-4444-555555555555");
 
+    /// <summary>The one user this deployment holds, whose books every contact command here therefore acts on.</summary>
+    /// <remarks>
+    /// A contact command names a user, and one holding a single record settles it from the roster rather than making
+    /// every invocation say so — which is the shape these tests are written in, and the shape an operator of a
+    /// deployment serving one person meets.
+    /// </remarks>
+    internal static readonly Guid UserIdentity = new("66666666-7777-8888-9999-aaaaaaaaaaaa");
+
     /// <summary>Builds a deployment answering the contact routes with the bodies given.</summary>
     /// <param name="lookup">What a read of one contact answers, or <see langword="null" /> to answer that the book holds none.</param>
     /// <param name="write">What a write answers, or <see langword="null" /> where the test asks for none.</param>
@@ -120,6 +128,11 @@ internal static class FakeContactDeployment
         CultureInfo.InvariantCulture,
         $$"""{"contactsErased":{{contactsErased}},"addressesErased":{{addressesErased}}}""");
 
+    /// <summary>Writes the body the roster answers with: one user, so a command that named none settles on them.</summary>
+    /// <returns>The response body.</returns>
+    internal static string Roster() =>
+        $$"""{"users":[{"id":"{{UserIdentity:D}}","displayName":"The Deployment's User","served":true,"mcpEndpoint":true,"clientEndpoint":true}]}""";
+
     /// <summary>Writes the body an export answers with.</summary>
     /// <param name="displayName">The name the exported record carries.</param>
     /// <returns>The response body.</returns>
@@ -165,6 +178,20 @@ internal static class FakeContactDeployment
             .RequestUri?.Query;
     }
 
+    /// <summary>Reports the query the command last asked an erasure of what one account collected with.</summary>
+    /// <param name="deployment">The deployment the command was pointed at.</param>
+    /// <returns>The query string, or <see langword="null" /> where no such erasure was asked for.</returns>
+    internal static string? LastCollectedErasureQuery(this FakeHttpMessageHandler deployment)
+    {
+        ArgumentNullException.ThrowIfNull(deployment);
+
+        return deployment.RecordedRequests
+            .LastOrDefault(request =>
+                request.Method == HttpMethod.Delete
+                && request.RequestUri?.AbsolutePath == AdminEndpointRoutes.CollectedContactsPath)?
+            .RequestUri?.Query;
+    }
+
     private static string Contact(
         string displayName,
         string[]? addresses,
@@ -191,6 +218,13 @@ internal static class FakeContactDeployment
         string? version)
     {
         var path = request.RequestUri?.AbsolutePath;
+
+        // Answered before the contact routes, because every contact command settles which user it acts for first and a
+        // double that refused the roster would have each of them fail before reaching the route under test.
+        if (path == AdminEndpointRoutes.UsersPath && request.Method == HttpMethod.Get)
+        {
+            return FakeAdminEndpoint.Json(HttpStatusCode.OK, Roster());
+        }
 
         if (path == AdminEndpointRoutes.ContactsPath)
         {

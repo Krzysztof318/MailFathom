@@ -305,7 +305,8 @@ server's entry in the editor's MCP view for Visual Studio Code and for Cursor, t
 two cloud clients.
 
 Beside them are the six contact tools — `list_contacts`, `get_contact`, `create_contact`, `update_contact`,
-`delete_contact`, and `promote_contact` — over MailFathom's own contact book. Four of them change local state, and two
+`delete_contact`, and `promote_contact` — over the contact books your user reads: their own, and the collected book
+of each mail account they are assigned. Four of them change local state, and two
 of those four advertise themselves as destructive, which is what makes a client ask before calling them:
 `delete_contact` erases a person, and `update_contact` replaces a whole record, so anything the caller left out of it is
 dropped. They reach no mail server and touch no mail.

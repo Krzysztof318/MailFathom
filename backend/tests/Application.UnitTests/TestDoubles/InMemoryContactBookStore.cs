@@ -5,24 +5,26 @@
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
 
-/// <summary>Keeps the contact books in memory with the one rule the real store enforces in the database.</summary>
+/// <summary>Keeps the contact books in memory with the two rules the real store enforces in the database.</summary>
 /// <remarks>
-/// It is one class behind both ports because it is one book: a test arranging what the directory answers and then
-/// asserting what the store kept would otherwise be arranging two halves that could disagree. The rule reproduced is
-/// that one address belongs to one contact <em>within one user's book</em>, which is what every outcome the book
-/// publishes turns on and is exactly what the unique index over the user and the address holds; the session is
-/// accepted and unused, because what it guarantees is a transaction and there is none here.
+/// It is one class behind both ports because it is one set of books: a test arranging what the directory answers and
+/// then asserting what the store kept would otherwise be arranging two halves that could disagree. The first rule
+/// reproduced is that one address belongs to one contact <em>within one book</em>, which is what the unique index over
+/// the book holder and the address holds; the second is that a record is hidden when a book earlier in the scope's
+/// order holds one of its addresses, which is what makes a user's own contact win over one their mailbox collected. The
+/// session is accepted and unused, because what it guarantees is a transaction and there is none here.
 /// </remarks>
 /// <remarks>
 /// The books are held in one dictionary keyed on the contact's identity alone, because that is the primary key
-/// <c>ContactConfiguration</c> declares: <c>(Id, UserId)</c> is only an alternate key, so that an address row's
-/// foreign key can carry the user. Keying this double on the pair would let a test arrange one identity in two books
+/// <c>ContactConfiguration</c> declares: <c>(Id, BookHolderId)</c> is only an alternate key, so that an address row's
+/// foreign key can carry the book. Keying this double on the pair would let a test arrange one identity in two books
 /// and pass, where PostgreSQL would refuse the second row.
 /// </remarks>
 internal sealed class InMemoryContactBookStore : IContactStore, IContactDirectory
@@ -43,28 +45,49 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
     /// </remarks>
     internal int BatchedLookupCount { get; private set; }
 
-    /// <summary>Puts a contact into the deployment user's book without going through a write, for arranging what was already held.</summary>
+    /// <summary>Puts a contact into the deployment user's own book without going through a write, for arranging what was already held.</summary>
     internal void Hold(Contact contact) => this.Hold(SyntheticMailUser.Deployment, contact);
 
-    /// <summary>Puts a contact into one user's book without going through a write.</summary>
-    internal void Hold(MailUserId user, Contact contact) => this.heldById[contact.Id] = new HeldContact(user, contact);
+    /// <summary>Puts a contact into one user's own book without going through a write.</summary>
+    internal void Hold(MailUserId user, Contact contact) => this.Hold(ContactBookHolder.Of(user), contact);
 
-    /// <summary>Gets every contact one user's book holds, for a test asserting that a book is one person's.</summary>
-    internal IReadOnlyCollection<Contact> ContactsOf(MailUserId user) => [.. this.BookOf(user)];
+    /// <summary>Puts a contact into one mail account's collected book without going through a write.</summary>
+    internal void Hold(MailAccountId account, Contact contact) => this.Hold(ContactBookHolder.Of(account), contact);
+
+    /// <summary>Puts a contact into one named book without going through a write.</summary>
+    internal void Hold(ContactBookHolder holder, Contact contact) =>
+        this.heldById[contact.Id] = new HeldContact(holder, contact);
+
+    /// <summary>Gets every contact one user's own book holds, for a test asserting that a book is one person's.</summary>
+    internal IReadOnlyCollection<Contact> ContactsOf(MailUserId user) => [.. this.BookOf(ContactBookHolder.Of(user))];
+
+    /// <summary>Gets every contact one account's collected book holds, for a test asserting that a book is one mailbox's.</summary>
+    internal IReadOnlyCollection<Contact> ContactsOf(MailAccountId account) =>
+        [.. this.BookOf(ContactBookHolder.Of(account))];
 
     /// <inheritdoc />
     public Task AddAsync(
         IPersistenceSession session,
-        MailUserId user,
+        ContactBookHolder holder,
         Contact contact,
         CancellationToken cancellationToken)
     {
-        if (this.HolderOf(user, contact) is { } holder)
+        ArgumentNullException.ThrowIfNull(holder);
+        ArgumentNullException.ThrowIfNull(contact);
+
+        if (contact.Origin != holder.Origin)
         {
-            throw new InvalidOperationException($"The address is already held by contact {holder}.");
+            throw new ArgumentException(
+                $"A {holder.Origin} book cannot hold a {contact.Origin} contact.",
+                nameof(contact));
         }
 
-        this.heldById[contact.Id] = new HeldContact(user, contact);
+        if (this.HolderOf(holder, contact) is { } held)
+        {
+            throw new InvalidOperationException($"The address is already held by contact {held}.");
+        }
+
+        this.heldById[contact.Id] = new HeldContact(holder, contact);
 
         return Task.CompletedTask;
     }
@@ -72,16 +95,19 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
     /// <inheritdoc />
     public Task<bool> ReplaceAsync(
         IPersistenceSession session,
-        MailUserId user,
+        ContactBookHolder holder,
         Contact contact,
         CancellationToken cancellationToken)
     {
-        if (this.HeldIn(user, contact.Id) is null)
+        ArgumentNullException.ThrowIfNull(holder);
+        ArgumentNullException.ThrowIfNull(contact);
+
+        if (this.HeldIn(holder, contact.Id) is null)
         {
             return Task.FromResult(false);
         }
 
-        this.heldById[contact.Id] = new HeldContact(user, contact);
+        this.heldById[contact.Id] = new HeldContact(holder, contact);
 
         return Task.FromResult(true);
     }
@@ -89,11 +115,13 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
     /// <inheritdoc />
     public Task<ContactErasure> EraseAsync(
         IPersistenceSession session,
-        MailUserId user,
+        ContactBookScope scope,
         ContactId contactId,
         CancellationToken cancellationToken)
     {
-        if (this.HeldIn(user, contactId) is not { } held)
+        ArgumentNullException.ThrowIfNull(scope);
+
+        if (this.HeldInAnyOf(scope, contactId) is not { } held)
         {
             return Task.FromResult(new ContactErasure(contactId, WasHeld: false, AddressesErased: 0));
         }
@@ -106,12 +134,10 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
     /// <inheritdoc />
     public Task<CollectedContactErasure> EraseCollectedAsync(
         IPersistenceSession session,
-        MailUserId user,
+        MailAccountId account,
         CancellationToken cancellationToken)
     {
-        var collected = this.BookOf(user)
-            .Where(contact => contact.Origin == ContactOrigin.Collected)
-            .ToArray();
+        var collected = this.BookOf(ContactBookHolder.Of(account)).ToArray();
 
         foreach (var contact in collected)
         {
@@ -124,19 +150,19 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
     }
 
     /// <inheritdoc />
-    public Task<Contact?> FindAsync(MailUserId user, ContactId contactId, CancellationToken cancellationToken) =>
-        Task.FromResult(this.HeldIn(user, contactId));
+    public Task<Contact?> FindAsync(ContactBookScope scope, ContactId contactId, CancellationToken cancellationToken) =>
+        Task.FromResult(this.VisibleIn(scope).FirstOrDefault(contact => contact.Id == contactId));
 
     /// <inheritdoc />
     public Task<Contact?> FindByAddressAsync(
-        MailUserId user,
+        ContactBookScope scope,
         EmailAddress address,
         CancellationToken cancellationToken) =>
-        Task.FromResult(this.BookOf(user).FirstOrDefault(contact => contact.Holds(address)));
+        Task.FromResult(this.VisibleIn(scope).FirstOrDefault(contact => contact.Holds(address)));
 
     /// <inheritdoc />
     public Task<IReadOnlyDictionary<ContactId, Contact>> FindAllAsync(
-        MailUserId user,
+        ContactBookScope scope,
         IReadOnlyCollection<ContactId> contactIds,
         CancellationToken cancellationToken)
     {
@@ -148,17 +174,18 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
 
         this.BatchedLookupCount++;
 
-        IReadOnlyDictionary<ContactId, Contact> held = contactIds
-            .Distinct()
-            .Where(contactId => this.HeldIn(user, contactId) is not null)
-            .ToDictionary(contactId => contactId, contactId => this.HeldIn(user, contactId)!);
+        var sought = contactIds.ToHashSet();
+
+        IReadOnlyDictionary<ContactId, Contact> held = this.VisibleIn(scope)
+            .Where(contact => sought.Contains(contact.Id))
+            .ToDictionary(contact => contact.Id);
 
         return Task.FromResult(held);
     }
 
     /// <inheritdoc />
     public Task<IReadOnlyDictionary<ContactDisplayName, ContactMatch>> MatchDisplayNamesAsync(
-        MailUserId user,
+        ContactBookScope scope,
         IReadOnlyCollection<ContactDisplayName> displayNames,
         CancellationToken cancellationToken)
     {
@@ -170,16 +197,18 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
 
         this.BatchedLookupCount++;
 
+        var visible = this.VisibleIn(scope).ToArray();
+
         IReadOnlyDictionary<ContactDisplayName, ContactMatch> matches = displayNames
             .Distinct()
-            .ToDictionary(displayName => displayName, displayName => this.MatchOf(user, displayName));
+            .ToDictionary(displayName => displayName, displayName => MatchOf(visible, displayName));
 
         return Task.FromResult(matches);
     }
 
     /// <inheritdoc />
     public Task<IReadOnlyDictionary<EmailAddress, ContactId>> FindHoldersOfAsync(
-        MailUserId user,
+        ContactBookHolder holder,
         IReadOnlyCollection<EmailAddress> addresses,
         CancellationToken cancellationToken)
     {
@@ -191,23 +220,48 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
 
         this.BatchedLookupCount++;
 
+        var book = this.BookOf(holder).ToArray();
+
         IReadOnlyDictionary<EmailAddress, ContactId> holders = addresses
-            .Where(address => this.BookOf(user).Any(contact => contact.Holds(address)))
             .Distinct()
+            .Where(address => book.Any(contact => contact.Holds(address)))
             .ToDictionary(
                 address => address,
-                address => this.BookOf(user).First(contact => contact.Holds(address)).Id);
+                address => book.First(contact => contact.Holds(address)).Id);
 
         return Task.FromResult(holders);
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlySet<EmailAddress>> FindHeldAddressesAsync(
+        ContactBookScope scope,
+        IReadOnlyCollection<EmailAddress> addresses,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(addresses);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            addresses.Count,
+            Contact.MaximumAddressCount,
+            nameof(addresses));
+
+        this.BatchedLookupCount++;
+
+        var visible = this.VisibleIn(scope).ToArray();
+
+        IReadOnlySet<EmailAddress> held = addresses
+            .Where(address => visible.Any(contact => contact.Holds(address)))
+            .ToHashSet();
+
+        return Task.FromResult(held);
+    }
+
+    /// <inheritdoc />
     public Task<ContactPage> ReadPageAsync(
-        MailUserId user,
+        ContactBookScope scope,
         ContactQuery query,
         CancellationToken cancellationToken)
     {
-        var ordered = this.BookOf(user)
+        var ordered = this.VisibleIn(scope)
             .Where(contact => query.Origin is not { } origin || contact.Origin == origin)
             .OrderBy(contact => contact.DisplayName.SortKey, StringComparer.Ordinal)
             .ThenBy(contact => contact.Id.Value)
@@ -231,23 +285,10 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
         return byName > 0 || (byName == 0 && contact.Id.Value > cursor.ContactId.Value);
     }
 
-    /// <summary>Reads one user's book, which is the whole of what any port method here may see.</summary>
-    private IEnumerable<Contact> BookOf(MailUserId user) =>
-        this.heldById.Values
-            .Where(held => held.User == user)
-            .Select(held => held.Contact);
-
-    /// <summary>Reads one contact of one book, answering with nothing where the identity is filed under another user.</summary>
-    private Contact? HeldIn(MailUserId user, ContactId contactId) =>
-        this.heldById.TryGetValue(contactId, out var held) && held.User == user ? held.Contact : null;
-
-    /// <summary>One person, and the book they are filed in.</summary>
-    private sealed record HeldContact(MailUserId User, Contact Contact);
-
-    /// <summary>States who one name resolves to in one book, on the comparison form the listing index is built on.</summary>
-    private ContactMatch MatchOf(MailUserId user, ContactDisplayName displayName)
+    /// <summary>States who one name resolves to among the records a scope shows, on the comparison form the listing index is built on.</summary>
+    private static ContactMatch MatchOf(IReadOnlyCollection<Contact> visible, ContactDisplayName displayName)
     {
-        var carrying = this.BookOf(user)
+        var carrying = visible
             .Where(contact => string.Equals(
                 contact.DisplayName.SortKey,
                 displayName.SortKey,
@@ -262,13 +303,56 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
         };
     }
 
-    /// <summary>Names the other contact in this user's book already holding one of this record's addresses, as the unique index would.</summary>
-    private ContactId? HolderOf(MailUserId user, Contact contact)
+    /// <summary>Reads one book, which is the whole of what a write may see.</summary>
+    private IEnumerable<Contact> BookOf(ContactBookHolder holder) =>
+        this.heldById.Values
+            .Where(held => string.Equals(held.Holder.Key, holder.Key, StringComparison.Ordinal))
+            .Select(held => held.Contact);
+
+    /// <summary>Reads the records a scope shows, hiding one whose address an earlier book of the scope already holds.</summary>
+    private IEnumerable<Contact> VisibleIn(ContactBookScope scope)
     {
-        var holders = this.BookOf(user)
+        ArgumentNullException.ThrowIfNull(scope);
+
+        var rankOfBook = scope.Keys
+            .Select((key, rank) => (Key: key, Rank: rank))
+            .ToDictionary(book => book.Key, book => book.Rank, StringComparer.Ordinal);
+
+        var inScope = this.heldById.Values
+            .Where(held => rankOfBook.ContainsKey(held.Holder.Key))
+            .ToArray();
+
+        return inScope
+            .Where(held => !inScope.Any(other =>
+                rankOfBook[other.Holder.Key] < rankOfBook[held.Holder.Key]
+                && other.Contact.Addresses.Any(held.Contact.Holds)))
+            .Select(held => held.Contact);
+    }
+
+    /// <summary>Reads one contact of one book, answering with nothing where the identity is filed under another.</summary>
+    private Contact? HeldIn(ContactBookHolder holder, ContactId contactId) =>
+        this.heldById.TryGetValue(contactId, out var held)
+        && string.Equals(held.Holder.Key, holder.Key, StringComparison.Ordinal)
+            ? held.Contact
+            : null;
+
+    /// <summary>Reads one contact of whichever book of a scope holds it, which is what an erasure reaches.</summary>
+    private Contact? HeldInAnyOf(ContactBookScope scope, ContactId contactId) =>
+        this.heldById.TryGetValue(contactId, out var held)
+        && scope.Keys.Contains(held.Holder.Key, StringComparer.Ordinal)
+            ? held.Contact
+            : null;
+
+    /// <summary>Names the other contact in this book already holding one of this record's addresses, as the unique index would.</summary>
+    private ContactId? HolderOf(ContactBookHolder holder, Contact contact)
+    {
+        var holders = this.BookOf(holder)
             .Where(held => held.Id != contact.Id && contact.Addresses.Any(held.Holds))
             .ToArray();
 
         return holders.Length == 0 ? null : holders[0].Id;
     }
+
+    /// <summary>One person, and the book they are filed in.</summary>
+    private sealed record HeldContact(ContactBookHolder Holder, Contact Contact);
 }

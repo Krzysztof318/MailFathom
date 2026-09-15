@@ -74,9 +74,9 @@ internal sealed class UpdateContactTool(ContactBookWriter contactBookWriter)
         "Amends one person in MailFathom's own contact book. State the whole record you want them to have — the name, "
         + "every address, which one is preferred, and the note — rather than only what changes: an address the new "
         + "record does not name is removed, and an omitted note clears the one held. Read the contact with get_contact "
-        + "first so nothing is dropped by accident. Writes to local state only, and touches no mail. A contact this "
-        + "deployment collected from arriving mail answers contactWasCollected: only the operator can take such a "
-        + "record on, through mfctl, and it can then be amended.")]
+        + "first so nothing is dropped by accident. Writes to local state only, and touches no mail. A contact a mail "
+        + "account collected from arriving mail answers contactWasCollected: that record is the mailbox's and the "
+        + "account's other users read it, so take your own copy on with promote_contact and amend the copy.")]
     public async Task<ContactWriteToolResult> UpdateContactAsync(
         [Description("The contactId of the person to amend, as a listing or an earlier write returned it.")]
         string contactId,

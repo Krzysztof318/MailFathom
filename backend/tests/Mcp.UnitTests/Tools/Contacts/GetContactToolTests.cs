@@ -3,8 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Failures;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Mcp.Tools.Contacts;
@@ -25,7 +25,7 @@ public sealed class GetContactToolTests
         var contact = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test");
         var book = new StubContactBook();
         book.Directory
-            .FindByAddressAsync(Arg.Any<MailUserId>(), Arg.Any<EmailAddress>(), Arg.Any<CancellationToken>())
+            .FindByAddressAsync(Arg.Any<ContactBookScope>(), Arg.Any<EmailAddress>(), Arg.Any<CancellationToken>())
             .Returns(contact);
 
         var tool = new GetContactTool(book.Reader);
@@ -38,7 +38,7 @@ public sealed class GetContactToolTests
         // Assert
         Assert.Equal(contact.Id.ToString(), result.Contact?.ContactId);
         await book.Directory.DidNotReceiveWithAnyArgs()
-            .FindAsync(default, default, TestContext.Current.CancellationToken);
+            .FindAsync(default!, default!, TestContext.Current.CancellationToken);
     }
 
     /// <summary>The identifier form is what a caller reaches for once a listing or a write has handed it one.</summary>
@@ -48,7 +48,7 @@ public sealed class GetContactToolTests
         // Arrange
         var contact = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test");
         var book = new StubContactBook();
-        book.Directory.FindAsync(Arg.Any<MailUserId>(), contact.Id, Arg.Any<CancellationToken>()).Returns(contact);
+        book.Directory.FindAsync(Arg.Any<ContactBookScope>(), contact.Id, Arg.Any<CancellationToken>()).Returns(contact);
 
         var tool = new GetContactTool(book.Reader);
 
@@ -60,7 +60,7 @@ public sealed class GetContactToolTests
         // Assert
         Assert.Equal("Anna Kowalska", result.Contact?.DisplayName);
         await book.Directory.DidNotReceiveWithAnyArgs()
-            .FindByAddressAsync(default, default, TestContext.Current.CancellationToken);
+            .FindByAddressAsync(default!, default!, TestContext.Current.CancellationToken);
     }
 
     /// <summary>Every spelling a UUID parse accepts names the same person, which is what the length ceiling has to admit.</summary>
@@ -76,7 +76,7 @@ public sealed class GetContactToolTests
         // Arrange
         var contact = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test");
         var book = new StubContactBook();
-        book.Directory.FindAsync(Arg.Any<MailUserId>(), contact.Id, Arg.Any<CancellationToken>()).Returns(contact);
+        book.Directory.FindAsync(Arg.Any<ContactBookScope>(), contact.Id, Arg.Any<CancellationToken>()).Returns(contact);
 
         var tool = new GetContactTool(book.Reader);
 
@@ -137,7 +137,7 @@ public sealed class GetContactToolTests
             tool.GetContactAsync(contactId, cancellationToken: TestContext.Current.CancellationToken));
 
         await book.Directory.DidNotReceiveWithAnyArgs()
-            .FindAsync(default, default, TestContext.Current.CancellationToken);
+            .FindAsync(default!, default!, TestContext.Current.CancellationToken);
     }
 
     /// <summary>Text that is no address the book could hold is refused the same way, and names nothing about the text.</summary>
@@ -179,7 +179,7 @@ public sealed class GetContactToolTests
             cancellationToken: TestContext.Current.CancellationToken));
 
         await book.Directory.DidNotReceiveWithAnyArgs()
-            .FindByAddressAsync(default, default, TestContext.Current.CancellationToken);
+            .FindByAddressAsync(default!, default!, TestContext.Current.CancellationToken);
     }
 
     /// <summary>Casing is not part of an address's identity, so the lookup uses the comparison form the book indexes on.</summary>
@@ -190,7 +190,7 @@ public sealed class GetContactToolTests
         var contact = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test");
         var book = new StubContactBook();
         book.Directory
-            .FindByAddressAsync(Arg.Any<MailUserId>(), StubContactBook.Address("anna@example.test"), Arg.Any<CancellationToken>())
+            .FindByAddressAsync(Arg.Any<ContactBookScope>(), StubContactBook.Address("anna@example.test"), Arg.Any<CancellationToken>())
             .Returns(contact);
 
         var tool = new GetContactTool(book.Reader);
@@ -220,7 +220,7 @@ public sealed class GetContactToolTests
             StubContactBook.Now);
 
         var book = new StubContactBook();
-        book.Directory.FindAsync(Arg.Any<MailUserId>(), contact.Id, Arg.Any<CancellationToken>()).Returns(contact);
+        book.Directory.FindAsync(Arg.Any<ContactBookScope>(), contact.Id, Arg.Any<CancellationToken>()).Returns(contact);
 
         var tool = new GetContactTool(book.Reader);
 

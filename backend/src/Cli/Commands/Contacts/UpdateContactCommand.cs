@@ -4,6 +4,7 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Administration.Contacts;
+using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
@@ -15,8 +16,9 @@ namespace MailFathom.Cli.Commands.Contacts;
 /// invocation correct a name without restating every address.
 /// </para>
 /// <para>
-/// A collected contact is refused here rather than amended, because it is a record the deployment wrote from arriving
-/// mail. <c>contact promote</c> is the act that makes it the user's, and the refusal says so.
+/// A collected contact is not amended here, because it belongs to the mail account it arrived on and every user
+/// assigned that account reads it. <c>contact promote</c> writes this user's own copy of it, and that copy is what this
+/// command then corrects.
 /// </para>
 /// </remarks>
 internal static class UpdateContactCommand
@@ -30,6 +32,7 @@ internal static class UpdateContactCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
+        var userOption = UserOptions.User();
         var identityOption = ContactOptions.Identity();
 
         Option<string?> nameOption = new("--name")
@@ -59,8 +62,9 @@ internal static class UpdateContactCommand
             Description = "Hold no note about the person afterwards.",
         };
 
-        Command command = new("update", "Correct what the deployment's book holds about one person.")
+        Command command = new("update", "Correct what one user's own book holds about one person.")
         {
+            userOption,
             identityOption,
             nameOption,
             addressOption,
@@ -72,6 +76,7 @@ internal static class UpdateContactCommand
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
+            result.GetValue(userOption),
             result.GetValue(identityOption),
             new ContactCorrection(
                 result.GetValue(nameOption),
@@ -87,6 +92,7 @@ internal static class UpdateContactCommand
 
     private static Task<int> RunAsync(
         CliContext context,
+        Guid? requestedUser,
         Guid contactId,
         ContactCorrection correction,
         string? requestedDeployment,
@@ -97,6 +103,7 @@ internal static class UpdateContactCommand
         return ContactRecordEdit.AmendAsync(
             context,
             contactId,
+            requestedUser,
             requestedDeployment,
             correction.ApplyTo,
             "Corrected",

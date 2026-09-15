@@ -27,6 +27,9 @@ public sealed class MailContactCollectorTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 18, 9, 0, 0, TimeSpan.Zero);
 
+    /// <summary>The account every run here is opened for, whose book is therefore the one book collection touches.</summary>
+    private static readonly MailAccountId CollectingAccount = MailAccountId.Create("primary");
+
     /// <summary>An instance nobody switched collection on for never accumulates a record of who writes to its user.</summary>
     [Fact]
     public async Task CollectFromAsync_CollectionSwitchedOff_WritesNothingAndReadsNothing()
@@ -227,9 +230,51 @@ public sealed class MailContactCollectorTests
         Assert.Equal([ContactCollectionOutcome.NotCorrespondence], telemetry.Outcomes);
     }
 
-    /// <summary>The refusal to touch what a user wrote down is the rule the whole origin distinction exists for.</summary>
+    /// <summary>An address the account's own book already holds costs one question and no write.</summary>
+    /// <remarks>
+    /// The one book collection reads is the one it writes, so this is where a second sighting of a correspondent stops.
+    /// The record itself is never read: what a collected record says about somebody is what the message that first
+    /// produced it said, and rewriting it on every later message would make the book a log of the last envelope.
+    /// </remarks>
     [Fact]
-    public async Task CollectFromAsync_AnAddressAnAssertedContactAlreadyHolds_LeavesThatContactExactlyAsItWas()
+    public async Task CollectFromAsync_AnAddressTheAccountsOwnBookAlreadyHolds_LeavesThatRecordExactlyAsItWas()
+    {
+        // Arrange
+        var book = new InMemoryContactBookStore();
+        var collected = ContactOf("Anna Kowalska", "anna@example.test", ContactOrigin.Collected);
+
+        book.Hold(CollectingAccount, collected);
+
+        var telemetry = new RecordingContactCollectionTelemetry();
+        var collector = CollectorOver(
+            book,
+            SettingsCollecting(minimumMessages: 1),
+            StubAuthoredMailTally.NobodyHasWritten,
+            telemetry);
+
+        // Act
+        await collector.CollectFromAsync(
+            MessageFrom("A. Kowalska (work)", "Anna@Example.test"),
+            RunOver(collector, folderRole: null),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var held = Assert.Single(book.ContactsOf(CollectingAccount));
+        Assert.Equal(collected.Id, held.Id);
+        Assert.Equal("Anna Kowalska", held.DisplayName.Value);
+        Assert.Equal([ContactCollectionOutcome.AlreadyHeld], telemetry.Outcomes);
+    }
+
+    /// <summary>What a user wrote down is in another book, and collection neither reads it nor is stopped by it.</summary>
+    /// <remarks>
+    /// The two books answer for one address on purpose: the mailbox's record belongs to every user assigned it, so a
+    /// mailbox one person shares with another cannot stop collecting because that person happened to write the sender
+    /// down. The precedence a read applies is what hides the collected record from them and from nobody else, and it is
+    /// asserted where the reading is. What this states is the half collection owes it — that the user's own record is
+    /// neither read, nor amended, nor taken as an answer.
+    /// </remarks>
+    [Fact]
+    public async Task CollectFromAsync_AnAddressAUsersOwnContactHolds_CollectsItIntoTheAccountsBookAllTheSame()
     {
         // Arrange
         var book = new InMemoryContactBookStore();
@@ -259,12 +304,15 @@ public sealed class MailContactCollectorTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        var held = Assert.Single(book.Contacts);
-        Assert.Equal(asserted.Id, held.Id);
-        Assert.Equal(ContactOrigin.Asserted, held.Origin);
-        Assert.Equal("Anna Kowalska", held.DisplayName.Value);
-        Assert.Equal("Met at the conference.", held.Note?.Value);
-        Assert.Equal([ContactCollectionOutcome.AlreadyHeld], telemetry.Outcomes);
+        var collected = Assert.Single(book.ContactsOf(CollectingAccount));
+        Assert.Equal("A. Kowalska (work)", collected.DisplayName.Value);
+        Assert.Equal(ContactOrigin.Collected, collected.Origin);
+        Assert.Equal([ContactCollectionOutcome.Recorded], telemetry.Outcomes);
+
+        var untouched = Assert.Single(book.ContactsOf(SyntheticMailUser.Deployment));
+        Assert.Equal(asserted.Id, untouched.Id);
+        Assert.Equal("Anna Kowalska", untouched.DisplayName.Value);
+        Assert.Equal("Met at the conference.", untouched.Note?.Value);
     }
 
     /// <summary>The user's list and the structural rule are both held against the address before anything is read.</summary>
@@ -415,7 +463,6 @@ public sealed class MailContactCollectorTests
             new ContactBook(
                 book,
                 book,
-                ContactBookOwnerships.ForTheServedUser(),
                 new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), timeProvider),
                 timeProvider,
                 new AccessAuthorization(principals)),
@@ -425,7 +472,17 @@ public sealed class MailContactCollectorTests
     }
 
     private static ContactCollectionRun RunOver(MailContactCollector collector, MailFolderSpecialUse? folderRole) =>
-        collector.OpenRun(MailAccountId.Create("primary"), folderRole);
+        collector.OpenRun(CollectingAccount, folderRole);
+
+    private static Contact ContactOf(string displayName, string address, ContactOrigin origin) => Contact.Create(
+        ContactId.Create(Guid.CreateVersion7(Now)),
+        ContactDisplayName.Create(displayName),
+        [AddressOf(address, displayName: null)],
+        AddressOf(address, displayName: null),
+        note: null,
+        origin,
+        Now,
+        Now);
 
     private static ContactCollectionSettings SettingsCollecting(
         int minimumMessages,

@@ -329,7 +329,7 @@ mapped OAuth subject, a client's public key, and [a user's own username and pass
 
 **A credential reaches the whole surface until its provisioning narrows it.** The command above named no `--permission`,
 so the key it minted may do everything the MCP surface publishes — read the local mailbox copy, ask questions of it, and
-read, record, amend, and erase the deployment's own contact book. That is deliberate: nothing has to be granted before a
+read, record, amend, and erase the contact books its user reads. That is deliberate: nothing has to be granted before a
 first deployment works. Naming `--permission` once per name states a narrower grant, and `mfctl credential list` reads
 back what each credential holds —
 [what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do) has the names and the rules.
@@ -377,7 +377,8 @@ read-only, and `cancel_outgoing_email` stops one that has not left yet, advertis
 the sending tools — as confined to this process, since stopping a message reaches nobody. Then `save_draft`,
 `update_draft`, and `delete_draft`, which write a message into your own Drafts folder and send nothing, and
 `send_draft`, which sends what one of them holds and announces itself exactly as `send_email` does. Then the six contact
-tools over the deployment's own contact book, of which four change state
+tools over the contact books its user reads — their own, and the collected book of each mail account they are
+assigned — of which four change state
 and two —
 `update_contact`, which replaces a whole record, and `delete_contact`, which erases one — announce themselves as
 destructive too. `ask_mail`

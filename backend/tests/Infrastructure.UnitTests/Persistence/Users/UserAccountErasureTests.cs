@@ -24,6 +24,12 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Users;
 /// cascades from the mail it is about. Both are discharged by a statement already in the list, so naming them would be
 /// asking the database twice for rows it has already taken.
 /// </para>
+/// <para>
+/// One absence is worth the same reading. <c>contacts</c> holds two books and is in neither list, because each half
+/// keys onto its own holder: a record somebody wrote down cascades from the user row, and a record a mailbox collected
+/// cascades from <c>mailbox_accounts</c> beside that account's folders, threads, and jobs. <c>contact_addresses</c> is
+/// absent for the second reason above, cascading from whichever half holds the person.
+/// </para>
 /// </remarks>
 public sealed class UserAccountErasureTests
 {

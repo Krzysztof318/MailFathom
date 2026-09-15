@@ -73,14 +73,14 @@ question that names the identifier alone has no single answer, and whoever holds
 decision and grants nothing — a worker was already admitted by name — and it is deliberately not a way for a caller to
 act for somebody else, because nothing published to a caller consults it.
 
-**Not everything owned is caller-scoped, and the difference is a second reading rather than a second rule.** The contact
-book belongs to a user exactly as mail does, and it is reached by the administrator and by MailFathom's own
-synchronization as well as by a caller — so requiring a user there would refuse the two principals that legitimately
-maintain it. `ActingUser` is the reading those paths take: it answers with the user the principal acts for, or with
-nothing when the principal acts for none, and one resolution then falls back to the user this deployment serves. It
-refuses work reached under no principal exactly as `RequireUser` does, because that is the case where nothing said what
-admitted the work at all. `ContactBookOwnership` is the only reader, and [Contacts § A book belongs to one
-user](../features/contacts.md#a-book-belongs-to-one-user) is where what it decides is described.
+**The contact book is two books, and which of them a principal reaches follows from the user it acts for.** A caller
+reads their own book beside the collected book of each mail account assigned to them, so `ContactBookOwnership` resolves
+the caller's user with `RequireUser` and composes the scope from the assignment relation — a principal acting for nobody
+reaches no book rather than falling back to whoever the deployment serves. The two principals that legitimately maintain
+a book without being a caller are outside that reading rather than exceptions to it: an administrative route names the
+user, or the mail account, it acts for, and MailFathom's own synchronization writes the collected book of the account it
+is synchronizing and reads no user at all. [Contacts § Two books, and a read of
+both](../features/contacts.md#two-books-and-a-read-of-both) is where what that decides is described.
 
 The signed capability is what `GET /mcp/attachments/{capability}` runs under. That route authenticates nobody by design: the
 URL carries a ticket verified against the deployment's key ring, and what it names is one attachment of one email rather
@@ -147,11 +147,10 @@ surfaces — or the surfaces being off.
 **The administrative surface is deliberately outside that reading.** An administrator acts for the deployment rather
 than for a person, and every route there that is about one user names the user it is about, so a roster of several
 leaves nothing unanswered. That is also what makes recording a second user reachable at all: the surface an operator
-would use to correct the other two cannot be the surface the refusal closes. What it costs is the handful of
-administrative reads that still resolve the sole user — the contact book among them — and those have no answer on a
-roster of several; each is a separate act to scope, and no route silently picks one user out of several. Which mail
-accounts a caller owns is not one of them: it is resolved from the user each served account carries, so every mailbox
-read answers a caller with their own half of a deployment serving several.
+would use to correct the other two cannot be the surface the refusal closes. No administrative route resolves the sole user any more — the contact
+book was the last of them, and each of its routes now names the user, or the mail account, whose book it reaches. Which
+mail accounts a caller owns was never one of them either: it is resolved from the user each served account carries, so
+every mailbox read answers a caller with their own half of a deployment serving several.
 [The health endpoints](../operations/health-endpoints.md#the-three-probes) record what each refusal means to an
 operator.
 

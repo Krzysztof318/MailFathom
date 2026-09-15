@@ -5,6 +5,7 @@
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence;
@@ -39,6 +40,13 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
 {
     /// <summary>The instant a directly constructed contact is stamped with, fixed so no test here reads a clock.</summary>
     private static readonly DateTimeOffset RecordedAt = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
+    /// The mail account whose collected book this class writes into. A collected record belongs to the mailbox it
+    /// arrived on rather than to a user, so everything here that is collected is filed under this one and read through
+    /// a scope that names it beside the served user's own book.
+    /// </summary>
+    private static readonly MailAccountId CollectingAccount = MailAccountId.Create("book-contacts-account");
 
     /// <summary>The names the walk lists, written out of order so the order it reads them in is the book's rather than the insertion's.</summary>
     /// <remarks>
@@ -82,12 +90,12 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
 
         var export = await AsOperatorAsync(
             services,
-            (book, token) => book.ExportAsync(contactId, token),
+            (book, token) => book.ExportAsync(BooksOf(services), contactId, token),
             cancellationToken);
 
         var erasure = await AsOperatorAsync(
             services,
-            (book, token) => book.EraseAsync(contactId, token),
+            (book, token) => book.EraseAsync(BooksOf(services), contactId, token),
             cancellationToken);
 
         var addressRowsLeft = await CountAddressRowsAsync(services, contactId, cancellationToken);
@@ -112,48 +120,55 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         Assert.Equal(ContactWriteOutcome.Written, reclaimed.Outcome);
     }
 
-    /// <summary>Promotion changes a column an amendment never touches, so only a re-read from the database proves it landed.</summary>
+    /// <summary>Promotion writes a second record into a second book, so only a re-read from the database proves what stands afterwards.</summary>
     /// <remarks>
-    /// The in-memory double a unit test writes through replaces the whole record, which would report a promotion as
-    /// written whatever the adapter copied onto the tracked row. What that cannot establish is the one thing this write
-    /// is for: that the origin column moved, and that asking again therefore says there is nothing left to do.
+    /// Two rows now hold one address, in two books, which is a state the unique index has to admit and the merged read
+    /// has to resolve — neither of which a substitute settles. What the re-read establishes is that the caller's own
+    /// copy is what the scope answers with, that the mailbox's record is still there for whoever else reads it, and
+    /// that the same address in two books breaks nothing.
     /// </remarks>
     [Fact]
-    public async Task PromoteAsync_ACollectedContact_WritesTheOriginAndAnsweredAgainSaysNothingIsLeftToDo()
+    public async Task PromoteAsync_ACollectedContact_WritesTheCallersOwnCopyAndLeavesTheMailboxesRecord()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
 
-        var recorded = await RecordAsync(
+        var collected = await CollectAsync(
             services,
             "Promotion Subject",
             ["anna@promotion.contacts.test"],
-            ContactOrigin.Collected,
             cancellationToken);
 
-        var contactId = recorded.Contact!.Id;
+        var collectedId = collected.Contact!.Id;
 
         // Act
         var promoted = await AsOperatorAsync(
             services,
-            (book, token) => book.PromoteAsync(contactId, ContactOrigin.Asserted, token),
+            (book, token) => book.PromoteAsync(BooksOf(services), collectedId, ContactOrigin.Asserted, token),
             cancellationToken);
+
+        var promotedId = promoted.Contact!.Id;
 
         var reread = await AsOperatorAsync(
             services,
-            (book, token) => book.ExportAsync(contactId, token),
+            (book, token) => book.ExportAsync(BooksOf(services), promotedId, token),
             cancellationToken);
 
         var again = await AsOperatorAsync(
             services,
-            (book, token) => book.PromoteAsync(contactId, ContactOrigin.Asserted, token),
+            (book, token) => book.PromoteAsync(BooksOf(services), promotedId, ContactOrigin.Asserted, token),
             cancellationToken);
+
+        var mailboxesRecordStillThere = await CountContactRowsAsync(services, collectedId, cancellationToken);
 
         // Assert
         Assert.Equal(ContactWriteOutcome.Written, promoted.Outcome);
+        Assert.NotEqual(collectedId, promotedId);
         Assert.Equal(ContactOrigin.Asserted, reread!.Contact.Origin);
+        Assert.Equal("Promotion Subject", reread.Contact.DisplayName.Value);
         Assert.Equal(ContactWriteOutcome.AlreadyAsserted, again.Outcome);
+        Assert.Equal(1, mailboxesRecordStillThere);
     }
 
     /// <summary>Two writers claiming one address both read nothing, so only the index closes that window — as a conflict.</summary>
@@ -181,12 +196,12 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
                     .BeginSessionAsync(token);
 
                 await losingScope.GetRequiredService<IContactStore>()
-                    .AddAsync(losingSession, services.ServedUser, losing, token);
+                    .AddAsync(losingSession, ContactBookHolder.Of(services.ServedUser), losing, token);
 
                 var committedFirst = await services.CommitAsync(
                     (winningScope, winningSession, winningToken) => winningScope
                         .GetRequiredService<IContactStore>()
-                        .AddAsync(winningSession, services.ServedUser, winning, winningToken),
+                        .AddAsync(winningSession, ContactBookHolder.Of(services.ServedUser), winning, winningToken),
                     token);
 
                 return (committedFirst, await losingSession.CommitAsync(token));
@@ -211,11 +226,10 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
 
         foreach (var (name, position) in WalkedNames.Select((name, position) => (name, position)))
         {
-            await RecordAsync(
+            await CollectAsync(
                 services,
                 name,
                 [$"walked-{position}@walk.contacts.test"],
-                ContactOrigin.Collected,
                 cancellationToken);
         }
 
@@ -380,6 +394,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         var amended = await AsOperatorAsync(
             services,
             (book, token) => book.AmendAsync(
+                BooksOf(services),
                 new ContactAmendment
                 {
                     ContactId = contactId,
@@ -402,7 +417,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
 
         var reread = await AsOperatorAsync(
             services,
-            (book, token) => book.ExportAsync(contactId, token),
+            (book, token) => book.ExportAsync(BooksOf(services), contactId, token),
             cancellationToken);
 
         // Assert
@@ -441,6 +456,37 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         return emailAddress;
     }
 
+    /// <summary>Names the books a read of this class's arrangement covers: the served user's own, and the one it collects into.</summary>
+    private static ContactBookScope BooksOf(OrchestratedMailFathomServices services) =>
+        ContactBookScope.Of(services.ServedUser, [CollectingAccount]);
+
+    /// <summary>Collects a person into this class's account book, as MailFathom's own work rather than as a caller.</summary>
+    /// <remarks>
+    /// Collection is the only writer of a collected record and admits the process identity alone, so this reaches the
+    /// book through <c>InScopeAsync</c> rather than through the operator's grant the acts above run under.
+    /// </remarks>
+    private static async Task<ContactWriteResult> CollectAsync(
+        OrchestratedMailFathomServices services,
+        string displayName,
+        IReadOnlyList<string> addresses,
+        CancellationToken cancellationToken)
+    {
+        await OrchestratedMailboxAccountRows.HoldAsync(services, [CollectingAccount], cancellationToken);
+
+        return await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<ContactBook>().CollectAsync(
+                CollectingAccount,
+                new NewContact
+                {
+                    DisplayName = ContactDisplayName.Create(displayName),
+                    Addresses = [.. addresses.Select(Address)],
+                    PreferredAddress = Address(addresses[0]),
+                    Origin = ContactOrigin.Collected,
+                },
+                token),
+            cancellationToken);
+    }
+
     private static Task<ContactWriteResult> RecordAsync(
         OrchestratedMailFathomServices services,
         string displayName,
@@ -449,6 +495,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         CancellationToken cancellationToken) => AsOperatorAsync(
             services,
             (book, token) => book.RecordAsync(
+                services.ServedUser,
                 new NewContact
                 {
                     DisplayName = ContactDisplayName.Create(displayName),
@@ -464,7 +511,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         string address,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IContactDirectory>().FindByAddressAsync(
-                services.ServedUser,
+                BooksOf(services),
                 Address(address),
                 token),
             cancellationToken);
@@ -475,7 +522,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         int pageSize,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IContactDirectory>().ReadPageAsync(
-                services.ServedUser,
+                BooksOf(services),
                 ContactQuery.Create(ContactOrigin.Collected, search: null, pageSize, cursor),
                 token),
             cancellationToken);
@@ -485,7 +532,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         IReadOnlyCollection<string> displayNames,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IContactDirectory>().MatchDisplayNamesAsync(
-                services.ServedUser,
+                BooksOf(services),
                 [.. displayNames.Select(ContactDisplayName.Create)],
                 token),
             cancellationToken);
@@ -495,7 +542,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         IReadOnlyCollection<ContactId> contactIds,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IContactDirectory>().FindAllAsync(
-                services.ServedUser,
+                BooksOf(services),
                 contactIds,
                 token),
             cancellationToken);
@@ -505,9 +552,21 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         string search,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IContactDirectory>().ReadPageAsync(
-                services.ServedUser,
+                BooksOf(services),
                 ContactQuery.Create(origin: null, ContactSearch.Create(search), pageSize: 20, cursor: null),
                 token),
+            cancellationToken);
+
+    /// <summary>Counts the contact rows one identity has, which is how a record left in another book is observed.</summary>
+    private static Task<int> CountContactRowsAsync(
+        OrchestratedMailFathomServices services,
+        ContactId contactId,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailFathomDbContext>()
+                .Contacts
+                .AsNoTracking()
+                .Where(contact => contact.Id == contactId.Value)
+                .CountAsync(token),
             cancellationToken);
 
     private static Task<int> CountAddressRowsAsync(

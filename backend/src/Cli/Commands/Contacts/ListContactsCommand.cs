@@ -4,6 +4,7 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
@@ -18,6 +19,12 @@ namespace MailFathom.Cli.Commands.Contacts;
 /// The order is the deployment's own — the name's comparison form, then the identity — which is total, so a walk serves
 /// every contact exactly once. The cursor a page prints is what continues it.
 /// </para>
+/// <para>
+/// A page is read over every book that user reads at once: their own, and the collected book of each mail account they
+/// are assigned. Where two of those hold one address the page serves it once, from the user's own book first and then
+/// from the accounts in the order of their identifiers — so a page may be shorter than the size asked for while the
+/// walk still has more to serve, and the cursor rather than the count is what says whether it does.
+/// </para>
 /// </remarks>
 internal static class ListContactsCommand
 {
@@ -30,18 +37,20 @@ internal static class ListContactsCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
+        var userOption = UserOptions.User();
 
         Option<string?> originOption = new("--origin")
         {
             Description =
-                "Narrow to contacts of one origin: Asserted for the people written down, Collected for the addresses the deployment picked up. Defaults to the whole book.",
+                "Narrow to contacts of one origin: Asserted for the people written down, Collected for the addresses the mailboxes picked up. Defaults to every book the user reads.",
         };
 
         var pageSizeOption = CliOptions.PageSize("contacts");
         var cursorOption = CliOptions.Cursor();
 
-        Command command = new("list", "Read one page of the deployment's contact book.")
+        Command command = new("list", "Read one page of the books one user reads.")
         {
+            userOption,
             originOption,
             pageSizeOption,
             cursorOption,
@@ -50,6 +59,7 @@ internal static class ListContactsCommand
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
+            result.GetValue(userOption),
             result.GetValue(originOption),
             result.GetValue(pageSizeOption),
             result.GetValue(cursorOption),
@@ -61,6 +71,7 @@ internal static class ListContactsCommand
 
     private static async Task<int> RunAsync(
         CliContext context,
+        Guid? requestedUser,
         string? origin,
         int? pageSize,
         string? cursor,
@@ -70,8 +81,16 @@ internal static class ListContactsCommand
         var profile = await context.Deployment().ReachAsync(requestedDeployment, cancellationToken);
 
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
-        var page = await new AdminApiClient(transport, context.Console)
-            .ReadContactPageAsync(profile.Token, origin, pageSize, cursor, cancellationToken);
+        var deployment = new AdminApiClient(transport, context.Console);
+
+        var user = await UserOptions.ResolveUserAsync(deployment, profile.Token, requestedUser, cancellationToken);
+        var page = await deployment.ReadContactPageAsync(
+            profile.Token,
+            user,
+            origin,
+            pageSize,
+            cursor,
+            cancellationToken);
 
         if (page.Contacts is not { Count: > 0 } contacts)
         {
@@ -98,10 +117,10 @@ internal static class ListContactsCommand
     /// </remarks>
     private static string DescribeEmptyPage(string? origin, string? cursor) => (origin, cursor) switch
     {
-        (_, { Length: > 0 }) => "That cursor reached the end of the book, so there was nothing further to read.",
+        (_, { Length: > 0 }) => "That cursor reached the end of the books, so there was nothing further to read.",
         ({ Length: > 0 } narrowed, _) =>
-            $"The deployment's contact book holds no {narrowed} contacts. Nothing writes to the book on its own, so an instance nobody has written to holds none at all.",
+            $"The books that user reads hold no {narrowed} contacts. Nothing is written down unless somebody writes it, and nothing is collected unless an account they are assigned has collection switched on.",
         _ =>
-            "The deployment's contact book is empty. Nothing writes to it on its own, so it holds nobody until somebody is recorded in it.",
+            "The books that user reads are empty. They hold nobody until somebody is recorded in the user's own book, or until an account they are assigned collects an address out of mail.",
     };
 }

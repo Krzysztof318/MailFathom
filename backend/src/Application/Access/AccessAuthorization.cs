@@ -30,11 +30,10 @@ namespace MailFathom.Application.Access;
 /// and a grant however broad still reaches the mail of the one user the work was admitted for.
 /// </para>
 /// <para>
-/// Two members report instead of refusing, one per axis, for a boundary composing an answer per caller rather than
-/// performing an operation for one. Neither decides anything of its own: <see cref="Permits" /> answers exactly what
+/// One member reports instead of refusing, for a boundary composing an answer per caller rather than performing an
+/// operation for one. It decides nothing of its own: <see cref="Permits" /> answers exactly what
 /// <see cref="RequirePermission" /> would have refused, so the transport and the use case cannot come to disagree about
-/// what holding a permission means, and <see cref="ActingUser" /> answers what <see cref="RequireUser" /> would —
-/// with the user, or with nothing where the principal acts for none.
+/// what holding a permission means.
 /// </para>
 /// </remarks>
 public sealed class AccessAuthorization
@@ -67,25 +66,6 @@ public sealed class AccessAuthorization
     /// </para>
     /// </remarks>
     public string? PrincipalIdentity => this.principals.Current?.Identity;
-
-    /// <summary>Gets the user the work in hand is acting for, or <see langword="null" /> where it acts for nobody's mail.</summary>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work was reached under no principal, which is an entrypoint that never stated what admitted it rather than one acting for nobody.</exception>
-    /// <remarks>
-    /// <para>
-    /// This reports where <see cref="RequireUser" /> refuses, and the two are for different questions. A use case that
-    /// reads or writes one user's mail asks <see cref="RequireUser" />, because "acting for nobody" there has to be a
-    /// refusal rather than an unbounded read. What this is for is the record that belongs to a user and is reached by
-    /// principals that carry none — the deployment administrator, and this process's own identity — where which user it
-    /// is has an answer the deployment can state rather than one the principal carried.
-    /// </para>
-    /// <para>
-    /// Reaching for it is therefore a decision to be justified where it is made, and the caller states what it resolves
-    /// the absent user to. <see cref="Contacts.ContactBookOwnership" /> is the one such reader
-    /// today. Work reached under no principal at all is still refused, so an entrypoint that stated nothing cannot be
-    /// read as one acting for nobody.
-    /// </para>
-    /// </remarks>
-    public MailUserId? ActingUser => this.RequirePrincipal().User;
 
     /// <summary>Requires that an admitted caller holding one named capability is what reached this use case.</summary>
     /// <param name="permission">The capability the operation is published under.</param>

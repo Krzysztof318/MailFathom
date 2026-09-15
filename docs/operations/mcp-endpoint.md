@@ -812,8 +812,9 @@ The operational consequences are the ones that always applied to an unauthentica
   with it. `mailfathom.mail.flags.write` lets them mark, star, and relabel the user's mail on the real mail server
   through `set_mail_flags`, and the change converges out over the account's own write connection; nothing there sends,
   deletes, or moves mail, but a message somebody else marked read is a message the user never saw arrive.
-  `mailfathom.mail.contacts.write` lets them record, amend, and irreversibly erase the deployment's records about
-  identified third parties. `mailfathom.mail.send` is the third writing half and the one whose effect cannot be
+  `mailfathom.mail.contacts.write` lets them record, amend, and irreversibly erase the records about identified third
+  parties that the credential's user reads — their own book, and the collected book of each mail account assigned to
+  them, so an erasure there reaches a record every other user of a shared mailbox was reading. `mailfathom.mail.send` is the third writing half and the one whose effect cannot be
   recalled: through `send_email` it lets anyone who can reach the port send mail from the user's own address to
   anybody, and through `reply_to_email` and `forward_email` — which such an endpoint also grants the reading half those
   two need — it lets them answer the user's correspondents and pass the user's mail and its attachments on to

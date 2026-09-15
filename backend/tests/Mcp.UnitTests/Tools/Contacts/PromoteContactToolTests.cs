@@ -2,9 +2,9 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Failures;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Mcp.Tools.Contacts;
 using MailFathom.Mcp.UnitTests.TestDoubles;
@@ -16,19 +16,26 @@ namespace MailFathom.Mcp.UnitTests.Tools.Contacts;
 /// <summary>Covers the one crossing between the two halves of the book, and what each way it can end reads as.</summary>
 public sealed class PromoteContactToolTests
 {
-    /// <summary>A record the deployment collected becomes one the user asserted, and the answer says so and no more.</summary>
+    /// <summary>A record a mailbox collected becomes one the caller's own book holds, and the answer says so and no more.</summary>
     /// <remarks>
+    /// <para>
     /// The record is deliberately absent from a success. A caller reaches this tool with the writing grant alone, which
     /// implies no reading grant, and it named an identifier rather than a person — so publishing the promoted contact
     /// would hand over the whole of what <c>get_contact</c> serves to somebody never granted it.
+    /// </para>
+    /// <para>
+    /// What the write is, is the other half: a copy into the caller's own book rather than an origin changed in place,
+    /// because the collected record belongs to a mailbox that other users may read and taking somebody on is not an act
+    /// over their book.
+    /// </para>
     /// </remarks>
     [Fact]
-    public async Task PromoteContactAsync_AContactTheDeploymentCollected_AnswersThatItWasWrittenAndPublishesNoRecord()
+    public async Task PromoteContactAsync_AContactAMailboxCollected_WritesTheCallersOwnCopyAndPublishesNoRecord()
     {
         // Arrange
         var collected = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test", ContactOrigin.Collected);
         var book = new StubContactBook();
-        book.Directory.FindAsync(Arg.Any<MailUserId>(), collected.Id, Arg.Any<CancellationToken>()).Returns(collected);
+        book.Directory.FindAsync(Arg.Any<ContactBookScope>(), collected.Id, Arg.Any<CancellationToken>()).Returns(collected);
 
         var tool = new PromoteContactTool(book.Writer);
 
@@ -42,13 +49,20 @@ public sealed class PromoteContactToolTests
         Assert.Null(result.Contact);
 
         // The promotion is a required side effect rather than something the answer reports, now that the answer
-        // reports nothing about the person, so it is asserted where it actually happens.
-        await book.Store.Received(1).ReplaceAsync(
+        // reports nothing about the person, so it is asserted where it actually happens: a record of its own, in the
+        // caller's own book, leaving the mailbox's untouched.
+        await book.Store.Received(1).AddAsync(
             Arg.Any<IPersistenceSession>(),
-            Arg.Any<MailUserId>(),
+            book.Scope.OwnBook,
             Arg.Is<Contact>(promoted =>
-                promoted != null && promoted.Id == collected.Id && promoted.Origin == ContactOrigin.Asserted),
+                promoted != null
+                && promoted.Id != collected.Id
+                && promoted.Origin == ContactOrigin.Asserted
+                && promoted.DisplayName == collected.DisplayName),
             Arg.Any<CancellationToken>());
+
+        await book.Store.DidNotReceiveWithAnyArgs()
+            .ReplaceAsync(default!, default!, default!, TestContext.Current.CancellationToken);
     }
 
     /// <summary>Asking twice is asking once, so the second call answers with the state the first left the record in.</summary>
@@ -58,7 +72,7 @@ public sealed class PromoteContactToolTests
         // Arrange
         var asserted = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test");
         var book = new StubContactBook();
-        book.Directory.FindAsync(Arg.Any<MailUserId>(), asserted.Id, Arg.Any<CancellationToken>()).Returns(asserted);
+        book.Directory.FindAsync(Arg.Any<ContactBookScope>(), asserted.Id, Arg.Any<CancellationToken>()).Returns(asserted);
 
         var tool = new PromoteContactTool(book.Writer);
 
@@ -79,7 +93,7 @@ public sealed class PromoteContactToolTests
         // Arrange
         var book = new StubContactBook();
         book.Directory
-            .FindAsync(Arg.Any<MailUserId>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>())
+            .FindAsync(Arg.Any<ContactBookScope>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>())
             .Returns((Contact?)null);
 
         var tool = new PromoteContactTool(book.Writer);

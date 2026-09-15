@@ -21,21 +21,53 @@ Addressing a message by naming a contact](mail-delivery.md#addressing-a-message-
 becomes an address, which name refuses to, and what the record then keeps. Nothing about that writes the book: addressing
 somebody is not a fact about them, so no contact is created, amended, or promoted by being written to.
 
-## A book belongs to one user
+## Two books, and a read of both
 
-Every contact is written in one user's book and read out of it. The user is a column on the record rather than a
-question the surface reading it answers, so which book a caller reaches is settled where the mail beside it is settled —
-by whom the caller was admitted to act for — and no request of theirs can name another. A caller on a mail-serving
-surface reads the book of the user they act for; the deployment administrator and MailFathom's own work act for nobody
-and reach the book of the user this deployment serves, which is exactly one while mail accounts are declared in
-configuration. [Single-tenant multi-user ownership](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
-is the decision, and the day a user is named on a request rather than derived is the day that resolution changes and
-nothing else here does.
+**What a person wrote down belongs to them; what a mailbox picked up belongs to the mailbox.** Those are two books,
+with two holders:
 
-Two things follow, and both are the schema's rather than a predicate somebody remembered to write. Every read of the
-book leads with the user, down to the index a listing and an address lookup are served from. And erasing a user takes
-their book with them — the people they wrote down and every address row beneath — because `contacts` keys onto the user
-record and `contact_addresses` keys onto `contacts`, so the cascade reaches an address through the person holding it.
+| Book | Holder | What is in it |
+| --- | --- | --- |
+| A user's own | The user | Everything anybody wrote down for them — every asserted contact |
+| A mail account's collected | The mail account | Everything collection picked up out of the mail that arrived on that account — every collected contact |
+
+A contact record names exactly one of the two, the record's origin agrees with which it named, and the database refuses
+a row where the three disagree rather than leaving every reader to reason about it. So a collected record filed under a
+user, or an asserted one filed under a mailbox, is not a state this system has.
+
+The split is what a shared mailbox costs and what it buys. Two people assigned one account are two users and one
+mailbox: the account collects a correspondent **once**, both of them read that one record, and neither of them holds a
+copy the other's edit would have to chase. And when one of them leaves, what goes with them is the book they wrote —
+the mailbox's stays for whoever is still assigned it. [Single-tenant multi-user
+ownership](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
+is the decision the second half of that follows from.
+
+**A user reads both, as one book.** Every read a user makes — a listing, a lookup by address, a lookup by name, an MCP
+tool, addressing a message by naming a contact — covers their own book and the collected book of every mail account
+they are assigned. That set is resolved from who the caller was admitted to act for, exactly as the mail beside it is,
+and no request of theirs can name another user's.
+
+**The order between those books is fixed and stated, because two of them may hold one address.** It is the user's own
+book first, then the accounts by the ordinal order of their identifiers, and **a record is hidden when a book earlier in
+that order holds one of its addresses**. Two things follow. A contact the user wrote down hides a collected one carrying
+the same address — which is the point of writing somebody down: their name and their note are what the user sees, and it
+hides it for that user alone, because the other users of the mailbox never saw their record. And an address two of their
+accounts both collected is answered once, from the first of the two in that order — the same answer on every read, and
+the same answer for two users of one mailbox, because the order is the accounts' own rather than the order either user's
+record happened to declare them in. The database applies it in the query rather than a reader applying it afterwards, so
+a page never serves one person twice — which also means a page may come back shorter than the size asked for while the
+walk still has more to serve, and the cursor rather than the count is what says whether it does.
+
+**Which book an act writes is never the same question as which books it reads.** A caller's writes go into their own
+book: recording a person, amending one, promoting one. Collection writes into the book of the account it is
+synchronizing and into no other. Erasure is the exception and deliberately so — see [§ Erasing and exporting a
+person](#erasing-and-exporting-a-person).
+
+Each book keys onto its holder and is erased with it, by the schema rather than by a statement somebody remembers to
+write. Erasing a user takes their own book, and erasing a mail account takes the book it collected, beside that
+account's folders and mail; `contact_addresses` keys onto `contacts` through `(ContactId, BookHolderId)` either way, so
+the cascade reaches an address through the person holding it. A collected book therefore goes when its account does,
+which is when the last user assigned it is erased.
 
 ## A contact is a person, not an address
 
@@ -86,16 +118,19 @@ The written form is kept beside the comparison form, so what a reader is shown i
 the comparison form is matched, grouped, or indexed on. It is the same rule and the same value the mail beside it is
 matched by, defined once in the domain rather than per writer.
 
-**One address belongs to one contact, within one user's book.** Adding an address a different contact in the same book
+**One address belongs to one contact, within one book.** Adding an address a different contact in the same book
 already holds is refused with an answer naming which contact holds it, so the caller can look at that person rather than
 guess. The rule is a unique index in PostgreSQL rather than a check before the write: two callers claiming one address at
 once both read that nobody holds it, and only the database closes that window. Losing that race is a conflict the write
 retries from a fresh read, and the second caller is then told who holds the address.
 
-It stops at the book's edge deliberately. Two users who correspond with the same person each hold their own record of
-them, with their own name for them and their own note, because a rule across the table would make what one user may
-write down depend on what another already had — and would let one of them find out that the other corresponds with
-somebody by being refused.
+It stops at the book's edge deliberately, and there are two edges it stops at. Two users who correspond with the same
+person each hold their own record of them, with their own name for them and their own note, because a rule across the
+table would make what one user may write down depend on what another already had — and would let one of them find out
+that the other corresponds with somebody by being refused. And a user's own record and a record one of their mailboxes
+collected may both hold one address: they are two books, the one the user wrote is the one their reads answer with, and
+refusing the second would mean a person could not write somebody down because a mailbox they share had already met
+them.
 
 Inside one record, two spellings of one address are merged rather than refused. They name the same mailbox of the same
 person, and refusing would ask a user to resolve a difference nothing else makes.
@@ -103,24 +138,30 @@ person, and refusing would ask a user to resolve a difference nothing else makes
 ## Two origins, and who may write which
 
 A contact is either **asserted** — somebody wrote this person down — or **collected**, an address that appeared in mail
-that arrived. Both live in one book, because searching for somebody should not require knowing which half they are in.
-What the difference decides is who may change the record without anybody asking:
+that arrived. The origin is not a flag beside the record: it says which of the two books holds it, and the database
+refuses a row whose origin and holder disagree. A user reads both at once, so searching for somebody never requires
+knowing which half they are in. What the difference decides is who may change the record without anybody asking:
 
-- A writer amends the contacts of its own origin and no others. Collection never touches what a user wrote down, and
-  a user does not amend a collected record in place either.
-- **Promotion** is the one crossing, and it runs one way: a collected contact becomes asserted, which is the act of the
-  user taking responsibility for it. It names its writer for the same reason an amendment does, so collection is refused
-  the promotion of the record it just created rather than being able to award itself the authority that comes with it.
+- A writer amends the contacts of its own origin and no others, and an amendment writes into the writer's own book
+  alone. Collection never touches what a user wrote down, and a user amending a record their mailbox collected is
+  refused by that record's origin rather than having a mailbox's record rewritten under everybody else assigned it. The
+  refusal names the origin rather than reporting a contact nobody holds, because what the caller has to be told is that
+  promotion is the act that makes such a record theirs.
+- **Promotion** is the one crossing between the books, and it **copies**: it writes the caller's own record of the
+  collected person, under an identity of its own, and leaves the mailbox's where it is for whoever else is assigned that
+  account. What the caller gains is a record they may then amend like any other, and which their own reads answer with
+  in place of the collected one. It names its writer for the same reason an amendment does, so collection is refused the
+  promotion of the record it just created rather than being able to award itself the authority that comes with it.
   Nothing turns an asserted contact back into a collected one, because nothing can unsay that somebody wrote a person
-  down. Promoting a contact that is already asserted is answered as such rather than written again.
+  down. Promoting a contact the caller has already asserted is answered as such rather than written again.
 - Origin is recorded when the contact is created and is never changed by an amendment.
 
-Both surfaces a caller reaches the book through write as **asserted**, because both are somebody writing a person down:
-`mfctl` is the user at a terminal, and an agent over MCP is acting for them. What follows is that neither amends a
-collected record in place — an agent's call is answered `contactWasCollected` rather than refused — and what either does
-instead is promote it. Both reach that act: `mfctl contact promote` and the `promote_contact` tool, under the same
-writing grant each surface already holds. A promotion reachable from only one of the two would leave an amendment
-permanently refused on the other for every record collection produced.
+Both surfaces a caller reaches the book through write as **asserted**, into the caller's own book, because both are
+somebody writing a person down: `mfctl` is the user at a terminal, and an agent over MCP is acting for them. What
+follows is that neither amends a collected record — an agent's call is refused by that record's origin — and what
+either does instead is promote it. Both reach that act: `mfctl contact promote` and the
+`promote_contact` tool, under the same writing grant each surface already holds. A promotion reachable from only one of
+the two would leave an amendment permanently refused on the other for every record collection produced.
 
 Erasure is deliberately outside that rule. It is the data-subject path, and somebody asking to be removed from a contact
 book is not answered with which half of the book they happen to be in.
@@ -135,8 +176,10 @@ one decides separately for each. [Configuration §
 declaration in its user's record, holds the keys and their bounds.
 
 Collection runs inside the synchronization pass that stored the message, after the transaction that stored it committed.
-What it writes goes into the book of the user this deployment serves, because MailFathom's own work acts for nobody in
-particular; the day an account names its own user is the day it writes into that user's book instead.
+**What it writes goes into the collected book of the account it is synchronizing, and into no other** — it never asks
+who that account's users are, and it never reads a user's own book. That is what makes one mailbox's collection one
+mailbox's: a correspondent is recorded once however many users are assigned the account, every one of them reads that
+one record, and nothing a user wrote down can stop the mailbox from recording somebody it corresponds with.
 It owns no worker, no timer, and no queue, and it reaches the mail server for nothing at all: the headers it reads were
 already read to store the message, so what one message costs is a bounded number of indexed reads and, rarely, one
 insert.
@@ -176,13 +219,16 @@ Four things are never collected, and none of them can be switched off:
 - **A role mailbox**, by the names RFC 2142 reserves — `postmaster`, `abuse`, `info`, `support`, `sales`, and the rest —
   together with the `no-reply` family and the `-request`, `-bounces`, `-user`, `-admin`, `-subscribe`, and
   `-unsubscribe` list-administration suffixes.
-- **The account's own mailboxes**, derived from the user name of every account its own owner declares, so a user writing
-  from one of their mailboxes to another is not recorded as a correspondent of themselves. The set stops at that person:
-  a deployment serving several users holds one such set per user, so somebody this deployment also serves is an ordinary
-  correspondent of the account they wrote to.
-- **An address the book already holds**, under either origin. That is a refusal rather than a merge: an address that
-  belongs to somebody the user asserted is already answered for by that record, and adding it there would be collection
-  editing what a user wrote down. A user who wants the address on that person puts it there themselves.
+- **The account's own mailboxes**, derived from the user name of every account declared beside it, so a user writing
+  from one of their mailboxes to another is not recorded as a correspondent of themselves. The set stops there:
+  somebody this deployment also serves, on an account this one is not declared beside, is an ordinary correspondent of
+  the account they wrote to.
+- **An address the account's own collected book already holds.** That is where a second sighting of a correspondent
+  stops, and the record itself is never read: what a collected record says about somebody is what the message that first
+  produced it said, and rewriting it on every later message would make the book a log of the last envelope. What a user
+  wrote down is in another book and is neither read nor consulted — a mailbox two people share cannot stop collecting
+  because one of them happened to write the sender down, and the precedence a read applies is what hides the collected
+  record from that one person and from nobody else.
 
 On top of those a user writes their own exclusions per account, each naming either a domain — optionally reaching the
 names beneath it — or a pattern over the whole address, where `*` stands for any run of characters and `?` for exactly
@@ -208,10 +254,12 @@ a book filling too fast, a policy excluding everything, and a run repeatedly sto
 from each other. No address, name, folder, or message identity reaches an instrument; [telemetry §
 `mailfathom.contacts.collection.decisions`](../operations/telemetry.md#contact-collection) holds the counter.
 
-**A user who changes their mind takes the whole of it back.** Everything collection built is a contact of its own
-origin, so `mfctl contact delete-collected` erases exactly that and leaves every record the user entered. It cannot be
-undone: switching collection on again rebuilds the book from the mail that arrives afterwards rather than restoring what
-went. Switching it off is a separate act in configuration, and one worth making — with it still on, the book fills again
+**A user who changes their mind takes the whole of it back, one account at a time.** A collected book is one mail
+account's, so `mfctl contact delete-collected --account <id>` empties that account's and leaves both what another
+account collected and every record anybody entered. It is an act over a mailbox rather than over one person's records:
+the book it empties is read by every user assigned that account. It cannot be undone — switching collection on again
+rebuilds the book from the mail that arrives afterwards rather than restoring what went. Switching it off is a separate
+act in configuration, and one worth making, per account like the switch itself: with it still on, the book fills again
 from the next message.
 
 ## Amending a contact states the whole record
@@ -221,7 +269,13 @@ and the note — rather than the difference from the one held. Adding an address
 default, and correcting a name are then one operation whose result is checked against the invariants above, instead of
 four that could each leave a contact without an address or with a default it does not hold.
 
-An address the amended record no longer names is removed, which is also what frees it for another contact to claim.
+An address the amended record no longer names is removed, which is also what frees it for another contact in the same
+book to claim.
+
+An amendment writes into the caller's own book alone. A record one of their mailboxes collected is therefore refused by
+its origin, naming the record as collected, and what the caller does instead is promote it — which leaves them a record
+of their own to amend and leaves the mailbox's for everybody else assigned the account. A contact outside the books the
+caller reads at all is a contact they do not hold, and is answered as such.
 
 Two amendments of one contact are last-writer-wins, which is what stating the whole record means: the later one is the
 record, exactly as it would be a second later. What is not left to that is an amendment racing an **erasure** — the row
@@ -236,21 +290,24 @@ Three lookups and one listing:
 
 - **By identity**, which is what every other part of the system names a person by.
 - **By address**, which answers "who is this from" and is served from the unique index rather than from a scan. The index
-  leads with the user, so the lookup reads one book rather than the table. At most one contact can answer, which is the
-  uniqueness rule above rather than a property of the lookup.
+  leads with the book, so the lookup seeks into each of the books the reader holds rather than scanning the table. Each
+  of those books can answer at most once, which is the uniqueness rule above, and the order between them settles which
+  of two answers the reader is given.
 - **By the whole name**, which answers "who did they mean" and is what addressing a message to somebody reads. It matches
   the name's comparison form exactly rather than looking for text inside it, so it is served from the listing index the
-  user and the name's key lead, and it answers with the one contact in that book carrying the name or with how many
-  carry it. A namesake in somebody else's book is not one of them. More than one is not
+  book and the name's key lead, and it answers with the one contact the reader's books carry the name in or with how
+  many carry it. A namesake in a book they do not read is not one of them, and a collected record a contact of their own
+  hides is not one either. More than one is not
   a result to choose from: nothing here ranks people, and [mail delivery §
   Addressing a message by naming a contact](mail-delivery.md#addressing-a-message-by-naming-a-contact) is where refusing
   that is argued. The count is exact and comes from the database, and the addresses of the people a shared name matched
   are never read, so a name a hundred collected contacts happen to share costs one number rather than a hundred records.
   A name resolving to one person answers with that person and with the count that decided it read together, so the answer
   can never be one of two people a namesake written down meanwhile made ambiguous.
-- **A page of the book**, bounded and continued by a keyset cursor. The order is the name's comparison form and then the
-  identity, within the user the page is of, which makes it total: two people with one name are still served in a fixed
-  order, so a walk of the book serves every contact exactly once. A page holds 50 contacts unless the caller asks for fewer, and never more than 200.
+- **A page of the books**, bounded and continued by a keyset cursor. The order is the name's comparison form and then
+  the identity, across the books the page is of, which makes it total: two people with one name are still served in a
+  fixed order, so a walk serves every contact exactly once. A record a book earlier in the reader's order hides is not
+  served at all, which is why a page may be shorter than the size asked for while the walk has more to give. A page holds 50 contacts unless the caller asks for fewer, and never more than 200.
   A listing may be narrowed to one origin, which is the question "what did my instance pick up" and its inverse, and to
   a **search**.
 
@@ -278,8 +335,9 @@ filters, so continuing a walk with a different search or a different origin is d
 
 The order is taken on a comparison form stored beside the name rather than on the name itself, and the column holding it
 is pinned to PostgreSQL's `C` collation, so the order is the ordinal one MailFathom derived the form to produce rather
-than whichever collation the database was created with. The index it is served from leads with the user and ends with
-the identity, which is what makes a page a page of one book and the walk over it terminate.
+than whichever collation the database was created with. The index it is served from leads with the book and ends with
+the identity, which is what lets each of a reader's books be seeked into rather than the table scanned, and what makes
+the walk over them terminate.
 
 ## Erasing and exporting a person
 
@@ -290,13 +348,21 @@ than as a later addition, and both are proven by test rather than described.
 **Erasing a contact removes them and everything derived from them.** The schema's own foreign key is what guarantees no
 address outlives its person, rather than a second statement somebody remembers to write; the erasure takes those rows
 first inside the same transaction so it can answer with what it removed — the contact and how many addresses went with
-it — and a user asking for one gets an answer rather than a call that returned without complaint. Erasing somebody the book does not hold is a completed erasure, not
-a failure: the state the user asked for is the state the book is in.
+it — and a user asking for one gets an answer rather than a call that returned without complaint. Erasing somebody the books do not hold is a completed erasure, not
+a failure: the state the user asked for is the state the books are in.
 
-**Erasing a user erases their whole book.** It is the cascade rather than an erasure of its own, and it runs in two
-hops: `contacts` keys onto the user record and `contact_addresses` keys onto `contacts` through `(ContactId, UserId)`.
-So a data-subject request against the user discharges the people they wrote down and every address beneath them along
-with the mail.
+**It reaches every book the caller reads, not only their own.** That is the one act over the books that does, and it is
+what a person asking to be taken out of a contact book is owed: no origin gates it, and somebody making that request is
+not answered with which half of which book they happen to be in. So **erasing a collected contact takes it out for every
+user assigned that mailbox**, because it was one record rather than a copy each — which is the honest reading of the
+request and the cost of the mailbox holding one record for everybody.
+
+**Erasing a user erases their own book.** It is the cascade rather than an erasure of its own, and it runs in two
+hops: the asserted half of `contacts` keys onto the user record and `contact_addresses` keys onto `contacts` through
+`(ContactId, BookHolderId)`. So a data-subject request against the user discharges the people they wrote down and every
+address beneath them along with the mail. What it leaves is what their mailboxes collected, which belongs to those
+mailboxes and to whoever is still assigned them; a mailbox nobody is left assigned is erased with them, and its
+collected book goes with it.
 
 **Exporting a contact produces everything held about them** as of the instant it was taken: the name, every address,
 which is preferred, the note, the origin, and both timestamps. What a user reads is left to the surface that asks for
@@ -308,7 +374,8 @@ day somebody asks for it. The erasure asks before it runs and answers with what 
 addresses — and never with the person.
 
 Erasure is also a tool, `delete_contact`, and it answers the same counts. Export is not: the document is the answer to a
-request a person made of the deployment's user, and the surface that produces it is the one the user is identified at.
+request a person made of whoever holds the book, and the surface that produces it is the one that names the user it is
+reaching the book of.
 An agent that needs what an export holds reads the contact, which is the same record without the framing of a
 data-subject reply.
 

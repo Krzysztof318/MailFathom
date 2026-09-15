@@ -37,7 +37,7 @@ public sealed class ContactBookReaderTests
             reader.ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken));
 
         Assert.Equal(MailFathomPermission.MailContactsRead, refusal.RequiredPermission);
-        await directory.DidNotReceiveWithAnyArgs().ReadPageAsync(default, default!, TestContext.Current.CancellationToken);
+        await directory.DidNotReceiveWithAnyArgs().ReadPageAsync(default!, default!, TestContext.Current.CancellationToken);
     }
 
     /// <summary>Work no caller requested holds no permission, so it is refused rather than admitted as a caller with everything.</summary>
@@ -127,7 +127,7 @@ public sealed class ContactBookReaderTests
                 new ContactPageRequest { PageSize = pageSize },
                 TestContext.Current.CancellationToken));
 
-        await directory.DidNotReceiveWithAnyArgs().ReadPageAsync(default, default!, TestContext.Current.CancellationToken);
+        await directory.DidNotReceiveWithAnyArgs().ReadPageAsync(default!, default!, TestContext.Current.CancellationToken);
     }
 
     /// <summary>An origin nothing declares would narrow the page to a half of the book that does not exist.</summary>
@@ -209,7 +209,7 @@ public sealed class ContactBookReaderTests
                 new ContactPageRequest { Cursor = "not-a-cursor-this-system-issued" },
                 TestContext.Current.CancellationToken));
 
-        await directory.DidNotReceiveWithAnyArgs().ReadPageAsync(default, default!, TestContext.Current.CancellationToken);
+        await directory.DidNotReceiveWithAnyArgs().ReadPageAsync(default!, default!, TestContext.Current.CancellationToken);
     }
 
     /// <summary>A cursor this deployment issued names the boundary the next page reads beyond, and reaches the store unchanged.</summary>
@@ -241,7 +241,7 @@ public sealed class ContactBookReaderTests
         var directory = Substitute.For<IContactDirectory>();
         var address = Address("anna@example.test");
         var contact = ContactOf("Anna Kowalska", "anna@example.test");
-        directory.FindByAddressAsync(Arg.Any<MailUserId>(), address, Arg.Any<CancellationToken>()).Returns(contact);
+        directory.FindByAddressAsync(Arg.Any<ContactBookScope>(), address, Arg.Any<CancellationToken>()).Returns(contact);
 
         var reader = ReaderOver(directory);
 
@@ -278,7 +278,7 @@ public sealed class ContactBookReaderTests
     private static IContactDirectory DirectoryAnswering(ContactPage page)
     {
         var directory = Substitute.For<IContactDirectory>();
-        directory.ReadPageAsync(Arg.Any<MailUserId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>()).Returns(page);
+        directory.ReadPageAsync(Arg.Any<ContactBookScope>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>()).Returns(page);
 
         return directory;
     }

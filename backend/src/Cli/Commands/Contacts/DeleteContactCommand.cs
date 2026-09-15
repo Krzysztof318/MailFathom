@@ -5,6 +5,7 @@
 using System.CommandLine;
 using System.Globalization;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Commands.Users;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
@@ -20,9 +21,14 @@ namespace MailFathom.Cli.Commands.Contacts;
 /// pass the flag rather than having an agreement read out of whatever was piped in.
 /// </para>
 /// <para>
-/// A contact the book does not hold is a completed erasure rather than a failure: the state the operator asked for is
-/// the state the book is in, and reporting it as an error would only tell them whether somebody had already erased that
-/// person.
+/// A contact the books do not hold is a completed erasure rather than a failure: the state the operator asked for is
+/// the state the books are in, and reporting it as an error would only tell them whether somebody had already erased
+/// that person.
+/// </para>
+/// <para>
+/// It reaches every book that user reads rather than their own alone, which is what a person asking to be taken out of
+/// a contact book is owed. So erasing a record one of their mail accounts collected takes it out for every user
+/// assigned that account, because it was one record rather than a copy each.
 /// </para>
 /// </remarks>
 internal static class DeleteContactCommand
@@ -36,12 +42,14 @@ internal static class DeleteContactCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
+        var userOption = UserOptions.User();
         var identityOption = ContactOptions.Identity();
 
         var confirmedOption = CliOptions.Confirmed("erasure");
 
-        Command command = new("delete", "Erase one person from the deployment's contact book. This cannot be undone.")
+        Command command = new("delete", "Erase one person from the books a user reads. This cannot be undone.")
         {
+            userOption,
             identityOption,
             confirmedOption,
             endpointOption,
@@ -49,6 +57,7 @@ internal static class DeleteContactCommand
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
+            result.GetValue(userOption),
             result.GetValue(identityOption),
             CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             result.GetValue(confirmedOption),
@@ -59,6 +68,7 @@ internal static class DeleteContactCommand
 
     private static async Task<int> RunAsync(
         CliContext context,
+        Guid? requestedUser,
         Guid contactId,
         string? requestedDeployment,
         bool confirmedUpFront,
@@ -69,12 +79,14 @@ internal static class DeleteContactCommand
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
         var deployment = new AdminApiClient(transport, context.Console);
 
-        var lookup = await deployment.ReadContactAsync(profile.Token, contactId, cancellationToken);
+        var user = await UserOptions.ResolveUserAsync(deployment, profile.Token, requestedUser, cancellationToken);
+
+        var lookup = await deployment.ReadContactAsync(profile.Token, contactId, user, cancellationToken);
 
         if (lookup.Contact is not { } held)
         {
             context.Console.WriteLine(
-                $"The deployment's contact book holds no contact {contactId:D}, so nothing was erased.");
+                $"The books that user reads hold no contact {contactId:D}, so nothing was erased.");
 
             return CliExitCode.Success;
         }
@@ -92,11 +104,11 @@ internal static class DeleteContactCommand
             return CliExitCode.Failure;
         }
 
-        var erasure = await deployment.EraseContactAsync(profile.Token, contactId, cancellationToken);
+        var erasure = await deployment.EraseContactAsync(profile.Token, contactId, user, cancellationToken);
 
         context.Console.WriteLine(erasure.WasHeld
             ? $"Erased contact {erasure.Contact:D} and {DescribeAddresses(erasure.AddressesErased)}. Nothing in MailFathom can put the record back."
-            : $"The deployment's contact book held no contact {erasure.Contact:D} by the time the erasure ran, so nothing was erased.");
+            : $"The books that user reads held no contact {erasure.Contact:D} by the time the erasure ran, so nothing was erased.");
 
         return CliExitCode.Success;
     }

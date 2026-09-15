@@ -358,7 +358,7 @@
       "readOnlyHint": false,
       "title": "Create contact"
     },
-    "description": "Records a person in MailFathom's own contact book: their name, every address they use, which one is preferred, and an optional note. Writes to local state only — nothing is sent to a mail server or to anybody else, and no mail is touched. Calling twice with the same person records them once and then answers addressHeldByAnotherContact, because one address belongs to one contact across the whole book; look that contact up with get_contact rather than writing a second record. Ask the person you are acting for before writing somebody down.",
+    "description": "Records a person in your own contact book: their name, every address they use, which one is preferred, and an optional note. It writes your own book and never a mail account's collected one. Writes to local state only — nothing is sent to a mail server or to anybody else, and no mail is touched. Calling twice with the same person records them once and then answers addressHeldByAnotherContact, because one address belongs to one contact within a book; look that contact up with get_contact rather than writing a second record. An address one of your mail accounts collected is free here, and your record is what answers for it afterwards. Ask the person you are acting for before writing somebody down.",
     "inputSchema": {
       "properties": {
         "addresses": {
@@ -492,7 +492,7 @@
       "readOnlyHint": false,
       "title": "Delete contact"
     },
-    "description": "Erases one person from MailFathom's own contact book and removes every address recorded with them. This cannot be undone: the record is deleted rather than marked, and nothing here can bring it back. It removes only the contact record — no mail is deleted and no mail server is contacted. Erasing somebody the book does not hold is reported as a completed erasure rather than as an error, so repeating the call is safe. Confirm with the person you are acting for before calling it.",
+    "description": "Erases one person from the contact books you read and removes every address recorded with them. This cannot be undone: the record is deleted rather than marked, and nothing here can bring it back. It reaches a collected record as well as one you wrote down, and erasing a collected one takes it out of that mail account's book for every user assigned the account. It removes only the contact record — no mail is deleted and no mail server is contacted. Erasing somebody the books do not hold is reported as a completed erasure rather than as an error, so repeating the call is safe. Confirm with the person you are acting for before calling it.",
     "inputSchema": {
       "properties": {
         "contactId": {
@@ -705,7 +705,7 @@
       "readOnlyHint": true,
       "title": "Get contact"
     },
-    "description": "Reads one person from MailFathom's own contact book, named either by the contactId a listing returned or by any address they use — name exactly one of the two. Use the address form to answer who a message is from or who an address belongs to: at most one contact in the book holds a given address, and the lookup ignores casing. Reads local state only: it never contacts a mail server and changes nothing. A person this deployment has no record of comes back as an empty answer rather than as an error.",
+    "description": "Reads one person from the contact books you read — your own, and the collected book of each mail account you are assigned — named either by the contactId a listing returned or by any address they use; name exactly one of the two. Use the address form to answer who a message is from or who an address belongs to: one contact answers for a given address, your own record before a collected one, and the lookup ignores casing. Reads local state only: it never contacts a mail server and changes nothing. A person none of those books holds comes back as an empty answer rather than as an error.",
     "inputSchema": {
       "properties": {
         "address": {
@@ -1718,7 +1718,7 @@
       "readOnlyHint": true,
       "title": "List contacts"
     },
-    "description": "Lists people from MailFathom's own contact book, ordered by name, with the addresses each of them uses. Reads local state only: it never contacts a mail server and changes nothing. Narrow the page with search, which matches text anywhere in a name or an address without regard to case, and with origin. Returns at most 200 contacts per call and 50 by default, with an opaque cursor for the next page; there is no way to ask for the whole book in one call. To resolve one address to the person using it, call get_contact with that address rather than searching for it here.",
+    "description": "Lists people from the contact books you read, ordered by name, with the addresses each of them uses: your own book, holding whoever was written down, and the collected book of each mail account you are assigned. Reads local state only: it never contacts a mail server and changes nothing. Narrow the page with search, which matches text anywhere in a name or an address without regard to case, and with origin. Returns at most 200 contacts per call and 50 by default, with an opaque cursor for the next page; there is no way to ask for the whole book in one call. An address held in more than one of those books is served once, from your own book first and then from the accounts in the order of their identifiers, so a page can come back shorter than pageSize while the walk has more to serve — read nextCursor rather than the count to know. To resolve one address to the person using it, call get_contact with that address rather than searching for it here.",
     "inputSchema": {
       "properties": {
         "cursor": {
@@ -1731,7 +1731,7 @@
         },
         "origin": {
           "default": null,
-          "description": "Return only contacts of this origin: asserted for the people somebody wrote down, collected for the addresses this deployment picked up from mail that arrived. Omit to list both.",
+          "description": "Return only contacts of this origin: asserted for the people somebody wrote down, collected for the addresses a mail account you are assigned picked up from mail that arrived. Omit to list both.",
           "enum": [
             "asserted",
             "collected",
@@ -2315,7 +2315,7 @@
       "readOnlyHint": false,
       "title": "Promote contact"
     },
-    "description": "Takes on one person MailFathom collected from arriving mail, so the record becomes one the user asserted rather than one the deployment inferred. This is the only path between the two origins and it runs one way; it is also what unlocks update_contact on a record that answered contactWasCollected. Nothing about the person is rewritten. Writes to local state only, and touches no mail. A contact that was already asserted answers alreadyAsserted. The answer carries the outcome alone and never the record; read the person with get_contact.",
+    "description": "Takes on one person a mail account collected from arriving mail, by writing your own asserted copy of the record under an identity of its own. It copies rather than moves: the mail account's record stays where it is, because the other users assigned that account read it too, and your reads answer with your copy in its place. This is the only path between the two books and it runs one way; it is also what unlocks update_contact on a record that answered contactWasCollected. Nothing about the person is rewritten. Writes to local state only, and touches no mail. A contact you had already written down answers alreadyAsserted, and one you have already promoted answers notFound because your own copy now answers for the address. The answer carries the outcome alone and never the record; read the person with get_contact.",
     "inputSchema": {
       "properties": {
         "contactId": {
@@ -3570,7 +3570,7 @@
       "readOnlyHint": false,
       "title": "Update contact"
     },
-    "description": "Amends one person in MailFathom's own contact book. State the whole record you want them to have — the name, every address, which one is preferred, and the note — rather than only what changes: an address the new record does not name is removed, and an omitted note clears the one held. Read the contact with get_contact first so nothing is dropped by accident. Writes to local state only, and touches no mail. A contact this deployment collected from arriving mail answers contactWasCollected: only the operator can take such a record on, through mfctl, and it can then be amended.",
+    "description": "Amends one person in MailFathom's own contact book. State the whole record you want them to have — the name, every address, which one is preferred, and the note — rather than only what changes: an address the new record does not name is removed, and an omitted note clears the one held. Read the contact with get_contact first so nothing is dropped by accident. Writes to local state only, and touches no mail. A contact a mail account collected from arriving mail answers contactWasCollected: that record is the mailbox's and the account's other users read it, so take your own copy on with promote_contact and amend the copy.",
     "inputSchema": {
       "properties": {
         "addresses": {

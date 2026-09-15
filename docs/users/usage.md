@@ -539,9 +539,15 @@ maintain it. The
 record is a person with the addresses they use rather than an address with a name attached, which is what lets an agent
 answer "who is this from" for somebody who writes from three of them.
 
-`get_contact` by address is the one worth building a habit around: it is an index lookup, it is exact, and at most one
-person in the book can answer it. Searching for an address in `list_contacts` finds the same person more slowly and
-finds others besides.
+**There are two books and a read of both.** Your own holds the people somebody wrote down; each mailbox you are assigned
+holds the addresses its own arriving mail picked up, which everybody assigned that mailbox reads. Every read here merges
+them — your own book first, then your mailboxes in the order of their identifiers — and an address held in more than one
+of them is answered once, from the first, so your own record is what an agent sees where you have written one. A page
+can therefore come back shorter than the size asked for while the walk has more to give; read `nextCursor` rather than
+the count.
+
+`get_contact` by address is the one worth building a habit around: it is an index lookup, it is exact, and one person
+answers it. Searching for an address in `list_contacts` finds the same person more slowly and finds others besides.
 
 Four of them change state, and three of those carry the annotations that make a client pause. `create_contact` is not idempotent —
 the book mints the identity, and calling it twice for one person records them once and then answers
@@ -550,13 +556,15 @@ the change: an address the new record does not name is removed, and an omitted n
 contact first and send it back with the change. It is destructive for exactly that reason, and a client that asks
 before calling a destructive tool will ask here. `delete_contact` is destructive and cannot be undone; it erases the
 person and every address recorded with them, and answers with how many went. `promote_contact` is the one write that is
-neither destructive nor a first record: it takes on a person the deployment collected from arriving mail, so the record
-becomes one you asserted. It answers with the outcome and never with the person, so an agent that wants to read them
-back calls `get_contact`.
+neither destructive nor a first record: it takes on a person one of your mailboxes collected by writing **your own copy**
+of the record, and leaves the mailbox's where it is for whoever else is assigned that mailbox. It answers with the
+outcome and never with the person, so an agent that wants to read them back calls `get_contact` with one of their
+addresses.
 
-One thing is worth knowing before an agent is pointed at the book. A record this deployment collected is not an agent's
-to amend as it stands — that call answers `contactWasCollected` — and `promote_contact` is what it calls instead, after
-which every other tool works on the record. And the book is somebody's list of real people: a name, an address, and
+Two things are worth knowing before an agent is pointed at the book. A record a mailbox collected is not an agent's to
+amend as it stands — that call answers `contactWasCollected` — and `promote_contact` is what it calls instead, after
+which every other tool works on the copy. And `delete_contact` reaches a collected record as readily as one you wrote
+down, so erasing one takes it out of that mailbox's book for every user assigned it, not only for you. And the book is somebody's list of real people: a name, an address, and
 above all a note are things about a third party rather than facts about your mail, so what an agent writes there is what
 you asked it to write down.
 

@@ -20,9 +20,10 @@ namespace MailFathom.Application.Contacts;
 /// reach the book by arriving another way.
 /// </para>
 /// <para>
-/// Which book is read is <see cref="ContactBookOwnership" />'s answer rather than an argument of the request, so a
-/// caller reads the book of the user they were admitted to act for and no request of theirs can name another. A
-/// contact of somebody else's book is answered as one this book does not hold.
+/// Which books are read is <see cref="ContactBookOwnership" />'s answer rather than an argument of the request, so a
+/// caller reads the book of the user they were admitted to act for beside the collected book of each mail account
+/// assigned to them, and no request of theirs can name another. A contact outside that scope is answered as one these
+/// books do not hold.
 /// </para>
 /// <para>
 /// There is no unbounded read. A caller naming no page size is served the book's default rather than everything, and one
@@ -73,7 +74,7 @@ public sealed class ContactBookReader
 
         this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
 
-        return this.directory.ReadPageAsync(this.ownership.User, QueryFrom(request), cancellationToken);
+        return this.directory.ReadPageAsync(this.ownership.Scope, QueryFrom(request), cancellationToken);
     }
 
     /// <summary>Reads one contact by the identity the book gave it.</summary>
@@ -85,7 +86,7 @@ public sealed class ContactBookReader
     {
         this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
 
-        return this.directory.FindAsync(this.ownership.User, contactId, cancellationToken);
+        return this.directory.FindAsync(this.ownership.Scope, contactId, cancellationToken);
     }
 
     /// <summary>Reads the person who uses one address.</summary>
@@ -102,7 +103,7 @@ public sealed class ContactBookReader
     {
         this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
 
-        return this.directory.FindByAddressAsync(this.ownership.User, address, cancellationToken);
+        return this.directory.FindByAddressAsync(this.ownership.Scope, address, cancellationToken);
     }
 
     /// <summary>Reads the query a request states, refusing every part of it the book does not serve.</summary>

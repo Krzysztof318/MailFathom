@@ -245,7 +245,7 @@ public sealed class OrchestratedContactCollectionPassTests(MailFathomOrchestrati
                 }
 
                 return scope.GetRequiredService<IContactDirectory>().FindByAddressAsync(
-                    services.ServedUser,
+                    ContactBookScope.Of(services.ServedUser, [SyntheticMailAccount.Account]),
                     emailAddress,
                     token);
             },

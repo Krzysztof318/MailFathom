@@ -632,10 +632,10 @@ public sealed class AdminApiEndpointsTests
         var timeProvider = new FakeTimeProvider();
 
         services.AddScoped(_ => directory);
+        services.AddScoped(_ => new ContactBookScopes(new StubMailAccountAssignments()));
         services.AddScoped(_ => new ContactBook(
             Substitute.For<IContactStore>(),
             directory,
-            ContactBookOwnerships.ForTheServedUser(),
             new OptimisticConcurrencyRetryPolicy(
                 Substitute.For<IPersistenceSessionFactory>(),
                 new PersistenceConcurrencyOptions(),

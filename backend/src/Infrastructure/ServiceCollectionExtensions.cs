@@ -1411,8 +1411,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IContactDirectory, ContactDirectory>();
         services.AddScoped<ContactBook>();
 
-        // Whose book each act reads and writes, resolved once per unit of work from the principal it was admitted
-        // under. Scoped for that reason: it answers about the work in hand rather than about the process.
+        // Which books a named user reads, and which books the caller in hand reads. The first answers about whoever it
+        // is asked about, which is what the administrative surface needs; the second binds that question to the
+        // principal the work was admitted under, which is what a mail-serving surface needs. Both are scoped, because
+        // both answer about the work in hand rather than about the process.
+        services.AddScoped<ContactBookScopes>();
         services.AddScoped<ContactBookOwnership>();
 
         // The two caller-facing use cases over it, which are what the protocol tools reach. They are separate from the

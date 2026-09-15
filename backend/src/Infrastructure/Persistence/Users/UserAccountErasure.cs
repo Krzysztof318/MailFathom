@@ -56,12 +56,14 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// over braces instead of the only thing standing between an erasure and a writer it never saw.
 /// </para>
 /// <para>
-/// The contact book is reached by the cascade rather than by the walk. <c>contacts</c> and <c>contact_addresses</c>
-/// record no mail account, so nothing here names either, and the cascade reaches them in two hops rather than one:
-/// <c>contacts</c> keys onto the user row, and <c>contact_addresses</c> keys onto <c>contacts</c> through
-/// <c>(ContactId, UserId)</c>, so the addresses go with the person and the person goes with the user — which is what
-/// an erasure request owes about a book of third parties this user assembled.
-/// Nothing about it is reported separately, for the same reason nothing else the cascade takes is.
+/// The contact book is two books, and each half is reached by a cascade from its own holder rather than by the walk.
+/// What the user wrote down keys onto the user row and goes when the user does; what a mailbox collected keys onto
+/// <c>mailbox_accounts</c>, beside that account's folders, threads, and jobs, and so goes only with an account nobody
+/// is left assigned. <c>contact_addresses</c> is reached either way in a second hop, keying onto <c>contacts</c>
+/// through <c>(ContactId, BookHolderId)</c>, so the addresses go with the person whichever book the person was in.
+/// That split is what an erasure request owes about a book of third parties: the records this user assembled leave
+/// with them, and the records a shared mailbox assembled stay with the mailbox for whoever else reads it.
+/// Nothing about either half is reported separately, for the same reason nothing else the cascade takes is.
 /// </para>
 /// </remarks>
 internal static class UserAccountErasure

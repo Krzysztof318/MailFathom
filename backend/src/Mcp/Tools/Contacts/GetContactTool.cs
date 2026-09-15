@@ -68,11 +68,12 @@ internal sealed class GetContactTool(ContactBookReader contactBookReader)
         OpenWorld = false,
         UseStructuredContent = true)]
     [Description(
-        "Reads one person from MailFathom's own contact book, named either by the contactId a listing returned or by "
-        + "any address they use — name exactly one of the two. Use the address form to answer who a message is from or "
-        + "who an address belongs to: at most one contact in the book holds a given address, and the lookup ignores "
-        + "casing. Reads local state only: it never contacts a mail server and changes nothing. A person this deployment "
-        + "has no record of comes back as an empty answer rather than as an error.")]
+        "Reads one person from the contact books you read — your own, and the collected book of each mail account you "
+        + "are assigned — named either by the contactId a listing returned or by any address they use; name exactly "
+        + "one of the two. Use the address form to answer who a message is from or who an address belongs to: one "
+        + "contact answers for a given address, your own record before a collected one, and the lookup ignores casing. "
+        + "Reads local state only: it never contacts a mail server and changes nothing. A person none of those books "
+        + "holds comes back as an empty answer rather than as an error.")]
     public async Task<GetContactToolResult> GetContactAsync(
         [Description("The contactId a listing or a write returned. Name this or address, and exactly one of the two.")]
         string? contactId = null,

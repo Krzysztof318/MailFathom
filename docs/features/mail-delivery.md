@@ -174,8 +174,9 @@ every time is the loop being bounded.
 two things: somebody this deployment derived — whoever a reply answers, whoever a reply-to-all keeps, an address
 resolved from a contact the caller named, by the identity the book gave it or by the whole name the user recorded —
 or an address the caller wrote out itself. Only the second is judged.
-Against it stands what this installation already holds a record of: the contact book of the user the send is authored
-for, and the addresses its own accounts send as. An address that is neither is what an injected instruction looks like,
+Against it stands what this installation already holds a record of: the contact books the user the send is authored for
+reads — their own, and the collected book of each mail account assigned to them — and the addresses its own accounts
+send as. An address that is neither is what an injected instruction looks like,
 and
 [`MailDelivery:UnvouchedRecipients`](../operations/configuration-mail.md#a-recipient-nothing-here-vouches-for--maildeliveryunvouchedrecipients)
 is the deployment's choice of what to do about one: `Admit` records it, `Refuse` refuses the whole message.
@@ -382,8 +383,10 @@ out of the deployment: what it produces is an ordinary address, indistinguishabl
 bound, refusal, and check a written-down address meets it meets as well. Naming a contact can therefore reach no mailbox
 that naming an address could not.
 
-**A contact is named by the identity the book gave it or by the whole name the user recorded**, and a name addresses a
-message only where exactly one contact carries it. Nothing ranks candidates, nothing prefers the most recently written
+**A contact is named by the identity a book gave it or by the whole name the user recorded**, and the books read are
+the ones that user reads: their own, and the collected book of each mail account assigned to them, with their own record
+answering where both hold an address. A name addresses a message only where exactly one contact in that reading carries
+it. Nothing ranks candidates, nothing prefers the most recently written
 down, and nothing falls back to a near match: a recipient chosen that way is a message delivered to somebody nobody
 named. The name is compared on the form the book compares its own values in, so the casing an author wrote is immaterial,
 and it is the whole name rather than part of one — text that merely appears inside somebody's name is not that person

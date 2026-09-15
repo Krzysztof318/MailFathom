@@ -8,6 +8,7 @@ using MailFathom.Application.Contacts.Failures;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
@@ -26,6 +27,13 @@ namespace MailFathom.Application.UnitTests.Contacts;
 public sealed class ContactBookWriterTests
 {
     private static readonly DateTimeOffset Now = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
+
+    private static readonly MailUserId User = SyntheticMailUser.Deployment;
+
+    private static readonly MailAccountId Account = SyntheticMailAccount.Deployment;
+
+    /// <summary>The books the caller every test here arranges reads: their own, then the account assigned to them.</summary>
+    private static readonly ContactBookScope Scope = ContactBookScope.Of(User, [Account]);
 
     /// <summary>A note holding somebody's address, so a refusal that repeated what it read would be visible.</summary>
     private const string PrivateNote = "reachable at anna@example.test";
@@ -82,7 +90,7 @@ public sealed class ContactBookWriterTests
 
         // Assert
         Assert.Equal(MailFathomPermission.MailContactsWrite, refusal.RequiredPermission);
-        var untouched = await book.FindAsync(SyntheticMailUser.Deployment, held.Id, TestContext.Current.CancellationToken);
+        var untouched = await book.FindAsync(Scope, held.Id, TestContext.Current.CancellationToken);
         Assert.Equal("Anna Kowalska", untouched?.DisplayName.Value);
     }
 
@@ -104,14 +112,19 @@ public sealed class ContactBookWriterTests
         Assert.Equal(ContactOrigin.Asserted, result.Contact?.Origin);
     }
 
-    /// <summary>A record collected from arriving mail is not a caller's to edit in place, and the outcome says which rule refused it.</summary>
+    /// <summary>A record collected from arriving mail is the mailbox's, so an amendment naming one is refused as collected.</summary>
+    /// <remarks>
+    /// An amendment writes into the caller's own book alone, and the collected record is in the account's — where the
+    /// other users assigned that mailbox read it. The refusal names the origin rather than the absence, because
+    /// promotion is what gives the caller a copy of their own to amend and the caller has to be told that.
+    /// </remarks>
     [Fact]
-    public async Task AmendAsync_AContactTheDeploymentCollected_IsRefusedByItsOrigin()
+    public async Task AmendAsync_AContactTheDeploymentCollected_IsRefusedByItsOriginRatherThanAmended()
     {
         // Arrange
         var book = new InMemoryContactBookStore();
         var collected = ContactOf("Anna Kowalska", "anna@example.test", ContactOrigin.Collected);
-        book.Hold(collected);
+        book.Hold(Account, collected);
 
         var writer = WriterOver(book);
 
@@ -123,6 +136,33 @@ public sealed class ContactBookWriterTests
 
         // Assert
         Assert.Equal(ContactWriteOutcome.OriginRefusesWriter, result.Outcome);
+        Assert.Equal(ContactOrigin.Collected, result.Contact?.Origin);
+        Assert.Equal("Anna Kowalska", Assert.Single(book.ContactsOf(Account)).DisplayName.Value);
+    }
+
+    /// <summary>Promotion writes the caller's own copy, which is then amendable like any other record they wrote down.</summary>
+    [Fact]
+    public async Task PromoteAsync_AContactTheDeploymentCollected_LeavesACopyTheCallerCanThenAmend()
+    {
+        // Arrange
+        var book = new InMemoryContactBookStore();
+        var collected = ContactOf("Anna Kowalska", "anna@example.test", ContactOrigin.Collected);
+        book.Hold(Account, collected);
+
+        var writer = WriterOver(book);
+
+        // Act
+        var promoted = await writer.PromoteAsync(collected.Id, TestContext.Current.CancellationToken);
+        var amended = await writer.AmendAsync(
+            promoted.Contact!.Id,
+            DraftOf("Anna K.", "anna@example.test"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ContactWriteOutcome.Written, promoted.Outcome);
+        Assert.Equal(ContactWriteOutcome.Written, amended.Outcome);
+        Assert.Equal("Anna K.", Assert.Single(book.ContactsOf(User)).DisplayName.Value);
+        Assert.Equal("Anna Kowalska", Assert.Single(book.ContactsOf(Account)).DisplayName.Value);
     }
 
     /// <summary>An amendment states the whole record, so the second identical call leaves the same one.</summary>
@@ -147,14 +187,18 @@ public sealed class ContactBookWriterTests
         Assert.Equal(1, book.ContactCount);
     }
 
-    /// <summary>Somebody asking to be taken out of a book is not answered with which half of it they are in.</summary>
+    /// <summary>Somebody asking to be taken out of a book is not answered with which of the caller's books they are in.</summary>
+    /// <remarks>
+    /// Erasing a collected record reaches the account's book, so it is gone for every user assigned that mailbox — the
+    /// record was one record rather than a copy each, and a data-subject erasure that left the others is no erasure.
+    /// </remarks>
     [Fact]
     public async Task EraseAsync_AContactTheDeploymentCollected_IsErasedAllTheSame()
     {
         // Arrange
         var book = new InMemoryContactBookStore();
         var collected = ContactOf("Anna Kowalska", "anna@example.test", ContactOrigin.Collected);
-        book.Hold(collected);
+        book.Hold(Account, collected);
 
         var writer = WriterOver(book);
 
@@ -327,7 +371,8 @@ public sealed class ContactBookWriterTests
     {
         var granted = permissions.ToArray();
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
-        principals.Current.Returns(AuthorizedPrincipal.Caller(
+        principals.Current.Returns(AuthorizedPrincipal.CallerActingFor(
+            User,
             "a-caller",
             granted.Length == 0 ? [MailFathomPermission.MailContactsWrite] : granted));
 
@@ -335,16 +380,17 @@ public sealed class ContactBookWriterTests
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
         var timeProvider = new FakeTimeProvider(Now);
+        var authorization = new AccessAuthorization(principals);
 
         return new ContactBookWriter(
             new ContactBook(
                 book,
                 book,
-                ContactBookOwnerships.ForTheServedUser(),
                 new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), timeProvider),
                 timeProvider,
-                new AccessAuthorization(principals)),
-            new AccessAuthorization(principals));
+                authorization),
+            ContactBookOwnerships.For(authorization, Account),
+            authorization);
     }
 
     private static ContactRecordDraft DraftOf(string displayName, string address) => new()

@@ -736,6 +736,7 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         var contact = new ContactEntity
         {
             Id = Guid.CreateVersion7(),
+            BookHolderId = userId.ToString("D"),
             UserId = userId,
             DisplayName = displayName,
             DisplayNameSortKey = displayName.ToUpperInvariant(),
@@ -750,7 +751,7 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         {
             Id = Guid.CreateVersion7(),
             ContactId = contact.Id,
-            UserId = userId,
+            BookHolderId = userId.ToString("D"),
             Address = address,
             NormalizedAddress = address.ToUpperInvariant(),
         });

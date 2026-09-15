@@ -75,42 +75,48 @@ internal static class AuthoredSendGovernors
             timeProvider ?? TimeProvider.System);
     }
 
-    /// <summary>A contact book holding nobody, which is what an installation that has recorded no correspondent has.</summary>
+    /// <summary>A set of contact books holding nobody, which is what an installation that has recorded no correspondent has.</summary>
     private sealed class VouchingNobody : IContactDirectory
     {
         public Task<Contact?> FindAsync(
-            MailUserId user,
+            ContactBookScope scope,
             ContactId contactId,
             CancellationToken cancellationToken) =>
             Task.FromResult<Contact?>(null);
 
         public Task<IReadOnlyDictionary<ContactId, Contact>> FindAllAsync(
-            MailUserId user,
+            ContactBookScope scope,
             IReadOnlyCollection<ContactId> contactIds,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<ContactId, Contact>>(new Dictionary<ContactId, Contact>());
 
         public Task<Contact?> FindByAddressAsync(
-            MailUserId user,
+            ContactBookScope scope,
             EmailAddress address,
             CancellationToken cancellationToken) =>
             Task.FromResult<Contact?>(null);
 
         public Task<IReadOnlyDictionary<ContactDisplayName, ContactMatch>> MatchDisplayNamesAsync(
-            MailUserId user,
+            ContactBookScope scope,
             IReadOnlyCollection<ContactDisplayName> displayNames,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<ContactDisplayName, ContactMatch>>(
                 new Dictionary<ContactDisplayName, ContactMatch>());
 
         public Task<IReadOnlyDictionary<EmailAddress, ContactId>> FindHoldersOfAsync(
-            MailUserId user,
+            ContactBookHolder holder,
             IReadOnlyCollection<EmailAddress> addresses,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<EmailAddress, ContactId>>(new Dictionary<EmailAddress, ContactId>());
 
+        public Task<IReadOnlySet<EmailAddress>> FindHeldAddressesAsync(
+            ContactBookScope scope,
+            IReadOnlyCollection<EmailAddress> addresses,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<EmailAddress>>(new HashSet<EmailAddress>());
+
         public Task<ContactPage> ReadPageAsync(
-            MailUserId user,
+            ContactBookScope scope,
             ContactQuery query,
             CancellationToken cancellationToken) =>
             Task.FromResult(new ContactPage([], null));

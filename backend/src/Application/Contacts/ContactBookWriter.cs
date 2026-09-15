@@ -40,18 +40,25 @@ public sealed class ContactBookWriter
     private const ContactOrigin CallerWriter = ContactOrigin.Asserted;
 
     private readonly ContactBook book;
+    private readonly ContactBookOwnership ownership;
     private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the use case over the book it writes to and the authorization it asks first.</summary>
     /// <param name="book">Performs the acts the book supports.</param>
+    /// <param name="ownership">Answers whose book this caller writes and which books they read.</param>
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
-    public ContactBookWriter(ContactBook book, AccessAuthorization authorization)
+    public ContactBookWriter(
+        ContactBook book,
+        ContactBookOwnership ownership,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(book);
+        ArgumentNullException.ThrowIfNull(ownership);
         ArgumentNullException.ThrowIfNull(authorization);
 
         this.book = book;
+        this.ownership = ownership;
         this.authorization = authorization;
     }
 
@@ -71,6 +78,7 @@ public sealed class ContactBookWriter
         var record = ReadRecord(draft);
 
         return this.book.RecordAsync(
+            this.ownership.User,
             new NewContact
             {
                 DisplayName = record.DisplayName,
@@ -102,6 +110,7 @@ public sealed class ContactBookWriter
         var record = ReadRecord(draft);
 
         return this.book.AmendAsync(
+            this.ownership.Scope,
             new ContactAmendment
             {
                 ContactId = contactId,
@@ -121,8 +130,9 @@ public sealed class ContactBookWriter
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the writing grant.</exception>
     /// <remarks>
     /// The act that turns a record nobody wrote down into one somebody did, and the only crossing between the origins.
-    /// It is what unlocks amending a collected contact: a caller refused an amendment is told the record was collected,
-    /// promotes it, and then amends it like any other. It acts under <see cref="CallerWriter" /> for the same reason
+    /// It is what unlocks amending a contact a mailbox collected: an amendment reaches the caller's own book alone, so a
+    /// caller promotes the collected record — which writes their own copy of it and leaves the mailbox's for whoever
+    /// else is assigned that account — and then amends that copy like any other. It acts under <see cref="CallerWriter" /> for the same reason
     /// every other write here does — a caller granted this permission is writing for the user — which is also what
     /// keeps collection from performing it on its own output.
     /// </remarks>
@@ -130,7 +140,7 @@ public sealed class ContactBookWriter
     {
         this.authorization.RequirePermission(MailFathomPermission.MailContactsWrite);
 
-        return this.book.PromoteAsync(contactId, CallerWriter, cancellationToken);
+        return this.book.PromoteAsync(this.ownership.Scope, contactId, CallerWriter, cancellationToken);
     }
 
     /// <summary>Erases one person and everything the book derived from them.</summary>
@@ -140,14 +150,15 @@ public sealed class ContactBookWriter
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the writing grant.</exception>
     /// <remarks>
     /// The data-subject erasure path, so it removes rather than marks and no origin gates it: somebody asking to be
-    /// taken out of a contact book is not answered with which half of the book they happen to be in. That is also why a
-    /// caller may erase a contact it could not have amended.
+    /// taken out of a contact book is not answered with which book they happen to be in. That is also why a caller may
+    /// erase a contact it could not have amended — and why erasing one a mailbox collected takes it out for every user
+    /// assigned that mailbox rather than only for this one.
     /// </remarks>
     public Task<ContactErasure> EraseAsync(ContactId contactId, CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailContactsWrite);
 
-        return this.book.EraseAsync(contactId, cancellationToken);
+        return this.book.EraseAsync(this.ownership.Scope, contactId, cancellationToken);
     }
 
     /// <summary>Reads the record a draft states, refusing the one rule it broke.</summary>

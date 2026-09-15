@@ -14,6 +14,9 @@
          the same way wherever one is arranged rather than once per suite. -->
     <Compile Include="..\shared\AccessAuthorizations.cs" Link="AccessAuthorizations.cs" />
     <Compile Include="..\shared\SyntheticMailUser.cs" Link="SyntheticMailUser.cs" />
+    <!-- Which contact books a caller reads follows from the mail accounts assigned to their user, so the suites that
+         compose a book over a caller arrange that relation the same way. -->
+    <Compile Include="..\shared\StubMailAccountAssignments.cs" Link="StubMailAccountAssignments.cs" />
     <Compile Include="..\shared\ContactBookOwnerships.cs" Link="ContactBookOwnerships.cs" />
     <Compile Include="..\shared\OutgoingMailGovernors.cs" Link="OutgoingMailGovernors.cs" />
     <Compile Include="..\shared\AuthoredSendGovernors.cs" Link="AuthoredSendGovernors.cs" />

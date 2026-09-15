@@ -71,12 +71,14 @@ internal sealed class PromoteContactTool(ContactBookWriter contactBookWriter)
         OpenWorld = false,
         UseStructuredContent = true)]
     [Description(
-        "Takes on one person MailFathom collected from arriving mail, so the record becomes one the user asserted "
-        + "rather than one the deployment inferred. This is the only path between the two origins and it runs one way; "
-        + "it is also what unlocks update_contact on a record that answered contactWasCollected. Nothing about the "
-        + "person is rewritten. Writes to local state only, and touches no mail. A contact that was already asserted "
-        + "answers alreadyAsserted. The answer carries the outcome alone and never the record; read the person with "
-        + "get_contact.")]
+        "Takes on one person a mail account collected from arriving mail, by writing your own asserted copy of the "
+        + "record under an identity of its own. It copies rather than moves: the mail account's record stays where it "
+        + "is, because the other users assigned that account read it too, and your reads answer with your copy in its "
+        + "place. This is the only path between the two books and it runs one way; it is also what unlocks "
+        + "update_contact on a record that answered contactWasCollected. Nothing about the person is rewritten. Writes "
+        + "to local state only, and touches no mail. A contact you had already written down answers alreadyAsserted, "
+        + "and one you have already promoted answers notFound because your own copy now answers for the address. The "
+        + "answer carries the outcome alone and never the record; read the person with get_contact.")]
     public async Task<ContactWriteToolResult> PromoteContactAsync(
         [Description("The contactId of the collected person to take on, as a listing or an earlier read returned it.")]
         string contactId,
