@@ -157,8 +157,22 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
     public Task<Contact?> FindByAddressAsync(
         ContactBookScope scope,
         EmailAddress address,
-        CancellationToken cancellationToken) =>
-        Task.FromResult(this.VisibleIn(scope).FirstOrDefault(contact => contact.Holds(address)));
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+
+        // The precedence over the address rather than over the record, exactly as the real store takes it here: the
+        // earliest book holding this address answers, even where a listing would hide that record for another of its
+        // addresses.
+        var answering = this.heldById.Values
+            .Where(held => scope.Keys.Contains(held.Holder.Key, StringComparer.Ordinal)
+                && held.Contact.Holds(address))
+            .OrderBy(held => scope.Keys.ToList().IndexOf(held.Holder.Key))
+            .Select(held => held.Contact)
+            .FirstOrDefault();
+
+        return Task.FromResult(answering);
+    }
 
     /// <inheritdoc />
     public Task<IReadOnlyDictionary<ContactId, Contact>> FindAllAsync(
@@ -246,10 +260,15 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
 
         this.BatchedLookupCount++;
 
-        var visible = this.VisibleIn(scope).ToArray();
+        // No visibility test, exactly as the real store states: being held in any of the books is the whole of the
+        // question, and which of two records for one address the reader is shown does not change that they know it.
+        var inScope = this.heldById.Values
+            .Where(held => scope.Keys.Contains(held.Holder.Key, StringComparer.Ordinal))
+            .Select(held => held.Contact)
+            .ToArray();
 
         IReadOnlySet<EmailAddress> held = addresses
-            .Where(address => visible.Any(contact => contact.Holds(address)))
+            .Where(address => inScope.Any(contact => contact.Holds(address)))
             .ToHashSet();
 
         return Task.FromResult(held);

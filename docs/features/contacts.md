@@ -59,6 +59,12 @@ a page never serves one person twice, and it is applied as the page is read rath
 page still holds the size asked for while the walk has more to serve, and the cursor rather than the count is what says
 whether it does.
 
+**Resolving an address takes the same order over the address rather than over the record**, which is the one place the
+two differ. A hidden record may hold an address no earlier book holds — a mailbox that collected somebody under two of
+their addresses, where the user wrote only one of them down — and a caller resolving that second address already has it
+in hand, so answering that nobody uses it would deny an address this deployment holds and the reader is assigned. The
+address they share still answers from the record a listing shows.
+
 **Which book an act writes is never the same question as which books it reads.** A caller's writes go into their own
 book: recording a person, amending one, promoting one. Collection writes into the book of the account it is
 synchronizing and into no other. Erasure is the exception and deliberately so — see [§ Erasing and exporting a

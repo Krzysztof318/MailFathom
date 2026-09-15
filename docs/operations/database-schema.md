@@ -310,7 +310,7 @@ or assigns somebody several, loses what those accounts had collected. **Nothing 
 touched either way**, and collection rebuilds what was deleted from the mail that arrives next, exactly as it does after
 `mfctl contact delete-collected`. There is no way back to them afterwards, so an operator who wants them kept reads
 them **before** the upgrade — and which reading is available depends on the deployment being upgraded from, because on
-the release carrying that migration every `mfctl contact` command still reaches the book of the one user the deployment
+the release being upgraded from, every `mfctl contact` command still reaches the book of the one user that deployment
 serves. A deployment serving one user reads them with `mfctl contact list --origin Collected` and exports each with
 `mfctl contact export`. A deployment serving several — which is exactly the shape that loses rows — cannot, so it reads
 them from the database instead, before the migration runs:

@@ -24,13 +24,14 @@ namespace MailFathom.Application.Contacts;
 /// </para>
 /// <para>
 /// <see cref="Key" /> is what the store files a row under, and it is text because the two identifiers are:
-/// a user is a UUID and a mail account is the identifier its declaration carries, and the mail graph beside this one
-/// already records that identifier as text. It leads with the kind, and that prefix is load-bearing rather than
-/// decorative: an account identifier is text an operator wrote and nothing constrains its shape, so one written as the
-/// canonical form of some user's UUID would otherwise make that user's own book and that mailbox's collected book one
-/// key — and every read narrows on the key alone, so every other user assigned the account would read that user's own
-/// contacts. The prefix is what makes the two namespaces unable to meet, and the check constraint on the table asserts
-/// the same derivation so a row cannot be filed under a key its own holder columns do not produce.
+/// a user is a UUID and a mail account is the identifier the deployment generated for its record, which the mail graph
+/// beside this one already records as text. It leads with the kind, and that prefix is load-bearing rather than
+/// decorative: the two are UUIDs minted independently of each other, so nothing about either makes it unable to equal
+/// the other, and one that did would make that user's own book and that mailbox's collected book one key — every read
+/// narrows on the key alone, so every other user assigned the account would read that user's own contacts. Neither
+/// value is checked against the other's table anywhere, and no constraint could be: the prefix is what makes the two
+/// namespaces unable to meet, and the check constraint on the table asserts the same derivation so a row cannot be
+/// filed under a key its own holder columns do not produce.
 /// </para>
 /// </remarks>
 public sealed record ContactBookHolder

@@ -542,7 +542,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
     private static ContactEntity ContactRowOf(Guid userId, Contact contact) => new()
     {
         Id = contact.Id.Value,
-        BookHolderId = userId.ToString("D"),
+        BookHolderId = ContactBookHolder.Of(MailUserId.Create(userId)).Key,
         UserId = userId,
         DisplayName = contact.DisplayName.Value,
         DisplayNameSortKey = contact.DisplayName.SortKey,
@@ -556,7 +556,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
     {
         Id = Guid.CreateVersion7(RecordedAt),
         ContactId = contact.Id.Value,
-        BookHolderId = userId.ToString("D"),
+        BookHolderId = ContactBookHolder.Of(MailUserId.Create(userId)).Key,
         Address = contact.PreferredAddress.Address,
         NormalizedAddress = contact.PreferredAddress.NormalizedAddress,
     };

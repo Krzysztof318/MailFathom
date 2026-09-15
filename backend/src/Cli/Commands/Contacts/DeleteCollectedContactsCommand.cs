@@ -71,8 +71,8 @@ internal static class DeleteCollectedContactsCommand
         if (!CliConfirmation.Agreed(
                 context,
                 confirmedUpFront,
-                "There is nobody at the terminal to agree to this, and erasing what was collected cannot be undone. Pass --yes to erase without being asked.",
-                "Erase everything that mail account collected? Every user assigned it reads that book, and what anybody wrote down is kept. [y/N] "))
+                $"There is nobody at the terminal to agree to erasing what mail account {accountId:D} collected, and it cannot be undone. Pass --yes to erase without being asked.",
+                $"Erase everything mail account {accountId:D} collected? Every user assigned it reads that book, and what anybody wrote down is kept. [y/N] "))
         {
             context.Console.WriteError("Nothing was erased.");
 
@@ -88,8 +88,8 @@ internal static class DeleteCollectedContactsCommand
             cancellationToken);
 
         context.Console.WriteLine(erasure.ContactsErased == 0
-            ? "That mail account had collected nobody, so nothing was erased."
-            : $"Erased {Describe(erasure.ContactsErased, "contact", "contacts")} that mail account had collected, and {Describe(erasure.AddressesErased, "address", "addresses")}. Nothing in MailFathom can put them back.");
+            ? $"Mail account {accountId:D} had collected nobody, so nothing was erased."
+            : $"Erased {Describe(erasure.ContactsErased, "contact", "contacts")} mail account {accountId:D} had collected, and {Describe(erasure.AddressesErased, "address", "addresses")}. Nothing in MailFathom can put them back.");
 
         return CliExitCode.Success;
     }

@@ -97,8 +97,9 @@ public sealed class ContactBookReader
     /// <remarks>
     /// The lookup a caller reaches for once it has an address out of mail, answered from the address index leading
     /// with the book rather than from a search over one. Several books of the scope may each hold the address, and the
-    /// earliest of them is the one that answers — the same precedence a page is read under, rather than a uniqueness
-    /// rule the database keeps.
+    /// earliest of them is the one that answers — the scope's own precedence rather than a uniqueness rule the database
+    /// keeps. It is taken over the address here rather than over the record, so an address only a record a listing
+    /// hides holds still resolves.
     /// </remarks>
     public Task<Contact?> FindByAddressAsync(EmailAddress address, CancellationToken cancellationToken)
     {

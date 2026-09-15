@@ -26,8 +26,10 @@ namespace MailFathom.Mcp.Tools.Contacts;
 /// </para>
 /// <para>
 /// It changes state, reaches nothing outside this process, and is not destructive: nothing about the person is
-/// rewritten, and what moves is which half of the book they are in. Asking twice is asking once — the second call
-/// answers <c>alreadyAsserted</c>, which is the state the first call left the record in.
+/// rewritten and nothing is taken from anybody. What it writes is the caller's own copy, and the mail account's record
+/// stays where the account's other users go on reading it. A second call therefore answers <c>notFound</c> rather than
+/// repeating the first: the copy is what answers for that address in the caller's scope, so the collected record the
+/// identifier named is no longer the one a read of theirs reaches.
 /// </para>
 /// <para>
 /// <b>It answers with the outcome and never with the record.</b> The caller supplied an identifier rather than a

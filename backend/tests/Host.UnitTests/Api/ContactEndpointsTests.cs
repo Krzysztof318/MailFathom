@@ -160,6 +160,7 @@ public sealed class ContactEndpointsTests
             User,
             this.Book(),
             this.Scopes(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -452,6 +453,7 @@ public sealed class ContactEndpointsTests
             User,
             this.Book(),
             this.Scopes(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -525,6 +527,57 @@ public sealed class ContactEndpointsTests
         await this.AssertRefusedWithoutWriting(result, "holds no user");
     }
 
+    /// <summary>The three routes that act under a named user refuse one this deployment holds no record for.</summary>
+    /// <remarks>
+    /// Each answers the same shape for a user nobody holds as it would for a person the books do not carry — nothing
+    /// erased, nothing exported, nothing promoted — so a mistyped identifier would otherwise read exactly like the act
+    /// having run against the person who was meant. A plain read is deliberately not here: an empty book is the honest
+    /// answer to a reader nobody holds, which is what <c>ContactBookScopes.Of</c> documents.
+    /// </remarks>
+    [Fact]
+    public async Task TheActingRoutes_AUserThisDeploymentHoldsNoRecordFor_RefuseWithoutReachingTheBook()
+    {
+        // Arrange
+        var stranger = SyntheticMailUser.Another.Value;
+        this.Holds(Asserted("Anna Kowalska", "anna@example.test"));
+
+        // Act
+        var erasure = await ContactEndpoints.EraseAsync(
+            Identity,
+            stranger,
+            this.Book(),
+            this.Scopes(),
+            this.Roster(),
+            TestContext.Current.CancellationToken);
+
+        var export = await ContactEndpoints.ExportAsync(
+            Identity,
+            stranger,
+            this.Book(),
+            this.Scopes(),
+            this.Roster(),
+            TestContext.Current.CancellationToken);
+
+        var promotion = await ContactEndpoints.PromoteAsync(
+            Identity,
+            stranger,
+            this.Book(),
+            this.Scopes(),
+            this.Roster(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(erasure.Result).StatusCode);
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(export.Result).StatusCode);
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(promotion.Result).StatusCode);
+
+        await this.store.DidNotReceive().EraseAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<ContactBookScope>(),
+            Arg.Any<ContactId>(),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>An erasure cannot be undone, so an account nothing serves is refused rather than answered with nothing removed.</summary>
     [Fact]
     public async Task EraseCollectedAsync_AnAccountThisDeploymentDoesNotServe_RefusesWithoutErasing()
@@ -560,6 +613,7 @@ public sealed class ContactEndpointsTests
             User,
             this.Book(),
             this.Scopes(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -581,6 +635,7 @@ public sealed class ContactEndpointsTests
             User,
             this.Book(),
             this.Scopes(),
+            this.Roster(),
             TestContext.Current.CancellationToken);
 
         // Assert

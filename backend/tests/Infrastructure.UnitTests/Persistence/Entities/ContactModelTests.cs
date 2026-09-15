@@ -63,8 +63,10 @@ public sealed class ContactModelTests
             candidate => candidate.Name == PersistenceConstraintNames.ContactBookHolderCheckConstraintName);
 
         // Assert
-        Assert.Contains("\"UserId\" IS NOT NULL", constraint.Sql, StringComparison.Ordinal);
-        Assert.Contains("\"MailboxAccountId\" IS NOT NULL", constraint.Sql, StringComparison.Ordinal);
+        Assert.Contains(
+            "((\"UserId\" IS NOT NULL)::int + (\"MailboxAccountId\" IS NOT NULL)::int) = 1",
+            constraint.Sql,
+            StringComparison.Ordinal);
         Assert.Contains(
             "\"BookHolderId\" = CASE WHEN \"UserId\" IS NULL THEN 'account:' || \"MailboxAccountId\" ELSE 'user:' || \"UserId\"::text END",
             constraint.Sql,

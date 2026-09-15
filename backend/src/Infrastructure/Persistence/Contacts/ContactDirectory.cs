@@ -27,11 +27,19 @@ namespace MailFathom.Infrastructure.Persistence.Contacts;
 /// record.
 /// </para>
 /// <para>
-/// <b>One address is shown once.</b> A user's own book and the collected book of each of their mailboxes may all hold a
-/// record for one address, so every read here is taken over <see cref="VisibleIn" />, which hides a record whose
-/// address a book earlier in the scope already holds. The precedence is the scope's own order and it reaches the
-/// database as the position of a book in that list, so the same record wins on a listing, on a lookup, and on a name
+/// <b>One person is answered once.</b> A user's own book and the collected book of each of their mailboxes may all hold
+/// a record for one address, so every read that serves people is taken over <see cref="VisibleIn" />, which hides a
+/// record whose address a book earlier in the scope already holds. The precedence is the scope's own order and it
+/// reaches the database as the position of a book in that list, so the same record wins on a listing and on a name
 /// match. A scope of one book skips the test altogether, because no earlier book exists for anything to be hidden by.
+/// </para>
+/// <para>
+/// <see cref="FindByAddressAsync" /> is the one read that takes the same precedence over the address instead of over
+/// the record, and the difference is only visible where one person's records disagree about which addresses they hold.
+/// A record hidden from a listing because an earlier book holds one of its addresses may hold another the earlier book
+/// does not, and a caller resolving that second address has it in hand already — so answering nothing would deny an
+/// address this deployment holds and the reader is assigned. It is not hidden the other way either: the record a
+/// listing does show is the one that answers for the address they share.
 /// </para>
 /// <para>
 /// A page narrowed by a search is the one read no index answers, because a contained match has no prefix to seek on. It
@@ -101,14 +109,19 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
         ArgumentNullException.ThrowIfNull(scope);
 
         var normalizedAddress = address.NormalizedAddress;
+        var books = scope.Keys.ToArray();
 
-        // At most one record survives the visibility test for one address, because a record is hidden exactly when a
-        // book earlier in the scope holds that address, so the earliest book holding it is the only one left.
-        var entity = await this.VisibleIn(scope)
+        // The precedence is taken over the address rather than over the record, which is the one read where the two
+        // differ. A listing hides a whole record whose address an earlier book holds, because a person is listed once;
+        // here the caller already has the address, so the earliest book holding *it* answers even where that record is
+        // one a listing would hide for a different address of the same person. Within a book the address is unique, so
+        // the order over the scope settles the answer outright.
+        var entity = await readContext.Contacts.AsNoTracking()
+            .Where(record => books.Contains(record.BookHolderId)
+                && record.Addresses.Any(held => held.NormalizedAddress == normalizedAddress))
+            .OrderBy(record => Array.IndexOf(books, record.BookHolderId))
             .Include(record => record.Addresses)
-            .FirstOrDefaultAsync(
-                record => record.Addresses.Any(held => held.NormalizedAddress == normalizedAddress),
-                cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken);
 
         return entity is null ? null : ContactMapping.ToContact(entity);
     }

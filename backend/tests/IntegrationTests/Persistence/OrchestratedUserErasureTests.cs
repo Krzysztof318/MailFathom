@@ -2,9 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Contacts;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
@@ -736,7 +738,7 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         var contact = new ContactEntity
         {
             Id = Guid.CreateVersion7(),
-            BookHolderId = userId.ToString("D"),
+            BookHolderId = ContactBookHolder.Of(MailUserId.Create(userId)).Key,
             UserId = userId,
             DisplayName = displayName,
             DisplayNameSortKey = displayName.ToUpperInvariant(),
@@ -751,7 +753,7 @@ public sealed class OrchestratedUserErasureTests(MailFathomOrchestrationFixture 
         {
             Id = Guid.CreateVersion7(),
             ContactId = contact.Id,
-            BookHolderId = userId.ToString("D"),
+            BookHolderId = ContactBookHolder.Of(MailUserId.Create(userId)).Key,
             Address = address,
             NormalizedAddress = address.ToUpperInvariant(),
         });

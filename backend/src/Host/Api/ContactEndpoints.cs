@@ -212,9 +212,12 @@ internal static class ContactEndpoints
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the outcome, or <c>400</c> naming which rule the record broke.</returns>
     /// <remarks>
-    /// The roster is asked before the write rather than after it because this is the one contact route that inserts
-    /// under a user the request named: a read of a user nobody holds is an empty book, but a write under one would
-    /// reach the commit and fail on the foreign key onto the user record, which is a fault where a refusal is owed.
+    /// The roster is asked before the write rather than after it, as it is on every route here that acts under the user
+    /// a request named: an insert under a user nobody holds would reach the commit and fail on the foreign key onto the
+    /// user record, which is a fault where a refusal is owed, and an erasure or an export of one would answer that the
+    /// books held nobody — indistinguishable from the act having run against the person who was meant. A plain read is
+    /// the one case left alone, because an empty book is the honest answer there and <c>ContactBookScopes.Of</c>
+    /// documents it.
     /// </remarks>
     internal static async Task<Results<Ok<ContactWriteResponse>, ProblemHttpResult>> RecordAsync(
         [FromQuery] Guid user,
@@ -389,6 +392,7 @@ internal static class ContactEndpoints
     /// <param name="user">The user taking the record on, whose own book the copy is written into.</param>
     /// <param name="book">Performs the write.</param>
     /// <param name="scopes">Composes the books that user reads.</param>
+    /// <param name="users">Answers whether this deployment holds a record for the named user.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the outcome and no record, including for a contact that was already asserted.</returns>
     /// <remarks>
@@ -402,14 +406,21 @@ internal static class ContactEndpoints
         [FromQuery] Guid user,
         [FromServices] ContactBook book,
         [FromServices] ContactBookScopes scopes,
+        [FromServices] IMailUserDirectory users,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
         ArgumentNullException.ThrowIfNull(scopes);
+        ArgumentNullException.ThrowIfNull(users);
 
         if (!TryReadUser(user, out var writer))
         {
             return EmptyUser();
+        }
+
+        if (await users.ReadUserAsync(writer, cancellationToken) is null)
+        {
+            return UnknownUser(writer);
         }
 
         if (!TryReadContactId(contactId, out var identity))
@@ -431,6 +442,7 @@ internal static class ContactEndpoints
     /// <param name="user">The user whose books the erasure reaches.</param>
     /// <param name="book">Performs the erasure.</param>
     /// <param name="scopes">Composes the books that user reads.</param>
+    /// <param name="users">Answers whether this deployment holds a record for the named user.</param>
     /// <param name="cancellationToken">Cancels the erasure when the client disconnects.</param>
     /// <returns><c>200</c> with what was removed, including books that held no such contact.</returns>
     /// <remarks>
@@ -444,14 +456,21 @@ internal static class ContactEndpoints
         [FromQuery] Guid user,
         [FromServices] ContactBook book,
         [FromServices] ContactBookScopes scopes,
+        [FromServices] IMailUserDirectory users,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
         ArgumentNullException.ThrowIfNull(scopes);
+        ArgumentNullException.ThrowIfNull(users);
 
         if (!TryReadUser(user, out var reader))
         {
             return EmptyUser();
+        }
+
+        if (await users.ReadUserAsync(reader, cancellationToken) is null)
+        {
+            return UnknownUser(reader);
         }
 
         if (!TryReadContactId(contactId, out var identity))
@@ -509,6 +528,7 @@ internal static class ContactEndpoints
     /// <param name="user">The user whose books are read.</param>
     /// <param name="book">Produces the export.</param>
     /// <param name="scopes">Composes the books that user reads.</param>
+    /// <param name="users">Answers whether this deployment holds a record for the named user.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the export, or <c>200</c> with none where the book holds no such person.</returns>
     internal static async Task<Results<Ok<ContactExportResponse>, ProblemHttpResult>> ExportAsync(
@@ -516,14 +536,21 @@ internal static class ContactEndpoints
         [FromQuery] Guid user,
         [FromServices] ContactBook book,
         [FromServices] ContactBookScopes scopes,
+        [FromServices] IMailUserDirectory users,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(book);
         ArgumentNullException.ThrowIfNull(scopes);
+        ArgumentNullException.ThrowIfNull(users);
 
         if (!TryReadUser(user, out var reader))
         {
             return EmptyUser();
+        }
+
+        if (await users.ReadUserAsync(reader, cancellationToken) is null)
+        {
+            return UnknownUser(reader);
         }
 
         if (!TryReadContactId(contactId, out var identity))

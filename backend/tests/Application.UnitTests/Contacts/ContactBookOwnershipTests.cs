@@ -129,6 +129,43 @@ public sealed class ContactBookOwnershipTests
         Assert.Equal(collected.Id, Assert.Single(didNot.Contacts).Id);
     }
 
+    /// <summary>An address only a hidden record holds still resolves, because a lookup takes the order over the address.</summary>
+    /// <remarks>
+    /// The record a listing hides is hidden for one of its addresses, and a mailbox that collected somebody under two
+    /// of them holds the other one alone. Answering that nobody uses it would deny an address this deployment holds and
+    /// this reader is assigned, so the precedence is taken over the address here rather than over the record — and the
+    /// address the two records share still answers from the one the listing shows.
+    /// </remarks>
+    [Fact]
+    public async Task FindByAddressAsync_AnAddressHeldOnlyByARecordTheListingHides_AnswersFromTheBookHoldingIt()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+
+        var collected = CollectedContactOf("Anna Kowalska", "anna@work.test", "anna@home.test");
+        var written = ContactOf("Anna Kowalska", "anna@work.test");
+        store.Hold(SyntheticMailAccount.Deployment, collected);
+        store.Hold(SyntheticMailUser.Deployment, written);
+
+        var reader = ReaderOf(store, SyntheticMailUser.Deployment, assignments);
+
+        // Act
+        var byTheHiddenAddress = await reader.FindByAddressAsync(
+            Address("anna@home.test"),
+            TestContext.Current.CancellationToken);
+        var byTheSharedAddress = await reader.FindByAddressAsync(
+            Address("anna@work.test"),
+            TestContext.Current.CancellationToken);
+        var page = await reader.ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(collected.Id, byTheHiddenAddress?.Id);
+        Assert.Equal(written.Id, byTheSharedAddress?.Id);
+        Assert.Equal(written.Id, Assert.Single(page.Contacts).Id);
+    }
+
     /// <summary>An address two of a user's mailboxes both collected is answered once, from the account the order names first.</summary>
     /// <remarks>
     /// The order is the accounts' own identifiers rather than anything either user's record declared, so the same
@@ -240,11 +277,20 @@ public sealed class ContactBookOwnershipTests
     }
 
     /// <summary>Collection writes into the account's book alone, whichever users happen to be assigned it.</summary>
+    /// <remarks>
+    /// The sharing is arranged rather than assumed, because two empty user books prove nothing where nobody was
+    /// assigned anything: what is being asserted is that a write reached neither book of the two people who do read
+    /// this mailbox.
+    /// </remarks>
     [Fact]
     public async Task CollectAsync_AnAccountTwoUsersShare_WritesOneRecordIntoTheAccountsBook()
     {
         // Arrange
         var store = new InMemoryContactBookStore();
+        var assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment)
+            .Assigning(SyntheticMailUser.Another, SyntheticMailAccount.Deployment);
+
         var book = CollectingBookOf(store);
 
         // Act
@@ -259,6 +305,36 @@ public sealed class ContactBookOwnershipTests
         Assert.Equal(collected.Contact?.Id, Assert.Single(store.ContactsOf(SyntheticMailAccount.Deployment)).Id);
         Assert.Empty(store.ContactsOf(SyntheticMailUser.Deployment));
         Assert.Empty(store.ContactsOf(SyntheticMailUser.Another));
+        Assert.Equal(
+            [SyntheticMailUser.Deployment, SyntheticMailUser.Another],
+            assignments.UsersAssignedTo(SyntheticMailAccount.Deployment));
+    }
+
+    /// <summary>A user not assigned a mailbox reads none of what it collected, which is the whole of what the split is for.</summary>
+    /// <remarks>
+    /// The positive half — two assigned users reading one record — holds just as well under a scope that put every
+    /// served account's book into everybody's, and that scope is exactly the disclosure this change closed. So the
+    /// relation is asserted from its negative end as well, where an assignment nobody made is what has to be absent.
+    /// </remarks>
+    [Fact]
+    public async Task ReadPageAsync_AUserAssignedNoneOfTheAccount_ReadsNothingItCollected()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var assignments = new StubMailAccountAssignments()
+            .Assigning(SyntheticMailUser.Deployment, SyntheticMailAccount.Deployment);
+
+        store.Hold(SyntheticMailAccount.Deployment, CollectedContactOf("Anna Kowalska", "anna@example.test"));
+
+        // Act
+        var assigned = await ReaderOf(store, SyntheticMailUser.Deployment, assignments)
+            .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
+        var unassigned = await ReaderOf(store, SyntheticMailUser.Another, assignments)
+            .ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Single(assigned.Contacts);
+        Assert.Empty(unassigned.Contacts);
     }
 
     /// <summary>Erasing a contact of somebody else's book erases nothing, and reads as a book that never held them.</summary>
@@ -367,6 +443,18 @@ public sealed class ContactBookOwnershipTests
 
     private static Contact CollectedContactOf(string displayName, string address) =>
         ContactOf(displayName, address, ContactOrigin.Collected);
+
+    /// <summary>Builds a collected contact holding several addresses, the first of which it prefers.</summary>
+    private static Contact CollectedContactOf(string displayName, params string[] addresses) =>
+        Contact.Create(
+            ContactId.Create(Guid.CreateVersion7(Now)),
+            ContactDisplayName.Create(displayName),
+            [.. addresses.Select(Address)],
+            Address(addresses[0]),
+            note: null,
+            ContactOrigin.Collected,
+            Now,
+            Now);
 
     private static Contact ContactOf(string displayName, string address, ContactOrigin origin) =>
         Contact.Create(
