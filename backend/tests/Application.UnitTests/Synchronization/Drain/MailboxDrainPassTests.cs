@@ -85,22 +85,23 @@ public sealed class MailboxDrainPassTests
         Assert.Single(context.Store.Cleared);
     }
 
-    [Fact]
-    public async Task DrainAsync_PayloadWasNeverStored_LeavesTheMessageOnItsSourceAndCountsWhy()
+    [Theory]
+    [InlineData(StoredEmailContentAvailability.ExceededSizeLimit, MailboxDrainHoldBack.ContentAboveSizeLimit)]
+    [InlineData(StoredEmailContentAvailability.AwaitingStorageHeadroom, MailboxDrainHoldBack.AwaitingStorageHeadroom)]
+    public async Task DrainAsync_TheRowSaysNoPayloadIsStoredYet_LeavesTheMessageOnItsSourceAndCountsWhy(
+        StoredEmailContentAvailability availability,
+        MailboxDrainHoldBack expected)
     {
         // Arrange
         var context = new DrainContext(Held)
-            .Storing(Stored(Inbox, uid: 11) with
-            {
-                ContentAvailability = StoredEmailContentAvailability.ExceededSizeLimit,
-            });
+            .Storing(Stored(Inbox, uid: 11) with { ContentAvailability = availability });
 
         // Act
         var report = await context.Pass.DrainAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(0, report.DrainedCount);
-        Assert.Equal(1, report.HeldBack[MailboxDrainHoldBack.ContentAboveSizeLimit]);
+        Assert.Equal(1, report.HeldBack[expected]);
         Assert.Empty(context.ExpungedUids);
     }
 
@@ -217,7 +218,24 @@ public sealed class MailboxDrainPassTests
 
         // Assert
         Assert.Equal(1, report.FailedBatchCount);
+        Assert.Equal(1, report.FailedBatches[MailboxDrainFailure.SourceUnavailable]);
         Assert.True(report.Failed);
+        Assert.Empty(context.Store.Cleared);
+    }
+
+    [Fact]
+    public async Task DrainAsync_SourceStoppedServingAMessageScopedExpunge_SaysSoRatherThanCountingATransientFailure()
+    {
+        // Arrange
+        var context = new DrainContext(Held)
+            .Storing(Stored(Inbox, uid: 11))
+            .WithSourceThatCannotExpungeOneMessage();
+
+        // Act
+        var report = await context.Pass.DrainAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.FailedBatches[MailboxDrainFailure.SourceCannotExpungeOneMessage]);
         Assert.Empty(context.Store.Cleared);
     }
 
@@ -239,6 +257,30 @@ public sealed class MailboxDrainPassTests
         Assert.Equal(1, report.RemovedErasedCount);
         Assert.Equal([ImapUid.Create(31)], context.ExpungedUids);
         Assert.Equal([removal.Id], context.Store.DeletedRemovals);
+    }
+
+    /// <summary>One run takes at most the configured number off the source, over both halves of the pass together.</summary>
+    [Fact]
+    public async Task DrainAsync_ErasedCopiesSpendTheWholeRunsBudget_LeavesTheStoredMailToTheNextRun()
+    {
+        // Arrange
+        var removal = new MailboxSourceRemoval(
+            MailboxSourceRemovalId.New(),
+            EmailOccurrenceId.Create(Account, Inbox.Id, ImapUidValidity.Create(1), ImapUid.Create(31)),
+            Inbox);
+
+        var context = new DrainContext(Held, maxPerRun: 1)
+            .AwaitingRemovalOf(removal)
+            .Storing(Stored(Inbox, uid: 11));
+
+        // Act
+        var report = await context.Pass.DrainAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, report.RemovedErasedCount);
+        Assert.Equal(0, report.DrainedCount);
+        Assert.Equal([ImapUid.Create(31)], context.ExpungedUids);
+        Assert.Empty(context.Store.Cleared);
     }
 
     [Fact]
@@ -271,6 +313,25 @@ public sealed class MailboxDrainPassTests
         // Assert
         Assert.Equal(MailAccountCustodyPhase.Held, context.Custody.StateOf(Account)!.Phase);
         Assert.Equal(1, report.DrainedCount);
+    }
+
+    /// <summary>A source with no message-scoped expunge could never be emptied, so the account stays mirroring it.</summary>
+    [Fact]
+    public async Task DrainAsync_SourceAdvertisesNoMessageScopedExpunge_LeavesTheAccountMirroringAndSaysWhy()
+    {
+        // Arrange
+        var context = new DrainContext(
+                new MailAccountCustodyState(MailAccountCustody.HoldMailbox, MailAccountCustodyPhase.Mirrored))
+            .Storing(Stored(Inbox, uid: 11))
+            .WithSourceThatAdvertisesNoMessageScopedExpunge();
+
+        // Act
+        var report = await context.Pass.DrainAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(report.SourceCannotBeDrained);
+        Assert.Equal(MailAccountCustodyPhase.Mirrored, context.Custody.StateOf(Account)!.Phase);
+        Assert.Empty(context.ExpungedUids);
     }
 
     [Fact]
@@ -341,7 +402,7 @@ public sealed class MailboxDrainPassTests
         private readonly IMailFolderMappingReader mappings = Substitute.For<IMailFolderMappingReader>();
         private readonly IMailboxMutationRecordStore mutations = Substitute.For<IMailboxMutationRecordStore>();
 
-        internal DrainContext(MailAccountCustodyState custody, int maxPerCommand = 50)
+        internal DrainContext(MailAccountCustodyState custody, int maxPerCommand = 50, int maxPerRun = 200)
         {
             this.Custody = InMemoryMailAccountCustodyStore.With(Account, custody);
 
@@ -361,6 +422,7 @@ public sealed class MailboxDrainPassTests
                 .Returns(new StoredEmailContent(Payload, Payload.Length, SHA256.HashData(Payload)));
 
             this.WriteSession = Substitute.For<IMailboxWriteSession>();
+            this.WriteSession.SupportsDrainAsync(Arg.Any<CancellationToken>()).Returns(true);
             this.WriteSession
                 .When(session => session.ExpungeDrainedAsync(
                     Arg.Any<ImapUidValidity>(),
@@ -405,7 +467,7 @@ public sealed class MailboxDrainPassTests
                     TimeProvider.System),
                 new MailboxSynchronizationOptions
                 {
-                    MaxDrainedEmailsPerRun = 200,
+                    MaxDrainedEmailsPerRun = maxPerRun,
                     MaxDrainedEmailsPerCommand = maxPerCommand,
                 },
                 new FakeTimeProvider(RunInstant));
@@ -472,6 +534,28 @@ public sealed class MailboxDrainPassTests
                     Inbox.Alias,
                     ImapUidValidity.Create(1),
                     ImapUidValidity.Create(2)));
+
+            return this;
+        }
+
+        internal DrainContext WithSourceThatAdvertisesNoMessageScopedExpunge()
+        {
+            this.WriteSession.SupportsDrainAsync(Arg.Any<CancellationToken>()).Returns(false);
+
+            return this;
+        }
+
+        internal DrainContext WithSourceThatCannotExpungeOneMessage()
+        {
+            this.WriteSession.ExpungeDrainedAsync(
+                    Arg.Any<ImapUidValidity>(),
+                    Arg.Any<IReadOnlyCollection<ImapUid>>(),
+                    Arg.Any<CancellationToken>())
+                .ThrowsAsync(new MailboxMutationUnsupportedException(
+                    Account,
+                    Inbox.Alias,
+                    "drain expunge",
+                    "UIDPLUS"));
 
             return this;
         }

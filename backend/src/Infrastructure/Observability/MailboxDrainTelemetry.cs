@@ -20,15 +20,16 @@ namespace MailFathom.Infrastructure.Observability;
 /// <em>nothing is moving</em> into an answer.
 /// </para>
 /// <para>
-/// The dimensions are the account alias and MailFathom's own name for a hold-back reason, bounded by the configured
-/// accounts times the four reasons a message is held back, and neither is derived from a message. Nothing here carries a subject, an address,
-/// a folder path, or a UID.
+/// The dimensions are the account alias and MailFathom's own name for a hold-back reason or a kind of failure, bounded
+/// by the configured accounts times the four reasons a message is held back and the four kinds of failure, and none of
+/// them is derived from a message. Nothing here carries a subject, an address, a folder path, or a UID.
 /// </para>
 /// </remarks>
 public sealed partial class MailboxDrainTelemetry : IMailboxDrainTelemetry
 {
     private const string AccountTagName = "mailfathom.mail.account";
     private const string HoldBackTagName = "mailfathom.mailbox.drain.held_back_reason";
+    private const string FailureTagName = "mailfathom.mailbox.drain.failure";
 
     private readonly Counter<long> drained;
     private readonly Counter<long> removed;
@@ -60,7 +61,7 @@ public sealed partial class MailboxDrainTelemetry : IMailboxDrainTelemetry
         this.failedBatches = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.mailbox.drain.failed_batches",
             unit: "{batch}",
-            description: "Batches whose commands the source did not serve, which the account's backoff defers.");
+            description: "Batches whose commands the source did not serve, by the kind of failure, each attempted again by the next ordinary run.");
         this.abandonedBatches = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.mailbox.drain.abandoned_batches",
             unit: "{batch}",
@@ -76,11 +77,15 @@ public sealed partial class MailboxDrainTelemetry : IMailboxDrainTelemetry
     {
         ArgumentNullException.ThrowIfNull(report);
 
+        if (DidNothing(report))
+        {
+            return;
+        }
+
         var accountTag = new KeyValuePair<string, object?>(AccountTagName, account.Value);
 
         this.drained.Add(report.DrainedCount, accountTag);
         this.removed.Add(report.RemovedErasedCount, accountTag);
-        this.failedBatches.Add(report.FailedBatchCount, accountTag);
         this.abandonedBatches.Add(report.AbandonedBatchCount, accountTag);
 
         foreach (var (reason, count) in report.HeldBack)
@@ -89,6 +94,14 @@ public sealed partial class MailboxDrainTelemetry : IMailboxDrainTelemetry
                 count,
                 accountTag,
                 new KeyValuePair<string, object?>(HoldBackTagName, reason.ToString()));
+        }
+
+        foreach (var (failure, count) in report.FailedBatches)
+        {
+            this.failedBatches.Add(
+                count,
+                accountTag,
+                new KeyValuePair<string, object?>(FailureTagName, failure.ToString()));
         }
 
         if (report.DrainedCount == 0 && report.RemovedErasedCount == 0 && report.FailedBatchCount == 0)
@@ -101,13 +114,29 @@ public sealed partial class MailboxDrainTelemetry : IMailboxDrainTelemetry
             report.DrainedCount,
             report.RemovedErasedCount,
             report.FailedBatchCount);
+
+        foreach (var (failure, count) in report.FailedBatches)
+        {
+            this.LogDrainBatchesFailed(account.Value, count, failure);
+        }
     }
 
-    /// <summary>States what one pass took off the source, and what it could not.</summary>
+    /// <summary>Answers whether the pass has anything to record at all.</summary>
+    /// <param name="report">What the pass did.</param>
+    /// <returns><see langword="true" /> when no instrument would record anything but a zero.</returns>
     /// <remarks>
-    /// The failed count is the one to react to: it names batches the source refused, which the account's own backoff
-    /// defers rather than retries, so a figure that stays high means the source is the thing to look at.
+    /// Every configured account reports a pass per interval and a mirrored account's pass does nothing, so adding the
+    /// zeroes would give a deployment that never enabled the mode a per-account series on every one of these
+    /// instruments. A held-back message is not nothing, which is why the two dictionaries are part of the question.
     /// </remarks>
+    private static bool DidNothing(MailboxDrainReport report) =>
+        report.DrainedCount == 0
+        && report.RemovedErasedCount == 0
+        && report.AbandonedBatchCount == 0
+        && report.HeldBack.Count == 0
+        && report.FailedBatches.Count == 0;
+
+    /// <summary>States what one pass took off the source, and what it could not.</summary>
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Drained the source of account {AccountId}; {DrainedCount} messages left the source, {RemovedErasedCount} erased copies were removed, and {FailedBatchCount} batches failed and will be attempted again.")]
@@ -116,4 +145,19 @@ public sealed partial class MailboxDrainTelemetry : IMailboxDrainTelemetry
         int drainedCount,
         int removedErasedCount,
         int failedBatchCount);
+
+    /// <summary>Names what refused a pass's failed batches, one line per kind.</summary>
+    /// <remarks>
+    /// A line per kind rather than one line naming all of them, because the kinds are what an operator acts on
+    /// differently and a kind that repeats across runs is the source rather than the run —
+    /// <see cref="MailboxDrainFailure.SourceCannotExpungeOneMessage" /> above all, which repeating can never get past.
+    /// The name is MailFathom's own word for the refusal and carries nothing the source said.
+    /// </remarks>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The source of account {AccountId} refused {FailedBatchCount} drain batches: {DrainFailure}.")]
+    private partial void LogDrainBatchesFailed(
+        string accountId,
+        int failedBatchCount,
+        MailboxDrainFailure drainFailure);
 }

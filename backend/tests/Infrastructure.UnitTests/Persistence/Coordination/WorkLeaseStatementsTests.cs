@@ -68,6 +68,24 @@ public sealed class WorkLeaseStatementsTests
     }
 
     /// <summary>
+    /// A takeover replaces the holder in full rather than keeping any part of what the previous hold wrote. The custody
+    /// switch reads the build out of that column, so a conflict path that left a newer build's stamp standing under an
+    /// older build's hold would let the switch accept a hold it must refuse.
+    /// </summary>
+    [Fact]
+    public void ComposeClaim_ATakeover_ReplacesTheWholeHolderWithTheClaimingHolds()
+    {
+        // Act
+        var statement = WorkLeaseStatements.ComposeClaim(Scope, Holder, Replica, LeaseDuration);
+
+        // Assert
+        Assert.Contains(
+            $"SET \"{nameof(WorkLeaseEntity.Holder)}\" = EXCLUDED.\"{nameof(WorkLeaseEntity.Holder)}\"",
+            statement.Format,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Every instant is PostgreSQL's, so the deployment holds one clock rather than one per replica: a replica running
     /// minutes fast would otherwise find a live lease expired and take a scope another replica is working under. The
     /// duration crosses as an interval, which is the only part of the arithmetic a caller supplies.

@@ -632,7 +632,10 @@ public sealed class TelemetrySurfaceContractTests
                 {
                     [MailboxDrainHoldBack.ContentAboveSizeLimit] = 1,
                 },
-                FailedBatchCount: 1,
+                FailedBatches: new Dictionary<MailboxDrainFailure, int>
+                {
+                    [MailboxDrainFailure.SourceUnavailable] = 1,
+                },
                 AbandonedBatchCount: 1));
     }
 

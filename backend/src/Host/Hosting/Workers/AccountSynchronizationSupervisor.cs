@@ -1447,6 +1447,18 @@ internal sealed partial class AccountSynchronizationSupervisor
                 remotelyDeletedEmailDisposition);
         }
 
+        // Its own line rather than the one above, because no disposition was applied to these: on an account whose
+        // mailbox MailFathom keeps, an occurrence gone from the source is the drain's own work and the local row is
+        // the only copy there is. Naming the configured disposition here would tell an operator their mail had been
+        // erased when nothing touched it.
+        if (reconciliation.DrainCompletedEmailCount > 0)
+        {
+            this.LogDrainedOccurrencesObserved(
+                this.account.Value,
+                folderAlias,
+                reconciliation.DrainCompletedEmailCount);
+        }
+
         if (reconciliation.SeenStateChangedEmailCount > 0)
         {
             this.LogSeenStateChangesObserved(
@@ -1621,6 +1633,19 @@ internal sealed partial class AccountSynchronizationSupervisor
         string folderAlias,
         int remotelyDeletedEmailCount,
         RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition);
+
+    /// <summary>Records occurrences the source no longer holds on an account whose mailbox MailFathom keeps.</summary>
+    /// <remarks>
+    /// It names no disposition because none was applied: the row's occurrence is cleared and the mail stands, so this
+    /// is the drain's work arriving back through synchronization rather than mail leaving the local copy.
+    /// </remarks>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Mail server no longer holds {DrainCompletedEmailCount} messages stored for {AccountId}/{FolderAlias}; MailFathom keeps this mailbox, so their local copies stand and only the source occurrence was cleared.")]
+    private partial void LogDrainedOccurrencesObserved(
+        string accountId,
+        string folderAlias,
+        int drainCompletedEmailCount);
 
     /// <summary>Separates a folder the server does not advertise from a folder that failed, because only one of them is the operator's to fix in configuration.</summary>
     [LoggerMessage(

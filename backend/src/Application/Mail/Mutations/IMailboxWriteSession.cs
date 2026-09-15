@@ -43,10 +43,16 @@ namespace MailFathom.Application.Mail.Mutations;
 /// </para>
 /// <para>
 /// A relocation and a delete are not atomic on a server that lacks <c>MOVE</c>, and nothing here makes them so. A crash
-/// between the commands leaves the mailbox in a state this session cannot describe, which is why every operation takes
-/// an <see cref="IMailboxMutationJournal" />: the caller has written the change down before calling, the session
-/// announces each stage of the sequence as it passes it, and a resumed attempt reads
-/// <see cref="IMailboxMutationJournal.Stage" /> and continues from there instead of starting over.
+/// between the commands leaves the mailbox in a state this session cannot describe, which is why every operation that
+/// places or removes an authored change takes an <see cref="IMailboxMutationJournal" />: the caller has written the
+/// change down before calling, the session announces each stage of the sequence as it passes it, and a resumed attempt
+/// reads <see cref="IMailboxMutationJournal.Stage" /> and continues from there instead of starting over.
+/// </para>
+/// <para>
+/// <see cref="ExpungeDrainedAsync" /> is the one operation here that takes no journal, and its own remarks say why: it
+/// authors nothing, both its commands are idempotent against the UIDs they name, and the row that selected each UID
+/// still carries the occurrence until the expunge is answered — so the durable record a journal would add is one the
+/// selecting state already holds, per message of a whole mailbox.
 /// </para>
 /// <para>
 /// Resuming is decided here rather than by the caller because it depends on what the connection advertises, which is
@@ -292,6 +298,17 @@ public interface IMailboxWriteSession : IAsyncDisposable
         ImapUidValidity uidValidity,
         ImapUid uid,
         CancellationToken cancellationToken);
+
+    /// <summary>Reports whether this source can be drained at all, which is whether it advertises <c>UIDPLUS</c>.</summary>
+    /// <param name="cancellationToken">Cancels the reading.</param>
+    /// <returns><see langword="true" /> where a message-scoped expunge exists on this server.</returns>
+    /// <remarks>
+    /// Asked before an account is moved into holding its own mailbox, and never as part of a batch. A source with no
+    /// <c>UIDPLUS</c> has no way to remove one named message, so an account held against one would have its remote
+    /// deletions switched off while its source was never emptied — it stays mirrored instead, and this is what
+    /// establishes that. It reads the capabilities the open session already carries and issues no command.
+    /// </remarks>
+    Task<bool> SupportsDrainAsync(CancellationToken cancellationToken);
 
     /// <summary>Removes from this session's folder exactly the messages a drain selected, and no others.</summary>
     /// <param name="uidValidity">The UIDVALIDITY the selected occurrences name, which must still be the folder's.</param>

@@ -66,7 +66,10 @@ A refusal changes nothing and names every reason at once, so one round of fixing
   and a build that does not know about custody would read a held account as mirrored — on meeting its source emptied it
   would apply the account's `RemotelyDeletedEmailDisposition` to every drained message. The check reads the work-lease
   rows: a replica that knows the mode stamps its build into the hold it takes, so a live lease carrying no build is a
-  replica to upgrade. Finish the rolling upgrade and ask again.
+  replica to upgrade. Finish the rolling upgrade and ask again. The reading is bounded, so a deployment holding more
+  live leases than it covers is refused for the same reason rather than accepted on a partial reading — ask again once
+  fewer scopes are held. A replica holding no lease at all is invisible to the check, which is the honest limit of it:
+  the upgrade order still matters.
 - **The account synchronizes a folder playing a virtual role** — `All`, `Flagged`, or `Important`. Such a folder
   presents messages that are occurrences of other folders, so holding it would store each of them twice and draining it
   would remove mail from folders nobody asked about. Providers whose folders are labels over one store are not what
@@ -81,12 +84,17 @@ The drain runs at the end of each synchronization run of a held account, under t
 the account's one write connection. It never runs on a client, MCP, or rule request, so how fast the source server is
 decides how soon it is emptied and never how long anybody waits.
 
-**A message leaves its source only once all of this is true**, re-established immediately before the command goes out:
+**A message leaves its source only once all of this is true:**
 
 1. its row is committed, carrying the occurrence about to be expunged;
 2. the row says its payload is stored;
 3. **the stored bytes have been read back and matched against the length and SHA-256 digest recorded for them**;
 4. the folder still reports the `UIDVALIDITY` the occurrence names.
+
+Points 1, 2, and 4 are re-established immediately before the command goes out, from a fresh read of the row and the
+folder the command is about to name. Point 3 is established once per message and recorded: a payload that has been read
+back and matched is a fact about those bytes, so the drain records the match rather than reading the whole payload
+again for every batch a message survives to.
 
 A message that fails any of them stays on the source and is counted under the reason it failed. Two of those reasons
 are ordinary and not faults: a message whose payload exceeded `MaxRawMimeBytes` was never stored at all, and one
@@ -118,10 +126,13 @@ nobody is reading, and each one is read back and matched before its source copy 
 
 ## What it costs, and how to watch it
 
-One run drains at most [`MailSynchronization:MaxDrainedEmailsPerRun`](../operations/configuration-mail.md) messages, in
-commands naming at most `MailSynchronization:MaxDrainedEmailsPerCommand` UIDs each. That is what keeps emptying a
-mailbox of years from crowding out the synchronization it sits behind, and it is why a large mailbox takes days rather
-than minutes. Raising the first empties a source sooner and lengthens that account's runs.
+One run takes at most [`MailSynchronization:MaxDrainedEmailsPerRun`](../operations/configuration-mail.md) messages off
+the source, in commands naming at most `MailSynchronization:MaxDrainedEmailsPerCommand` UIDs each. The two halves of a
+pass share that one budget rather than each getting it: the source copies of mail an erasure already took locally are
+spent first, because that is an erasure finishing rather than a mailbox emptying, and the stored mailbox is drained
+with what is left. That is what keeps emptying a mailbox of years from crowding out the synchronization it sits behind,
+and it is why a large mailbox takes days rather than minutes. Raising the first empties a source sooner and lengthens
+that account's runs.
 
 `mfctl account custody show` is the operator's view of progress, and it is the only view there is: a drained message
 looks exactly like a message that was never on the source. Beside it, these instruments are published per account, and
@@ -132,7 +143,7 @@ carry no subject, address, folder path, or UID:
 | `mailfathom.mailbox.drain.drained` | Messages whose source copy MailFathom removed once it verifiably held them |
 | `mailfathom.mailbox.drain.removed_erased` | Messages erased locally whose source copy the drain removed afterwards |
 | `mailfathom.mailbox.drain.held_back` | Messages the gate left on the source, broken down by the reason it refused them |
-| `mailfathom.mailbox.drain.failed_batches` | Batches whose commands the source did not serve, which the next run attempts again |
+| `mailfathom.mailbox.drain.failed_batches` | Batches whose commands the source did not serve, broken down by what refused them, each attempted again by the next run |
 | `mailfathom.mailbox.drain.abandoned_batches` | Batches abandoned before a command went out because the folder reported another `UIDVALIDITY` |
 
 A drain that fails never puts the account into backoff and never fails its run. What it could not take off the source

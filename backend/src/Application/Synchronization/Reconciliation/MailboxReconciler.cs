@@ -195,7 +195,8 @@ public sealed class MailboxReconciler
 
         return new MailboxReconciliationResult(
             outcome.StillPresent.Count + outcome.ConfirmedUnchanged.Count,
-            outcome.Disappeared.Count,
+            outcome.AppliesRemoteDeletions ? outcome.Disappeared.Count : 0,
+            outcome.AppliesRemoteDeletions ? 0 : outcome.Disappeared.Count,
             outcome.RemovedByOwnMutation.Count,
             flagChanges.ExternalSeenStateCount,
             flagChanges.ExternalFlaggedStateCount,
@@ -663,7 +664,12 @@ public sealed class MailboxReconciler
 
 /// <summary>Summarizes one bounded reconciliation window.</summary>
 /// <param name="ObservedEmailCount">How many stored occurrences the server still holds, whether it described them or only confirmed them.</param>
-/// <param name="RemotelyDeletedEmailCount">How many stored occurrences the folder no longer holds and nothing MailFathom did accounts for.</param>
+/// <param name="RemotelyDeletedEmailCount">How many stored occurrences the folder no longer holds, nothing MailFathom did accounts for, and the account's disposition was applied to.</param>
+/// <param name="DrainCompletedEmailCount">
+/// How many stored occurrences the folder no longer holds on an account whose mailbox MailFathom keeps. They are
+/// counted apart from the remotely deleted ones because no disposition is applied to them: on such an account the
+/// source has no say, so an occurrence gone from it is the drain's own work completing and the local row stands.
+/// </param>
 /// <param name="OwnMutationCompletedEmailCount">
 /// How many stored occurrences left the folder because MailFathom relocated or deleted them. They are counted apart from
 /// the remotely deleted ones because they are the opposite finding: a change of the user's own that has come back
@@ -700,6 +706,7 @@ public sealed class MailboxReconciler
 public sealed record MailboxReconciliationResult(
     int ObservedEmailCount,
     int RemotelyDeletedEmailCount,
+    int DrainCompletedEmailCount,
     int OwnMutationCompletedEmailCount,
     int SeenStateChangedEmailCount,
     int FlaggedStateChangedEmailCount,
@@ -717,6 +724,7 @@ public sealed record MailboxReconciliationResult(
     public static MailboxReconciliationResult NothingToReconcile { get; } = new(
         ObservedEmailCount: 0,
         RemotelyDeletedEmailCount: 0,
+        DrainCompletedEmailCount: 0,
         OwnMutationCompletedEmailCount: 0,
         SeenStateChangedEmailCount: 0,
         FlaggedStateChangedEmailCount: 0,

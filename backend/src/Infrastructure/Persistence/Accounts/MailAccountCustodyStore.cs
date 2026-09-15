@@ -16,7 +16,9 @@ namespace MailFathom.Infrastructure.Persistence.Accounts;
 /// A phase move is a compare-and-set against the phase the caller decided from rather than a plain write, because an
 /// account's supervision can cross a lease handover: the replica that read the phase is not necessarily the one still
 /// holding the account when the write goes out, and a plain write would then overwrite whatever its replacement had
-/// since decided.
+/// since decided. It is the statement itself that compares, rather than a reading in front of a write: the row's only
+/// concurrency token is the folder revision, which a phase move neither reads nor moves, so a comparison made in
+/// memory would leave both replicas' writes landing.
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class MailAccountCustodyStore(MailFathomDbContext dbContext) : IMailAccountCustodyStore
@@ -65,15 +67,13 @@ internal sealed class MailAccountCustodyStore(MailFathomDbContext dbContext) : I
         CancellationToken cancellationToken)
     {
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var accountRow = await sessionContext.MailboxAccounts.FindAsync([account.Value], cancellationToken);
 
-        if (accountRow is null || accountRow.CustodyPhase != decidedFrom)
-        {
-            return false;
-        }
+        var accountIdValue = account.Value;
 
-        accountRow.CustodyPhase = moveTo;
+        var affected = await sessionContext.MailboxAccounts
+            .Where(row => row.Id == accountIdValue && row.CustodyPhase == decidedFrom)
+            .ExecuteUpdateAsync(row => row.SetProperty(entity => entity.CustodyPhase, moveTo), cancellationToken);
 
-        return true;
+        return affected == 1;
     }
 }

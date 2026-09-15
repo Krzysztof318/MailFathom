@@ -63,9 +63,12 @@ internal static class PersistenceConstraintNames
 
     /// <summary>The order a held account's source is emptied in, which is its oldest mail first.</summary>
     /// <remarks>
-    /// Filtered to the rows a source still holds, which is what makes the read cost nothing on a mirrored account and
-    /// makes it shrink to nothing as a held account's source empties. Without the filter every run of every account
-    /// would walk the whole timeline to discover that no row qualifies.
+    /// Filtered to the rows a source copy is still expected for, which excludes what the drain has already cleared and
+    /// what no server ever returned, so the index shrinks as a held account's source empties. That is what it buys:
+    /// without the filter, every run of a held account whose source is already empty would walk that account's whole
+    /// timeline to discover that no row qualifies. What it costs is the mirrored account, where nothing clears an
+    /// occurrence and the index therefore covers substantially every row over the same columns as
+    /// <see cref="StoredEmailAccountTimelineIndexName" />.
     /// </remarks>
     internal const string StoredEmailAwaitingDrainIndexName = "ix_stored_emails_awaiting_drain";
 

@@ -5,6 +5,7 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Accounts.Custody;
 using MailFathom.Application.Synchronization.Drain;
+using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Security.Endpoints;
@@ -110,12 +111,17 @@ internal static class MailAccountCustodyEndpoints
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
     /// <param name="custody">Performs the switch.</param>
     /// <param name="cancellationToken">Cancels the request when the client disconnects.</param>
-    /// <returns><c>200</c> with what the request did, or <c>400</c> naming what was wrong with it.</returns>
+    /// <returns><c>200</c> with what the request did, <c>400</c> naming what was wrong with it, or <c>503</c> where the source could not be read.</returns>
     /// <remarks>
     /// A refused switch answers <c>200</c> with the refusals rather than an error status, because every one of them is
     /// a true statement about the deployment rather than a fault in the request: a replica running a build that does
     /// not know the mode, a folder mapping that names nothing the source advertises, a folder playing a virtual role.
     /// The operator acts on what the answer names and asks again.
+    /// </remarks>
+    /// <remarks>
+    /// A switch off reads what the source advertises before it accepts anything, so a source that cannot be reached is
+    /// the ordinary condition rather than a fault: it answers <c>503</c> saying nothing was started, because a
+    /// generic failure there would read as the deployment being broken rather than as the mail server being away.
     /// </remarks>
     internal static async Task<Results<Ok<MailAccountCustodySwitchResponse>, ProblemHttpResult>> SwitchAsync(
         [FromBody] MailAccountCustodySwitchRequest? request,
@@ -139,7 +145,20 @@ internal static class MailAccountCustodyEndpoints
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        if (await custody.SwitchAsync(servedAccount, requested, cancellationToken) is not { } outcome)
+        MailAccountCustodySwitchOutcome? outcome;
+
+        try
+        {
+            outcome = await custody.SwitchAsync(servedAccount, requested, cancellationToken);
+        }
+        catch (MailboxUnavailableException)
+        {
+            return TypedResults.Problem(
+                "The account's source server could not be reached, so the folder mappings the restore needs could not be checked. Nothing was started; ask again once the source answers.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        if (outcome is null)
         {
             return AdminAccountRequest.Refuse(request?.Account);
         }

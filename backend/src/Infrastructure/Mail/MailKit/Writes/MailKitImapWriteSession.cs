@@ -446,6 +446,16 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
         scope.Completed();
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Read from the capabilities the open connection already negotiated, so it costs no command and cannot itself
+    /// fail against a server that would refuse one.
+    /// </remarks>
+    public Task<bool> SupportsDrainAsync(CancellationToken cancellationToken) =>
+        this.lease.Connection.ExecuteMutationAsync(
+            static (client, _, _) => Task.FromResult(client.Capabilities.HasFlag(ImapCapabilities.UidPlus)),
+            cancellationToken);
+
     public async Task ExpungeDrainedAsync(
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,

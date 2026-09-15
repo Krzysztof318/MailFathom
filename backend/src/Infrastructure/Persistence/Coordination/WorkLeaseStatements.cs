@@ -178,13 +178,15 @@ internal static class WorkLeaseStatements
     /// all: what asks is a refusal that turns on some replica the asking build has never heard of holding work, and a
     /// filter composed from the scopes this build knows would miss exactly that. The bound is written into the
     /// statement rather than applied to the answer, so a deployment whose lease table has grown reads one page instead
-    /// of all of it.
+    /// of all of it. The ordering is what makes that page a page rather than an arbitrary subset, so a caller counting
+    /// the rows back can tell a complete reading from one that filled its bound.
     /// </remarks>
     internal static FormattableString ComposeEveryHeldRead(int maximumLeases) =>
         $"""
          SELECT "Scope", "Holder", "Replica", "HeldSince", "ExpiresAt"
          FROM work_leases
          WHERE "ExpiresAt" > now()
+         ORDER BY "Scope"
          LIMIT {maximumLeases}
          """;
 }

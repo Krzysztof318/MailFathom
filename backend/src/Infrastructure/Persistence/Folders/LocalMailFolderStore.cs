@@ -202,34 +202,8 @@ internal sealed class LocalMailFolderStore(MailFathomDbContext dbContext, TimePr
     }
 
     /// <summary>Records where the source still holds each message this erasure is about to remove locally.</summary>
-    /// <remarks>
-    /// <para>
-    /// The erasure deletes the only row that said where the message was on the source, so the drain would otherwise
-    /// have nothing left to expunge and the source would keep a copy of mail MailFathom was asked to destroy. The
-    /// record is written in the erasing transaction rather than issued from it, because a request to erase mail must
-    /// not wait on a mail server and must not fail because one is unreachable.
-    /// </para>
-    /// <para>
-    /// A row whose occurrence was already cleared has nothing on the source to name, and writes nothing. That is every
-    /// message of a mailbox the drain has already emptied, which is why an account far into holding pays nothing here.
-    /// </para>
-    /// </remarks>
-    private void RecordSourceRemovals(MailFathomDbContext sessionContext, IReadOnlyList<StoredEmailEntity> erased)
-    {
-        var recordedAt = timeProvider.GetUtcNow();
-
-        sessionContext.MailboxSourceRemovals.AddRange(erased
-            .Where(static row => row.UidValidity is not null && row.Uid is not null)
-            .Select(row => new MailboxSourceRemovalEntity
-            {
-                Id = Guid.CreateVersion7(),
-                MailboxAccountId = row.MailboxAccountId,
-                MailFolderId = row.MailFolderId,
-                UidValidity = row.UidValidity!.Value,
-                Uid = row.Uid!.Value,
-                RecordedAt = recordedAt,
-            }));
-    }
+    private void RecordSourceRemovals(MailFathomDbContext sessionContext, IReadOnlyList<StoredEmailEntity> erased) =>
+        MailboxSourceRemovalRecords.Stage(sessionContext, erased, timeProvider.GetUtcNow());
 
     private static ValueTask<MailboxAccountEntity?> FindAccountAsync(
         MailFathomDbContext sessionContext,

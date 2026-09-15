@@ -23,7 +23,7 @@ namespace MailFathom.Infrastructure.Persistence.Mutations;
 /// write is scoped to the account as well as the identity, so a change can never reach another user's mail by naming it.
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class LocalEmailStateStore : ILocalEmailStateStore
+internal sealed class LocalEmailStateStore(TimeProvider timeProvider) : ILocalEmailStateStore
 {
     /// <inheritdoc />
     public async Task<LocalEmailState?> ReadAsync(
@@ -82,6 +82,11 @@ internal sealed class LocalEmailStateStore : ILocalEmailStateStore
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         Guid[] removedIds = [row.Id];
+
+        // This is the one erasure path a person's own delete takes on a held account, so it owes the source removal
+        // record every other erasure path owes: the row about to go is the only thing that still says where the
+        // message is on the source, and the drain may not have reached it yet.
+        MailboxSourceRemovalRecords.Stage(sessionContext, [row], timeProvider.GetUtcNow());
 
         // The cascade every stored message's erasure runs, in the order LocalMailFolderStore states it: the user's storage
         // figure and the content objects are read from the row the removal below only stages.

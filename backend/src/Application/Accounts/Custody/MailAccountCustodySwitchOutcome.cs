@@ -24,8 +24,13 @@ public sealed record MailAccountCustodySwitchOutcome(
 
 /// <summary>One reason a custody switch was refused, and what it was refused over.</summary>
 /// <param name="Reason">Why the switch was refused.</param>
-/// <param name="Subject">What it was refused over, which is a folder alias or a replica identity and never anything from a message.</param>
-public sealed record MailAccountCustodyRefusalDetail(MailAccountCustodySwitchRefusal Reason, string Subject)
+/// <param name="Subject">What it was refused over, which is a folder alias or a replica identity and never anything from a message, or <see langword="null" /> for a refusal that names nothing in particular.</param>
+/// <remarks>
+/// The subject is absent exactly where the refusal is about the reading rather than about a thing it found: a lease
+/// page that filled its bound refuses without being able to say which replica, because the replica it is refusing over
+/// may be in the part that was not read.
+/// </remarks>
+public sealed record MailAccountCustodyRefusalDetail(MailAccountCustodySwitchRefusal Reason, string? Subject)
 {
     /// <summary>States the refusal in the sentence an operator reads, wherever it is reported.</summary>
     /// <returns>The sentence, naming what to correct.</returns>
@@ -37,6 +42,8 @@ public sealed record MailAccountCustodyRefusalDetail(MailAccountCustodySwitchRef
     {
         MailAccountCustodySwitchRefusal.SynchronizedVirtualFolder =>
             $"The folder '{this.Subject}' plays a role whose messages are occurrences of other folders, and an account holding its own mailbox cannot synchronize one. Stop synchronizing that mapping and ask again.",
+        MailAccountCustodySwitchRefusal.ReplicaOnBuildWithoutTheMode when this.Subject is null =>
+            "Too many replicas are holding work at once for their builds to be read, so whether one of them does not know this mode could not be established. Ask again once fewer scopes are held.",
         MailAccountCustodySwitchRefusal.ReplicaOnBuildWithoutTheMode =>
             $"Replica '{this.Subject}' is holding work under a build that does not know this mode, and would read a held account as mirrored. The refusal clears once that replica's lease expires.",
         _ =>

@@ -118,7 +118,8 @@ public sealed class MailboxReconcilerTests
             CancellationToken.None);
 
         // Assert
-        Assert.Equal(1, result.RemotelyDeletedEmailCount);
+        Assert.Equal(0, result.RemotelyDeletedEmailCount);
+        Assert.Equal(1, result.DrainCompletedEmailCount);
         Assert.False(Assert.Single(store.AppliedOutcomes).AppliesRemoteDeletions);
         Assert.Equal([11U], store.ClearedOccurrenceUids);
         Assert.Empty(store.RemovedUids);
@@ -138,7 +139,7 @@ public sealed class MailboxReconcilerTests
             custodyStore: InMemoryMailAccountCustodyStore.Mirroring(Account));
 
         // Act
-        await reconciler.ReconcileAsync(
+        var result = await reconciler.ReconcileAsync(
             mailboxSession,
             Account,
             InboxFolder,
@@ -148,6 +149,8 @@ public sealed class MailboxReconcilerTests
 
         // Assert
         Assert.True(Assert.Single(store.AppliedOutcomes).AppliesRemoteDeletions);
+        Assert.Equal(1, result.RemotelyDeletedEmailCount);
+        Assert.Equal(0, result.DrainCompletedEmailCount);
         Assert.Equal([11U], store.RemovedUids);
         Assert.Empty(store.ClearedOccurrenceUids);
     }

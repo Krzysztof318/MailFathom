@@ -941,9 +941,12 @@ MailFathom's own names for why: the content is above the size limit, the store h
 was never stored, or the bytes read back did not match what the row recorded. The last of those is the reading worth
 alerting on outright — a stored payload that no longer matches its own digest is why the gate exists.
 
-`mailfathom.mailbox.drain.failed_batches` counts the batches whose commands the source did not serve, which the
-account's own backoff defers rather than retries; a figure that stays high means the source server is the thing to look
-at. `mailfathom.mailbox.drain.abandoned_batches` counts the batches abandoned before a command went out because the
+`mailfathom.mailbox.drain.failed_batches` counts the batches whose commands the source did not serve, which the next
+ordinary run attempts again — a drain that fails never puts the account into backoff and never fails its run. It breaks
+them down by `mailfathom.mailbox.drain.failure`, whose values are MailFathom's own names for what refused the batch:
+the source was unavailable, the source advertises no message-scoped expunge, the folder is no longer there, or the pass
+could not classify it. The second of those is the one to act on rather than wait out, because repeating the batch can
+never get past it. `mailfathom.mailbox.drain.abandoned_batches` counts the batches abandoned before a command went out because the
 folder reported a `UIDVALIDITY` other than the one the occurrences named, which synchronization resolves rather than
 the drain. Both are additive.
 

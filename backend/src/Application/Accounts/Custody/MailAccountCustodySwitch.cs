@@ -131,10 +131,10 @@ public sealed class MailAccountCustodySwitch
             ? []
             : await this.FindRefusalsAsync(account, requested, cancellationToken);
 
-        await this.RecordAsync(account, current.Requested, requested, refusals, cancellationToken);
-
         if (refusals.Count > 0)
         {
+            await this.RecordAsync(account, current.Requested, requested, refusals, cancellationToken);
+
             return new MailAccountCustodySwitchOutcome(current, refusals);
         }
 
@@ -143,9 +143,14 @@ public sealed class MailAccountCustodySwitch
                 this.store.RequestAsync(session, account, requested, attemptCancellationToken),
             cancellationToken);
 
-        return written is null
-            ? null
-            : new MailAccountCustodySwitchOutcome(current with { Requested = requested }, []);
+        if (written is null)
+        {
+            return null;
+        }
+
+        await this.RecordAsync(account, current.Requested, requested, refusals, cancellationToken);
+
+        return new MailAccountCustodySwitchOutcome(current with { Requested = requested }, []);
     }
 
     /// <summary>Finds every reason the switch cannot be accepted now.</summary>
@@ -183,11 +188,23 @@ public sealed class MailAccountCustodySwitch
     /// older build took — including one it took over from a newer build, which replaces the whole holder rather than
     /// leaving a newer build's name standing beside an older build's hold.
     /// </para>
+    /// <para>
+    /// A reading that filled its bound refuses on its own, naming no replica. The page is ordered, so what came back is
+    /// a prefix rather than a sample, and an older build's lease may be in the part that was not read — and this check
+    /// is the whole of the protection, so it has to fail closed. A deployment holding this many live leases at once is
+    /// either working an extraordinary number of scopes or releasing none of them, and both are worth looking at
+    /// before a mailbox is switched.
+    /// </para>
     /// </remarks>
     private async Task<IReadOnlyList<MailAccountCustodyRefusalDetail>> FindOlderBuildsAsync(
         CancellationToken cancellationToken)
     {
         var held = await this.leases.ReadEveryHeldAsync(MaximumInspectedLeases, cancellationToken);
+
+        if (held.Count >= MaximumInspectedLeases)
+        {
+            return [new MailAccountCustodyRefusalDetail(MailAccountCustodySwitchRefusal.ReplicaOnBuildWithoutTheMode, null)];
+        }
 
         return
         [
@@ -244,6 +261,11 @@ public sealed class MailAccountCustodySwitch
                 && (mapping.MayCreateMissingFolder || advertised.Any(folder => folder.Path.NamesSameFolderAs(path)));
 
     /// <summary>Writes the decision to the audit trail, whichever way it went.</summary>
+    /// <remarks>
+    /// A refusal is recorded as it is decided, because nothing follows it. An acceptance is recorded only once the
+    /// write has committed: this is the trail somebody reads to find out whether a mail server was emptied, and an
+    /// entry for a switch that a lost commit or a vanished account left unwritten would say it was.
+    /// </remarks>
     private Task RecordAsync(
         MailAccountId account,
         MailAccountCustody from,

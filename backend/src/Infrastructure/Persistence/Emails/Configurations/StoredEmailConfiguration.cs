@@ -236,11 +236,14 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
                 $"\"{nameof(StoredEmailEntity.ContentAvailability)}\" = '{nameof(StoredEmailContentAvailability.AwaitingStorageHeadroom)}'");
 
         // The order a held account's source is emptied in: its oldest mail first, so a mailbox of years empties from
-        // the end nobody is reading. The filter is what keeps it proportionate to what a source still holds rather
-        // than to the mailbox — it holds nothing at all on a mirrored account, and shrinks to nothing as a held
-        // account finishes draining, which is why the drain can ask on every run of every account. The model name is
-        // given explicitly because the account timeline index above covers these same three properties, and without
-        // one this declaration would reconfigure that index rather than add one.
+        // the end nobody is reading. The filter excludes the rows no source copy is left for — the ones the drain has
+        // already cleared, and the ones no server ever returned — so the index shrinks as a held account's source
+        // empties instead of growing with the mailbox. That is what a held account whose source is already empty is
+        // paying for: without it, every one of its runs would walk the whole timeline to find that no row qualifies.
+        // The cost is the other side of that filter: on a mirrored account, where nothing clears an occurrence, it
+        // covers substantially every row and duplicates the columns of the account timeline index above. The model
+        // name is given explicitly for that same overlap — without one this declaration would reconfigure that index
+        // rather than add one.
         entity.HasIndex(
                 email => new { email.MailboxAccountId, email.ReceivedAt, email.Id },
                 PersistenceConstraintNames.StoredEmailAwaitingDrainIndexName)

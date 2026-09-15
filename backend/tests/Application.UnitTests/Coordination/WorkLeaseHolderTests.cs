@@ -104,21 +104,17 @@ public sealed class WorkLeaseHolderTests
     }
 
     /// <summary>
-    /// An older build taking a scope over replaces the whole holder rather than one part of it, so a lease it holds
-    /// carries its own unstamped value and reads as the unknown build it is.
+    /// A bare identifier is what a build that does not know the mode writes, so reading one back has to say the build
+    /// is unknown rather than inherit anything from whatever the column held before.
     /// </summary>
     [Fact]
-    public void Build_AHoldAnOlderBuildTookOverFromAStampedOne_NamesNoBuild()
+    public void Build_AHolderValueWrittenByABuildThatStampsNone_NamesNoBuild()
     {
-        // Arrange
-        var stamped = WorkLeaseHolder.ForBuild("0.8.0");
-
         // Act
-        var tookOver = WorkLeaseHolder.Create(Guid.CreateVersion7().ToString());
+        var holder = WorkLeaseHolder.Create(Guid.CreateVersion7().ToString());
 
         // Assert
-        Assert.NotNull(stamped.Build);
-        Assert.Null(tookOver.Build);
+        Assert.Null(holder.Build);
     }
 
     [Fact]

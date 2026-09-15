@@ -107,7 +107,7 @@ public interface IMailboxDrainStore
 
 /// <summary>What one held account's source still holds, counted rather than listed.</summary>
 /// <param name="AwaitingDrain">Messages whose occurrence still stands, whether or not the gate would pass them.</param>
-/// <param name="HeldBackAboveSizeLimit">Messages the source keeps because their payload was never stored at all.</param>
+/// <param name="HeldBackAboveSizeLimit">Messages the source keeps because their content is above the size MailFathom stores.</param>
 /// <param name="HeldBackAwaitingHeadroom">Messages the source keeps until the storage ceiling has headroom for them.</param>
 /// <param name="AwaitingSourceRemoval">Messages erased locally whose source copy has still to be removed.</param>
 /// <remarks>

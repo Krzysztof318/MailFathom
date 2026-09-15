@@ -109,10 +109,18 @@ public sealed class MailboxDrainPass
     /// <returns>What the pass did, which is <see cref="MailboxDrainReport.Nothing" /> for an account whose mailbox is not held.</returns>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels the pass.</exception>
     /// <remarks>
+    /// <para>
     /// An account whose configuration has come to synchronize a folder playing a virtual role has its drain paused
     /// rather than run: such a folder presents messages that are occurrences of other folders, so draining it would
     /// remove mail from folders nobody asked about. The pause is silent in the counts and visible in the standing
     /// figures, which go on saying what the source still holds.
+    /// </para>
+    /// <para>
+    /// The two halves share one budget, so <c>MaxDrainedEmailsPerRun</c> bounds what a run takes off the source rather
+    /// than bounding each half of it. The erased copies are spent first because that half is an erasure finishing
+    /// rather than a mailbox emptying: a message somebody asked to be rid of is still on the source until this pass
+    /// reaches it, and letting a mailbox of years starve it would leave that for as long as the drain takes.
+    /// </para>
     /// </remarks>
     public async Task<MailboxDrainReport> DrainAsync(MailAccountId account, CancellationToken cancellationToken)
     {
@@ -123,26 +131,37 @@ public sealed class MailboxDrainPass
             return MailboxDrainReport.Nothing;
         }
 
-        if (custodyState.IsSwitchPending)
-        {
-            custodyState = await this.AdvancePhaseAsync(custodyState, account, cancellationToken);
-        }
-
-        if (custodyState.Phase is not MailAccountCustodyPhase.Held)
-        {
-            return MailboxDrainReport.Nothing;
-        }
-
         if (this.SynchronizesAVirtualFolder(account))
         {
             return MailboxDrainReport.Nothing;
         }
 
         var transportSecurityPolicy = this.transportSecurity.GetPolicy(account);
-        var tally = new DrainTally();
 
-        await this.DrainStoredMailAsync(account, transportSecurityPolicy, tally, cancellationToken);
-        await this.RemoveErasedMailAsync(account, transportSecurityPolicy, tally, cancellationToken);
+        if (custodyState.IsSwitchPending)
+        {
+            if (custodyState.Requested is MailAccountCustody.HoldMailbox
+                && !await this.SourceCanBeDrainedAsync(account, transportSecurityPolicy, cancellationToken))
+            {
+                return MailboxDrainReport.SourceWithoutMessageScopedExpunge;
+            }
+
+            custodyState = await this.AdvancePhaseAsync(custodyState, account, cancellationToken);
+        }
+
+        var tally = new DrainTally();
+        var budget = this.options.MaxDrainedEmailsPerRun;
+
+        if (custodyState.Phase is MailAccountCustodyPhase.Held or MailAccountCustodyPhase.Restoring)
+        {
+            budget -= await this.RemoveErasedMailAsync(
+                account, transportSecurityPolicy, tally, budget, cancellationToken);
+        }
+
+        if (budget > 0 && custodyState.Phase is MailAccountCustodyPhase.Held)
+        {
+            await this.DrainStoredMailAsync(account, transportSecurityPolicy, tally, budget, cancellationToken);
+        }
 
         return tally.ToReport();
     }
@@ -200,29 +219,34 @@ public sealed class MailboxDrainPass
         return moved ? current with { Phase = moveTo } : current;
     }
 
-    /// <summary>Removes from the source the messages the gate passes, folder by folder.</summary>
+    /// <summary>Removes from the source the messages the gate passes, one folder generation at a time.</summary>
+    /// <remarks>
+    /// Grouped by the occurrence's <c>UIDVALIDITY</c> beside the folder rather than by the folder alone, because a
+    /// batch carries one generation to the write session and the session refuses the whole batch on any other. A
+    /// folder the source recreated leaves occurrences of two generations behind, and a batch mixing them would be
+    /// judged by whichever one happened to lead it.
+    /// </remarks>
     private async Task DrainStoredMailAsync(
         MailAccountId account,
         MailTransportSecurityPolicy transportSecurityPolicy,
         DrainTally tally,
+        int budget,
         CancellationToken cancellationToken)
     {
-        var candidates = await this.store.ReadCandidatesAsync(
-            account,
-            this.options.MaxDrainedEmailsPerRun,
-            cancellationToken);
+        var candidates = await this.store.ReadCandidatesAsync(account, budget, cancellationToken);
 
-        foreach (var folderCandidates in candidates.GroupBy(static candidate => candidate.Folder))
+        foreach (var generation in candidates.GroupBy(static candidate =>
+            (candidate.Folder, candidate.Occurrence.UidValidity)))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var passed = await this.GateAsync(folderCandidates.ToArray(), tally, cancellationToken);
+            var passed = await this.GateAsync(generation.ToArray(), tally, cancellationToken);
 
             foreach (var batch in passed.Chunk(this.options.MaxDrainedEmailsPerCommand))
             {
                 await this.ExpungeBatchAsync(
                     account,
-                    folderCandidates.Key,
+                    generation.Key.Folder,
                     transportSecurityPolicy,
                     batch,
                     tally,
@@ -232,36 +256,38 @@ public sealed class MailboxDrainPass
     }
 
     /// <summary>Removes from the source the messages an erasure took locally before the drain reached them.</summary>
+    /// <returns>How much of the run's budget this half spent, which is what is left for the stored mail.</returns>
     /// <remarks>
     /// Taken beside the gate's own selection rather than by it, because there is no row left to gate: the erasing
     /// transaction wrote where the message was on the source and nothing else, which is what keeps an erasure reaching
     /// the source without ever reaching it on the request that asked for one.
     /// </remarks>
-    private async Task RemoveErasedMailAsync(
+    private async Task<int> RemoveErasedMailAsync(
         MailAccountId account,
         MailTransportSecurityPolicy transportSecurityPolicy,
         DrainTally tally,
+        int budget,
         CancellationToken cancellationToken)
     {
-        var removals = await this.store.ReadSourceRemovalsAsync(
-            account,
-            this.options.MaxDrainedEmailsPerRun,
-            cancellationToken);
+        var removals = await this.store.ReadSourceRemovalsAsync(account, budget, cancellationToken);
 
-        foreach (var folderRemovals in removals.GroupBy(static removal => removal.Folder))
+        foreach (var generation in removals.GroupBy(static removal =>
+            (removal.Folder, removal.Occurrence.UidValidity)))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            foreach (var batch in folderRemovals.Chunk(this.options.MaxDrainedEmailsPerCommand))
+            foreach (var batch in generation.Chunk(this.options.MaxDrainedEmailsPerCommand))
             {
                 await this.ExpungeRemovalBatchAsync(
-                    folderRemovals.Key,
+                    generation.Key.Folder,
                     transportSecurityPolicy,
                     batch,
                     tally,
                     cancellationToken);
             }
         }
+
+        return removals.Count;
     }
 
     /// <summary>Applies the gate to one folder's candidates, reading each stored payload back once.</summary>
@@ -394,9 +420,9 @@ public sealed class MailboxDrainPass
             // generation change; abandoning the batch is the whole of what the drain does about it.
             tally.Abandoned();
         }
-        catch (Exception)
+        catch (Exception failure)
         {
-            tally.Failed();
+            tally.Failed(Classify(failure));
         }
     }
 
@@ -449,11 +475,25 @@ public sealed class MailboxDrainPass
 
             tally.Abandoned();
         }
-        catch (Exception)
+        catch (Exception failure)
         {
-            tally.Failed();
+            tally.Failed(Classify(failure));
         }
     }
+
+    /// <summary>Sorts a batch's failure into the kinds an operator does different things about.</summary>
+    /// <remarks>
+    /// The counts are the only view of a held account's drain, so a source that can never serve the commands, one that
+    /// refused the credential and one that was busy have to be told apart in them. Cancellation is rethrown above
+    /// rather than sorted here, because a batch the host stopped waiting for is a shutdown rather than a failure.
+    /// </remarks>
+    private static MailboxDrainFailure Classify(Exception failure) => failure switch
+    {
+        MailboxMutationUnsupportedException => MailboxDrainFailure.SourceCannotExpungeOneMessage,
+        MailboxDestinationFolderMissingException => MailboxDrainFailure.FolderMissing,
+        MailboxUnavailableException or MailboxCredentialRefusedException => MailboxDrainFailure.SourceUnavailable,
+        _ => MailboxDrainFailure.SomethingElse,
+    };
 
     /// <summary>Re-reads a batch's rows and keeps the ones the gate still passes on the same occurrence.</summary>
     private async Task<IReadOnlyList<MailboxDrainCandidate>> ConfirmAsync(
@@ -482,21 +522,53 @@ public sealed class MailboxDrainPass
         .Any(static mapping => mapping.Participation.IsSynchronized
             && VirtualMailFolderRoles.Includes(mapping.SpecialUse));
 
+    /// <summary>Establishes whether the account's source can be emptied of one named message at a time.</summary>
+    /// <remarks>
+    /// Asked before the account is moved into holding its mailbox and never afterwards, because the alternative is an
+    /// account whose remote deletions are switched off against a source that can never be emptied. A source that
+    /// cannot be reached at all answers the same way: nothing moves, and the next run asks again.
+    /// </remarks>
+    /// <remarks>
+    /// It is a capability of the server rather than of a folder, so any folder the account maps by path answers it.
+    /// An account mapping every folder by role alone leaves nothing to open a session against, and the batches
+    /// themselves are then what the source refuses.
+    /// </remarks>
+    private async Task<bool> SourceCanBeDrainedAsync(
+        MailAccountId account,
+        MailTransportSecurityPolicy transportSecurityPolicy,
+        CancellationToken cancellationToken)
+    {
+        if (this.mappings.FoldersOf(account).FirstOrDefault(static mapping =>
+            mapping.Participation.IsSynchronized && mapping.RemotePath is not null) is not { RemotePath: { } path } mapping)
+        {
+            return true;
+        }
+
+        await using var session = await this.writeSessions.OpenForWritingAsync(
+            account,
+            MailFolderResolution.FirstBindingOf(mapping.Alias, path),
+            transportSecurityPolicy,
+            cancellationToken);
+
+        return await session.SupportsDrainAsync(cancellationToken);
+    }
+
     /// <summary>Accumulates what one pass did, so the counting is not spread across the batch methods.</summary>
     private sealed class DrainTally
     {
         private readonly Dictionary<MailboxDrainHoldBack, int> heldBack = [];
+        private readonly Dictionary<MailboxDrainFailure, int> failedBatches = [];
 
         private int drainedCount;
         private int removedCount;
-        private int failedBatchCount;
         private int abandonedBatchCount;
 
         internal void Drained(int count) => this.drainedCount += count;
 
         internal void Removed(int count) => this.removedCount += count;
 
-        internal void Failed() => this.failedBatchCount++;
+        internal void Failed(MailboxDrainFailure reason) =>
+            this.failedBatches[reason] = this.failedBatches.GetValueOrDefault(reason) + 1;
 
         internal void Abandoned() => this.abandonedBatchCount++;
 
@@ -507,7 +579,7 @@ public sealed class MailboxDrainPass
             this.drainedCount,
             this.removedCount,
             this.heldBack,
-            this.failedBatchCount,
+            this.failedBatches,
             this.abandonedBatchCount);
     }
 }

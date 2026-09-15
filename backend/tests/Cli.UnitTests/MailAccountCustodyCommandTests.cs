@@ -33,8 +33,8 @@ public sealed class MailAccountCustodyCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.harness.Console.Lines, line => line.Contains("HoldMailbox", StringComparison.Ordinal));
-        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Held", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Requested: HoldMailbox", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Phase:     Held", StringComparison.Ordinal));
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("4812", StringComparison.Ordinal));
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("Awaiting source removal: 7", StringComparison.Ordinal));
     }
